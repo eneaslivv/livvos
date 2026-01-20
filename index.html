@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eneas OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class', // Enabled manual toggling
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              // Redefining Zinc for "Warm Stone" (Light) and "Deep Black" (Dark)
+              zinc: {
+                50: '#FDFBF7',  // Cream White
+                100: '#F5F2EB', // Light Beige
+                200: '#E6E2D8', // Stone Border
+                300: '#D6D1C7',
+                400: '#A8A29A', 
+                500: '#78736A', 
+                600: '#52525B', // Standard Zinc for text balance
+                700: '#3F3F46',
+                800: '#27272A', // Dark Borders
+                900: '#09090B', // DEEP CARD SURFACE (Almost Black)
+                950: '#000000', // PURE BLACK BACKGROUND
+              },
+              // Remapping standard colors to fit the theme if needed, 
+              // but keeping them mostly standard ensures accessibility.
+              indigo: {
+                500: '#6366f1',
+                600: '#4f46e5',
+                900: '#312e81', // For very dark accents
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #FDFBF7; /* Cream */
+        color: #09090B; /* Deep Black Text */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .dark body {
+        background-color: #000000; /* Pure Black */
+        color: #EDEDED; /* Soft White Text */
+      }
+      
+      /* Custom Scrollbar - Darker */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #E6E2D8;
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #D6D1C7;
+      }
+      
+      /* Dark mode scrollbar */
+      .dark ::-webkit-scrollbar-thumb {
+        background: #27272A; 
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #3F3F46; 
+      }
+
+      .fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+        opacity: 0;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      /* Utilities */
+      .mask-image-linear-gradient {
+          mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
+      }
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
