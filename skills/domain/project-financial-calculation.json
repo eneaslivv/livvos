@@ -1,0 +1,335 @@
+{
+  "name": "project-financial-calculation",
+  "description": "Implement comprehensive project financial calculations with real-time updates, health metrics, and reporting",
+  "priority": "HIGH",
+  "expectedDuration": "45-90 minutes",
+  "requiredAgents": ["finance-agent", "project-agent", "security-agent"],
+  "requiredPermissions": ["finance.manage", "project.view", "calculations.execute"],
+  "dependencies": ["finance-schema-cleanup", "project-schema-validation", "calculation-engine"],
+  
+  "objectives": [
+    "Resolve duplicate finance tables (finances vs finance_records)",
+    "Implement accurate financial health calculations",
+    "Create real-time financial metric updates",
+    "Build comprehensive financial reporting system",
+    "Implement financial data validation and integrity checks",
+    "Add role-based access to financial information"
+  ],
+  
+  "prerequisites": [
+    "Decision on canonical finance table (finances or finance_records)",
+    "Project schema with financial fields validated",
+    "Business model definitions (fixed, hourly, retainer) documented",
+    "Financial calculation formulas approved",
+    "User roles for financial access defined",
+    "Backup of current financial data"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Financial Schema Analysis and Cleanup",
+      "description": "Analyze and resolve duplicate financial table structures",
+      "commands": [
+        "COMPARE finances vs finance_records table structures",
+        "IDENTIFY data inconsistencies between tables",
+        "DECIDE on canonical table structure",
+        "CREATE migration plan to consolidate data",
+        "DOCUMENT final schema design"
+      ],
+      "agent": "finance-agent",
+      "expectedOutput": "Financial schema consolidation plan and decision"
+    },
+    {
+      "step": 2,
+      "action": "Data Consolidation and Migration",
+      "description": "Migrate and consolidate financial data into canonical structure",
+      "commands": [
+        "ANALYZE data quality in both tables",
+        "RESOLVE conflicts and inconsistencies",
+        "MIGRATE data to canonical table",
+        "VALIDATE data integrity after migration",
+        "REMOVE deprecated table safely"
+      ],
+      "agent": "finance-agent",
+      "expectedOutput": "Consolidated financial data in canonical table"
+    },
+    {
+      "step": 3,
+      "action": "Financial Calculation Engine",
+      "description": "Implement core financial calculation functions",
+      "commands": [
+        "CREATE profit margin calculation (collected - expenses) / agreed",
+        "IMPLEMENT health status calculation (profitable, break-even, loss)",
+        "BUILD business model-specific calculations",
+        "CREATE expense categorization (direct vs imputed)",
+        "IMPLEMENT time-based financial projections"
+      ],
+      "agent": "finance-agent",
+      "expectedOutput": "Financial calculation functions and formulas"
+    },
+    {
+      "step": 4,
+      "action": "Dedicated Finance Context Creation",
+      "description": "Create dedicated FinanceContext for centralized financial data management",
+      "commands": [
+        "CREATE FinanceContext.tsx with proper structure",
+        "IMPLEMENT financial data fetching and caching",
+        "ADD real-time subscription for financial updates",
+        "CREATE financial calculation hooks",
+        "ADD financial data validation functions"
+      ],
+      "agent": "finance-agent",
+      "expectedOutput": "Complete FinanceContext implementation"
+    },
+    {
+      "step": 5,
+      "action": "Real-Time Financial Updates",
+      "description": "Implement real-time financial metric updates and triggers",
+      "commands": [
+        "CREATE database triggers for financial recalculation",
+        "IMPLEMENT Supabase realtime subscriptions",
+        "ADD financial change event logging",
+        "CREATE financial metric update procedures",
+        "BUILD financial status change notifications"
+      ],
+      "agent": ["finance-agent", "project-agent"],
+      "expectedOutput": "Real-time financial update system"
+    },
+    {
+      "step": 6,
+      "action": "Security and Access Control",
+      "description": "Implement role-based access control for financial data",
+      "commands": [
+        "DEFINE financial data access levels by role",
+        "IMPLEMENT RLS policies for financial tables",
+        "CREATE financial data audit logging",
+        "ADD financial access permission checks",
+        "VALIDATE cross-tenant financial isolation"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Financial security and access control system"
+    },
+    {
+      "step": 7,
+      "action": "Financial Reporting and Analytics",
+      "description": "Build comprehensive financial reporting and analytics system",
+      "commands": [
+        "CREATE financial summary reports",
+        "IMPLEMENT profit and loss statements",
+        "BUILD project financial health dashboards",
+        "ADD financial trend analysis",
+        "CREATE ROI and profitability metrics"
+      ],
+      "agent": ["finance-agent", "analytics-agent"],
+      "expectedOutput": "Financial reporting and analytics system"
+    },
+    {
+      "step": 8,
+      "action": "Integration with Project System",
+      "description": "Integrate financial calculations with project management system",
+      "commands": [
+        "UPDATE ProjectsContext to use FinanceContext",
+        "ADD financial health indicators in project views",
+        "IMPLEMENT financial alerts for project managers",
+        "CREATE budget tracking and warnings",
+        "SYNC project progress with financial metrics"
+      ],
+      "agent": "project-agent",
+      "expectedOutput": "Integrated project-financial system"
+    },
+    {
+      "step": 9,
+      "action": "Comprehensive Testing and Validation",
+      "description": "Test all financial calculations and integrations",
+      "commands": [
+        "VALIDATE all financial calculations with test data",
+        "TEST real-time updates and triggers",
+        "CHECK security and access control enforcement",
+        "VERIFY reporting accuracy and completeness",
+        "PERFORM load testing for financial calculations"
+      ],
+      "agent": ["finance-agent", "project-agent", "security-agent"],
+      "expectedOutput": "Comprehensive test results for financial system"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Financial calculations accurate and consistent",
+      "Data successfully consolidated without loss",
+      "Real-time updates working correctly",
+      "Security and access control properly enforced",
+      "Reporting provides accurate insights",
+      "Integration with project system seamless"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Profit Calculation",
+        "test": "Verify profit margin calculation matches manual calculation",
+        "expected": "Automated calculation equals expected result"
+      },
+      {
+        "scenario": "Health Status Update",
+        "test": "Change financial values and verify health status updates",
+        "expected": "Health status changes correctly based on thresholds"
+      },
+      {
+        "scenario": "Access Control",
+        "test": "Test financial access with different user roles",
+        "expected": "Only authorized roles can view financial data"
+      },
+      {
+        "scenario": "Real-Time Updates",
+        "test": "Update financial data and verify UI updates immediately",
+        "expected": "UI reflects changes without page refresh"
+      }
+    ],
+    "successIndicators": [
+      "All financial calculations match expected results",
+      "Real-time updates trigger correctly",
+      "Security tests pass with no unauthorized access",
+      "Reports provide accurate and useful insights"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Financial calculation inconsistencies",
+        "solution": "Review formulas, validate data types, check rounding rules"
+      },
+      {
+        "error": "Data migration failures or corruption",
+        "solution": "Use backup, verify data integrity, re-run migration with validation"
+      },
+      {
+        "error": "Real-time updates not working",
+        "solution": "Check triggers, verify subscriptions, test notification system"
+      },
+      {
+        "error": "Security access control failures",
+        "solution": "Review RLS policies, check role assignments, validate permissions"
+      },
+      {
+        "error": "Performance issues with calculations",
+        "solution": "Optimize queries, add indexes, implement caching strategies"
+      }
+    ],
+    "rollbackProcedure": [
+      "RESTORE financial data from backup",
+      "ROLLBACK schema changes if needed",
+      "REVERT application code to previous version",
+      "DISABLE real-time updates temporarily",
+      "DOCUMENT rollback and root cause"
+    ],
+    "escalationCriteria": [
+      "Financial data corruption or loss",
+      "Security breach of financial information",
+      "System performance severely degraded",
+      "Critical calculation errors affecting business decisions",
+      "Real-time updates completely broken"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Calculation Accuracy",
+      "target": "100%",
+      "measurement": "All financial calculations match expected results"
+    },
+    {
+      "name": "Data Integrity",
+      "target": "100%",
+      "measurement": "No data loss or corruption during consolidation"
+    },
+    {
+      "name": "Real-Time Performance",
+      "target": "<2 seconds",
+      "measurement": "Time from data change to UI update"
+    },
+    {
+      "name": "Security Compliance",
+      "target": "100%",
+      "measurement": "All access control tests pass"
+    },
+    {
+      "name": "User Satisfaction",
+      "target": ">4.0/5.0",
+      "measurement": "Financial system user feedback"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "finance-agent",
+      "toAgent": "project-agent",
+      "message": "Financial system implemented, integrate with project management",
+      "data": ["calculation_methods", "health_metrics", "api_endpoints"]
+    },
+    {
+      "fromAgent": "finance-agent",
+      "toAgent": "security-agent",
+      "message": "Financial data requires security controls and access management",
+      "data": ["access_levels", "sensitive_fields", "audit_requirements"]
+    },
+    {
+      "fromAgent": "finance-agent",
+      "toAgent": "analytics-agent",
+      "message": "Financial data ready for analytics and reporting integration",
+      "data": ["metrics_definitions", "reporting_data", "kpi_formulas"]
+    },
+    {
+      "fromAgent": "project-agent",
+      "toAgent": "finance-agent",
+      "message": "Project data changes require financial recalculation",
+      "data": ["project_updates", "budget_changes", "progress_metrics"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "FinanceContext Implementation",
+      "type": "TypeScript React Context",
+      "content": ["context_definition", "hooks", "realtime_subscriptions"]
+    },
+    {
+      "name": "Financial Calculation Engine",
+      "type": "SQL functions and procedures",
+      "content": ["calculation_functions", "triggers", "stored_procedures"]
+    },
+    {
+      "name": "Security Implementation",
+      "type": "RLS policies and permissions",
+      "content": ["access_policies", "role_permissions", "audit_logging"]
+    },
+    {
+      "name": "Reporting System",
+      "type": "Analytics components and queries",
+      "content": ["reports", "dashboards", "metrics_calculations"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Remove deprecated financial tables",
+      "Archive migration scripts and test data",
+      "Update system documentation",
+      "Clean up development configurations"
+    ],
+    "monitoring": [
+      "Monitor calculation accuracy continuously",
+      "Track financial data access patterns",
+      "Watch for performance issues",
+      "Monitor real-time update effectiveness",
+      "Track user satisfaction and issues"
+    ],
+    "maintenance": [
+      "Review financial formulas quarterly",
+      "Update reporting based on business needs",
+      "Maintain security compliance",
+      "Optimize performance based on usage",
+      "Update training as features evolve"
+    ]
+  }
+}

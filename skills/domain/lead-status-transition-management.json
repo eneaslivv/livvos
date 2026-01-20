@@ -1,0 +1,321 @@
+{
+  "name": "lead-status-transition-management",
+  "description": "Implement comprehensive lead status transitions with validation, automation, and analytics tracking",
+  "priority": "HIGH",
+  "expectedDuration": "30-60 minutes",
+  "requiredAgents": ["crm-agent", "security-agent", "team-agent"],
+  "requiredPermissions": ["crm.manage", "lead.transition", "workflow.manage"],
+  "dependencies": ["lead-schema-validation", "workflow-definitions", "notification-system"],
+  
+  "objectives": [
+    "Implement lead status transition workflow with proper validation",
+    "Create automated actions triggered by status changes",
+    "Ensure role-based access control for status transitions",
+    "Implement audit trail for all status changes",
+    "Add analytics tracking for conversion metrics",
+    "Provide clear error handling and user feedback"
+  ],
+  
+  "prerequisites": [
+    "Leads table with status field validated",
+    "Lead status workflow defined and approved",
+    "User roles and permissions configured",
+    "Notification system functional",
+    "Analytics tracking infrastructure ready",
+    "Test data covering all transition scenarios"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Workflow Definition and Validation",
+      "description": "Define and validate the complete lead status transition workflow",
+      "commands": [
+        "DEFINE all valid status transitions (new → contacted → following → closed/lost)",
+        "VALIDATE business rules for each transition",
+        "IDENTIFY required conditions for status changes",
+        "DOCUMENT transition requirements and restrictions",
+        "CREATE transition validation matrix"
+      ],
+      "agent": "crm-agent",
+      "expectedOutput": "Validated lead status transition workflow documentation"
+    },
+    {
+      "step": 2,
+      "action": "Database Transition Constraints",
+      "description": "Implement database-level constraints for status transitions",
+      "commands": [
+        "CREATE CHECK constraints for valid status transitions",
+        "IMPLEMENT trigger functions for transition validation",
+        "ADD transition metadata fields (previous_status, transition_date, transition_by)",
+        "CREATE indexes for transition queries",
+        "ADD audit logging for status changes"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Database constraints and triggers for transition management"
+    },
+    {
+      "step": 3,
+      "action": "Application Logic Implementation",
+      "description": "Implement application-level transition validation and processing",
+      "commands": [
+        "UPDATE ClientsContext with transition validation functions",
+        "IMPLEMENT transition workflows with required steps",
+        "ADD automated actions for specific transitions",
+        "CREATE error handling for invalid transitions",
+        "IMPLEMENT user permission checks for transition actions"
+      ],
+      "agent": "crm-agent",
+      "expectedOutput": "Application code for lead status transition management"
+    },
+    {
+      "step": 4,
+      "action": "Role-Based Access Control",
+      "description": "Implement role-based restrictions on status transitions",
+      "commands": [
+        "DEFINE which roles can perform which transitions",
+        "IMPLEMENT permission checks in transition functions",
+        "CREATE override capabilities for managers/owners",
+        "VALIDATE role assignments in RBAC system",
+        "TEST access control enforcement"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Role-based access control for status transitions"
+    },
+    {
+      "step": 5,
+      "action": "Automated Actions Integration",
+      "description": "Implement automated actions triggered by status changes",
+      "commands": [
+        "CREATE notification triggers for status changes",
+        "IMPLEMENT task assignment for specific transitions",
+        "ADD analytics tracking for conversion metrics",
+        "IMPLEMENT email/SMS notifications for stakeholders",
+        "CREATE calendar events for follow-up requirements"
+      ],
+      "agent": ["crm-agent", "team-agent"],
+      "expectedOutput": "Automated action system for status transitions"
+    },
+    {
+      "step": 6,
+      "action": "Analytics and Reporting Integration",
+      "description": "Integrate status transitions with analytics and reporting systems",
+      "commands": [
+        "UPDATE analytics metrics for conversion tracking",
+        "IMPLEMENT transition funnel analysis",
+        "CREATE lead lifecycle reporting",
+        "ADD time-in-stage metrics calculation",
+        "IMPLEMENT ROI tracking for converted leads"
+      ],
+      "agent": "crm-agent",
+      "expectedOutput": "Analytics integration for lead transition metrics"
+    },
+    {
+      "step": 7,
+      "action": "User Interface Updates",
+      "description": "Update user interface to reflect transition rules and constraints",
+      "commands": [
+        "UPDATE Sales page to show valid transition options",
+        "IMPLEMENT transition confirmation dialogs",
+        "ADD transition history display",
+        "CREATE transition workflow visual indicators",
+        "IMPLEMENT bulk transition capabilities where appropriate"
+      ],
+      "agent": "crm-agent",
+      "expectedOutput": "Updated user interface for lead status management"
+    },
+    {
+      "step": 8,
+      "action": "Comprehensive Testing",
+      "description": "Test all transition scenarios and edge cases",
+      "commands": [
+        "TEST all valid status transitions",
+        "ATTEMPT invalid transitions (should be blocked)",
+        "TEST role-based access restrictions",
+        "VALIDATE automated actions trigger correctly",
+        "CHECK analytics tracking accuracy"
+      ],
+      "agent": ["crm-agent", "security-agent"],
+      "expectedOutput": "Comprehensive test results for transition system"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "All valid status transitions work correctly",
+      "Invalid transitions are properly blocked",
+      "Role-based access control enforced",
+      "Automated actions trigger as expected",
+      "Analytics tracking accurate and complete",
+      "User interface provides clear feedback"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Valid Transition",
+        "test": "new → contacted transition with required fields",
+        "expected": "Transition succeeds, automation triggers"
+      },
+      {
+        "scenario": "Invalid Transition",
+        "test": "Attempt new → closed transition (not allowed)",
+        "expected": "Transition blocked, clear error message"
+      },
+      {
+        "scenario": "Role Restriction",
+        "test": "Sales role attempting to close deal",
+        "expected": "Success if allowed, blocked if restricted"
+      },
+      {
+        "scenario": "Automated Actions",
+        "test": "Lead converted to project",
+        "expected": "Project created, notifications sent"
+      }
+    ],
+    "successIndicators": [
+      "All transition tests pass",
+      "Analytics show correct conversion metrics",
+      "User feedback positive on workflow",
+      "No invalid transitions possible"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Transition validation fails unexpectedly",
+        "solution": "Check validation logic, review business rules, update constraints"
+      },
+      {
+        "error": "Automated actions don't trigger",
+        "solution": "Verify trigger configuration, check notification system, validate workflow"
+      },
+      {
+        "error": "Analytics not tracking transitions",
+        "solution": "Check tracking implementation, verify data flow, update metrics"
+      },
+      {
+        "error": "Role permissions not enforced",
+        "solution": "Review RBAC integration, check permission logic, test access control"
+      },
+      {
+        "error": "Database constraint violations",
+        "solution": "Review constraint definitions, check data consistency, adjust validation"
+      }
+    ],
+    "rollbackProcedure": [
+      "DISABLE automated triggers temporarily",
+      "ROLLBACK application code changes",
+      "REMOVE database constraints if needed",
+      "RESTORE previous workflow logic",
+      "NOTIFY users of temporary changes"
+    ],
+    "escalationCriteria": [
+      "Critical transitions fail (lead to project conversion)",
+      "Data corruption during status changes",
+      "Security access control failures",
+      "Analytics tracking completely broken",
+      "System becomes unusable for sales team"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Transition Success Rate",
+      "target": ">95%",
+      "measurement": "Valid transitions completed successfully"
+    },
+    {
+      "name": "Invalid Transition Blocking",
+      "target": "100%",
+      "measurement": "Invalid attempts properly blocked"
+    },
+    {
+      "name": "Automation Accuracy",
+      "target": ">90%",
+      "measurement": "Automated actions trigger correctly"
+    },
+    {
+      "name": "Analytics Completeness",
+      "target": "100%",
+      "measurement": "All transitions tracked in analytics"
+    },
+    {
+      "name": "User Satisfaction",
+      "target": ">4.0/5.0",
+      "measurement": "User feedback on workflow efficiency"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "crm-agent",
+      "toAgent": "security-agent",
+      "message": "Status transition workflow defined, implement access controls",
+      "data": ["transition_rules", "permission_requirements", "validation_matrix"]
+    },
+    {
+      "fromAgent": "crm-agent",
+      "toAgent": "team-agent",
+      "message": "Lead status changes require notifications and task assignments",
+      "data": ["notification_triggers", "assignment_rules", "escalation_procedures"]
+    },
+    {
+      "fromAgent": "crm-agent",
+      "toAgent": "analytics-agent",
+      "message": "Track lead conversion metrics and funnel analysis",
+      "data": ["transition_events", "conversion_criteria", "tracking_points"]
+    },
+    {
+      "fromAgent": "crm-agent",
+      "toAgent": "project-agent",
+      "message": "Lead converted, create project with lead metadata",
+      "data": ["lead_data", "conversion_details", "project_requirements"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Transition Workflow Configuration",
+      "type": "JSON configuration",
+      "content": ["status_rules", "transition_matrix", "automation_config"]
+    },
+    {
+      "name": "Database Schema Updates",
+      "type": "SQL migration scripts",
+      "content": ["constraints", "triggers", "indexes", "audit_tables"]
+    },
+    {
+      "name": "Application Code Updates",
+      "type": "TypeScript files",
+      "content": ["context_updates", "validation_functions", "ui_components"]
+    },
+    {
+      "name": "Analytics Integration",
+      "type": "Tracking implementation",
+      "content": ["events", "metrics", "reports", "dashboards"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive test data and temporary configurations",
+      "Update system documentation",
+      "Clean up development-only code",
+      "Finalize user interface improvements"
+    ],
+    "monitoring": [
+      "Monitor transition success rates",
+      "Track analytics for conversion trends",
+      "Watch for automation failures",
+      "Monitor user feedback and issues",
+      "Track system performance impact"
+    ],
+    "maintenance": [
+      "Review transition rules quarterly",
+      "Update automation based on feedback",
+      "Maintain analytics accuracy",
+      "Update user training as needed",
+      "Optimize performance based on usage"
+    ]
+  }
+}

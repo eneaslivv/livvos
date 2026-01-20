@@ -1,0 +1,335 @@
+{
+  "name": "tenant-isolation-verification",
+  "description": "Implement comprehensive tenant isolation verification to ensure multi-tenant security and data separation",
+  "priority": "CRITICAL",
+  "expectedDuration": "60-90 minutes",
+  "requiredAgents": ["security-agent", "tenant-agent", "all-domain-agents"],
+  "requiredPermissions": ["security.audit", "tenant.validate", "isolation.test"],
+  "dependencies": ["rls-policy-implementation", "tenant-schema-validation", "security-audit-tools"],
+  
+  "objectives": [
+    "Verify complete tenant data isolation across all tables",
+    "Validate RLS policies enforce tenant boundaries",
+    "Test cross-tenant access attempt prevention",
+    "Implement automated isolation monitoring",
+    "Create tenant isolation audit procedures",
+    "Validate feature flag isolation per tenant"
+  ],
+  
+  "prerequisites": [
+    "RLS policies implemented on all tables",
+    "Tenant isolation design documented",
+    "Test tenants with sample data created",
+    "Security audit tools available",
+    "Cross-tenant test scenarios defined",
+    "Monitoring infrastructure ready"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Tenant Isolation Test Framework Setup",
+      "description": "Create comprehensive testing framework for tenant isolation verification",
+      "commands": [
+        "CREATE multi-tenant test environment",
+        "SET up test tenants with sample data",
+        "IMPLEMENT cross-tenant access test procedures",
+        "CREATE isolation validation functions",
+        "SET up automated test execution framework"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Comprehensive tenant isolation testing framework"
+    },
+    {
+      "step": 2,
+      "action": "Database-Level Isolation Verification",
+      "description": "Verify database-level tenant isolation through direct SQL testing",
+      "commands": [
+        "TEST direct SQL access across tenant boundaries",
+        "VALIDATE RLS policies block cross-tenant queries",
+        "CHECK tenant_id filtering in all queries",
+        "VERIFY foreign key constraints respect tenant boundaries",
+        "TEST bypass attempts (superuser, policy changes)"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Database isolation verification results"
+    },
+    {
+      "step": 3,
+      "action": "Application-Level Isolation Testing",
+      "description": "Test tenant isolation through application interfaces",
+      "commands": [
+        "TEST cross-tenant data access through API endpoints",
+        "VALIDATE context switching maintains isolation",
+        "CHECK tenant-specific feature flag enforcement",
+        "TEST file and document access boundaries",
+        "VERIFY real-time subscription isolation"
+      ],
+      "agent": "all-domain-agents",
+      "expectedOutput": "Application-level isolation test results"
+    },
+    {
+      "step": 4,
+      "action": "Context Provider Isolation Validation",
+      "description": "Verify all React Context providers maintain tenant isolation",
+      "commands": [
+        "TEST TenantContext isolation with branding",
+        "VALIDATE RBACContext respects tenant boundaries",
+        "CHECK ProjectsContext tenant filtering",
+        "TEST DocumentsContext storage isolation",
+        "VALIDATE CalendarContext event separation"
+      ],
+      "agent": "tenant-agent",
+      "expectedOutput": "Context provider isolation validation report"
+    },
+    {
+      "step": 5,
+      "action": "Storage and File Isolation Verification",
+      "description": "Verify tenant isolation in file storage and external services",
+      "commands": [
+        "TEST Supabase Storage bucket isolation",
+        "VALIDATE document access restrictions",
+        "CHECK file URL security and tenant separation",
+        "TEST cross-tenant file access attempts",
+        "VERIFY backup and export maintain isolation"
+      ],
+      "agent": ["document-agent", "tenant-agent"],
+      "expectedOutput": "Storage isolation verification results"
+    },
+    {
+      "step": 6,
+      "action": "Real-Time and Subscription Isolation Testing",
+      "description": "Verify real-time subscriptions maintain tenant isolation",
+      "commands": [
+        "TEST Supabase Realtime subscription isolation",
+        "VALIDATE WebSocket connection tenant separation",
+        "CHECK broadcast message filtering",
+        "TEST cross-tenant notification prevention",
+        "VERIFY cache isolation between tenants"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Real-time isolation verification results"
+    },
+    {
+      "step": 7,
+      "action": "Security Audit and Penetration Testing",
+      "description": "Conduct comprehensive security audit of tenant isolation",
+      "commands": [
+        "PERFORM SQL injection attempts across tenants",
+        "TEST JWT token manipulation for tenant switching",
+        "CHECK for enumeration attacks across tenants",
+        "VALIDATE session hijacking protection",
+        "TEST API endpoint tenant validation"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Security audit report with vulnerability assessment"
+    },
+    {
+      "step": 8,
+      "action": "Automated Isolation Monitoring System",
+      "description": "Implement continuous monitoring of tenant isolation",
+      "commands": [
+        "CREATE automated isolation test execution",
+        "IMPLEMENT cross-tenant access attempt logging",
+        "SET up isolation breach alerting",
+        "CREATE tenant isolation health metrics",
+        "IMPLEMENT continuous compliance validation"
+      },
+      "agent": "security-agent",
+      "expectedOutput": "Automated isolation monitoring and alerting system"
+    },
+    {
+      "step": 9,
+      "action": "Comprehensive Reporting and Documentation",
+      "description": "Create comprehensive isolation verification reports",
+      "commands": [
+        "GENERATE isolation compliance report",
+        "CREATE security posture assessment",
+        "DOCUMENT isolation test procedures",
+        "CREATE incident response procedures",
+        "PROVIDE tenant isolation security certification"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Comprehensive tenant isolation verification documentation"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "100% of cross-tenant access attempts blocked",
+      "All RLS policies enforce proper tenant filtering",
+      "Application interfaces maintain complete isolation",
+      "File storage isolated properly between tenants",
+      "Real-time subscriptions respect tenant boundaries",
+      "Security audit shows no isolation vulnerabilities"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Direct SQL Cross-Tenant Access",
+        "test": "Attempt to access data from different tenant using direct SQL",
+        "expected": "Access blocked, query returns no rows or error"
+      },
+      {
+        "scenario": "API Endpoint Tenant Bypass",
+        "test": "Manipulate request to access different tenant's data",
+        "expected": "Request blocked, unauthorized access logged"
+      },
+      {
+        "scenario": "JWT Token Tenant Manipulation",
+        "test": "Modify JWT token tenant_id claim",
+        "expected": "Token validation fails, access denied"
+      },
+      {
+        "scenario": "File Storage Cross-Access",
+        "test": "Attempt to access files from different tenant",
+        "expected": "File access blocked, security violation logged"
+      }
+    ],
+    "successIndicators": [
+      "All isolation tests pass with 100% success rate",
+      "No security vulnerabilities found in audit",
+      "Automated monitoring shows no isolation breaches",
+      "Performance impact of isolation controls acceptable"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "RLS policy allows cross-tenant access",
+        "solution": "Review and fix policy conditions, add tenant_id validation"
+      },
+      {
+        "error": "Application bypasses tenant filtering",
+        "solution": "Update application code, add tenant validation at API level"
+      },
+      {
+        "error": "Real-time subscriptions not isolated",
+        "solution": "Update subscription queries, add tenant filtering"
+      },
+      {
+        "error": "File storage not properly isolated",
+        "solution": "Update storage policies, add tenant-specific paths"
+      },
+      {
+        "error": "Performance degradation from isolation controls",
+        "solution": "Optimize queries, add indexes, review policy complexity"
+      }
+    ],
+    "rollbackProcedure": [
+      "IMMEDIATELY block all cross-tenant access if isolation breach found",
+      "ROLLBACK any changes that compromised isolation",
+      "FORCE logout all users, require re-authentication",
+      "CONDUCT full security audit of affected systems",
+      "DOCUMENT isolation breach and remediation"
+    ],
+    "escalationCriteria": [
+      "Any cross-tenant data access successful",
+      "Isolation breach affecting production data",
+      "Security vulnerability exposing tenant data",
+      "Performance degradation making system unusable",
+      "Isolation monitoring system failure"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Isolation Compliance Rate",
+      "target": "100%",
+      "measurement": "Percentage of isolation tests passed"
+    },
+    {
+      "name": "Cross-Tenant Access Prevention",
+      "target": "100%",
+      "measurement": "Unauthorized cross-tenant attempts blocked"
+    },
+    {
+      "name": "Security Vulnerability Count",
+      "target": "0",
+      "measurement": "Critical isolation vulnerabilities found"
+    },
+    {
+      "name": "Monitoring Coverage",
+      "target": "100%",
+      "measurement": "Tenant isolation monitoring completeness"
+    },
+    {
+      "name": "Performance Impact",
+      "target": "<10%",
+      "measurement": "Performance overhead from isolation controls"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "Tenant isolation verification requires tenant context testing",
+      "data": ["test_tenants", "isolation_scenarios", "validation_requirements"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "all-domain-agents",
+      "message": "Domain agents must validate tenant isolation in their areas",
+      "data": ["isolation_tests", "cross_tenant_scenarios", "validation_procedures"]
+    },
+    {
+      "fromAgent": "all-domain-agents",
+      "toAgent": "security-agent",
+      "message": "Domain-specific isolation validation results",
+      "data": ["test_results", "issues_found", "isolation_compliance"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "Isolation monitoring system requires tenant status updates",
+      "data": ["monitoring_config", "alert_requirements", "compliance_status"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Isolation Test Framework",
+      "type": "Testing infrastructure",
+      "content": ["test_procedures", "automation_scripts", "validation_functions"]
+    },
+    {
+      "name": "Security Audit Report",
+      "type": "Comprehensive audit documentation",
+      "content": ["vulnerability_assessment", "compliance_status", "recommendations"]
+    },
+    {
+      "name": "Automated Monitoring System",
+      "type": "Continuous monitoring",
+      "content": ["isolation_checks", "alerting_system", "compliance_tracking"]
+    },
+    {
+      "name": "Isolation Certification",
+      "type": "Security certification",
+      "content": ["compliance_report", "security_posture", "monitoring_plan"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive test data and temporary tenants",
+      "Clean up testing configurations",
+      "Update system documentation",
+      "Remove development-only access methods"
+    ],
+    "monitoring": [
+      "Continuously monitor tenant isolation effectiveness",
+      "Track cross-tenant access attempts",
+      "Watch for isolation control performance impact",
+      "Monitor compliance with security requirements",
+      "Track system availability and isolation stability"
+    ],
+    "maintenance": [
+      "Regularly update isolation test scenarios",
+      "Maintain security audit procedures",
+      "Update monitoring based on new threats",
+      "Review and optimize isolation controls",
+      "Maintain incident response procedures"
+    ]
+  }
+}

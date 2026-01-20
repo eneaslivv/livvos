@@ -1,0 +1,335 @@
+{
+  "name": "calendar-event-scheduling",
+  "description": "Implement comprehensive calendar event scheduling with conflict detection, recurring events, and attendee coordination",
+  "priority": "MEDIUM",
+  "expectedDuration": "45-90 minutes",
+  "requiredAgents": ["calendar-agent", "team-agent", "notifications-agent"],
+  "requiredPermissions": ["calendar.manage", "events.create", "attendees.invite"],
+  "dependencies": ["calendar-schema-validation", "attendee-management", "reminder-system"],
+  
+  "objectives": [
+    "Implement event conflict detection and resolution",
+    "Add recurring event support with RFC 5545 compliance",
+    "Create attendee management with RSVP tracking",
+    "Implement intelligent reminder system",
+    "Add calendar integration capabilities",
+    "Create resource booking and availability management"
+  ],
+  
+  "prerequisites": [
+    "Calendar events schema validated and finalized",
+    "Attendee management requirements defined",
+    "Reminder scheduling system available",
+    "Integration APIs documented (Google, Outlook, etc.),
+    "Conflict resolution rules defined",
+    "Time zone handling requirements established"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Event Conflict Detection System",
+      "description": "Implement comprehensive conflict detection for events and tasks",
+      "commands": [
+        "CREATE conflict detection functions",
+        "IMPLEMENT time overlap checking algorithms",
+        "ADD resource conflict detection (meeting rooms, equipment)",
+        "CREATE attendee availability checking",
+        "IMPLEMENT intelligent scheduling suggestions"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Conflict detection system preventing scheduling issues"
+    },
+    {
+      "step": 2,
+      "action": "Recurring Events Implementation",
+      "description": "Add full recurring event support following RFC 5545",
+      "commands": [
+        "CREATE recurring event pattern storage",
+        "IMPLEMENT RFC 5545 recurrence rule parsing",
+        "ADD event expansion and instance management",
+        "CREATE exception and modification handling",
+        "IMPLEMENT recurring event editing and cancellation"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Full recurring event system with RFC compliance"
+    },
+    {
+      "step": 3,
+      "action": "Attendee Management System",
+      "description": "Implement comprehensive attendee management with RSVP tracking",
+      "commands": [
+        "CREATE attendee invitation workflow",
+        "IMPLEMENT RSVP status tracking (accepted, declined, tentative)",
+        "ADD attendee availability checking",
+        "CREATE automatic reminder scheduling for attendees",
+        "IMPLEMENT attendee conflict resolution"
+      ],
+      "agent": ["calendar-agent", "team-agent"],
+      "expectedOutput": "Attendee management system with full RSVP workflow"
+    },
+    {
+      "step": 4,
+      "action": "Intelligent Reminder System",
+      "description": "Implement smart reminder system with multiple channels",
+      "commands": [
+        "CREATE configurable reminder schedules",
+        "IMPLEMENT multi-channel notifications (email, in-app, SMS)",
+        "ADD intelligent reminder timing based on event importance",
+        "CREATE reminder escalation procedures",
+        "IMPLEMENT snooze and dismiss functionality"
+      ],
+      "agent": ["calendar-agent", "notifications-agent"],
+      "expectedOutput": "Intelligent reminder system with multiple notification channels"
+    },
+    {
+      "step": 5,
+      "action": "Resource Booking System",
+      "description": "Add resource booking for meeting rooms, equipment, and other resources",
+      "commands": [
+        "CREATE resources table with availability tracking",
+        "IMPLEMENT resource booking with conflict detection",
+        "ADD resource permission management",
+        "CREATE resource utilization reporting",
+        "IMPLEMENT automatic resource suggestions"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Resource booking system with availability management"
+    },
+    {
+      "step": 6,
+      "action": "Calendar Integration Framework",
+      "description": "Implement framework for external calendar integrations",
+      "commands": [
+        "CREATE integration API abstraction layer",
+        "IMPLEMENT Google Calendar integration",
+        "ADD Microsoft Outlook/365 integration",
+        "CREATE bi-directional sync capabilities",
+        "IMPLEMENT integration conflict resolution"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Calendar integration framework supporting major providers"
+    },
+    {
+      "step": 7,
+      "action": "CalendarContext Updates",
+      "description": "Update CalendarContext with new scheduling capabilities",
+      "commands": [
+        "UPDATE CalendarContext with conflict detection",
+        "ADD recurring event management functions",
+        "IMPLEMENT attendee RSVP management",
+        "ADD resource booking functions",
+        "CREATE integration management functions"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Enhanced CalendarContext with full scheduling capabilities"
+    },
+    {
+      "step": 8,
+      "action": "User Interface Enhancements",
+      "description": "Update calendar interface with advanced scheduling features",
+      "commands": [
+        "CREATE conflict resolution interface",
+        "ADD recurring event setup wizard",
+        "IMPLEMENT attendee invitation interface",
+        "ADD resource booking interface",
+        "CREATE integration configuration interface"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Advanced calendar interface with full scheduling features"
+    },
+    {
+      "step": 9,
+      "action": "Performance Optimization",
+      "description": "Optimize calendar performance for large datasets",
+      "commands": [
+        "IMPLEMENT efficient date range queries",
+        "ADD caching for recurring event instances",
+        "CREATE database indexes for performance",
+        "Optimize conflict detection algorithms",
+        "IMPLEMENT lazy loading for calendar views"
+      ],
+      "agent": "calendar-agent",
+      "expectedOutput": "Optimized calendar system with excellent performance"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Event conflicts detected and prevented effectively",
+      "Recurring events follow RFC 5545 standards",
+      "Attendee management works with proper RSVP tracking",
+      "Reminders sent at appropriate times through multiple channels",
+      "Resource booking prevents double-booking",
+      "Calendar integrations sync bi-directionally"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Conflict Detection",
+        "test": "Schedule overlapping events for same attendee",
+        "expected": "Conflict detected, alternative times suggested"
+      },
+      {
+        "scenario": "Recurring Events",
+        "test": "Create daily recurring event with exceptions",
+        "expected": "Instances generated correctly, exceptions handled"
+      },
+      {
+        "scenario": "RSVP Management",
+        "test": "Invite multiple attendees, track their responses",
+        "expected": "RSVPs tracked accurately, reminders sent"
+      },
+      {
+        "scenario": "Resource Booking",
+        "test": "Book meeting room for overlapping times",
+        "expected": "Second booking prevented, availability shown"
+      }
+    ],
+    "successIndicators": [
+      "No scheduling conflicts occur",
+      "Recurring events generate correct instances",
+      "Attendee responses tracked accurately",
+      "All reminders delivered on time"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Conflict detection missing overlapping events",
+        "solution": "Review time zone handling, validate overlap logic"
+      },
+      {
+        "error": "Recurring event generation errors",
+        "solution": "Check RFC 5545 parsing, validate recurrence rules"
+      },
+      {
+        "error": "RSVP tracking inconsistencies",
+        "solution": "Review attendee management logic, check data integrity"
+      },
+      {
+        "error": "Integration sync failures",
+        "solution": "Check API credentials, implement retry mechanisms"
+      },
+      {
+        "error": "Performance issues with large calendars",
+        "solution": "Optimize queries, implement caching, review database structure"
+      }
+    ],
+    "rollbackProcedure": [
+      "DISABLE new scheduling features temporarily",
+      "ROLLBACK CalendarContext changes",
+      "RESTORE previous calendar functionality",
+      "NOTIFY users of temporary limitations",
+      "DOCUMENT rollback and recovery process"
+    ],
+    "escalationCriteria": [
+      "Critical scheduling failures causing business disruption",
+      "Data corruption in recurring events",
+      "Integration sync failures causing data loss",
+      "Performance degradation making calendar unusable",
+      "Security vulnerabilities in attendee management"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Conflict Detection Accuracy",
+      "target": "100%",
+      "measurement": "All conflicts detected and prevented"
+    },
+    {
+      "name": "Recurring Event Compliance",
+      "target": "100%",
+      "measurement": "RFC 5545 compliance verified"
+    },
+    {
+      "name": "RSVP Response Rate",
+      "target": ">80%",
+      "measurement": "Attendees responding to invitations"
+    },
+    {
+      "name": "Reminder Delivery Success",
+      "target": ">95%",
+      "measurement": "Reminders delivered on time"
+    },
+    {
+      "name": "Calendar Performance",
+      "target": "<2 seconds",
+      "measurement": "Calendar loading and interaction response time"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "calendar-agent",
+      "toAgent": "team-agent",
+      "message": "Event scheduling requires attendee availability checking",
+      "data": ["event_details", "attendee_list", "availability_check"]
+    },
+    {
+      "fromAgent": "calendar-agent",
+      "toAgent": "notifications-agent",
+      "message": "Event reminders and RSVP notifications required",
+      "data": ["reminder_schedule", "notification_content", "delivery_channels"]
+    },
+    {
+      "fromAgent": "team-agent",
+      "toAgent": "calendar-agent",
+      "message": "Team member availability updated",
+      "data": ["member_id", "availability_changes", "time_preferences"]
+    },
+    {
+      "fromAgent": "notifications-agent",
+      "toAgent": "calendar-agent",
+      "message": "Notification delivery status updates",
+      "data": ["notification_id", "delivery_status", "response_tracking"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Calendar Schema Updates",
+      "type": "SQL migration scripts",
+      "content": ["conflict_detection", "recurring_events", "resource_booking"]
+    },
+    {
+      "name": "CalendarContext Enhancement",
+      "type": "TypeScript React Context",
+      "content": ["scheduling_logic", "conflict_resolution", "integration_management"]
+    },
+    {
+      "name": "Integration APIs",
+      "type": "API integration code",
+      "content": ["google_calendar", "outlook_integration", "sync_logic"]
+    },
+    {
+      "name": "User Interface Components",
+      "type": "React components",
+      "content": ["scheduling_wizard", "conflict_resolution", "attendee_management"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive old calendar configuration",
+      "Clean up temporary test data",
+      "Update system documentation",
+      "Remove development-only integrations"
+    ],
+    "monitoring": [
+      "Monitor calendar performance metrics",
+      "Track conflict detection effectiveness",
+      "Watch integration sync success rates",
+      "Monitor reminder delivery rates",
+      "Track user satisfaction and issues"
+    ],
+    "maintenance": [
+      "Review and optimize conflict detection algorithms",
+      "Maintain integration API compatibility",
+      "Update reminder strategies based on usage",
+      "Monitor resource utilization patterns",
+      "Regular performance optimization"
+    ]
+  }
+}

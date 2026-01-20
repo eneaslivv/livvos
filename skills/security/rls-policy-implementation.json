@@ -1,0 +1,324 @@
+{
+  "name": "rls-policy-implementation",
+  "description": "Implement comprehensive Row Level Security policies with tenant isolation and role-based access control",
+  "priority": "CRITICAL",
+  "expectedDuration": "45-90 minutes",
+  "requiredAgents": ["security-agent", "tenant-agent"],
+  "requiredPermissions": ["security.manage", "database.alter", "policy.create"],
+  "dependencies": ["table-schema-validation", "role-definitions", "tenant-structure"],
+  
+  "objectives": [
+    "Implement tenant isolation policies for all tables",
+    "Create role-based access control policies",
+    "Ensure data privacy and security compliance",
+    "Validate policy effectiveness across all user roles",
+    "Document all security policies for audit purposes",
+    "Test policy bypass scenarios and edge cases"
+  ],
+  
+  "prerequisites": [
+    "All target tables exist with proper tenant_id columns",
+    "Role hierarchy and permissions defined",
+    "JWT token structure verified (includes tenant_id)",
+    "Testing environment with multiple user roles available",
+    "Policy templates reviewed and approved",
+    "Backup of current policy state"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Policy Analysis and Design",
+      "description": "Analyze current security requirements and design comprehensive policies",
+      "commands": [
+        "REVIEW all tables requiring RLS policies",
+        "ANALYZE role hierarchy and permission matrix",
+        "IDENTIFY sensitive data requiring additional protection",
+        "DESIGN policy structure for each table",
+        "DOCUMENT policy requirements and expected behavior"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Policy design document with requirements matrix"
+    },
+    {
+      "step": 2,
+      "action": "Enable RLS on Tables",
+      "description": "Activate Row Level Security on all target tables",
+      "commands": [
+        "ALTER TABLE table_name ENABLE ROW LEVEL SECURITY",
+        "VERIFY RLS is enabled for each table",
+        "CHECK existing policies that may conflict",
+        "DOCUMENT current state before adding new policies"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "RLS activation confirmation report"
+    },
+    {
+      "step": 3,
+      "action": "Implement Tenant Isolation Policies",
+      "description": "Create policies ensuring users can only access their tenant's data",
+      "commands": [
+        "CREATE POLICY tenant_isolation ON table_name FOR ALL TO authenticated USING (tenant_id = auth.jwt()->>'tenant_id')",
+        "VALIDATE tenant_id extraction from JWT token",
+        "TEST policy with different tenant contexts",
+        "ENSURE superuser bypass is properly handled"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Tenant isolation policy implementation log"
+    },
+    {
+      "step": 4,
+      "action": "Implement Role-Based Access Policies",
+      "description": "Create policies for different roles and their specific access rights",
+      "commands": [
+        "CREATE POLICY role_read_access ON table_name FOR SELECT USING (has_role_condition())",
+        "CREATE POLICY role_write_access ON table_name FOR INSERT/UPDATE/DELETE WITH CHECK (role_permission_check())",
+        "IMPLEMENT owner override policies where needed",
+        "CREATE custom functions for complex permission checks"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Role-based policy implementation documentation"
+    },
+    {
+      "step": 5,
+      "action": "Create Helper Functions",
+      "description": "Implement supporting functions for complex permission logic",
+      "commands": [
+        "CREATE FUNCTION has_tenant_access() RETURNS BOOLEAN",
+        "CREATE FUNCTION has_role_permission(p_role text, p_action text) RETURNS BOOLEAN",
+        "CREATE FUNCTION is_resource_owner() RETURNS BOOLEAN",
+        "CREATE FUNCTION can_access_sensitive_data() RETURNS BOOLEAN"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Helper function definitions and usage documentation"
+    },
+    {
+      "step": 6,
+      "action": "Tenant-Agent Integration Testing",
+      "description": "Validate tenant isolation with tenant-agent context",
+      "commands": [
+        "TEST tenant isolation with tenant-agent contexts",
+        "VALIDATE tenant-level feature flag enforcement",
+        "CHECK cross-tenant data access blocking",
+        "VERIFY tenant branding and configuration isolation"
+      ],
+      "agent": "tenant-agent",
+      "expectedOutput": "Tenant integration test results"
+    },
+    {
+      "step": 7,
+      "action": "Comprehensive Security Testing",
+      "description": "Test all security scenarios and edge cases",
+      "commands": [
+        "TEST each user role with expected permissions",
+        "ATTEMPT unauthorized access (should be blocked)",
+        "TEST policy bypass attempts",
+        "VALIDATE JWT token manipulation protection",
+        "CHECK for SQL injection in policy definitions"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Security test results and vulnerability assessment"
+    },
+    {
+      "step": 8,
+      "action": "Performance Impact Assessment",
+      "description": "Measure and optimize policy performance impact",
+      "commands": [
+        "EXECUTE EXPLAIN ANALYZE on queries with RLS active",
+        "MEASURE query performance before and after policies",
+        "IDENTIFY performance bottlenecks in policy functions",
+        "OPTIMIZE policy conditions and helper functions",
+        "CREATE necessary indexes for policy conditions"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Performance impact analysis report"
+    },
+    {
+      "step": 9,
+      "action": "Policy Documentation and Audit",
+      "description": "Document all policies for compliance and future reference",
+      "commands": [
+        "GENERATE policy documentation from system catalog",
+        "CREATE policy matrix showing access rights per role",
+        "DOCUMENT policy dependencies and interactions",
+        "CREATE audit procedures for policy changes",
+        "ESTABLISH policy review schedule"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Comprehensive policy documentation package"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "All tables have RLS enabled",
+      "Tenant isolation working correctly (100% blocking of cross-tenant access)",
+      "Role-based access enforced as designed",
+      "No unauthorized access possible",
+      "Performance impact within acceptable limits (<20% degradation)",
+      "All edge cases handled appropriately"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Tenant Isolation",
+        "test": "User from Tenant A cannot access Tenant B data",
+        "expected": "Access denied"
+      },
+      {
+        "scenario": "Role Permissions",
+        "test": "Sales role can only access CRM data, not financial data",
+        "expected": "CRM access allowed, Financial access denied"
+      },
+      {
+        "scenario": "Owner Override",
+        "test": "Tenant owner can access all data within their tenant",
+        "expected": "Full access granted within tenant"
+      },
+      {
+        "scenario": "JWT Manipulation",
+        "test": "Modified JWT token with different tenant_id",
+        "expected": "Access denied, potential security event logged"
+      }
+    ],
+    "successIndicators": [
+      "All security tests pass",
+      "No unauthorized access possible",
+      "Policy performance impact minimal",
+      "Complete audit trail for policy changes"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Policy syntax error",
+        "solution": "Validate SQL syntax, check function names and column references"
+      },
+      {
+        "error": "JWT token tenant_id extraction fails",
+        "solution": "Verify JWT structure and token extraction functions"
+      },
+      {
+        "error": "Policy conflicts between multiple policies",
+        "solution": "Review policy order and conditions, resolve conflicts"
+      },
+      {
+        "error": "Performance degradation >50%",
+        "solution": "Optimize policy conditions, add indexes, simplify logic"
+      },
+      {
+        "error": "Policy allows unauthorized access",
+        "solution": "Review policy logic, tighten conditions, add additional checks"
+      }
+    ],
+    "rollbackProcedure": [
+      "DROP all newly created policies",
+      "DISABLE RLS on affected tables if necessary",
+      "RESTORE previous policy state from backup",
+      "VERIFY system security is maintained",
+      "DOCUMENT rollback and root cause"
+    ],
+    "escalationCriteria": [
+      "Security breach detected during testing",
+      "Cannot prevent unauthorized access",
+      "Policy implementation breaks existing functionality",
+      "Performance degradation makes system unusable",
+      "Policy conflicts cannot be resolved"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Security Coverage",
+      "target": "100%",
+      "measurement": "All tables have appropriate RLS policies"
+    },
+    {
+      "name": "Tenant Isolation Effectiveness",
+      "target": "100%",
+      "measurement": "Cross-tenant access attempts blocked"
+    },
+    {
+      "name": "Role Enforcement Accuracy",
+      "target": "100%",
+      "measurement": "Role-based access correctly enforced"
+    },
+    {
+      "name": "Performance Impact",
+      "target": "<20%",
+      "measurement": "Query performance degradation"
+    },
+    {
+      "name": "Security Test Pass Rate",
+      "target": "100%",
+      "measurement": "All security scenarios pass validation"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "RLS policies implemented, validate tenant isolation functionality",
+      "data": ["policy_list", "affected_tables", "testing_procedures"]
+    },
+    {
+      "fromAgent": "tenant-agent",
+      "toAgent": "security-agent",
+      "message": "Tenant isolation validation results",
+      "data": ["validation_status", "issues_found", "performance_impact"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "all-agents",
+      "message": "New RLS policies active, agent access may be affected",
+      "data": ["policy_changes", "access_updates", "required_agent_actions"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Policy Implementation Scripts",
+      "type": "SQL files",
+      "location": "/security/policies/rls_implementation_{timestamp}.sql"
+    },
+    {
+      "name": "Security Validation Report",
+      "type": "JSON document",
+      "content": ["test_results", "vulnerability_assessment", "compliance_status"]
+    },
+    {
+      "name": "Policy Documentation",
+      "type": "Markdown package",
+      "content": ["policy_matrix", "access_rules", "helper_functions", "audit_procedures"]
+    },
+    {
+      "name": "Performance Impact Analysis",
+      "type": "Report",
+      "content": ["before_after_metrics", "optimization_recommendations", "monitoring_plan"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive policy implementation scripts",
+      "Clean up temporary test data",
+      "Update system documentation",
+      "Remove development-only policies"
+    ],
+    "monitoring": [
+      "Monitor policy effectiveness continuously",
+      "Track unauthorized access attempts",
+      "Watch for policy performance issues",
+      "Audit policy changes and access patterns",
+      "Regular security reviews and updates"
+    ],
+    "maintenance": [
+      "Schedule regular policy reviews",
+      "Update policies as roles/permissions change",
+      "Monitor for new security requirements",
+      "Maintain policy documentation currency",
+      "Test policy changes in staging first"
+    ]
+  }
+}

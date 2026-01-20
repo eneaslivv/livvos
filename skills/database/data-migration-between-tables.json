@@ -1,0 +1,302 @@
+{
+  "name": "data-migration-between-tables",
+  "description": "Safely migrate data between database tables with validation, rollback, and minimal downtime",
+  "priority": "HIGH",
+  "expectedDuration": "30-120 minutes (depending on data volume)",
+  "requiredAgents": ["security-agent", "project-agent", "crm-agent", "finance-agent"],
+  "requiredPermissions": ["database.read", "database.write", "data.migrate", "audit.view"],
+  "dependencies": ["database-backup", "schema-validation", "performance-monitoring"],
+  
+  "objectives": [
+    "Migrate data from source table to destination table",
+    "Ensure data integrity and consistency during migration",
+    "Minimize system downtime and user impact",
+    "Validate migrated data against source",
+    "Maintain audit trail throughout migration process",
+    "Provide rollback capability if issues arise"
+  ],
+  
+  "prerequisites": [
+    "Complete database backup created and verified",
+    "Destination table schema validated and ready",
+    "Data mapping rules documented and approved",
+    "Migration window scheduled with stakeholders",
+    "Performance baseline established for comparison",
+    "Rollback plan tested in staging environment"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Pre-Migration Analysis",
+      "description": "Analyze source data and prepare migration plan",
+      "commands": [
+        "COUNT total records in source table",
+        "Analyze data distribution and constraints",
+        "Identify any data quality issues",
+        "Estimate migration duration based on data volume",
+        "Validate foreign key relationships"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Data analysis report with migration estimates"
+    },
+    {
+      "step": 2,
+      "action": "Create Migration Scripts",
+      "description": "Generate SQL scripts for data transfer and validation",
+      "commands": [
+        "CREATE temporary migration tracking table",
+        "Generate INSERT INTO ... SELECT FROM statements",
+        "Create data validation queries",
+        "Prepare rollback scripts",
+        "Add logging and progress tracking"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Complete migration script package"
+    },
+    {
+      "step": 3,
+      "action": "Start Migration Logging",
+      "description": "Initialize audit logging for migration tracking",
+      "commands": [
+        "INSERT migration start record into audit table",
+        "Log migration parameters and expected scope",
+        "Set up progress monitoring",
+        "Initialize rollback checkpoint"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Migration audit trail initialized"
+    },
+    {
+      "step": 4,
+      "action": "Execute Data Transfer",
+      "description": "Transfer data from source to destination in batches",
+      "commands": [
+        "BEGIN TRANSACTION for batch processing",
+        "INSERT batch of records into destination table",
+        "UPDATE migration tracking table",
+        "Validate batch integrity",
+        "COMMIT transaction",
+        "Repeat for all batches"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Data transfer completion log"
+    },
+    {
+      "step": 5,
+      "action": "Data Validation",
+      "description": "Comprehensive validation of migrated data",
+      "commands": [
+        "COMPARE record counts between source and destination",
+        "VALIDATE data integrity and constraints",
+        "CHECK foreign key relationships",
+        "VERIFY business rule compliance",
+        "PERFORM sample data comparison"
+      ],
+      "agent": ["project-agent", "crm-agent", "finance-agent"],
+      "expectedOutput": "Data validation report"
+    },
+    {
+      "step": 6,
+      "action": "Agent Integration Testing",
+      "description": "Test that all agents can correctly access migrated data",
+      "commands": [
+        "Test project-agent access to project-related data",
+        "Validate crm-agent can access lead/client data",
+        "Verify finance-agent access to financial records",
+        "Check security policies still enforced",
+        "Test real-time subscriptions and updates"
+      ],
+      "agent": ["project-agent", "crm-agent", "finance-agent"],
+      "expectedOutput": "Agent integration test results"
+    },
+    {
+      "step": 7,
+      "action": "Performance Validation",
+      "description": "Ensure system performance meets requirements post-migration",
+      "commands": [
+        "Execute performance benchmark queries",
+        "Compare against pre-migration baseline",
+        "Check index effectiveness on new table",
+        "Monitor query execution plans",
+        "Validate response times"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Performance validation report"
+    },
+    {
+      "step": 8,
+      "action": "Finalize Migration",
+      "description": "Complete migration process and update system references",
+      "commands": [
+        "Update application references to new table if needed",
+        "Create backup of old table before deletion",
+        "DROP old table (or rename for safety)",
+        "Update documentation and schema diagrams",
+        "Log migration completion to audit trail"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Migration completion confirmation"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "All records migrated successfully with 100% data integrity",
+      "No data loss or corruption detected",
+      "All agents can access migrated data correctly",
+      "Security policies enforced consistently",
+      "System performance meets or exceeds baseline",
+      "Audit trail complete and accurate"
+    ],
+    "validationQueries": [
+      "SELECT COUNT(*) FROM source_table",
+      "SELECT COUNT(*) FROM destination_table",
+      "SELECT * FROM destination_table EXCEPT SELECT * FROM source_table",
+      "EXPLAIN ANALYZE on critical queries using new table"
+    ],
+    "successIndicators": [
+      "Record counts match exactly between tables",
+      "All validation queries return expected results",
+      "No application errors or timeouts",
+      "Security tests show proper data isolation",
+      "Performance metrics within acceptable ranges"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Data type mismatch between tables",
+        "solution": "Review and correct column type conversions, use CAST functions"
+      },
+      {
+        "error": "Foreign key constraint violation",
+        "solution": "Ensure referenced data exists, migrate in correct dependency order"
+      },
+      {
+        "error": "Transaction timeout during large migration",
+        "solution": "Reduce batch size, increase timeout, or use non-transactional approach"
+      },
+      {
+        "error": "Performance degradation during migration",
+        "solution": "Schedule during low-traffic periods, use throttling"
+      },
+      {
+        "error": "Data validation failures",
+        "solution": "Investigate data quality issues, perform data cleansing"
+      }
+    ],
+    "rollbackProcedure": [
+      "STOP any ongoing migration processes",
+      "ROLLBACK any uncommitted transactions",
+      "RESTORE from backup if necessary",
+      "DROP destination table if partially created",
+      "RESTORE source table if modified",
+      "VERIFY system functionality restored",
+      "LOG rollback details to audit trail"
+    ],
+    "escalationCriteria": [
+      "Data integrity validation fails",
+      "Critical system errors during migration",
+      "Rollback fails to restore properly",
+      "Performance degradation >30% post-migration",
+      "Security policy violations detected"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Data Integrity",
+      "target": "100%",
+      "measurement": "Record count match and validation test success"
+    },
+    {
+      "name": "Migration Completion",
+      "target": "100%",
+      "measurement": "All records transferred without errors"
+    },
+    {
+      "name": "System Availability",
+      "target": ">95%",
+      "measurement": "System uptime during migration window"
+    },
+    {
+      "name": "Agent Integration",
+      "target": "100%",
+      "measurement": "All agents successfully access migrated data"
+    },
+    {
+      "name": "Performance Retention",
+      "target": ">90%",
+      "measurement": "Post-migration performance compared to baseline"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": ["project-agent", "crm-agent", "finance-agent"],
+      "message": "Data migration completed, validate domain-specific data",
+      "data": ["migration_summary", "table_name", "record_count", "validation_queries"]
+    },
+    {
+      "fromAgent": ["project-agent", "crm-agent", "finance-agent"],
+      "toAgent": "security-agent",
+      "message": "Domain data validation results",
+      "data": ["validation_status", "issues_found", "performance_impact", "data_quality_score"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "Migration completed, update tenant configurations if needed",
+      "data": ["completion_time", "impact_summary", "action_items"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Migration Scripts",
+      "type": "SQL files",
+      "location": "/migrations/data_migration_{timestamp}/"
+    },
+    {
+      "name": "Validation Report",
+      "type": "JSON document",
+      "content": ["data_integrity", "performance_metrics", "agent_test_results"]
+    },
+    {
+      "name": "Audit Trail",
+      "type": "Database records",
+      "content": ["migration_start", "progress_logs", "completion", "rollback_if_needed"]
+    },
+    {
+      "name": "Post-Migration Summary",
+      "type": "Markdown report",
+      "content": ["executive_summary", "technical_details", "recommendations"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive migration scripts and logs",
+      "Remove temporary tracking tables",
+      "Update system documentation",
+      "Clean up backup files after validation period",
+      "Notify stakeholders of completion"
+    ],
+    "monitoring": [
+      "Monitor system performance for 24 hours",
+      "Watch for data consistency issues",
+      "Track agent error rates",
+      "Monitor user-reported issues",
+      "Validate audit log completeness"
+    ],
+    "documentation": [
+      "Update technical documentation",
+      "Record lessons learned",
+      "Document any data quality issues found",
+      "Update runbook for future migrations"
+    ]
+  }
+}

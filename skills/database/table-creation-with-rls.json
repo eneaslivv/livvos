@@ -1,0 +1,232 @@
+{
+  "name": "database-table-creation-with-rls",
+  "description": "Create new database tables with comprehensive Row Level Security (RLS) policies for multi-tenant isolation",
+  "priority": "CRITICAL",
+  "expectedDuration": "15-30 minutes",
+  "requiredAgents": ["security-agent", "tenant-agent"],
+  "requiredPermissions": ["database.create", "security.manage", "tenant.configure"],
+  "dependencies": ["supabase-connection", "schema-validation"],
+  
+  "objectives": [
+    "Create database table with proper column definitions and constraints",
+    "Implement comprehensive RLS policies for tenant isolation",
+    "Add necessary indexes for performance optimization",
+    "Validate table creation with test data insertion",
+    "Ensure audit logging is configured for the table"
+  ],
+  
+  "prerequisites": [
+    "Active Supabase connection with admin privileges",
+    "Valid tenant_id reference exists",
+    "Table schema reviewed and approved",
+    "Migration strategy documented",
+    "Backup of current database state"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Validate Schema Requirements",
+      "description": "Review table schema for proper column types, constraints, and relationships",
+      "commands": [
+        "Check foreign key references exist",
+        "Validate column naming conventions",
+        "Ensure default values are appropriate",
+        "Verify data type constraints"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Schema validation report"
+    },
+    {
+      "step": 2,
+      "action": "Generate Migration Script",
+      "description": "Create SQL migration script for table creation with proper structure",
+      "commands": [
+        "CREATE TABLE with column definitions",
+        "Add foreign key constraints",
+        "Create necessary indexes",
+        "Add check constraints if needed"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "SQL migration file"
+    },
+    {
+      "step": 3,
+      "action": "Implement RLS Policies",
+      "description": "Add Row Level Security policies for tenant isolation and access control",
+      "commands": [
+        "ENABLE ROW LEVEL SECURITY",
+        "CREATE POLICY for tenant isolation (tenant_id = auth.jwt()->> 'tenant_id')",
+        "CREATE POLICY for role-based access control",
+        "CREATE POLICY for owner/admin override access"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "RLS policy definitions"
+    },
+    {
+      "step": 4,
+      "action": "Execute Migration",
+      "description": "Apply the migration to create the table and policies",
+      "commands": [
+        "Execute migration script in controlled environment",
+        "Verify table creation success",
+        "Confirm RLS policies are active",
+        "Check index creation"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Migration execution confirmation"
+    },
+    {
+      "step": 5,
+      "action": "Tenant Integration",
+      "description": "Validate tenant isolation and integration with existing tenant system",
+      "commands": [
+        "Test tenant isolation with different user contexts",
+        "Validate tenant-agent can access table",
+        "Test role-based access enforcement",
+        "Verify audit logging functionality"
+      ],
+      "agent": "tenant-agent",
+      "expectedOutput": "Tenant integration test results"
+    },
+    {
+      "step": 6,
+      "action": "Performance Validation",
+      "description": "Test query performance and optimize if necessary",
+      "commands": [
+        "Execute sample queries with EXPLAIN ANALYZE",
+        "Check query execution plans",
+        "Verify index usage",
+        "Monitor query response times"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Performance validation report"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Table created successfully without errors",
+      "All RLS policies are active and enforced",
+      "Tenant isolation working correctly",
+      "Indexes are being used by queries",
+      "Audit logging captures all operations",
+      "Performance meets acceptable thresholds (<100ms for typical queries)"
+    ],
+    "testQueries": [
+      "SELECT * FROM new_table WHERE tenant_id = 'test-tenant'",
+      "INSERT INTO new_table (tenant_id, ...) VALUES ('test-tenant', ...)",
+      "UPDATE new_table SET ... WHERE tenant_id = 'test-tenant'",
+      "DELETE FROM new_table WHERE tenant_id = 'test-tenant'"
+    ],
+    "successIndicators": [
+      "All test queries pass with expected results",
+      "Cross-tenant data access attempts are blocked",
+      "Database logs show RLS policy enforcement"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Table already exists",
+        "solution": "Check for existing table, use ALTER TABLE if migration needed"
+      },
+      {
+        "error": "RLS policy syntax error",
+        "solution": "Validate policy syntax, check function names and column references"
+      },
+      {
+        "error": "Foreign key constraint violation",
+        "solution": "Ensure referenced tables and columns exist with correct data types"
+      },
+      {
+        "error": "Index creation fails",
+        "solution": "Check for duplicate indexes, validate index definition"
+      }
+    ],
+    "rollbackProcedure": [
+      "Drop created table: DROP TABLE IF EXISTS table_name CASCADE;",
+      "Remove created indexes",
+      "Clean up any partial policies",
+      "Document rollback completion"
+    ],
+    "escalationCriteria": [
+      "Migration fails after 3 retry attempts",
+      "RLS policies cannot be applied correctly",
+      "Performance degradation >50% after table creation",
+      "Cross-tenant data leakage detected"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Table Creation Success",
+      "target": "100%",
+      "measurement": "Migration completion without errors"
+    },
+    {
+      "name": "RLS Policy Enforcement",
+      "target": "100%",
+      "measurement": "Cross-tenant access attempts blocked"
+    },
+    {
+      "name": "Query Performance",
+      "target": "<100ms",
+      "measurement": "Average query response time for typical operations"
+    },
+    {
+      "name": "Audit Completeness",
+      "target": "100%",
+      "measurement": "All table operations logged correctly"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "Table created with RLS policies, validate tenant isolation",
+      "data": ["table_name", "policy_count", "index_list"]
+    },
+    {
+      "fromAgent": "tenant-agent",
+      "toAgent": "security-agent",
+      "message": "Tenant isolation validation results",
+      "data": ["validation_results", "performance_metrics", "issues_found"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Migration Script",
+      "type": "SQL file",
+      "location": "/migrations/001_create_table_name.sql"
+    },
+    {
+      "name": "Validation Report",
+      "type": "JSON document",
+      "content": ["test_results", "performance_metrics", "security_validation"]
+    },
+    {
+      "name": "RLS Policy Documentation",
+      "type": "Markdown",
+      "content": ["policy_descriptions", "access_rules", "tenant_isolation_details"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Remove temporary test data",
+      "Archive migration scripts",
+      "Update system documentation",
+      "Notify relevant agents of new table availability"
+    ],
+    "monitoring": [
+      "Monitor query performance for first 24 hours",
+      "Watch RLS policy effectiveness logs",
+      "Track audit log completeness",
+      "Monitor storage impact"
+    ]
+  }
+}

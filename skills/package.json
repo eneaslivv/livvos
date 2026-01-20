@@ -1,0 +1,55 @@
+{
+  "name": "@eneas-os/skills",
+  "version": "1.0.0",
+  "description": "Skill templates and execution system for Eneas-OS autonomous agents",
+  "main": "loader.ts",
+  "bin": {
+    "skill": "cli.ts"
+  },
+  "scripts": {
+    "skill": "ts-node cli.ts",
+    "build": "tsc",
+    "dev": "ts-node --watch",
+    "lint": "eslint . --ext .ts",
+    "test": "jest",
+    "validate": "node -e \"require('./loader').validateAllSkills()\""
+  },
+  "keywords": [
+    "eneas-os",
+    "agents",
+    "skills",
+    "automation",
+    "multi-tenant",
+    "crm",
+    "project-management"
+  ],
+  "author": "Eneas-OS Development Team",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  },
+  "files": [
+    "**/*.json",
+    "**/*.ts",
+    "!*.test.ts",
+    "!node_modules"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eneas-os/skills"
+  },
+  "bugs": {
+    "url": "https://github.com/eneas-os/skills/issues"
+  },
+  "homepage": "https://github.com/eneas-os/skills#readme"
+}

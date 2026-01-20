@@ -1,0 +1,336 @@
+{
+  "name": "document-storage-management",
+  "description": "Implement comprehensive document storage management with folder hierarchy, versioning, and tenant isolation",
+  "priority": "MEDIUM",
+  "expectedDuration": "60-120 minutes",
+  "requiredAgents": ["document-agent", "tenant-agent", "security-agent"],
+  "requiredPermissions": ["documents.manage", "storage.manage", "tenant.configure"],
+  "dependencies": ["supabase-storage-setup", "folder-structure-design", "versioning-system"],
+  
+  "objectives": [
+    "Implement proper folder hierarchy system with nested folders",
+    "Add document versioning with change tracking",
+    "Enforce storage limits per tenant",
+    "Implement comprehensive security and access control",
+    "Add document search and tagging capabilities",
+    "Create backup and archival procedures"
+  ],
+  
+  "prerequisites": [
+    "Supabase Storage bucket configured and accessible",
+    "Folder hierarchy design approved",
+    "Versioning strategy documented",
+    "Storage limits defined per tenant tier",
+    "Document metadata schema finalized",
+    "Security requirements for document access defined"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Storage Infrastructure Setup",
+      "description": "Configure Supabase Storage and document infrastructure",
+      "commands": [
+        "CONFIGURE documents bucket with proper CORS settings",
+        "SET up folder structure naming conventions",
+        "IMPLEMENT tenant-specific folder organization",
+        "CONFIGURE storage policies and access controls",
+        "TEST storage upload/download functionality"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Configured storage infrastructure ready for document management"
+    },
+    {
+      "step": 2,
+      "action": "Folder Hierarchy Implementation",
+      "description": "Implement nested folder structure replacing simple text field",
+      "commands": [
+        "CREATE folders table with parent-child relationships",
+        "IMPLEMENT folder path resolution functions",
+        "ADD folder permission inheritance",
+        "CREATE folder CRUD operations",
+        "IMPLEMENT folder move and rename operations"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Folder hierarchy system with nested structure support"
+    },
+    {
+      "step": 3,
+      "action": "Document Versioning System",
+      "description": "Implement document versioning with history tracking",
+      "commands": [
+        "CREATE document_versions table for version history",
+        "IMPLEMENT version creation on document updates",
+        "ADD version comparison functionality",
+        "CREATE version rollback capabilities",
+        "IMPLEMENT version metadata tracking"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Document versioning system with full history tracking"
+    },
+    {
+      "step": 4,
+      "action": "Storage Limits and Quota Management",
+      "description": "Implement tenant storage limits and quota enforcement",
+      "commands": [
+        "CREATE storage_usage tracking table",
+        "IMPLEMENT storage calculation functions",
+        "ADD quota enforcement before uploads",
+        "CREATE storage usage reporting",
+        "IMPLEMENT storage limit notifications"
+      ],
+      "agent": "tenant-agent",
+      "expectedOutput": "Storage quota management system with enforcement"
+    },
+    {
+      "step": 5,
+      "action": "Security and Access Control",
+      "description": "Implement comprehensive security for document storage",
+      "commands": [
+        "CREATE RLS policies for documents and folders",
+        "IMPLEMENT file-level access controls",
+        "ADD secure file URL generation",
+        "IMPLEMENT download logging and tracking",
+        "CREATE document sharing permissions"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Security system for document access and storage"
+    },
+    {
+      "step": 6,
+      "action": "Document Context Updates",
+      "description": "Update DocumentsContext to support new features",
+      "commands": [
+        "UPDATE DocumentsContext for folder hierarchy",
+        "ADD version management functions",
+        "IMPLEMENT storage quota checking",
+        "ADD advanced search capabilities",
+        "CREATE document collaboration features"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Updated DocumentsContext with new functionality"
+    },
+    {
+      "step": 7,
+      "action": "Search and Indexing System",
+      "description": "Implement document search with full-text indexing",
+      "commands": [
+        "CREATE document content indexing system",
+        "IMPLEMENT full-text search functionality",
+        "ADD tag-based filtering and search",
+        "CREATE advanced search with multiple criteria",
+        "IMPLEMENT search result ranking and relevance"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Advanced document search and indexing system"
+    },
+    {
+      "step": 8,
+      "action": "User Interface Updates",
+      "description": "Update document management interface",
+      "commands": [
+        "CREATE folder navigation interface",
+        "ADD version history viewer",
+        "IMPLEMENT file preview capabilities",
+        "ADD storage usage indicators",
+        "CREATE bulk operations interface"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Updated user interface for document management"
+    },
+    {
+      "step": 9,
+      "action": "Backup and Archival System",
+      "description": "Implement document backup and archival procedures",
+      "commands": [
+        "CREATE document backup procedures",
+        "IMPLEMENT archival for old versions",
+        "ADD backup verification and restore testing",
+        "CREATE retention policies",
+        "IMPLEMENT disaster recovery procedures"
+      ],
+      "agent": "document-agent",
+      "expectedOutput": "Backup and archival system for document preservation"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Folder hierarchy supports unlimited nesting",
+      "Document versioning tracks all changes accurately",
+      "Storage limits enforced properly per tenant",
+      "Security controls prevent unauthorized access",
+      "Search functionality returns accurate results",
+      "User interface provides intuitive document management"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Folder Operations",
+        "test": "Create nested folders, move folders, rename folders",
+        "expected": "All folder operations work correctly with proper permissions"
+      },
+      {
+        "scenario": "Document Versioning",
+        "test": "Update document multiple times, view version history, rollback to previous version",
+        "expected": "All versions tracked correctly, rollback successful"
+      },
+      {
+        "scenario": "Storage Quota",
+        "test": "Upload files until tenant limit reached, attempt upload beyond limit",
+        "expected": "Uploads blocked when limit reached, clear notification provided"
+      },
+      {
+        "scenario": "Security Access",
+        "test": "Access documents across tenants, test role-based permissions",
+        "expected": "Cross-tenant access blocked, role permissions enforced"
+      }
+    ],
+    "successIndicators": [
+      "All folder operations work correctly",
+      "Document versioning tracks changes accurately",
+      "Storage quotas enforced consistently",
+      "Security controls prevent unauthorized access",
+      "Search returns relevant results quickly"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Folder hierarchy corruption",
+        "solution": "Implement integrity checks, use transactions for folder operations"
+      },
+      {
+        "error": "Version storage consumption too high",
+        "solution": "Implement version retention policies, compression for old versions"
+      },
+      {
+        "error": "Storage limit calculation errors",
+        "solution": "Review calculation logic, implement proper size tracking"
+      },
+      {
+        "error": "Search performance issues",
+        "solution": "Optimize indexing, implement search result caching"
+      },
+      {
+        "error": "File upload failures",
+        "solution": "Check storage configuration, implement retry mechanisms"
+      }
+    ],
+    "rollbackProcedure": [
+      "RESTORE documents from backup",
+      "ROLLBACK schema changes if needed",
+      "RESTORE previous DocumentsContext version",
+      "REVERT storage configuration changes",
+      "DOCUMENT rollback and recovery process"
+    ],
+    "escalationCriteria": [
+      "Document data loss or corruption",
+      "Security breach of sensitive documents",
+      "Storage system completely unusable",
+      "Versioning system fails causing data inconsistency",
+      "Performance degradation making system unusable"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Folder Operations Success",
+      "target": ">99%",
+      "measurement": "Folder operations completed successfully"
+    },
+    {
+      "name": "Version Accuracy",
+      "target": "100%",
+      "measurement": "All document changes tracked in versions"
+    },
+    {
+      "name": "Storage Quota Enforcement",
+      "target": "100%",
+      "measurement": "Storage limits properly enforced"
+    },
+    {
+      "name": "Search Response Time",
+      "target": "<2 seconds",
+      "measurement": "Time to return search results"
+    },
+    {
+      "name": "Security Compliance",
+      "target": "100%",
+      "measurement": "Unauthorized access attempts blocked"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "document-agent",
+      "toAgent": "tenant-agent",
+      "message": "Document storage system requires tenant quota management",
+      "data": ["storage_requirements", "quota_calculations", "usage_reporting"]
+    },
+    {
+      "fromAgent": "document-agent",
+      "toAgent": "security-agent",
+      "message": "Document access requires security controls and permissions",
+      "data": ["access_levels", "file_permissions", "security_requirements"]
+    },
+    {
+      "fromAgent": "tenant-agent",
+      "toAgent": "document-agent",
+      "message": "Storage limits updated, adjust document quotas",
+      "data": ["quota_changes", "tenant_tiers", "limit_adjustments"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "document-agent",
+      "message": "Security policies updated, adjust document access controls",
+      "data": ["policy_changes", "permission_updates", "security_requirements"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Database Schema Updates",
+      "type": "SQL migration scripts",
+      "content": ["folders_table", "document_versions", "storage_tracking"]
+    },
+    {
+      "name": "DocumentsContext Implementation",
+      "type": "TypeScript React Context",
+      "content": ["folder_management", "versioning", "quota_enforcement"]
+    },
+    {
+      "name": "Storage Configuration",
+      "type": "Supabase setup and policies",
+      "content": ["bucket_config", "access_policies", "cors_settings"]
+    },
+    {
+      "name": "User Interface Components",
+      "type": "React components",
+      "content": ["folder_browser", "version_viewer", "upload_interface"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive old folder text field data",
+      "Clean up temporary migration files",
+      "Update system documentation",
+      "Remove development-only configurations"
+    ],
+    "monitoring": [
+      "Monitor storage usage per tenant",
+      "Track document access patterns",
+      "Watch for storage performance issues",
+      "Monitor version storage consumption",
+      "Track user behavior and issues"
+    ],
+    "maintenance": [
+      "Review storage quotas quarterly",
+      "Maintain backup and archival procedures",
+      "Update search indexing as needed",
+      "Review and optimize folder structures",
+      "Maintain security compliance"
+    ]
+  }
+}

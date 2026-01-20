@@ -1,0 +1,350 @@
+{
+  "name": "new-agent-creation",
+  "description": "Create and integrate new autonomous agents into the eneas-os system with proper domain ownership and interfaces",
+  "priority": "MEDIUM",
+  "expectedDuration": "90-180 minutes",
+  "requiredAgents": ["security-agent", "tenant-agent"],
+  "requiredPermissions": ["agent.create", "system.configure", "domain.define"],
+  "dependencies": ["agent-architecture-validation", "domain-requirements-analysis", "integration-framework"],
+  
+  "objectives": [
+    "Define new agent domain structure and responsibilities",
+    "Create agent context and infrastructure components",
+    "Implement database schema and RLS policies for agent domain",
+    "Create agent interfaces and communication protocols",
+    "Integrate agent into global context provider stack",
+    "Implement agent-specific skills and capabilities"
+  ],
+  
+  "prerequisites": [
+    "New agent domain requirements documented",
+    "Agent architecture template available",
+    "System integration points identified",
+    "Database schema design approved",
+    "Security requirements defined",
+    "Testing framework ready for agent validation"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Domain Definition and Requirements Analysis",
+      "description": "Define the new agent's domain, responsibilities, and boundaries",
+      "commands": [
+        "ANALYZE business requirements for new agent",
+        "DEFINE agent domain scope and boundaries",
+        "IDENTIFY data ownership and access patterns",
+        "MAP agent responsibilities and workflows",
+        "DOCUMENT agent interfaces and dependencies"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Complete agent domain definition with requirements"
+    },
+    {
+      "step": 2,
+      "action": "Agent Architecture Design",
+      "description": "Design the agent's architecture following established patterns",
+      "commands": [
+        "CREATE agent context structure design",
+        "DEFINE React Context provider pattern",
+        "DESIGN database schema for agent domain",
+        "PLAN agent communication interfaces",
+        "IDENTIFY required skills and capabilities"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Complete agent architecture design"
+    },
+    {
+      "step": 3,
+      "action": "Database Schema Implementation",
+      "description": "Create database tables and RLS policies for the agent domain",
+      "commands": [
+        "CREATE database tables following naming conventions",
+        "IMPLEMENT tenant_id columns for isolation",
+        "ADD RLS policies for security and tenant isolation",
+        "CREATE necessary indexes for performance",
+        "ADD audit logging and activity tracking"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Database schema with security policies implemented"
+    },
+    {
+      "step": 4,
+      "action": "Agent Context Creation",
+      "description": "Implement the agent's React Context and state management",
+      "commands": [
+        "CREATE AgentContext.tsx following established patterns",
+        "IMPLEMENT state management for agent data",
+        "ADD Supabase integration for data operations",
+        "CREATE custom hooks for common operations",
+        "IMPLEMENT error handling and loading states"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Complete agent context implementation"
+    },
+    {
+      "step": 5,
+      "action": "Agent Interface Implementation",
+      "description": "Create communication interfaces with other agents",
+      "commands": [
+        "DEFINE agent-to-agent communication protocols",
+        "IMPLEMENT message passing interfaces",
+        "CREATE dependency management system",
+        "ADD event subscription and notification handling",
+        "IMPLEMENT cross-agent data sharing protocols"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Agent communication and interface system"
+    },
+    {
+      "step": 6,
+      "action": "Security Integration",
+      "description": "Integrate the new agent with the security system",
+      "commands": [
+        "DEFINE role-based access control for agent domain",
+        "IMPLEMENT permission checks in agent operations",
+        "ADD agent operations to audit logging",
+        "CREATE security validation procedures",
+        "INTEGRATE with RBAC system for permissions"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Security integration for the new agent"
+    },
+    {
+      "step": 7,
+      "action": "Tenant Integration",
+      "description": "Integrate the agent with tenant management and feature flags",
+      "commands": [
+        "IMPLEMENT tenant filtering in all data operations",
+        "ADD tenant-specific configuration support",
+        "CREATE feature flag integration for agent capabilities",
+        "IMPLEMENT tenant branding and customization support",
+        "ADD tenant resource limit enforcement"
+      ],
+      "agent": "tenant-agent",
+      "expectedOutput": "Tenant integration for the new agent"
+    },
+    {
+      "step": 8,
+      "action": "Global Context Stack Integration",
+      "description": "Integrate the agent into the global context provider stack",
+      "commands": [
+        "UPDATE global context provider order",
+        "ADD agent provider to App.tsx wrapper",
+        "IMPLEMENT proper provider dependencies",
+        "CREATE agent initialization procedures",
+        "ADD error boundaries and fallback handling"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Agent integrated into global context stack"
+    },
+    {
+      "step": 9,
+      "action": "Agent Skills and Capabilities Implementation",
+      "description": "Create agent-specific skills following the established template",
+      "commands": [
+        "CREATE agent skill templates for common operations",
+        "IMPLEMENT domain-specific automated procedures",
+        "ADD agent health monitoring and validation",
+        "CREATE agent-specific error handling procedures",
+        "IMPLEMENT agent performance optimization"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Agent skills and capabilities system"
+    },
+    {
+      "step": 10,
+      "action": "Testing and Validation",
+      "description": "Comprehensive testing of the new agent and its integrations",
+      "commands": [
+        "TEST agent context functionality",
+        "VALIDATE database operations and security",
+        "TEST agent communication interfaces",
+        "VALIDATE tenant and security integration",
+        "PERFORM load testing and performance validation"
+      ],
+      "agent": ["security-agent", "tenant-agent"],
+      "expectedOutput": "Comprehensive test results and validation report"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Agent domain well-defined with clear boundaries",
+      "Database schema implements proper tenant isolation",
+      "Agent context follows established patterns",
+      "Security integration prevents unauthorized access",
+      "Tenant integration respects multi-tenant boundaries",
+      "Agent communication interfaces work correctly",
+      "Global context stack integration stable"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Agent Context Functionality",
+        "test": "Test agent data operations and state management",
+        "expected": "All CRUD operations work correctly with proper error handling"
+      },
+      {
+        "scenario": "Security Integration",
+        "test": "Test agent access control with different user roles",
+        "expected": "Only authorized users can access agent functionality"
+      },
+      {
+        "scenario": "Tenant Isolation",
+        "test": "Verify tenant data separation in agent domain",
+        "expected": "Cross-tenant access blocked completely"
+      },
+      {
+        "scenario": "Agent Communication",
+        "test": "Test message passing between agents",
+        "expected": "Communication works correctly with proper error handling"
+      }
+    ],
+    "successIndicators": [
+      "All agent functionality tests pass",
+      "Security integration blocks unauthorized access",
+      "Tenant isolation works correctly",
+      "Agent communication interfaces functional"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Agent context initialization failures",
+        "solution": "Review provider dependencies, check data access patterns"
+      },
+      {
+        "error": "Security policy conflicts",
+        "solution": "Review RLS policies, resolve conflicts with existing policies"
+      },
+      {
+        "error": "Tenant isolation gaps",
+        "solution": "Add tenant_id filtering, review database queries"
+      },
+      {
+        "error": "Agent communication failures",
+        "solution": "Check interface protocols, verify message formatting"
+      },
+      {
+        "error": "Context stack integration issues",
+        "solution": "Review provider order, fix dependency cycles"
+      }
+    ],
+    "rollbackProcedure": [
+      "REMOVE new agent from global context stack",
+      "ROLLBACK database schema changes",
+      "REMOVE agent context and related files",
+      "RESTORE previous system configuration",
+      "DOCUMENT rollback and lessons learned"
+    ],
+    "escalationCriteria": [
+      "Agent integration breaks existing functionality",
+      "Security vulnerabilities introduced by new agent",
+      "Tenant isolation compromised by agent implementation",
+      "Performance degradation affecting entire system",
+      "Agent communication failures causing system instability"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Agent Integration Success",
+      "target": "100%",
+      "measurement": "All integration points working correctly"
+    },
+    {
+      "name": "Security Compliance",
+      "target": "100%",
+      "measurement": "All security tests pass with no vulnerabilities"
+    },
+    {
+      "name": "Tenant Isolation Effectiveness",
+      "target": "100%",
+      "measurement": "Cross-tenant access completely blocked"
+    },
+    {
+      "name": "Performance Impact",
+      "target": "<5%",
+      "measurement": "System performance impact from new agent"
+    },
+    {
+      "name": "Communication Reliability",
+      "target": ">99%",
+      "measurement": "Agent communication success rate"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "New agent requires tenant integration and feature flag support",
+      "data": ["agent_requirements", "tenant_configurations", "feature_flag_needs"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "existing-agents",
+      "message": "New agent interfaces require communication protocol updates",
+      "data": ["interface_definitions", "message_protocols", "communication_requirements"]
+    },
+    {
+      "fromAgent": "existing-agents",
+      "toAgent": "security-agent",
+      "message": "Interface compatibility feedback and integration requirements",
+      "data": ["compatibility_issues", "integration_needs", "protocol_updates"]
+    },
+    {
+      "fromAgent": "new-agent",
+      "toAgent": "all-agents",
+      "message": "New agent ready for integration and collaboration",
+      "data": ["agent_capabilities", "communication_protocols", "service_offerings"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Agent Domain Documentation",
+      "type": "Markdown documentation",
+      "content": ["domain_definition", "responsibilities", "interfaces", "dependencies"]
+    },
+    {
+      "name": "Database Schema",
+      "type": "SQL migration scripts",
+      "content": ["table_definitions", "rls_policies", "indexes", "constraints"]
+    },
+    {
+      "name": "Agent Context Implementation",
+      "type": "TypeScript React Context",
+      "content": ["context_provider", "custom_hooks", "state_management", "error_handling"]
+    },
+    {
+      "name": "Integration Configuration",
+      "type": "System configuration",
+      "content": ["context_stack_updates", "communication_protocols", "security_integration"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive development files and test data",
+      "Clean up temporary configurations",
+      "Update system documentation",
+      "Remove development-only debugging code"
+    ],
+    "monitoring": [
+      "Monitor new agent performance and stability",
+      "Track agent communication success rates",
+      "Watch for security issues or vulnerabilities",
+      "Monitor impact on existing system functionality",
+      "Track user adoption and feedback"
+    ],
+    "maintenance": [
+      "Regularly review agent performance and optimization",
+      "Maintain agent skill templates and procedures",
+      "Update security integration as needed",
+      "Monitor and optimize agent communication",
+      "Maintain documentation and training materials"
+    ]
+  }
+}

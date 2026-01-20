@@ -1,0 +1,192 @@
+# Skill Registry Index
+
+This file contains a registry of all available skills for the eneas-os agent system.
+
+## How to Use Skills
+
+Agents can load and execute skills using:
+```bash
+skill load <skill-name>
+skill list
+skill info <skill-name>
+```
+
+## Available Skills
+
+### Database Operations
+
+#### 🔴 Critical Skills
+- **table-creation-with-rls** - Create database tables with comprehensive Row Level Security
+  - Path: `skills/database/table-creation-with-rls.json`
+  - Required Agents: security-agent, tenant-agent
+  - Duration: 15-30 minutes
+
+- **data-migration-between-tables** - Safely migrate data between tables with validation
+  - Path: `skills/database/data-migration-between-tables.json`
+  - Required Agents: security-agent, project-agent, crm-agent, finance-agent
+  - Duration: 30-120 minutes
+
+### Security Operations
+
+#### 🔴 Critical Skills
+- **rls-policy-implementation** - Implement comprehensive RLS policies with tenant isolation
+  - Path: `skills/security/rls-policy-implementation.json`
+  - Required Agents: security-agent, tenant-agent
+  - Duration: 45-90 minutes
+
+- **credential-encryption-implementation** - Encrypt sensitive credentials with secure key management
+  - Path: `skills/security/credential-encryption-implementation.json`
+  - Required Agents: security-agent, project-agent
+  - Duration: 60-120 minutes
+
+### Domain-Specific Operations
+
+#### 🔶 High Priority Skills
+- **lead-status-transition-management** - Implement lead status transitions with validation
+  - Path: `skills/domain/lead-status-transition-management.json`
+  - Required Agents: crm-agent, security-agent, team-agent
+  - Duration: 30-60 minutes
+
+- **project-financial-calculation** - Implement comprehensive project financial calculations
+  - Path: `skills/domain/project-financial-calculation.json`
+  - Required Agents: finance-agent, project-agent, security-agent
+  - Duration: 45-90 minutes
+
+#### 🟡 Medium Priority Skills
+- **document-storage-management** - Implement folder hierarchy and versioning for documents
+  - Path: `skills/domain/document-storage-management.json`
+  - Required Agents: document-agent, tenant-agent, security-agent
+  - Duration: 60-120 minutes
+
+- **calendar-event-scheduling** - Implement conflict detection and recurring events
+  - Path: `skills/domain/calendar-event-scheduling.json`
+  - Required Agents: calendar-agent, team-agent, notifications-agent
+  - Duration: 45-90 minutes
+
+### System Operations
+
+#### 🟡 Medium Priority Skills
+- **agent-health-check-validation** - Implement comprehensive agent health monitoring
+  - Path: `skills/system/agent-health-check-validation.json`
+  - Required Agents: security-agent, all-domain-agents
+  - Duration: 30-45 minutes
+
+#### 🔴 Critical Skills
+- **tenant-isolation-verification** - Verify complete tenant isolation across all systems
+  - Path: `skills/system/tenant-isolation-verification.json`
+  - Required Agents: security-agent, tenant-agent, all-domain-agents
+  - Duration: 60-90 minutes
+
+### Development Workflow
+
+#### 🟡 Medium Priority Skills
+- **new-agent-creation** - Create and integrate new autonomous agents
+  - Path: `skills/development/new-agent-creation.json`
+  - Required Agents: security-agent, tenant-agent
+  - Duration: 90-180 minutes
+
+- **cross-agent-communication-protocol** - Implement standardized agent communication
+  - Path: `skills/development/cross-agent-communication-protocol.json`
+  - Required Agents: security-agent, all-domain-agents
+  - Duration: 60-120 minutes
+
+## Skill Categories by Priority
+
+### 🔴 Critical (Immediate Action Required)
+1. table-creation-with-rls
+2. rls-policy-implementation
+3. credential-encryption-implementation
+4. tenant-isolation-verification
+
+### 🔶 High Priority (Important)
+1. data-migration-between-tables
+2. lead-status-transition-management
+3. project-financial-calculation
+
+### 🟡 Medium Priority (Normal)
+1. document-storage-management
+2. calendar-event-scheduling
+3. agent-health-check-validation
+4. new-agent-creation
+5. cross-agent-communication-protocol
+
+### 🟢 Low Priority (Background)
+*Coming soon: Performance monitoring, analytics aggregation, maintenance procedures*
+
+## Agent Skill Matrix
+
+| Agent | Database | Security | Domain | System | Development |
+|-------|----------|----------|---------|---------|-------------|
+| auth-agent | ✓ | ✓ | ✓ | ✓ | ✗ |
+| tenant-agent | ✓ | ✓ | ✓ | ✓ | ✓ |
+| security-agent | ✓ | ✓ | ✓ | ✓ | ✓ |
+| project-agent | ✓ | ✗ | ✓ | ✗ | ✗ |
+| crm-agent | ✓ | ✗ | ✓ | ✗ | ✗ |
+| finance-agent | ✓ | ✗ | ✓ | ✗ | ✗ |
+| calendar-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
+| document-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
+| team-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
+| analytics-agent | ✗ | ✗ | ✗ | ✗ | ✗ |
+
+## Usage Examples
+
+### Loading a Skill
+```bash
+# Load critical security skill
+skill load rls-policy-implementation
+
+# Load domain-specific skill
+skill load lead-status-transition-management
+```
+
+### Getting Skill Information
+```bash
+# List all available skills
+skill list
+
+# Get detailed information about a skill
+skill info table-creation-with-rls
+```
+
+### Skill Dependencies
+Skills automatically handle their dependencies. When loading a skill, the system will:
+
+1. Check all prerequisites are met
+2. Load required dependencies first
+3. Validate agent permissions
+4. Execute the skill following the defined procedure
+5. Provide success/failure feedback
+
+## Skill Development
+
+When creating new skills:
+
+1. Follow the established template structure
+2. Include comprehensive error handling
+3. Define clear validation criteria
+4. Document integration points
+5. Test with relevant agents
+6. Update this registry
+
+## Contributing
+
+To add a new skill:
+
+1. Create skill JSON file in appropriate category
+2. Follow the established template format
+3. Include all required fields and sections
+4. Test skill execution thoroughly
+5. Update this registry file
+6. Document any new dependencies
+
+## Troubleshooting
+
+If a skill fails:
+
+1. Check prerequisites are met
+2. Verify agent permissions
+3. Review error logs for details
+4. Check system dependencies
+5. Consult skill documentation for common errors
+
+For system-wide issues, check the agent health monitoring skill first.

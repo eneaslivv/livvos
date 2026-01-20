@@ -1,0 +1,335 @@
+{
+  "name": "agent-health-check-validation",
+  "description": "Implement comprehensive agent health monitoring, validation, and automated recovery system",
+  "priority": "MEDIUM",
+  "expectedDuration": "30-45 minutes",
+  "requiredAgents": ["security-agent", "all-domain-agents"],
+  "requiredPermissions": ["system.monitor", "health.check", "recovery.execute"],
+  "dependencies": ["monitoring-infrastructure", "alert-system", "recovery-procedures"],
+  
+  "objectives": [
+    "Implement comprehensive health monitoring for all agents",
+    "Create automated validation procedures for agent functionality",
+    "Build intelligent alerting and escalation system",
+    "Implement automated recovery procedures",
+    "Create agent dependency mapping and cascade failure prevention",
+    "Build performance monitoring and trending analysis"
+  ],
+  
+  "prerequisites": [
+    "Agent communication protocols established",
+    "Monitoring infrastructure available",
+    "Alert notification system configured",
+    "Recovery procedures documented",
+    "Performance baselines established",
+    "Agent dependency matrix defined"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Health Monitoring Infrastructure Setup",
+      "description": "Create comprehensive monitoring infrastructure for all agents",
+      "commands": [
+        "CREATE agent_health table for tracking status",
+        "IMPLEMENT health check scheduling system",
+        "SET up agent heartbeat monitoring",
+        "CREATE dependency tracking system",
+        "IMPLEMENT performance metrics collection"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Health monitoring infrastructure ready for agent tracking"
+    },
+    {
+      "step": 2,
+      "action": "Agent-Specific Health Checks",
+      "description": "Implement specific health checks for each agent type",
+      "commands": [
+        "CREATE auth-agent health checks (user authentication, profile access)",
+        "IMPLEMENT tenant-agent checks (branding loading, feature flags)",
+        "ADD security-agent checks (RLS policies, permission validation)",
+        "CREATE project-agent checks (data access, calculations)",
+        "IMPLEMENT domain-specific checks for all agents"
+      ],
+      "agent": "all-domain-agents",
+      "expectedOutput": "Comprehensive health check suite for all agents"
+    },
+    {
+      "step": 3,
+      "action": "Automated Validation Procedures",
+      "description": "Create automated validation procedures for agent functionality",
+      "commands": [
+        "CREATE end-to-end workflow validation",
+        "IMPLEMENT data integrity checks",
+        "ADD performance benchmark validation",
+        "CREATE security validation procedures",
+        "IMPLEMENT integration validation between agents"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Automated validation procedures for agent functionality"
+    },
+    {
+      "step": 4,
+      "action": "Intelligent Alerting System",
+      "description": "Build intelligent alerting with severity classification and escalation",
+      "commands": [
+        "CREATE alert classification system (critical, warning, info)",
+        "IMPLEMENT intelligent alert correlation",
+        "ADD escalation procedures based on severity",
+        "CREATE alert suppression for known issues",
+        "IMPLEMENT multi-channel alert delivery"
+      },
+      "agent": "security-agent",
+      "expectedOutput": "Intelligent alerting system with proper escalation"
+    },
+    {
+      "step": 5,
+      "action": "Automated Recovery Procedures",
+      "description": "Implement automated recovery procedures for common agent failures",
+      "commands": [
+        "CREATE agent restart procedures",
+        "IMPLEMENT context reload mechanisms",
+        "ADD database connection recovery",
+        "CREATE cache clearing procedures",
+        "IMPLEMENT graceful degradation capabilities"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Automated recovery procedures for common failures"
+    },
+    {
+      "step": 6,
+      "action": "Dependency Mapping and Cascade Prevention",
+      "description": "Map agent dependencies and prevent cascade failures",
+      "commands": [
+        "CREATE agent dependency graph",
+        "IMPLEMENT cascade failure detection",
+        "ADD dependency health tracking",
+        "CREATE automatic isolation procedures",
+        "IMPLEMENT backup agent activation"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Dependency management system preventing cascade failures"
+    },
+    {
+      "step": 7,
+      "action": "Performance Monitoring and Trending",
+      "description": "Implement performance monitoring with trend analysis",
+      "commands": [
+        "CREATE performance metrics collection",
+        "IMPLEMENT trend analysis algorithms",
+        "ADD performance threshold detection",
+        "CREATE capacity planning projections",
+        "IMPLEMENT performance optimization suggestions"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Performance monitoring system with trend analysis"
+    },
+    {
+      "step": 8,
+      "action": "Health Dashboard Implementation",
+      "description": "Create comprehensive health dashboard for monitoring",
+      "commands": [
+        "CREATE real-time health status display",
+        "IMPLEMENT historical health trend views",
+        "ADD agent dependency visualization",
+        "CREATE alert management interface",
+        "IMPLEMENT recovery action controls"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Comprehensive health dashboard for agent monitoring"
+    },
+    {
+      "step": 9,
+      "action": "Integration Testing and Validation",
+      "description": "Test health monitoring system with simulated failures",
+      "commands": [
+        "SIMULATE agent failures and verify detection",
+        "TEST automated recovery procedures",
+        "VALIDATE alert delivery and escalation",
+        "CHECK dependency isolation effectiveness",
+        "VERIFY performance monitoring accuracy"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Validated health monitoring system with proven effectiveness"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "All agents monitored with appropriate health checks",
+      "Automated validation procedures catch issues early",
+      "Alert system delivers notifications with proper escalation",
+      "Recovery procedures successfully restore agent functionality",
+      "Dependency mapping prevents cascade failures",
+      "Performance monitoring provides actionable insights"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Agent Failure Detection",
+        "test": "Simulate agent database connection failure",
+        "expected": "Failure detected within 30 seconds, alert sent, recovery initiated"
+      },
+      {
+        "scenario": "Performance Degradation",
+        "test": "Simulate slow query performance in agent",
+        "expected": "Performance degradation detected, alert sent, optimization suggested"
+      },
+      {
+        "scenario": "Cascade Failure Prevention",
+        "test": "Simulate critical agent failure",
+        "expected": "Dependent agents isolated, backup procedures activated"
+      },
+      {
+        "scenario": "Automated Recovery",
+        "test": "Trigger known recoverable agent failure",
+        "expected": "Automated recovery successful, agent restored to healthy state"
+      }
+    ],
+    "successIndicators": [
+      "All agent failures detected within SLA",
+      "Automated recovery success rate >90%",
+      "Alert delivery success rate >99%",
+      "No cascade failures in testing"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Health check false positives",
+        "solution": "Adjust thresholds, improve check logic, add confirmation steps"
+      },
+      {
+        "error": "Alert fatigue from too many notifications",
+        "solution": "Implement alert suppression, improve correlation, adjust severity"
+      },
+      {
+        "error": "Recovery procedures causing additional issues",
+        "solution": "Review recovery logic, add safety checks, test thoroughly"
+      },
+      {
+        "error": "Performance monitoring overhead",
+        "solution": "Optimize monitoring queries, implement efficient collection"
+      },
+      {
+        "error": "Dependency mapping inaccurate",
+        "solution": "Review agent communications, update dependency matrix"
+      }
+    ],
+    "rollbackProcedure": [
+      "DISABLE automated recovery temporarily",
+      "ROLLBACK monitoring configuration changes",
+      "RESTORE previous health check logic",
+      "NOTIFY administrators of manual monitoring required",
+      "DOCUMENT rollback and system state"
+    ],
+    "escalationCriteria": [
+      "Multiple critical agent failures simultaneously",
+      "Automated recovery causing system instability",
+      "Health monitoring system failure",
+      "Performance degradation from monitoring overhead",
+      "Security breach detected in monitoring system"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Failure Detection Time",
+      "target": "<30 seconds",
+      "measurement": "Time from agent failure to detection"
+    },
+    {
+      "name": "Automated Recovery Success",
+      "target": ">90%",
+      "measurement": "Percentage of recoverable failures resolved automatically"
+    },
+    {
+      "name": "Alert Delivery Success",
+      "target": ">99%",
+      "measurement": "Percentage of alerts successfully delivered"
+    },
+    {
+      "name": "False Positive Rate",
+      "target": "<5%",
+      "measurement": "Percentage of false alerts generated"
+    },
+    {
+      "name": "System Uptime",
+      "target": ">99.9%",
+      "measurement": "Overall system availability with health monitoring"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "all-agents",
+      "message": "Health monitoring initiated, provide status updates",
+      "data": ["health_check_requirements", "monitoring_frequency", "reporting_format"]
+    },
+    {
+      "fromAgent": "all-agents",
+      "toAgent": "security-agent",
+      "message": "Agent health status report",
+      "data": ["health_status", "performance_metrics", "issues_detected", "recovery_actions"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "notifications-agent",
+      "message": "Health alerts require delivery",
+      "data": ["alert_content", "severity_level", "escalation_rules", "recipients"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "System health status for tenant reporting",
+      "data": ["health_summary", "service_availability", "performance_metrics"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Health Monitoring Database",
+      "type": "SQL schema and tables",
+      "content": ["agent_health", "dependency_mapping", "performance_metrics"]
+    },
+    {
+      "name": "Monitoring and Alerting System",
+      "type": "Monitoring infrastructure",
+      "content": ["health_checks", "alert_processing", "escalation_procedures"]
+    },
+    {
+      "name": "Automated Recovery Procedures",
+      "type": "Recovery automation",
+      "content": ["recovery_scripts", "isolation_procedures", "backup_activation"]
+    },
+    {
+      "name": "Health Dashboard",
+      "type": "React dashboard components",
+      "content": ["status_display", "trend_charts", "alert_management"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive test data and simulations",
+      "Clean up temporary monitoring configurations",
+      "Update system documentation",
+      "Finalize dashboard configurations"
+    ],
+    "monitoring": [
+      "Monitor health monitoring system effectiveness",
+      "Track automated recovery success rates",
+      "Watch for alert fatigue and optimization opportunities",
+      "Monitor performance impact of health checks",
+      "Track overall system availability improvements"
+    ],
+    "maintenance": [
+      "Review and update health check thresholds quarterly",
+      "Maintain recovery procedure effectiveness",
+      "Update agent dependency mapping as system evolves",
+      "Optimize alerting based on feedback",
+      "Regular performance tuning of monitoring system"
+    ]
+  }
+}

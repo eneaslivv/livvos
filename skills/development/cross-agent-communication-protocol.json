@@ -1,0 +1,335 @@
+{
+  "name": "cross-agent-communication-protocol",
+  "description": "Implement standardized cross-agent communication protocols with message routing, validation, and error handling",
+  "priority": "MEDIUM",
+  "expectedDuration": "60-120 minutes",
+  "requiredAgents": ["security-agent", "all-domain-agents"],
+  "requiredPermissions": ["system.configure", "communication.manage", "protocol.define"],
+  "dependencies": ["agent-interface-validation", "message-broker-setup", "communication-standards"],
+  
+  "objectives": [
+    "Implement standardized message format and protocol",
+    "Create intelligent message routing system",
+    "Build message validation and security framework",
+    "Implement communication monitoring and audit logging",
+    "Create communication failure recovery procedures",
+    "Build communication performance optimization"
+  ],
+  
+  "prerequisites": [
+    "All agents registered with defined interfaces",
+    "Message broker infrastructure available",
+    "Communication standards documented and approved",
+    "Security requirements for inter-agent communication defined",
+    "Performance baselines for agent communication established",
+    "Error handling and recovery procedures designed"
+  ],
+  
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Communication Protocol Design",
+      "description": "Design standardized communication protocols and message formats",
+      "commands": [
+        "DEFINE message format standards (JSON schema)",
+        "CREATE message type definitions and categories",
+        "DESIGN message routing and addressing scheme",
+        "IMPLEMENT message priority and urgency levels",
+        "CREATE message authentication and integrity verification"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Comprehensive communication protocol design"
+    },
+    {
+      "step": 2,
+      "action": "Message Broker Infrastructure",
+      "description": "Create message broker for agent communication",
+      "commands": [
+        "CREATE message broker service or use existing infrastructure",
+        "IMPLEMENT message queue management",
+        "ADD message persistence for reliability",
+        "CREATE message routing tables and algorithms",
+        "IMPLEMENT message filtering and subscription management"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Message broker infrastructure for agent communication"
+    },
+    {
+      "step": 3,
+      "action": "Agent Interface Registration",
+      "description": "Register all agents with communication system and define their interfaces",
+      "commands": [
+        "CREATE agent registry with interface definitions",
+        "IMPLEMENT agent capability advertisement",
+        "ADD agent availability and health status tracking",
+        "CREATE interface versioning and compatibility checking",
+        "IMPLEMENT dynamic agent discovery and registration"
+      ],
+      "agent": "all-domain-agents",
+      "expectedOutput": "Complete agent registry with interface definitions"
+    },
+    {
+      "step": 4,
+      "action": "Message Validation and Security",
+      "description": "Implement comprehensive message validation and security framework",
+      "commands": [
+        "CREATE message schema validation system",
+        "IMPLEMENT message authentication and signing",
+        "ADD message encryption for sensitive data",
+        "CREATE access control for message types",
+        "IMPLEMENT message audit logging and tracking"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Message validation and security framework"
+    },
+    {
+      "step": 5,
+      "action": "Communication API Implementation",
+      "description": "Implement communication APIs for agents to send and receive messages",
+      "commands": [
+        "CREATE standardized communication library",
+        "IMPLEMENT synchronous and asynchronous messaging",
+        "ADD message broadcasting and multicasting",
+        "CREATE request-response pattern support",
+        "IMPLEMENT event subscription and notification system"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Complete communication API for agent messaging"
+    },
+    {
+      "step": 6,
+      "action": "Error Handling and Recovery",
+      "description": "Implement comprehensive error handling and recovery procedures",
+      "commands": [
+        "CREATE error classification and handling system",
+        "IMPLEMENT automatic retry mechanisms with backoff",
+        "ADD circuit breaker pattern for failing agents",
+        "CREATE message duplication detection and handling",
+        "IMPLEMENT graceful degradation procedures"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Error handling and recovery system for agent communication"
+    },
+    {
+      "step": 7,
+      "action": "Communication Monitoring and Analytics",
+      "description": "Implement monitoring and analytics for agent communication",
+      "commands": [
+        "CREATE communication metrics collection system",
+        "IMPLEMENT real-time monitoring dashboards",
+        "ADD communication performance tracking",
+        "CREATE alerting for communication issues",
+        "IMPLEMENT communication pattern analysis"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Communication monitoring and analytics system"
+    },
+    {
+      "step": 8,
+      "action": "Agent Integration and Testing",
+      "description": "Integrate all agents with communication system and comprehensive testing",
+      "commands": [
+        "INTEGRATE all agents with communication APIs",
+        "TEST message routing and delivery",
+        "VALIDATE message security and validation",
+        "TEST error handling and recovery procedures",
+        "PERFORM load testing for communication system"
+      ],
+      "agent": "all-domain-agents",
+      "expectedOutput": "Fully integrated agent communication system"
+    },
+    {
+      "step": 9,
+      "action": "Performance Optimization",
+      "description": "Optimize communication system performance and efficiency",
+      "commands": [
+        "IMPLEMENT message batching and compression",
+        "OPTIMIZE message routing algorithms",
+        "ADD connection pooling and reuse",
+        "IMPLEMENT intelligent caching for frequent messages",
+        "CREATE performance tuning recommendations"
+      ],
+      "agent": "security-agent",
+      "expectedOutput": "Optimized communication system with high performance"
+    }
+  ],
+  
+  "validation": {
+    "criteria": [
+      "Message format standardized and consistently used",
+      "Message routing delivers messages correctly and efficiently",
+      "Security measures prevent unauthorized communication",
+      "Error handling prevents system failures",
+      "Performance meets or exceeds established baselines",
+      "Monitoring provides visibility into communication patterns"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Message Routing Accuracy",
+        "test": "Send messages between various agent combinations",
+        "expected": "100% message delivery to correct recipients"
+      },
+      {
+        "scenario": "Security Validation",
+        "test": "Attempt unauthorized message access and manipulation",
+        "expected": "All unauthorized attempts blocked and logged"
+      },
+      {
+        "scenario": "Error Recovery",
+        "test": "Simulate agent failures and message loss scenarios",
+        "expected": "System recovers gracefully with data integrity maintained"
+      },
+      {
+        "scenario": "Performance Under Load",
+        "test": "Send high volume of concurrent messages",
+        "expected": "System maintains performance with acceptable latency"
+      }
+    ],
+    "successIndicators": [
+      "Message delivery success rate >99.9%",
+      "Security blocks 100% of unauthorized attempts",
+      "Error recovery success rate >95%",
+      "Communication latency <100ms for typical messages"
+    ]
+  },
+  
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Message routing failures",
+        "solution": "Check routing tables, validate agent registration, implement fallback routing"
+      },
+      {
+        "error": "Message validation failures",
+        "solution": "Review schema definitions, update validation rules, provide better error messages"
+      },
+      {
+        "error": "Performance degradation",
+        "solution": "Optimize routing algorithms, implement caching, review system resources"
+      },
+      {
+        "error": "Security authentication failures",
+        "solution": "Check authentication tokens, validate certificates, review access controls"
+      },
+      {
+        "error": "Message broker failures",
+        "solution": "Implement broker clustering, add failover mechanisms, monitor broker health"
+      }
+    ],
+    "rollbackProcedure": [
+      "DISABLE new communication protocols",
+      "ROLLBACK to previous communication method",
+      "RESTORE agent integration points",
+      "NOTIFY agents of communication changes",
+      "DOCUMENT rollback and recovery process"
+    ],
+    "escalationCriteria": [
+      "Communication system completely fails",
+      "Security breach in message system",
+      "Performance degradation making system unusable",
+      "Data corruption in message transmission",
+      "Multiple agents unable to communicate"
+    ]
+  },
+  
+  "successMetrics": [
+    {
+      "name": "Message Delivery Success",
+      "target": ">99.9%",
+      "measurement": "Percentage of messages successfully delivered"
+    },
+    {
+      "name": "Communication Latency",
+      "target": "<100ms",
+      "measurement": "Average time for message delivery"
+    },
+    {
+      "name": "Security Compliance",
+      "target": "100%",
+      "measurement": "Unauthorized communication attempts blocked"
+    },
+    {
+      "name": "Error Recovery Success",
+      "target": ">95%",
+      "measurement": "Percentage of communication errors resolved automatically"
+    },
+    {
+      "name": "System Throughput",
+      "target": ">1000 msg/sec",
+      "measurement": "Messages processed per second"
+    }
+  ],
+  
+  "agentInterfaces": [
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "all-agents",
+      "message": "Communication protocol implemented, integrate with new system",
+      "data": ["protocol_specification", "api_documentation", "integration_instructions"]
+    },
+    {
+      "fromAgent": "all-agents",
+      "toAgent": "security-agent",
+      "message": "Agent communication integration status and requirements",
+      "data": ["integration_status", "capability_requirements", "interface_needs"]
+    },
+    {
+      "fromAgent": "security-agent",
+      "toAgent": "tenant-agent",
+      "message": "Communication system monitoring and analytics data",
+      "data": ["performance_metrics", "usage_statistics", "health_status"]
+    },
+    {
+      "fromAgent": "all-agents",
+      "toAgent": "all-agents",
+      "message": "Standardized agent communication",
+      "data": ["message_content", "routing_information", "priority_level"]
+    }
+  ],
+  
+  "expectedOutputs": [
+    {
+      "name": "Communication Protocol Specification",
+      "type": "Technical specification",
+      "content": ["message_formats", "routing_rules", "security_requirements"]
+    },
+    {
+      "name": "Message Broker Infrastructure",
+      "type": "Communication system",
+      "content": ["broker_service", "message_queues", "routing_engine"]
+    },
+    {
+      "name": "Agent Communication Library",
+      "type": "Software library",
+      "content": ["api_functions", "message_handlers", "error_recovery"]
+    },
+    {
+      "name": "Monitoring and Analytics System",
+      "type": "Monitoring dashboard",
+      "content": ["performance_metrics", "health_monitoring", "alerting_system"]
+    }
+  ],
+  
+  "postExecution": {
+    "cleanup": [
+      "Archive old communication methods",
+      "Clean up test data and temporary configurations",
+      "Update system documentation",
+      "Remove development-only debugging tools"
+    ],
+    "monitoring": [
+      "Monitor communication system performance continuously",
+      "Track message delivery success rates",
+      "Watch for security issues or anomalies",
+      "Monitor agent communication patterns and optimize",
+      "Track system resource usage and scaling needs"
+    ],
+    "maintenance": [
+      "Regularly update communication protocols as needed",
+      "Maintain message broker performance and reliability",
+      "Update security measures based on new threats",
+      "Optimize routing algorithms based on usage patterns",
+      "Maintain agent interface compatibility"
+    ]
+  }
+}
