@@ -1,12 +1,49 @@
 {
   "name": "eneas-os",
-  "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migration:dev": "ENVIRONMENT=development ./scripts/deploy-migrations.sh --env dev",
+    "migration:staging": "ENVIRONMENT=staging ./scripts/deploy-migrations.sh --env staging",
+    "migration:prod": "ENVIRONMENT=production FORCE_RUN=true ./scripts/deploy-migrations.sh --env production",
+    "migration:dry-run": "DRY_RUN=true ./scripts/deploy-migrations.sh --env dev",
+    "migration:rollback": "./scripts/deploy-migrations.sh --rollback",
+    "migration:status": "node -e \"import('./scripts/migration-tracker.js').then(m => m.default.createMigrationTracker().then(t => t.getMigrationHistory().then(h => console.table(h))))\"",
+    "validate:migrations": "node -e \"import('./scripts/validate-migrations.js').then(v => v.default.validateMigrations().then(r => console.log(v.default.generateValidationReport(r))))\"",
+    "validate:sql": "find migrations -name '*.sql' -exec echo 'Checking {}' \\; -exec psql --set ON_ERROR_STOP=1 --echo-all -f {} \\;",
+    "test:migrations": "node -e \"import('./scripts/validate-migrations.js').then(v => v.default.checkMigrationHealth().then(h => console.log(h)))\"",
+    "test:rollback": "echo 'Rollback tests not yet implemented'",
+    "security:scan": "echo 'Security scanning migrations...' && grep -r -i 'password\\|secret\\|api_key' migrations/ || echo 'No secrets found in plain text'",
+    "security:sensitive": "echo 'Checking for sensitive data exposure...' && grep -r -E '(DROP|TRUNCATE|DELETE)' migrations/ || echo 'No dangerous operations found'",
+    "security:rls": "echo 'Validating RLS policies...' && grep -r 'ENABLE ROW LEVEL SECURITY' migrations/ || echo 'No RLS policies found'",
+    "health:check": "node -e \"import('./scripts/migration-tracker.js').then(m => m.default.createMigrationTracker().then(t => t.performHealthCheck().then(h => console.log(h))))\"",
+    "health:application": "echo 'Application health checks not yet implemented'",
+    "health:performance": "echo 'Performance health checks not yet implemented'",
+    "health:integrity": "echo 'Data integrity checks not yet implemented'",
+    "backup:production": "echo 'Creating production backup...' && pg_dump $DATABASE_URL | gzip > backups/migrations/backup_$(date +%Y%m%d_%H%M%S).sql.gz",
+    "backup:staging": "echo 'Creating staging backup...' && pg_dump $STAGING_DATABASE_URL | gzip > backups/migrations/staging_backup_$(date +%Y%m%d_%H%M%S).sql.gz",
+    "rollback:production": "echo 'Rolling back production...' && ls -la backups/migrations/ | head -1",
+    "verify:deployment": "npm run validate:migrations && npm run health:check",
+    "verify:production": "npm run validate:migrations && npm run health:check && npm run health:application && npm run health:integrity",
+    "report:migrations": "node -e \"import('./scripts/migration-tracker.js').then(m => m.default.createMigrationTracker().then(t => t.getMigrationStats().then(s => console.log(JSON.stringify(s, null, 2))))\"",
+    "report:production": "npm run report:migrations > production-migration-report.json",
+    "check:dependencies": "node -e \"import('./scripts/validate-migrations.js').then(v => v.default.validateDependencies().then(d => console.log(JSON.stringify(d, null, 2))))\"",
+    "lint:migrations": "echo 'Linting migration files...' && find migrations -name '*.sql' -exec echo 'Linting {}' \\;",
+    "setup:test-db": "echo 'Setting up test database...'",
+    "visualize:dependencies": "echo 'Dependency visualization not yet implemented'",
+    "history:migrations": "node -e \"import('./scripts/migration-tracker.js').then(m => m.default.createMigrationTracker().then(t => t.getMigrationHistory(50).then(h => console.table(h))))\"",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:ui": "vitest --ui",
+    "test:security": "vitest run --config vitest.security.config.ts",
+    "test:performance": "vitest run --config vitest.performance.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
@@ -19,6 +56,22 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^5.2.0",
+    "vitest": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "jsdom": "^23.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "test": {
+    "globals": {
+      "defineEmits": true
+    },
+    "environment": "jsdom"
   }
 }

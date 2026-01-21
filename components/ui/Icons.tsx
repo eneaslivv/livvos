@@ -66,16 +66,22 @@ import {
   Moon,
   CreditCard,
   LogOut,
+  LogIn,
   TrendingUp,
   DollarSign,
   Lock,
+  Shield,
+  Key,
   RefreshCcw,
   Bell,
   CheckCircle,
   Loader2,
   Save,
   Palette,
-  Droplet
+  Droplet,
+  AlertTriangle,
+  XCircle,
+  Edit
 } from 'lucide-react';
 
 export const Icons = {
@@ -146,9 +152,12 @@ export const Icons = {
   Moon,
   CreditCard,
   LogOut,
+  LogIn,
   TrendingUp,
   DollarSign,
   Lock,
+  Shield,
+  Key,
   X,
   MoreHorizontal,
   RefreshCw: RefreshCcw,
@@ -158,5 +167,8 @@ export const Icons = {
   Save,
   Palette,
   Droplet,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle,
+  XCircle,
+  Edit
 };

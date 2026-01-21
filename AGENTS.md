@@ -421,20 +421,19 @@ crm-agent → security-agent: Check CRM access permissions
 **Primary Goal**: Track project financials, expenses, billing, and payment processing.
 
 **Context Files**:
-- (Not yet created - scattered in ProjectsContext)
+- `context/FinanceContext.tsx`
 
 **Page Components**:
 - (Dedicated Finance page doesn't exist yet)
 - `components/config/PaymentSettings.tsx`
 
 **Database Tables**:
-- `finances` (project financial tracking)
-- `finance_records` (duplicate/variant of finances)
+- `finances` (canonical project financial tracking)
 - `project_credentials` (payment service credentials)
 - `payment_processors` (payment gateway configuration)
 
 **RPC Functions**:
-- None currently
+- `get_project_financial_summary(p_project_id)` - Get comprehensive financial summary
 
 **Key Responsibilities**:
 1. Project financial tracking (agreed, collected, expenses, hours)
@@ -456,7 +455,7 @@ Project updates finances → Update totals
 
 **Payment Processing** (NOT YET IMPLEMENTED):
 ```
-Invoice generated → Create finance_record
+Invoice generated → Create finance record
                 → Charge payment via processor
                 → Update total_collected
                 → Update project financial health
@@ -482,8 +481,6 @@ financials updated → Calculate (total_collected - direct_expenses - imputed_ex
 - No manual override of calculated health
 
 **Known Risks**:
-- Two tables exist: `finances` and `finance_records` (which is canonical?)
-- No dedicated FinanceContext - data access scattered
 - Payment processing not implemented (only configuration)
 - No invoicing system
 - Project credentials stored in plain text (shared security issue)
@@ -942,7 +939,7 @@ ErrorBoundary
 4. **Client-side only** permission checks - MUST add server-side validation
 
 ### Data Model Issues
-5. **Duplicate tables**: `finances` vs `finance_records`, `activities` vs `activity_logs`
+5. **Duplicate tables**: `activities` vs `activity_logs` (finances table issue resolved)
 6. **Missing schema**: `invitations` table not defined (referenced in code)
 7. **Unused imports**: Firebase imported but never used
 8. **Folders as text field**: Should be separate table for nested structure
