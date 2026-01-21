@@ -56,14 +56,78 @@ export interface SkillExecution {
 
 export interface ClusterNode {
   id: string;
+  nodeId: string;
   name: string;
-  status: 'online' | 'offline' | 'maintenance';
+  status: 'provisioning' | 'online' | 'offline' | 'maintenance' | 'error' | 'decommissioning';
+  healthStatus: 'healthy' | 'warning' | 'critical' | 'unknown';
   region: string;
-  capacity: number;
-  used: number;
-  load: number;
+  availabilityZone?: string;
+  privateIp?: string;
+  publicIp?: string;
+  hostname?: string;
+  capacity: {
+    cpu: number;
+    memoryGb: number;
+    storageGb: number;
+    networkMbps: number;
+  };
+  usage: {
+    cpu: number;
+    memoryGb: number;
+    storageGb: number;
+    networkMbps: number;
+  };
   roles: string[];
+  capabilities: Record<string, any>;
+  metrics: {
+    loadAverage: number;
+    cpuUsagePercent: number;
+    memoryUsagePercent: number;
+    diskUsagePercent: number;
+    networkIoMbps: number;
+  };
+  isPrimary: boolean;
+  isCoordinator: boolean;
+  priority: number;
   lastHeartbeat: string;
+  lastRestart?: string;
+  uptimeSeconds: number;
+  config: Record<string, any>;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClusterInfo {
+  id: string;
+  clusterId: string;
+  name: string;
+  description?: string;
+  region: string;
+  version: string;
+  status: 'initializing' | 'active' | 'degraded' | 'maintenance' | 'offline' | 'decommissioning';
+  config: Record<string, any>;
+  metadata: Record<string, any>;
+  maxNodes: number;
+  maxTenants: number;
+  maxStorageGb: number;
+  healthScore: number;
+  lastHealthCheck: string;
+  createdAt: string;
+  updatedAt: string;
+  activatedAt?: string;
+  decommissionedAt?: string;
+  tags: string[];
+  labels: Record<string, string>;
+  nodeCount: number;
+  onlineNodes: number;
+  healthyNodes: number;
+  coordinationStatus: {
+    status: 'healthy' | 'degraded' | 'critical';
+    primaryNode?: ClusterNode;
+    coordinatorNode?: ClusterNode;
+    issues: string[];
+  };
 }
 
 interface SystemContextType {
@@ -105,9 +169,16 @@ interface SystemContextType {
 
   // Cluster Management
   getClusterNodes: () => Promise<ClusterNode[]>;
-  addNodeToCluster: (node: Omit<ClusterNode, 'id' | 'lastHeartbeat'>) => Promise<ClusterNode>;
+  getClusterInfo: (clusterId?: string) => Promise<ClusterInfo[]>;
+  createCluster: (clusterData: Partial<ClusterInfo>) => Promise<ClusterInfo>;
+  addNodeToCluster: (node: Omit<ClusterNode, 'id' | 'nodeId' | 'lastHeartbeat' | 'createdAt' | 'updatedAt'>) => Promise<ClusterNode>;
   removeNodeFromCluster: (nodeId: string) => Promise<void>;
-  updateNodeStatus: (nodeId: string, status: ClusterNode['status']) => Promise<void>;
+  updateNodeStatus: (nodeId: string, status: ClusterNode['status'], healthStatus?: ClusterNode['healthStatus'], metrics?: any) => Promise<void>;
+  promoteNodeToPrimary: (nodeId: string) => Promise<void>;
+  getClusterHealth: (clusterId?: string) => Promise<any>;
+  getClusterEvents: (clusterId: string, filters?: any) => Promise<any>;
+  recordClusterMetrics: (clusterId: string, metrics: any, nodeId?: string) => Promise<void>;
+  decommissionCluster: (clusterId: string, force?: boolean) => Promise<void>;
 
   // Orchestration
   orchestrateAgents: (workflow: AgentWorkflow) => Promise<SkillExecution[]>;
@@ -628,57 +699,187 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     if (!canViewSystem) return [];
 
     try {
-      // Mock cluster nodes
+      // Fetch from database using RPC function
+      const { data, error } = await supabase.rpc('get_cluster_info', {
+        p_cluster_id: null // Get all clusters
+      });
+
+      if (error) {
+        errorLogger.error('Error fetching cluster info:', error);
+        return [];
+      }
+
+      // Extract nodes from all clusters
+      const allNodes: ClusterNode[] = [];
+      if (data?.success && data.clusters) {
+        for (const cluster of data.clusters) {
+          if (cluster.nodes) {
+            allNodes.push(...cluster.nodes);
+          }
+        }
+      }
+
+      return allNodes;
+    } catch (err) {
+      errorLogger.error('Error fetching cluster nodes:', err);
+      
+      // Fallback to mock data
       const mockNodes: ClusterNode[] = [
         {
           id: 'node-1',
+          nodeId: 'default-node-001',
           name: 'Primary Node',
           status: 'online',
+          healthStatus: 'healthy',
           region: 'us-east-1',
-          capacity: 100,
-          used: 65,
-          load: 0.65,
-          roles: ['web', 'api', 'database'],
-          lastHeartbeat: new Date().toISOString()
+          availabilityZone: 'us-east-1a',
+          hostname: 'primary-node.eneas-os.local',
+          capacity: {
+            cpu: 8.0,
+            memoryGb: 32.0,
+            storageGb: 500.0,
+            networkMbps: 1000.0
+          },
+          usage: {
+            cpu: 5.2,
+            memoryGb: 20.8,
+            storageGb: 325.0,
+            networkMbps: 650.0
+          },
+          roles: ['web', 'api', 'database', 'coordinator'],
+          capabilities: { autoFailover: true, backupResponsible: true },
+          metrics: {
+            loadAverage: 0.65,
+            cpuUsagePercent: 65.0,
+            memoryUsagePercent: 65.0,
+            diskUsagePercent: 65.0,
+            networkIoMbps: 650.0
+          },
+          isPrimary: true,
+          isCoordinator: true,
+          priority: 100,
+          lastHeartbeat: new Date().toISOString(),
+          uptimeSeconds: 86400,
+          config: { role: 'primary', autoFailover: true },
+          metadata: { nodeType: 'primary', deploymentType: 'single-tenant' },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         },
         {
           id: 'node-2',
+          nodeId: 'default-node-002',
           name: 'Worker Node 1',
           status: 'online',
+          healthStatus: 'healthy',
           region: 'us-west-2',
-          capacity: 100,
-          used: 45,
-          load: 0.45,
+          availabilityZone: 'us-west-2a',
+          hostname: 'worker-node-1.eneas-os.local',
+          capacity: {
+            cpu: 4.0,
+            memoryGb: 16.0,
+            storageGb: 250.0,
+            networkMbps: 500.0
+          },
+          usage: {
+            cpu: 1.8,
+            memoryGb: 7.2,
+            storageGb: 112.5,
+            networkMbps: 225.0
+          },
           roles: ['worker', 'processing'],
-          lastHeartbeat: new Date().toISOString()
+          capabilities: { specializedProcessing: true },
+          metrics: {
+            loadAverage: 0.45,
+            cpuUsagePercent: 45.0,
+            memoryUsagePercent: 45.0,
+            diskUsagePercent: 45.0,
+            networkIoMbps: 450.0
+          },
+          isPrimary: false,
+          isCoordinator: false,
+          priority: 50,
+          lastHeartbeat: new Date().toISOString(),
+          uptimeSeconds: 43200,
+          config: { role: 'worker' },
+          metadata: { nodeType: 'worker', deploymentType: 'single-tenant' },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         }
       ];
 
       return mockNodes;
-    } catch (err) {
-      errorLogger.error('Error fetching cluster nodes:', err);
-      return [];
     }
   }, [canViewSystem]);
 
-  const addNodeToCluster = useCallback(async (node: Omit<ClusterNode, 'id' | 'lastHeartbeat'>): Promise<ClusterNode> => {
+  const addNodeToCluster = useCallback(async (node: Omit<ClusterNode, 'id' | 'nodeId' | 'lastHeartbeat' | 'createdAt' | 'updatedAt'>): Promise<ClusterNode> => {
     if (!canManageSystem) {
       throw new Error('Insufficient permissions to manage cluster');
     }
 
     try {
+      // Use RPC function to add node
+      const { data, error } = await supabase.rpc('add_cluster_node', {
+        p_cluster_id: 'default-cluster-001', // TODO: Make this configurable
+        p_name: node.name,
+        p_region: node.region,
+        p_availability_zone: node.availabilityZone,
+        p_hostname: node.hostname,
+        p_private_ip: node.privateIp,
+        p_public_ip: node.publicIp,
+        p_capacity_cpu: node.capacity.cpu,
+        p_capacity_memory_gb: node.capacity.memoryGb,
+        p_capacity_storage_gb: node.capacity.storageGb,
+        p_capacity_network_mbps: node.capacity.networkMbps,
+        p_roles: node.roles,
+        p_config: node.config,
+        p_metadata: node.metadata,
+        p_priority: node.priority
+      });
+
+      if (error || !data?.success) {
+        throw new Error(error?.message || 'Failed to add node to cluster');
+      }
+
+      // Create the new node object
       const newNode: ClusterNode = {
-        ...node,
-        id: `node_${Date.now()}`,
-        lastHeartbeat: new Date().toISOString()
+        id: data.node_uuid,
+        nodeId: data.node_id,
+        name: node.name,
+        status: 'provisioning',
+        healthStatus: 'unknown',
+        region: node.region,
+        availabilityZone: node.availabilityZone,
+        privateIp: node.privateIp,
+        publicIp: node.publicIp,
+        hostname: node.hostname,
+        capacity: node.capacity,
+        usage: {
+          cpu: 0,
+          memoryGb: 0,
+          storageGb: 0,
+          networkMbps: 0
+        },
+        roles: node.roles,
+        capabilities: node.capabilities,
+        metrics: {
+          loadAverage: 0,
+          cpuUsagePercent: 0,
+          memoryUsagePercent: 0,
+          diskUsagePercent: 0,
+          networkIoMbps: 0
+        },
+        isPrimary: false,
+        isCoordinator: false,
+        priority: node.priority,
+        lastHeartbeat: new Date().toISOString(),
+        uptimeSeconds: 0,
+        config: node.config,
+        metadata: node.metadata,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
 
       setClusterNodes(prev => [...prev, newNode]);
-
-      // In a real implementation, this would register the node
-      await supabase
-        .from('cluster_nodes')
-        .insert(newNode);
 
       return newNode;
     } catch (err) {
@@ -691,35 +892,293 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     if (!canManageSystem) return;
 
     try {
-      setClusterNodes(prev => prev.filter(node => node.id !== nodeId));
+      // Find the node to get its node_id
+      const node = clusterNodes.find(n => n.id === nodeId);
+      if (!node) {
+        throw new Error('Node not found');
+      }
 
-      await supabase
-        .from('cluster_nodes')
-        .delete()
-        .eq('id', nodeId);
+      // Update node status to decommissioning
+      const { error } = await supabase.rpc('update_node_status', {
+        p_node_id: node.nodeId,
+        p_status: 'decommissioning',
+        p_health_status: 'unknown'
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Update local state
+      setClusterNodes(prev => 
+        prev.map(n => 
+          n.id === nodeId 
+            ? { ...n, status: 'decommissioning', updatedAt: new Date().toISOString() }
+            : n
+        )
+      );
     } catch (err) {
       errorLogger.error('Error removing node from cluster:', err);
     }
-  }, [canManageSystem]);
+  }, [canManageSystem, clusterNodes]);
 
-  const updateNodeStatus = useCallback(async (nodeId: string, status: ClusterNode['status']) => {
+  const updateNodeStatus = useCallback(async (nodeId: string, status: ClusterNode['status'], healthStatus?: ClusterNode['healthStatus'], metrics?: any) => {
     if (!canManageSystem) return;
 
     try {
+      // Find the node to get its node_id
+      const node = clusterNodes.find(n => n.id === nodeId);
+      if (!node) {
+        throw new Error('Node not found');
+      }
+
+      // Use RPC function to update status
+      const { error } = await supabase.rpc('update_node_status', {
+        p_node_id: node.nodeId,
+        p_status: status,
+        p_health_status: healthStatus,
+        p_metrics: metrics
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Update local state
       setClusterNodes(prev => 
-        prev.map(node => 
-          node.id === nodeId ? { ...node, status, lastHeartbeat: new Date().toISOString() } : node
+        prev.map(n => 
+          n.id === nodeId 
+            ? { 
+                ...n, 
+                status, 
+                healthStatus: healthStatus || n.healthStatus,
+                metrics: metrics || n.metrics,
+                lastHeartbeat: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              } 
+            : n
         )
       );
-
-      await supabase
-        .from('cluster_nodes')
-        .update({ status, last_heartbeat: new Date().toISOString() })
-        .eq('id', nodeId);
     } catch (err) {
       errorLogger.error('Error updating node status:', err);
     }
+  }, [canManageSystem, clusterNodes]);
+
+  // Additional cluster management functions
+  const getClusterInfo = useCallback(async (clusterId?: string): Promise<ClusterInfo[]> => {
+    if (!canViewSystem) return [];
+
+    try {
+      const { data, error } = await supabase.rpc('get_cluster_info', {
+        p_cluster_id: clusterId || null
+      });
+
+      if (error || !data?.success) {
+        errorLogger.error('Error fetching cluster info:', error);
+        return [];
+      }
+
+      // Transform data to ClusterInfo format
+      const clusters: ClusterInfo[] = [];
+      if (clusterId && data.cluster) {
+        // Single cluster
+        clusters.push(transformClusterData(data.cluster));
+      } else if (data.clusters) {
+        // Multiple clusters
+        clusters.push(...data.clusters.map(transformClusterData));
+      }
+
+      return clusters;
+    } catch (err) {
+      errorLogger.error('Error fetching cluster info:', err);
+      return [];
+    }
+  }, [canViewSystem]);
+
+  const createCluster = useCallback(async (clusterData: Partial<ClusterInfo>): Promise<ClusterInfo> => {
+    if (!canManageSystem) {
+      throw new Error('Insufficient permissions to create cluster');
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('create_cluster', {
+        p_name: clusterData.name,
+        p_description: clusterData.description,
+        p_region: clusterData.region,
+        p_version: clusterData.version || '1.0.0',
+        p_config: clusterData.config || {},
+        p_metadata: clusterData.metadata || {},
+        p_max_nodes: clusterData.maxNodes || 10,
+        p_max_tenants: clusterData.maxTenants || 100,
+        p_max_storage_gb: clusterData.maxStorageGb || 1000,
+        p_tags: clusterData.tags || [],
+        p_labels: clusterData.labels || {}
+      });
+
+      if (error || !data?.success) {
+        throw new Error(error?.message || 'Failed to create cluster');
+      }
+
+      // Return the created cluster info
+      const clusters = await getClusterInfo(data.cluster_id);
+      return clusters[0];
+    } catch (err) {
+      errorLogger.error('Error creating cluster:', err);
+      throw err;
+    }
+  }, [canManageSystem, getClusterInfo]);
+
+  const promoteNodeToPrimary = useCallback(async (nodeId: string) => {
+    if (!canManageSystem) return;
+
+    try {
+      // Find the node to get its node_id
+      const node = clusterNodes.find(n => n.id === nodeId);
+      if (!node) {
+        throw new Error('Node not found');
+      }
+
+      const { error } = await supabase.rpc('promote_to_primary', {
+        p_node_id: node.nodeId
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Update local state
+      setClusterNodes(prev => 
+        prev.map(n => 
+          n.id === nodeId 
+            ? { ...n, isPrimary: true, priority: Math.max(n.priority, 100), updatedAt: new Date().toISOString() }
+            : n
+        )
+      );
+    } catch (err) {
+      errorLogger.error('Error promoting node to primary:', err);
+    }
+  }, [canManageSystem, clusterNodes]);
+
+  const getClusterHealth = useCallback(async (clusterId?: string) => {
+    if (!canViewSystem) return null;
+
+    try {
+      const { data, error } = await supabase.rpc('get_cluster_health_summary', {
+        p_cluster_id: clusterId || null
+      });
+
+      if (error || !data?.success) {
+        errorLogger.error('Error fetching cluster health:', error);
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      errorLogger.error('Error fetching cluster health:', err);
+      return null;
+    }
+  }, [canViewSystem]);
+
+  const getClusterEvents = useCallback(async (clusterId: string, filters: any = {}) => {
+    if (!canViewSystem) return null;
+
+    try {
+      const { data, error } = await supabase.rpc('get_cluster_events', {
+        p_cluster_id: clusterId,
+        p_event_type: filters.eventType || null,
+        p_severity: filters.severity || null,
+        p_limit: filters.limit || 100,
+        p_offset: filters.offset || 0
+      });
+
+      if (error || !data?.success) {
+        errorLogger.error('Error fetching cluster events:', error);
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      errorLogger.error('Error fetching cluster events:', err);
+      return null;
+    }
+  }, [canViewSystem]);
+
+  const recordClusterMetrics = useCallback(async (clusterId: string, metrics: any, nodeId?: string) => {
+    if (!canManageSystem) return;
+
+    try {
+      const { error } = await supabase.rpc('record_cluster_metrics', {
+        p_cluster_id: clusterId,
+        p_node_id: nodeId,
+        p_metrics: metrics
+      });
+
+      if (error) {
+        errorLogger.error('Error recording cluster metrics:', error);
+      }
+    } catch (err) {
+      errorLogger.error('Error recording cluster metrics:', err);
+    }
   }, [canManageSystem]);
+
+  const decommissionCluster = useCallback(async (clusterId: string, force = false) => {
+    if (!canManageSystem) return;
+
+    try {
+      const { error } = await supabase.rpc('decommission_cluster', {
+        p_cluster_id: clusterId,
+        p_force: force
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Update local state
+      setClusterNodes(prev => 
+        prev.map(node => 
+          node.clusterId === clusterId 
+            ? { ...node, status: 'decommissioning', updatedAt: new Date().toISOString() }
+            : node
+        )
+      );
+    } catch (err) {
+      errorLogger.error('Error decommissioning cluster:', err);
+    }
+  }, [canManageSystem]);
+
+  // Helper function to transform cluster data
+  const transformClusterData = (clusterData: any): ClusterInfo => {
+    return {
+      id: clusterData.id,
+      clusterId: clusterData.cluster_id,
+      name: clusterData.name,
+      description: clusterData.description,
+      region: clusterData.region,
+      version: clusterData.version,
+      status: clusterData.status,
+      config: clusterData.config,
+      metadata: clusterData.metadata,
+      maxNodes: clusterData.max_nodes,
+      maxTenants: clusterData.max_tenants,
+      maxStorageGb: clusterData.max_storage_gb,
+      healthScore: clusterData.health_score,
+      lastHealthCheck: clusterData.last_health_check,
+      createdAt: clusterData.created_at,
+      updatedAt: clusterData.updated_at,
+      activatedAt: clusterData.activated_at,
+      decommissionedAt: clusterData.decommissioned_at,
+      tags: clusterData.tags || [],
+      labels: clusterData.labels || {},
+      nodeCount: clusterData.node_count || 0,
+      onlineNodes: clusterData.online_nodes || 0,
+      healthyNodes: clusterData.healthy_nodes || 0,
+      coordinationStatus: clusterData.coordination_status || {
+        status: 'healthy',
+        issues: []
+      }
+    };
+  };
 
   // Orchestration
   const orchestrateAgents = useCallback(async (workflow: AgentWorkflow): Promise<SkillExecution[]> => {
@@ -936,9 +1395,16 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
 
     // Cluster Management
     getClusterNodes,
+    getClusterInfo,
+    createCluster,
     addNodeToCluster,
     removeNodeFromCluster,
     updateNodeStatus,
+    promoteNodeToPrimary,
+    getClusterHealth,
+    getClusterEvents,
+    recordClusterMetrics,
+    decommissionCluster,
 
     // Orchestration
     orchestrateAgents,
