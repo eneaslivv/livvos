@@ -1,0 +1,42 @@
+"""Database module."""
+from src.db.database import Base, engine, async_session_maker, init_db, get_session
+from src.db.models import (
+    User,
+    Device,
+    ConversationSession,
+    Message,
+    TaskState,
+    ExecutedAction,
+    UserContact,
+    UserPreference,
+    Reminder,
+    Note,
+    DeviceType,
+    ConversationMode,
+    MessageRole,
+    TaskStatus,
+    ActionStatus,
+)
+
+__all__ = [
+    "Base",
+    "engine",
+    "async_session_maker",
+    "init_db",
+    "get_session",
+    "User",
+    "Device",
+    "ConversationSession",
+    "Message",
+    "TaskState",
+    "ExecutedAction",
+    "UserContact",
+    "UserPreference",
+    "Reminder",
+    "Note",
+    "DeviceType",
+    "ConversationMode",
+    "MessageRole",
+    "TaskStatus",
+    "ActionStatus",
+]
