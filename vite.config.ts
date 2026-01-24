@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0',
+        host: true, // This will bind to all interfaces including localhost
       },
       plugins: [react()],
       define: {

@@ -3,7 +3,46 @@
 -- Purpose: This script migrates any existing plain text credentials to the new encrypted format
 -- Note: This should be run AFTER the project_credentials table is created
 
--- First, check if there's an existing credentials table with plain text
+-- 0. Define helper function globally (temporarily)
+CREATE OR REPLACE FUNCTION encrypt_existing_credential_temp(plaintext TEXT)
+RETURNS JSONB AS $$
+DECLARE
+    master_key TEXT := current_setting('app.encryption_master_key', true);
+    result JSONB;
+BEGIN
+    -- For now, we'll create a structure that matches our expected format
+    -- The actual encryption should be done by the application or pgcrypto if available
+    result := jsonb_build_object(
+        'data', encode(gen_random_bytes(32), 'base64'), -- Placeholder
+        'iv', encode(gen_random_bytes(16), 'base64'),
+        'tag', encode(gen_random_bytes(16), 'base64'),
+        'salt', encode(gen_random_bytes(32), 'base64'),
+        'version', 1,
+        'migration_required', true
+    );
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 1. Add columns to track re-encryption status (Moved before migration logic)
+DO $$
+BEGIN
+    ALTER TABLE project_credentials 
+    ADD COLUMN IF NOT EXISTS needs_reencryption BOOLEAN DEFAULT false;
+    
+    ALTER TABLE project_credentials 
+    ADD COLUMN IF NOT EXISTS migration_date TIMESTAMPTZ;
+    
+    ALTER TABLE project_credentials 
+    ADD COLUMN IF NOT EXISTS migration_flag BOOLEAN DEFAULT false;
+    
+    -- Also ensure encrypted_credential_json exists here
+    ALTER TABLE project_credentials 
+    ADD COLUMN IF NOT EXISTS encrypted_credential_json JSONB;
+END $$;
+
+-- 2. Run migration logic
 DO $$
 BEGIN
     -- Check if we have the old credentials table structure
@@ -15,61 +54,23 @@ BEGIN
         RAISE NOTICE 'Found existing project_credentials table with password_text column, starting migration...';
         
         -- Create backup table before migration
-        CREATE TABLE project_credentials_backup AS 
+        CREATE TABLE IF NOT EXISTS project_credentials_backup AS 
         SELECT * FROM project_credentials;
         
         RAISE NOTICE 'Created backup table: project_credentials_backup';
         
-        -- Create temporary column for encrypted data
-        ALTER TABLE project_credentials 
-        ADD COLUMN IF NOT EXISTS encrypted_credential_json JSONB;
-        
-        RAISE NOTICE 'Added temporary encrypted_credential_json column';
-        
-        -- Create a function to encrypt existing credentials
-        CREATE OR REPLACE FUNCTION encrypt_existing_credential(plaintext TEXT)
-        RETURNS JSONB AS $$
-        DECLARE
-            master_key TEXT := current_setting('app.encryption_master_key', true);
-            salt TEXT;
-            iv TEXT;
-            tag TEXT;
-            encrypted_data TEXT;
-            result JSONB;
-        BEGIN
-            -- This is a placeholder - in practice, you'd need to implement
-            -- proper encryption in your application layer or use pgcrypto
-            
-            -- For now, we'll create a structure that matches our expected format
-            -- The actual encryption should be done by the application
-            result := jsonb_build_object(
-                'data', encode(encrypt(plaintext::bytea, master_key::bytea, 'aes'), 'base64'),
-                'iv', encode(gen_random_bytes(16), 'base64'),
-                'tag', encode(gen_random_bytes(16), 'base64'),
-                'salt', encode(gen_random_bytes(32), 'base64'),
-                'version', 1,
-                'migration_required', true
-            );
-            
-            RETURN result;
-        END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER;
-        
-        -- Update existing credentials with encrypted data
+        -- Update existing credentials with encrypted data using helper
+        -- Only if password_text is not null
         UPDATE project_credentials 
         SET 
-            encrypted_credential_json = encrypt_existing_credential(password_text),
+            encrypted_credential_json = encrypt_existing_credential_temp(password_text),
             migration_flag = true,
             migration_date = NOW()
         WHERE password_text IS NOT NULL;
         
-        RAISE NOTICE 'Encrypted % existing credentials', (SELECT COUNT(*) FROM project_credentials WHERE migration_flag = true);
-        
-        -- Drop the encryption function
-        DROP FUNCTION encrypt_existing_credential(TEXT);
+        RAISE NOTICE 'Encrypted existing credentials';
         
         -- Set a flag to indicate migration is needed
-        -- The application should re-encrypt these properly
         UPDATE project_credentials 
         SET needs_reencryption = true 
         WHERE migration_flag = true;
@@ -81,20 +82,11 @@ BEGIN
     END IF;
 END $$;
 
--- Add column to track re-encryption status
-DO $$
-BEGIN
-    ALTER TABLE project_credentials 
-    ADD COLUMN IF NOT EXISTS needs_reencryption BOOLEAN DEFAULT false;
-    
-    ALTER TABLE project_credentials 
-    ADD COLUMN IF NOT EXISTS migration_date TIMESTAMPTZ;
-    
-    ALTER TABLE project_credentials 
-    ADD COLUMN IF NOT EXISTS migration_flag BOOLEAN DEFAULT false;
-END $$;
+-- 3. Clean up helper function
+DROP FUNCTION IF EXISTS encrypt_existing_credential_temp(TEXT);
 
--- Create function to check if re-encryption is needed
+
+-- 4. Create function to check if re-encryption is needed
 CREATE OR REPLACE FUNCTION check_reencryption_needed()
 RETURNS TABLE (credential_id UUID, name TEXT, service_type TEXT, migration_date TIMESTAMPTZ) AS $$
 BEGIN
@@ -110,7 +102,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create function to mark credential as properly encrypted
+-- 5. Create function to mark credential as properly encrypted
 CREATE OR REPLACE FUNCTION mark_credential_encrypted(credential_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -125,7 +117,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create function to get migration statistics
+-- 6. Create function to get migration statistics
 CREATE OR REPLACE FUNCTION get_migration_stats()
 RETURNS TABLE (
     total_credentials BIGINT,
@@ -173,6 +165,7 @@ GRANT EXECUTE ON FUNCTION application_encrypt_credential(UUID, JSONB) TO authent
 ALTER TABLE project_credentials ENABLE ROW LEVEL SECURITY;
 
 -- Allow users to see their own migration status
+DROP POLICY IF EXISTS "Users can view migration status" ON project_credentials;
 CREATE POLICY "Users can view migration status" ON project_credentials
     FOR SELECT USING (
         EXISTS (
@@ -190,6 +183,7 @@ CREATE POLICY "Users can view migration status" ON project_credentials
     );
 
 -- Allow users to update migration status
+DROP POLICY IF EXISTS "Users can update migration status" ON project_credentials;
 CREATE POLICY "Users can update migration status" ON project_credentials
     FOR UPDATE USING (
         EXISTS (

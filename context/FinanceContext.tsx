@@ -42,14 +42,14 @@ interface FinanceContextType {
   error: string | null
   canViewFinances: boolean
   canEditFinances: boolean
-  
+
   // CRUD operations
   createFinance: (projectId: string, data: Partial<Finance>) => Promise<Finance | null>
   updateFinance: (id: string, data: Partial<Finance>) => Promise<Finance | null>
   deleteFinance: (id: string) => Promise<boolean>
   getFinanceByProject: (projectId: string) => Promise<Finance | null>
   getFinancialSummary: (projectId: string) => Promise<FinancialSummary | null>
-  
+
   // Bulk operations
   getTenantFinancials: () => Promise<Finance[]>
   updateProjectFinancials: (projectId: string, updates: Partial<Finance>) => Promise<boolean>
@@ -74,7 +74,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const { currentTenant } = useTenant()
   const [finances, setFinances] = useState<Finance[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>
+  const [error, setError] = useState<string | null>(null);
   const [canViewFinances, setCanViewFinances] = useState(false)
   const [canEditFinances, setCanEditFinances] = useState(false)
 
@@ -89,7 +89,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       const viewPerm = await hasPermission('finance', 'view')
       const editPerm = await hasPermission('finance', 'edit')
-      
+
       setCanViewFinances(viewPerm)
       setCanEditFinances(editPerm)
     }

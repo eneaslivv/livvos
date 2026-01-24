@@ -9,44 +9,73 @@ CREATE TABLE IF NOT EXISTS finances (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   tenant_id UUID NOT NULL REFERENCES tenants(id),
-  
-  -- Financial tracking fields
-  total_agreed NUMERIC DEFAULT 0,           -- Total agreed amount with client
-  total_collected NUMERIC DEFAULT 0,        -- Total amount actually collected
-  direct_expenses NUMERIC DEFAULT 0,        -- Direct costs (materials, software, etc.)
-  imputed_expenses NUMERIC DEFAULT 0,       -- Imputed costs (labor, overhead, etc.)
-  hours_worked NUMERIC DEFAULT 0,            -- Total hours tracked on project
-  
-  -- Business model tracking
-  business_model TEXT DEFAULT 'fixed',       -- 'fixed', 'hourly', 'retainer'
-  hourly_rate NUMERIC,                       -- For hourly projects
-  
-  -- Financial health calculation
-  health TEXT DEFAULT 'break-even',          -- 'profitable', 'break-even', 'loss'
-  profit_margin NUMERIC GENERATED ALWAYS AS (
-    CASE 
-      WHEN total_agreed > 0 THEN 
-        ROUND((total_collected - direct_expenses - imputed_expenses) / total_agreed * 100, 2)
-      ELSE 0
-    END
-  ) STORED,
-  
-  -- Metadata
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
-  created_by UUID REFERENCES auth.users(id),
-  
-  -- Constraints
-  CONSTRAINT finances_business_model_check CHECK (business_model IN ('fixed', 'hourly', 'retainer')),
-  CONSTRAINT finances_health_check CHECK (health IN ('profitable', 'break-even', 'loss')),
-  CONSTRAINT finances_amounts_non_negative CHECK (
-    total_agreed >= 0 AND 
-    total_collected >= 0 AND 
-    direct_expenses >= 0 AND 
-    imputed_expenses >= 0 AND 
-    hours_worked >= 0
-  )
+  created_by UUID REFERENCES auth.users(id)
 );
+
+-- Ensure all columns exist
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE CASCADE;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id);
+
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS total_agreed NUMERIC DEFAULT 0;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS total_collected NUMERIC DEFAULT 0;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS direct_expenses NUMERIC DEFAULT 0;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS imputed_expenses NUMERIC DEFAULT 0;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS hours_worked NUMERIC DEFAULT 0;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS business_model TEXT DEFAULT 'fixed';
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC;
+ALTER TABLE finances ADD COLUMN IF NOT EXISTS health TEXT DEFAULT 'break-even';
+
+-- Generated columns handling: difficult to do IF NOT EXISTS for generated.
+-- We'll assume if profit_margin missing, we add it. 
+-- Adding generated column via ALTER TABLE is supported in PG 12+.
+DO $$
+BEGIN
+  BEGIN
+    ALTER TABLE finances ADD COLUMN profit_margin NUMERIC GENERATED ALWAYS AS (
+      CASE 
+        WHEN total_agreed > 0 THEN 
+          ROUND((total_collected - direct_expenses - imputed_expenses) / total_agreed * 100, 2)
+        ELSE 0
+      END
+    ) STORED;
+  EXCEPTION
+    WHEN duplicate_column THEN NULL;
+  END;
+END $$;
+
+
+-- Constraints (these might fail if exist, so wrap in DO block or drop first)
+DO $$
+BEGIN
+   -- Drop constraints if they exist to recreate them (or ignore if exist)
+   -- Using ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS is not standard until recent PG?
+   -- Supabase is PG 13/14+.
+   -- We'll try to drop first.
+   BEGIN
+     ALTER TABLE finances DROP CONSTRAINT IF EXISTS finances_business_model_check;
+     ALTER TABLE finances ADD CONSTRAINT finances_business_model_check CHECK (business_model IN ('fixed', 'hourly', 'retainer'));
+   EXCEPTION WHEN OTHERS THEN NULL; END;
+   
+   BEGIN
+     ALTER TABLE finances DROP CONSTRAINT IF EXISTS finances_health_check;
+     ALTER TABLE finances ADD CONSTRAINT finances_health_check CHECK (health IN ('profitable', 'break-even', 'loss'));
+   EXCEPTION WHEN OTHERS THEN NULL; END;
+
+   BEGIN
+     ALTER TABLE finances DROP CONSTRAINT IF EXISTS finances_amounts_non_negative;
+     ALTER TABLE finances ADD CONSTRAINT finances_amounts_non_negative CHECK (
+        total_agreed >= 0 AND 
+        total_collected >= 0 AND 
+        direct_expenses >= 0 AND 
+        imputed_expenses >= 0 AND 
+        hours_worked >= 0
+      );
+   EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
+
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_finances_project_id ON finances(project_id);
@@ -78,6 +107,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS finances_health_trigger ON finances;
 CREATE TRIGGER finances_health_trigger
   BEFORE INSERT OR UPDATE ON finances
   FOR EACH ROW EXECUTE FUNCTION update_finances_health();
@@ -99,6 +129,7 @@ COMMENT ON COLUMN finances.profit_margin IS 'Automatically calculated profit mar
 ALTER TABLE finances ENABLE ROW LEVEL SECURITY;
 
 -- Finances: SELECT Policy (will be overridden by comprehensive RLS policies)
+DROP POLICY IF EXISTS "finances_select_policy" ON finances;
 CREATE POLICY "finances_select_policy" ON finances
 FOR SELECT
 USING (
@@ -107,6 +138,7 @@ USING (
 );
 
 -- Finances: INSERT/UPDATE/DELETE Policies (will be overridden by comprehensive RLS policies)
+DROP POLICY IF EXISTS "finances_modify_policy" ON finances;
 CREATE POLICY "finances_modify_policy" ON finances
 FOR ALL
 USING (

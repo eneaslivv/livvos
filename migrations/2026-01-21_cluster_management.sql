@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS clusters (
     last_health_check TIMESTAMPTZ DEFAULT now(),
     
     -- Cluster coordination
-    primary_node_id UUID REFERENCES cluster_nodes(id),
+    primary_node_id UUID, -- Circular ref loaded later if needed, or allow it
     coordinator_token VARCHAR(255) UNIQUE,
     
     -- Timestamps
@@ -117,6 +117,15 @@ CREATE TABLE IF NOT EXISTS cluster_nodes (
     ssh_fingerprint VARCHAR(255),
     tls_certificate_id VARCHAR(64)
 );
+
+-- Add foreign key for primary_node_id if not exists (circular dependency)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'clusters_primary_node_id_fkey') THEN
+    ALTER TABLE clusters ADD CONSTRAINT clusters_primary_node_id_fkey FOREIGN KEY (primary_node_id) REFERENCES cluster_nodes(id);
+  END IF;
+END $$;
+
 
 -- Cluster events table for audit trail and coordination
 CREATE TABLE IF NOT EXISTS cluster_events (
@@ -267,15 +276,19 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_clusters_updated_at ON clusters;
 CREATE TRIGGER update_clusters_updated_at BEFORE UPDATE ON clusters
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_cluster_nodes_updated_at ON cluster_nodes;
 CREATE TRIGGER update_cluster_nodes_updated_at BEFORE UPDATE ON cluster_nodes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_cluster_events_updated_at ON cluster_events;
 CREATE TRIGGER update_cluster_events_updated_at BEFORE UPDATE ON cluster_events
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_cluster_config_templates_updated_at ON cluster_config_templates;
 CREATE TRIGGER update_cluster_config_templates_updated_at BEFORE UPDATE ON cluster_config_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -287,6 +300,7 @@ ALTER TABLE cluster_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cluster_config_templates ENABLE ROW LEVEL SECURITY;
 
 -- Clusters RLS policies
+DROP POLICY IF EXISTS "System admins can view all clusters" ON clusters;
 CREATE POLICY "System admins can view all clusters" ON clusters
     FOR SELECT USING (
         EXISTS (
@@ -298,6 +312,7 @@ CREATE POLICY "System admins can view all clusters" ON clusters
         )
     );
 
+DROP POLICY IF EXISTS "System admins can insert clusters" ON clusters;
 CREATE POLICY "System admins can insert clusters" ON clusters
     FOR INSERT WITH CHECK (
         EXISTS (
@@ -309,6 +324,7 @@ CREATE POLICY "System admins can insert clusters" ON clusters
         )
     );
 
+DROP POLICY IF EXISTS "System admins can update clusters" ON clusters;
 CREATE POLICY "System admins can update clusters" ON clusters
     FOR UPDATE USING (
         EXISTS (
@@ -320,6 +336,7 @@ CREATE POLICY "System admins can update clusters" ON clusters
         )
     );
 
+DROP POLICY IF EXISTS "System admins can delete clusters" ON clusters;
 CREATE POLICY "System admins can delete clusters" ON clusters
     FOR DELETE USING (
         EXISTS (
@@ -332,6 +349,7 @@ CREATE POLICY "System admins can delete clusters" ON clusters
     );
 
 -- Cluster nodes RLS policies
+DROP POLICY IF EXISTS "System admins can view all cluster nodes" ON cluster_nodes;
 CREATE POLICY "System admins can view all cluster nodes" ON cluster_nodes
     FOR SELECT USING (
         EXISTS (
@@ -343,6 +361,7 @@ CREATE POLICY "System admins can view all cluster nodes" ON cluster_nodes
         )
     );
 
+DROP POLICY IF EXISTS "System admins can manage cluster nodes" ON cluster_nodes;
 CREATE POLICY "System admins can manage cluster nodes" ON cluster_nodes
     FOR ALL USING (
         EXISTS (
@@ -355,6 +374,7 @@ CREATE POLICY "System admins can manage cluster nodes" ON cluster_nodes
     );
 
 -- Cluster events RLS policies
+DROP POLICY IF EXISTS "System admins can view all cluster events" ON cluster_events;
 CREATE POLICY "System admins can view all cluster events" ON cluster_events
     FOR SELECT USING (
         EXISTS (
@@ -366,6 +386,7 @@ CREATE POLICY "System admins can view all cluster events" ON cluster_events
         )
     );
 
+DROP POLICY IF EXISTS "System agents can create cluster events" ON cluster_events;
 CREATE POLICY "System agents can create cluster events" ON cluster_events
     FOR INSERT WITH CHECK (
         EXISTS (
@@ -378,6 +399,7 @@ CREATE POLICY "System agents can create cluster events" ON cluster_events
     );
 
 -- Cluster metrics RLS policies
+DROP POLICY IF EXISTS "System admins can view all cluster metrics" ON cluster_metrics;
 CREATE POLICY "System admins can view all cluster metrics" ON cluster_metrics
     FOR SELECT USING (
         EXISTS (
@@ -389,6 +411,7 @@ CREATE POLICY "System admins can view all cluster metrics" ON cluster_metrics
         )
     );
 
+DROP POLICY IF EXISTS "System agents can create cluster metrics" ON cluster_metrics;
 CREATE POLICY "System agents can create cluster metrics" ON cluster_metrics
     FOR INSERT WITH CHECK (
         EXISTS (
@@ -401,9 +424,11 @@ CREATE POLICY "System agents can create cluster metrics" ON cluster_metrics
     );
 
 -- Cluster config templates RLS policies
+DROP POLICY IF EXISTS "Anyone can view active cluster config templates" ON cluster_config_templates;
 CREATE POLICY "Anyone can view active cluster config templates" ON cluster_config_templates
     FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "System admins can manage cluster config templates" ON cluster_config_templates;
 CREATE POLICY "System admins can manage cluster config templates" ON cluster_config_templates
     FOR ALL USING (
         EXISTS (
@@ -742,6 +767,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS cluster_health_update_trigger ON cluster_nodes;
 CREATE TRIGGER cluster_health_update_trigger
     AFTER INSERT OR UPDATE ON cluster_nodes
     FOR EACH ROW

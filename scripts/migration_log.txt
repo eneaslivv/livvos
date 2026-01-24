@@ -1,0 +1,39 @@
+📝 Logging to migration_log.txt
+
+📄 Processing: 2025-12-28_enable_rls.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2025-12-28_enable_rls.sql
+
+📄 Processing: 2025-12-28_create_documents_tables_final.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2025-12-28_create_documents_tables_final.sql
+
+📄 Processing: 2025-12-28_create_calendar_tables_final.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2025-12-28_create_calendar_tables_final.sql
+
+📄 Processing: 2025-12-29_data_rls.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2025-12-29_data_rls.sql
+
+📄 Processing: 2026-01-16_notifications_system.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2026-01-16_notifications_system.sql
+
+📄 Processing: 2026-01-16_whitelabel_tenant.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2026-01-16_whitelabel_tenant.sql
+
+📄 Processing: 2026-01-20_create_finances_table.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2026-01-20_create_finances_table.sql
+
+📄 Processing: 2026-01-21_cluster_management.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2026-01-21_cluster_management.sql
+
+📄 Processing: 2026-01-20_migrate_plaintext_credentials.sql
+   Executing via RPC 'exec_sql'...
+   ✅ Success: 2026-01-20_migrate_plaintext_credentials.sql
+
+🏁 All migrations processed successfully!

@@ -234,7 +234,7 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setIsAuthenticated(!!session);
-        
+
         // Log auth state changes for security monitoring
         if (_event === 'SIGNED_IN') {
           console.log('🔓 User signed in:', session?.user?.email);
@@ -295,9 +295,10 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       {/* Complete Context Provider Stack with proper ordering */}
-      <RBACProvider>
-        <SecurityProvider>
-          <TenantProvider>
+      {/* Complete Context Provider Stack with proper ordering */}
+      <TenantProvider>
+        <RBACProvider>
+          <SecurityProvider>
             <NotificationsProvider>
               <TeamProvider>
                 <ClientsProvider>
@@ -326,9 +327,9 @@ const App: React.FC = () => {
                 </ClientsProvider>
               </TeamProvider>
             </NotificationsProvider>
-          </TenantProvider>
-        </SecurityProvider>
-      </RBACProvider>
+          </SecurityProvider>
+        </RBACProvider>
+      </TenantProvider>
     </ErrorBoundary>
   );
 };

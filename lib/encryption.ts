@@ -1,19 +1,17 @@
-import crypto from 'crypto';
+import CryptoJS from 'crypto-js';
 
 // Encryption configuration
 export const ENCRYPTION_CONFIG = {
-  algorithm: 'aes-256-gcm',
-  keyLength: 32, // 256 bits
-  ivLength: 16,  // 128 bits
-  tagLength: 16, // 128 bits
+  keyLength: 256 / 32, // 256 bits (words)
+  ivLength: 128 / 32,  // 128 bits (words)
   iterations: 100000, // PBKDF2 iterations
-  saltLength: 32 // 256 bits
+  saltLength: 256 / 32 // 256 bits (words)
 } as const;
 
 export interface EncryptedData {
   data: string; // Base64 encrypted data
   iv: string;   // Base64 initialization vector
-  tag: string;  // Base64 authentication tag
+  tag: string;  // Base64 authentication tag (Simulated/Null for CBC)
   salt: string; // Base64 salt for key derivation
   version: number; // Encryption version for future upgrades
 }
@@ -33,12 +31,16 @@ export interface DecryptionResult {
 /**
  * Derives encryption key from password and salt using PBKDF2
  */
-function deriveKey(password: string, salt: Buffer): Buffer {
-  return crypto.pbkdf2Sync(password, salt, ENCRYPTION_CONFIG.iterations, ENCRYPTION_CONFIG.keyLength, 'sha256');
+function deriveKey(password: string, salt: CryptoJS.lib.WordArray): CryptoJS.lib.WordArray {
+  return CryptoJS.PBKDF2(password, salt, {
+    keySize: ENCRYPTION_CONFIG.keyLength,
+    iterations: ENCRYPTION_CONFIG.iterations,
+    hasher: CryptoJS.algo.SHA256
+  });
 }
 
 /**
- * Encrypts plaintext using AES-256-GCM
+ * Encrypts plaintext using AES
  */
 export function encrypt(plaintext: string, password: string): EncryptionResult {
   try {
@@ -51,33 +53,31 @@ export function encrypt(plaintext: string, password: string): EncryptionResult {
     }
 
     // Generate random salt
-    const salt = crypto.randomBytes(ENCRYPTION_CONFIG.saltLength);
-    
+    const salt = CryptoJS.lib.WordArray.random(ENCRYPTION_CONFIG.saltLength * 4); // *4 because random expects bytes, logic uses words sometimes, safest to trust random() logic (bytes)
+    // Actually CryptoJS.lib.WordArray.random(n) -> n bytes. 
+    // ENCRYPTION_CONFIG.saltLength is 8 words = 32 bytes.
+
     // Derive encryption key
     const key = deriveKey(password, salt);
-    
+
     // Generate random IV
-    const iv = crypto.randomBytes(ENCRYPTION_CONFIG.ivLength);
-    
-    // Create cipher
-    const cipher = crypto.createCipheriv(ENCRYPTION_CONFIG.algorithm, key, iv);
-    cipher.setAAD(Buffer.from('eneas-os-v1', 'utf8')); // Additional authenticated data
-    
+    const iv = CryptoJS.lib.WordArray.random(16); // 16 bytes
+
     // Encrypt the data
-    let encrypted = cipher.update(plaintext, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
-    
-    // Get authentication tag
-    const tag = cipher.getAuthTag();
-    
+    const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+      iv: iv,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+
     const encryptedData: EncryptedData = {
-      data: encrypted,
-      iv: iv.toString('base64'),
-      tag: tag.toString('base64'),
-      salt: salt.toString('base64'),
+      data: encrypted.ciphertext.toString(CryptoJS.enc.Base64),
+      iv: iv.toString(CryptoJS.enc.Base64),
+      tag: '', // CBC doesn't produce an Auth Tag like GCM. We leave it empty.
+      salt: salt.toString(CryptoJS.enc.Base64),
       version: 1
     };
-    
+
     return { encrypted: encryptedData, success: true };
   } catch (error) {
     return {
@@ -89,7 +89,7 @@ export function encrypt(plaintext: string, password: string): EncryptionResult {
 }
 
 /**
- * Decrypts ciphertext using AES-256-GCM
+ * Decrypts ciphertext using AES
  */
 export function decrypt(encryptedData: EncryptedData, password: string): DecryptionResult {
   try {
@@ -102,31 +102,41 @@ export function decrypt(encryptedData: EncryptedData, password: string): Decrypt
     }
 
     // Validate required fields
-    const requiredFields = ['data', 'iv', 'tag', 'salt'];
+    const requiredFields = ['data', 'iv', 'salt']; // Tag not required for CBC
     for (const field of requiredFields) {
       if (!(field in encryptedData) || !encryptedData[field as keyof EncryptedData]) {
         return { decrypted: '', success: false, error: `Missing required field: ${field}` };
       }
     }
 
-    // Convert base64 strings back to buffers
-    const salt = Buffer.from(encryptedData.salt, 'base64');
-    const iv = Buffer.from(encryptedData.iv, 'base64');
-    const tag = Buffer.from(encryptedData.tag, 'base64');
-    
+    // Parse Base64 inputs
+    const salt = CryptoJS.enc.Base64.parse(encryptedData.salt);
+    const iv = CryptoJS.enc.Base64.parse(encryptedData.iv);
+    const ciphertext = CryptoJS.enc.Base64.parse(encryptedData.data);
+
     // Derive decryption key
     const key = deriveKey(password, salt);
-    
-    // Create decipher
-    const decipher = crypto.createDecipheriv(ENCRYPTION_CONFIG.algorithm, key, iv);
-    decipher.setAAD(Buffer.from('eneas-os-v1', 'utf8'));
-    decipher.setAuthTag(tag);
-    
-    // Decrypt the data
-    let decrypted = decipher.update(encryptedData.data, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return { decrypted, success: true };
+
+    // Decrypt parameters
+    const cipherParams = CryptoJS.lib.CipherParams.create({
+      ciphertext: ciphertext
+    });
+
+    // Decrypt
+    const decrypted = CryptoJS.AES.decrypt(cipherParams, key, {
+      iv: iv,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+
+    const decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
+
+    if (!decryptedString) {
+      // Can happen if key is wrong or data corrupted (CBC padding error)
+      return { decrypted: '', success: false, error: 'Decryption failed (Invalid key or data)' };
+    }
+
+    return { decrypted: decryptedString, success: true };
   } catch (error) {
     return {
       decrypted: '',
@@ -140,7 +150,7 @@ export function decrypt(encryptedData: EncryptedData, password: string): Decrypt
  * Generates a secure random encryption key
  */
 export function generateEncryptionKey(): string {
-  return crypto.randomBytes(32).toString('base64');
+  return CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64);
 }
 
 /**
@@ -152,7 +162,9 @@ export function validateEncryptedFormat(data: any): data is EncryptedData {
     typeof data === 'object' &&
     typeof data.data === 'string' &&
     typeof data.iv === 'string' &&
-    typeof data.tag === 'string' &&
+    // Tag is optional in this implementation (legacy compat? or just CBC)
+    // But interface has it.
+    (typeof data.tag === 'string' || data.tag === undefined || data.tag === null) &&
     typeof data.salt === 'string' &&
     typeof data.version === 'number'
   );
@@ -162,30 +174,30 @@ export function validateEncryptedFormat(data: any): data is EncryptedData {
  * Securely compares two strings (timing attack resistant)
  */
 export function secureCompare(a: string, b: string): boolean {
+  // CryptoJS doesn't expose a timingSafeEqual equivalent easily.
+  // Simple constant time implementation attempt
   if (a.length !== b.length) {
     return false;
   }
-  
+
   let result = 0;
   for (let i = 0; i < a.length; i++) {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
-  
+
   return result === 0;
 }
 
 /**
- * Wipes sensitive data from memory (Node.js specific)
+ * Wipes sensitive data from memory
  */
-export function secureWipe(data: string | Buffer): void {
-  if (typeof data === 'string') {
-    // In Node.js, strings are immutable, so we can't wipe them
-    // This is just a placeholder for documentation purposes
-    return;
-  }
-  
-  if (Buffer.isBuffer(data)) {
-    data.fill(0);
+export function secureWipe(data: string | any): void {
+  // JS GC handles this mostly, tough to force.
+  // CryptoJS WordArrays can be reset.
+  if (data && typeof data.clamp === 'function' && typeof data.words === 'object') {
+    // Is a WordArray
+    for (let i = 0; i < data.words.length; i++) data.words[i] = 0;
+    data.sigBytes = 0;
   }
 }
 
@@ -198,7 +210,7 @@ export function rotateEncryption(
   newPassword: string
 ): EncryptionResult {
   const decryptResult = decrypt(encryptedData, oldPassword);
-  
+
   if (!decryptResult.success) {
     return {
       encrypted: null as any,
@@ -206,22 +218,24 @@ export function rotateEncryption(
       error: `Failed to decrypt during rotation: ${decryptResult.error}`
     };
   }
-  
+
   return encrypt(decryptResult.decrypted, newPassword);
 }
 
 // Environment variable validation
 export function getEncryptionMasterKey(): string {
-  const masterKey = process.env.ENCRYPTION_MASTER_KEY || process.env.VITE_ENCRYPTION_MASTER_KEY;
-  
+  // Check strict Vite environment variable first
+  const masterKey = import.meta.env.VITE_ENCRYPTION_MASTER_KEY;
+
   if (!masterKey) {
-    throw new Error('ENCRYPTION_MASTER_KEY environment variable is not set. This is required for credential encryption.');
+    console.error('Environment variables:', import.meta.env);
+    throw new Error('VITE_ENCRYPTION_MASTER_KEY environment variable is not set. This is required for credential encryption.');
   }
-  
+
   if (masterKey.length < 32) {
-    throw new Error('ENCRYPTION_MASTER_KEY must be at least 32 characters long for AES-256 encryption.');
+    throw new Error('VITE_ENCRYPTION_MASTER_KEY must be at least 32 characters long for AES-256 encryption.');
   }
-  
+
   return masterKey;
 }
 

@@ -47,26 +47,29 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "@types/crypto-js": "^4.2.2",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^17.2.3",
     "firebase": "^12.6.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.0.0",
     "@types/node": "^22.14.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "eslint": "^8.0.0",
+    "jsdom": "^23.0.0",
     "typescript": "~5.8.2",
     "vite": "^5.2.0",
-    "vitest": "^1.0.0",
-    "@vitest/ui": "^1.0.0",
-    "@vitest/coverage-v8": "^1.0.0",
-    "jsdom": "^23.0.0",
-    "@testing-library/react": "^14.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/user-event": "^14.0.0",
-    "eslint": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0"
+    "vitest": "^1.0.0"
   },
   "test": {
     "globals": {

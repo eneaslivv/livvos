@@ -140,11 +140,13 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trigger_tenant_updated ON tenants;
 CREATE TRIGGER trigger_tenant_updated
   BEFORE UPDATE ON tenants
   FOR EACH ROW
   EXECUTE FUNCTION update_tenant_timestamp();
 
+DROP TRIGGER IF EXISTS trigger_tenant_config_updated ON tenant_config;
 CREATE TRIGGER trigger_tenant_config_updated
   BEFORE UPDATE ON tenant_config
   FOR EACH ROW
@@ -178,5 +180,53 @@ BEGIN
   WHERE id = COALESCE(p_owner_id, auth.uid());
   
   RETURN v_tenant_id;
+END;
+$$;
+
+-- =============================================
+-- MISSING PERMISSION FUNCTIONS (Required by Finances)
+-- =============================================
+
+-- can_access_tenant(uuid)
+CREATE OR REPLACE FUNCTION can_access_tenant(p_tenant_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Check if user belongs to the tenant via their profile
+  RETURN EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid() AND tenant_id = p_tenant_id
+  );
+END;
+$$;
+
+-- has_permission(p_module, p_action)
+-- Placeholder implementation assuming 'owner' and 'admin' have full access
+-- Using p_module/p_action to match existing signature if present
+CREATE OR REPLACE FUNCTION has_permission(p_module TEXT, p_action TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_role_name TEXT;
+BEGIN
+  -- Check user role
+  -- Assumes roles table and user_roles table exist
+  SELECT r.name INTO v_role_name
+  FROM user_roles ur
+  JOIN roles r ON ur.role_id = r.id
+  WHERE ur.user_id = auth.uid()
+  LIMIT 1;
+
+  -- Allow owners and admins everything
+  IF v_role_name IN ('owner', 'admin') THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Default deny for others for now, or implement granular checks
+  RETURN FALSE;
 END;
 $$;

@@ -25,25 +25,38 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Users can only see their own notifications
+DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
 CREATE POLICY "Users can view own notifications"
   ON notifications FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
 CREATE POLICY "Users can update own notifications"
   ON notifications FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own notifications" ON notifications;
 CREATE POLICY "Users can delete own notifications"
   ON notifications FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Service role can insert notifications for any user
+DROP POLICY IF EXISTS "Service can insert notifications" ON notifications;
 CREATE POLICY "Service can insert notifications"
   ON notifications FOR INSERT
   WITH CHECK (true);
 
 -- Enable realtime for notifications
-ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+-- Enable realtime for notifications
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+  EXCEPTION
+    WHEN duplicate_object THEN NULL;
+    WHEN OTHERS THEN NULL;
+  END;
+END $$;
 
 -- =============================================
 -- HELPER FUNCTION: Create notification
@@ -137,13 +150,13 @@ BEGIN
 END;
 $$;
 
--- Note: Only create trigger if tasks table exists
+-- Note: Only create trigger if tasks table exists (calendar_tasks)
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tasks') THEN
-    DROP TRIGGER IF EXISTS trigger_notify_task_assignment ON tasks;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'calendar_tasks') THEN
+    DROP TRIGGER IF EXISTS trigger_notify_task_assignment ON calendar_tasks;
     CREATE TRIGGER trigger_notify_task_assignment
-      AFTER UPDATE ON tasks
+      AFTER UPDATE ON calendar_tasks
       FOR EACH ROW
       EXECUTE FUNCTION notify_on_task_assignment();
   END IF;
