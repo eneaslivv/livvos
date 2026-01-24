@@ -33,9 +33,9 @@ export interface UserProfile {
   updated_at: string;
 }
 
-export type ModuleType = 
+export type ModuleType =
   | 'auth'
-  | 'tenant' 
+  | 'tenant'
   | 'security'
   | 'projects'
   | 'team'
@@ -46,7 +46,7 @@ export type ModuleType =
   | 'analytics'
   | 'system';
 
-export type ActionType = 
+export type ActionType =
   | 'view'
   | 'create'
   | 'edit'
@@ -113,7 +113,7 @@ interface RBACContextType {
   refreshRBAC: () => Promise<void>;
   checkAccess: (module: ModuleType, action: ActionType) => { allowed: boolean; reason?: string };
   getUserRoleHierarchy: () => number; // Returns hierarchy level (owner=0, admin=1, etc.)
-  
+
   // Security functions
   logPermissionCheck: (module: ModuleType, action: ActionType, allowed: boolean) => Promise<void>;
   getPermissionAudit: (userId?: string, startDate?: string, endDate?: string) => Promise<any[]>;
@@ -170,6 +170,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
         .single();
 
       if (profileError) {
+        console.error('❌ Error fetching profile:', profileError);
         // If profile doesn't exist, this is a critical error
         // Do NOT fall back to mock data for security
         throw new Error(`User profile not found: ${profileError.message}`);
@@ -191,15 +192,12 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
             name,
             description,
             is_system,
-            created_at,
-            updated_at,
             role_permissions (
               permissions (
                 id,
                 module,
                 action,
-                description,
-                created_at
+                description
               )
             )
           )
@@ -230,7 +228,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     } catch (err) {
       errorLogger.error('Error loading RBAC data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load RBAC data');
-      
+
       // Clear potentially inconsistent state
       setUser(null);
       setRoles([]);
@@ -255,15 +253,15 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
   const hasRole = useCallback((roleName: string): boolean => {
     if (!user || !isInitialized) return false;
-    
-    return roles.some(role => 
+
+    return roles.some(role =>
       role.name.toLowerCase() === roleName.toLowerCase()
     );
   }, [user, roles, isInitialized]);
 
   const hasAnyRole = useCallback((roleNames: string[]): boolean => {
     if (!user || !isInitialized) return false;
-    
+
     return roleNames.some(roleName => hasRole(roleName));
   }, [user, isInitialized, hasRole]);
 
@@ -615,7 +613,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
       if (error) throw error;
 
-      return (data || []).flatMap((ur: any) => 
+      return (data || []).flatMap((ur: any) =>
         (ur.roles.role_permissions || []).map((rp: any) => rp.permissions)
       );
     } catch (err) {
@@ -696,7 +694,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       }
 
       const { data, error } = await query;
-      
+
       if (error) throw error;
       return data || [];
     } catch (err) {
@@ -765,7 +763,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     refreshRBAC,
     checkAccess,
     getUserRoleHierarchy,
-    
+
     // Security functions
     logPermissionCheck,
     getPermissionAudit,
