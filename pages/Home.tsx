@@ -44,6 +44,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         status: (p.status ?? Status.Active) as Status,
         nextSteps: p.next_steps ?? ''
     }));
+    const projectLookup = projectsRaw.reduce<Record<string, string>>((acc, project) => {
+        acc[project.id] = project.title || 'Project';
+        return acc;
+    }, {});
     // const [userName, setUserName] = useState<string>('there'); // REMOVED
     // const [ideaInput, setIdeaInput] = useState(''); // REMOVED
     // const [ideaSaved, setIdeaSaved] = useState(false); // REMOVED
@@ -177,6 +181,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                             <div className={`text-sm font-medium transition-all ${task.completed ? 'text-zinc-500 line-through' : 'text-zinc-900 dark:text-zinc-100'}`}>
                                                 {task.title}
                                             </div>
+                                            {(() => {
+                                                const projectId = (task as any).projectId || (task as any).project_id;
+                                                if (!projectId) {
+                                                    return <div className="text-[10px] text-zinc-400">No project</div>;
+                                                }
+                                                return <div className="text-[10px] text-zinc-400">{projectLookup[projectId] || 'Project'}</div>;
+                                            })()}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">

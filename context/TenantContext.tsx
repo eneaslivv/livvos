@@ -74,35 +74,35 @@ interface TenantContextType {
     branding: TenantBranding;
     isLoading: boolean;
     error: string | null;
-    
+
     // Permission checks
     hasFeature: (feature: keyof TenantConfig['features']) => boolean;
     isWithinResourceLimit: (resource: keyof TenantConfig['resource_limits']) => boolean;
     getResourceUsage: (resource: keyof TenantConfig['resource_limits']) => { used: number; limit: number; percentage: number };
-    
+
     // Branding
     applyBranding: () => void;
     updateBranding: (updates: Partial<TenantBranding>) => Promise<void>;
-    
+
     // Configuration management
     updateConfig: (updates: Partial<TenantConfig>) => Promise<void>;
     updateFeatures: (features: Partial<TenantConfig['features']>) => Promise<void>;
     updateResourceLimits: (limits: Partial<TenantConfig['resource_limits']>) => Promise<void>;
     updateSecuritySettings: (settings: Partial<TenantConfig['security_settings']>) => Promise<void>;
-    
+
     // Usage tracking
     refreshUsage: () => Promise<void>;
     checkAndEnforceLimits: () => Promise<boolean>;
-    
+
     // Tenant operations
     createTenant: (tenantData: Omit<Tenant, 'id' | 'created_at' | 'updated_at'>) => Promise<Tenant>;
     updateTenant: (updates: Partial<Tenant>) => Promise<void>;
     switchTenant: (tenantId: string) => Promise<boolean>;
-    
+
     // Integrations
     updateIntegration: (provider: keyof TenantConfig['integrations'], config: any) => Promise<void>;
     testIntegration: (provider: keyof TenantConfig['integrations']) => Promise<boolean>;
-    
+
     // Utilities
     resetToDefaults: () => Promise<void>;
     exportTenantData: () => Promise<any>;
@@ -141,8 +141,89 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const buildTenantSlug = useCallback((value: string) => {
+        const slug = value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+        return slug || `tenant-${user?.id?.slice(0, 8) || 'default'}`;
+    }, [user?.id]);
+
+    const ensureTenantAssignment = useCallback(async (profile: { id: string; name?: string | null; email?: string | null } | null) => {
+        if (!user) return null;
+
+        const { data: existingTenant } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('owner_id', user.id)
+            .maybeSingle();
+
+        if (existingTenant?.id) {
+            await supabase
+                .from('profiles')
+                .update({ tenant_id: existingTenant.id })
+                .eq('id', user.id);
+            return existingTenant.id;
+        }
+
+        if (!profile) {
+            const profilePayload = {
+                id: user.id,
+                email: user.email ?? '',
+                name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                status: 'active'
+            };
+
+            const { error: insertError } = await supabase
+                .from('profiles')
+                .insert(profilePayload);
+
+            if (insertError) {
+                throw new Error(`Failed to create profile: ${insertError.message}`);
+            }
+        }
+
+        const tenantName =
+            profile?.name?.trim() ||
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split('@')[0] ||
+            'My Workspace';
+        const tenantSlug = buildTenantSlug(tenantName);
+        const fallbackSlug = `${tenantSlug}-${user.id.slice(0, 6)}`;
+
+        const { data: tenantId, error: tenantError } = await supabase
+            .rpc('create_tenant_with_config', {
+                p_name: tenantName,
+                p_slug: tenantSlug,
+                p_owner_id: user.id
+            });
+
+        if (tenantError) {
+            if (tenantError.message?.includes('tenants_slug_key')) {
+                const { data: retryTenantId, error: retryError } = await supabase
+                    .rpc('create_tenant_with_config', {
+                        p_name: tenantName,
+                        p_slug: fallbackSlug,
+                        p_owner_id: user.id
+                    });
+
+                if (retryError) {
+                    throw new Error(`Failed to create tenant: ${retryError.message}`);
+                }
+
+                return retryTenantId as string;
+            }
+
+            throw new Error(`Failed to create tenant: ${tenantError.message}`);
+        }
+
+        return tenantId as string;
+    }, [buildTenantSlug, user]);
+
     // Fetch tenant data for current user
     const fetchTenantData = useCallback(async () => {
+        console.log('[TenantContext] fetchTenantData triggered. User:', user?.id);
         if (!user) {
             setCurrentTenant(null);
             setTenantConfig(null);
@@ -158,27 +239,37 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             // Get user's tenant from profile
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
-                .select('tenant_id')
+                .select('id, name, email, tenant_id')
                 .eq('id', user.id)
                 .single();
 
             if (profileError) {
-                console.warn('Profile not found, user may not have tenant assigned:', profileError.message);
-                setIsLoading(false);
-                return;
+                console.warn('Profile not found, attempting auto-provision:', profileError.message);
+                await ensureTenantAssignment(null);
+            } else if (!profile?.tenant_id) {
+                console.warn('User does not have a tenant assigned. Auto-provisioning tenant.');
+                await ensureTenantAssignment(profile);
             }
 
-            if (!profile?.tenant_id) {
-                console.warn('User does not have a tenant assigned');
-                setIsLoading(false);
-                return;
+            const { data: updatedProfile, error: updatedProfileError } = await supabase
+                .from('profiles')
+                .select('tenant_id')
+                .eq('id', user.id)
+                .single();
+
+            if (updatedProfileError) {
+                throw new Error(`Failed to reload profile: ${updatedProfileError.message}`);
+            }
+
+            if (!updatedProfile?.tenant_id) {
+                throw new Error('User does not have a tenant assigned');
             }
 
             // Fetch tenant details
             const { data: tenant, error: tenantError } = await supabase
                 .from('tenants')
                 .select('*')
-                .eq('id', profile.tenant_id)
+                .eq('id', updatedProfile.tenant_id)
                 .single();
 
             if (tenantError) {
@@ -186,6 +277,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             }
 
             setCurrentTenant(tenant);
+            console.log('[TenantContext] Tenant loaded:', tenant.id);
 
             // Fetch tenant configuration
             const { data: config, error: configError } = await supabase
@@ -202,8 +294,8 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                 // Parse branding if it's stored as string
                 const parsedConfig = {
                     ...config,
-                    branding: typeof config.branding === 'string' 
-                        ? JSON.parse(config.branding) 
+                    branding: typeof config.branding === 'string'
+                        ? JSON.parse(config.branding)
                         : config.branding
                 };
                 setTenantConfig(parsedConfig);
@@ -213,12 +305,13 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             await refreshUsage();
 
         } catch (err) {
+            console.error('[TenantContext] Error loading tenant:', err);
             errorLogger.error('Error fetching tenant data:', err);
             setError(err instanceof Error ? err.message : 'Failed to load tenant data');
         } finally {
             setIsLoading(false);
         }
-    }, [user]);
+    }, [ensureTenantAssignment, user]);
 
     // Merge tenant config with defaults to get final branding
     const branding = useMemo(() => {
@@ -237,7 +330,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     // Check if within resource limits
     const isWithinResourceLimit = useCallback((resource: keyof TenantConfig['resource_limits']): boolean => {
         if (!tenantConfig || !tenantUsage) return false;
-        
+
         const limit = tenantConfig.resource_limits[resource];
         const usage = {
             max_users: tenantUsage.current_users,
@@ -301,7 +394,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
         try {
             const newBranding = { ...branding, ...updates };
-            
+
             const { error } = await supabase
                 .from('tenant_config')
                 .update({
@@ -415,7 +508,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         if (!tenantConfig || !tenantUsage) return true;
 
         const issues: string[] = [];
-        
+
         if (tenantUsage.current_users > tenantConfig.resource_limits.max_users) {
             issues.push('User limit exceeded');
         }
@@ -625,7 +718,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
         const issues: string[] = [];
         const limitsExceeded = !await checkAndEnforceLimits();
-        
+
         if (limitsExceeded) {
             issues.push('Resource limits exceeded');
         }
@@ -672,35 +765,35 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         branding,
         isLoading,
         error,
-        
+
         // Permission checks
         hasFeature,
         isWithinResourceLimit,
         getResourceUsage,
-        
+
         // Branding
         applyBranding,
         updateBranding,
-        
+
         // Configuration management
         updateConfig,
         updateFeatures,
         updateResourceLimits,
         updateSecuritySettings,
-        
+
         // Usage tracking
         refreshUsage,
         checkAndEnforceLimits,
-        
+
         // Tenant operations
         createTenant,
         updateTenant,
         switchTenant,
-        
+
         // Integrations
         updateIntegration,
         testIntegration,
-        
+
         // Utilities
         resetToDefaults,
         exportTenantData,

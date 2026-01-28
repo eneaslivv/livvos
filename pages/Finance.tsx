@@ -1,8 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../components/ui/Card';
-import { DollarSign, TrendingUp, TrendingDown, AlertTriangle, Target, PieChart, CreditCard, FileText, Settings, Download, Plus, Eye, Edit } from 'lucide-react';
-import { useFinanceContext } from '../context/FinanceContext';
-import { useRBACContext } from '../context/RBACContext';
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Target,
+  PieChart,
+  CreditCard,
+  FileText,
+  Settings,
+  Download,
+  Plus,
+  Eye,
+  Edit,
+  ArrowUpRight,
+  ChevronRight,
+  Activity,
+  Calendar,
+  X
+} from 'lucide-react';
+import { useFinance } from '../context/FinanceContext';
+import { useProjects } from '../context/ProjectsContext';
+import { useRBAC } from '../context/RBACContext';
+
+// Reusing Icons from the UI library if available, otherwise using lucide directly for consistent styling
+const Icons = {
+  Dollar: DollarSign,
+  TrendUp: TrendingUp,
+  TrendDown: TrendingDown,
+  Alert: AlertTriangle,
+  Target,
+  Chart: PieChart,
+  Card: CreditCard,
+  Docs: FileText,
+  Settings,
+  Download,
+  Plus,
+  Eye,
+  Edit,
+  ArrowUpRight,
+  ChevronRight,
+  Activity,
+  Calendar,
+  X
+};
 
 interface FinancialMetric {
   id: string;
@@ -24,487 +67,581 @@ interface ProjectFinancial {
   lastUpdated: string;
 }
 
-interface FinancialReport {
-  id: string;
-  name: string;
-  type: 'monthly' | 'quarterly' | 'yearly';
-  generatedDate: string;
-  totalRevenue: number;
-  totalExpenses: number;
-  profit: number;
-  margin: number;
-}
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+
+const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 export const Finance: React.FC = () => {
-  const { 
-    projectFinancials,
-    financialSummaries,
-    createFinanceRecord,
-    updateFinanceRecord,
-    getProjectFinancialSummary
-  } = useFinanceContext();
+  const {
+    finances,
+    loading: financesLoading,
+    createFinance,
+  } = useFinance();
 
-  const { hasPermission } = useRBACContext();
-  
+  const { projects, loading: projectsLoading } = useProjects();
+  const { hasPermission } = useRBAC();
+
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'reports' | 'settings'>('overview');
-  const [loading, setLoading] = useState(true);
-  const [projectData, setProjectData] = useState<ProjectFinancial[]>([]);
-  const [reports, setReports] = useState<FinancialReport[]>([]);
+  const [isEntryOpen, setIsEntryOpen] = useState(false);
+  const [entryError, setEntryError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [entryData, setEntryData] = useState({
+    projectId: '',
+    totalAgreed: '',
+    totalCollected: '',
+    directExpenses: '',
+    imputedExpenses: '',
+    hoursWorked: '',
+    businessModel: 'fixed'
+  });
+  const loading = financesLoading || projectsLoading;
 
-  useEffect(() => {
-    const loadFinancialData = async () => {
-      try {
-        setLoading(true);
-        
-        // Load project financials
-        const projects = await Promise.all(
-          (projectFinancials || []).map(async (project: any) => {
-            const summary = await getProjectFinancialSummary(project.project_id);
-            return {
-              id: project.project_id,
-              projectName: project.name || `Project ${project.project_id}`,
-              budget: summary.total_agreed || 0,
-              collected: summary.total_collected || 0,
-              expenses: (summary.direct_expenses || 0) + (summary.imputed_expenses || 0),
-              profit: 0,
-              health: 'profitable' as const,
-              lastUpdated: new Date().toLocaleDateString()
-            };
-          })
-        );
-        
-        // Calculate profit for each project
-        projects.forEach(project => {
-          project.profit = project.collected - project.expenses;
-          if (project.profit > 0) project.health = 'profitable';
-          else if (project.profit === 0) project.health = 'break-even';
-          else project.health = 'loss';
-        });
-        
-        setProjectData(projects);
+  const projectNameById = useMemo(() => {
+    return new Map(projects.map(project => [project.id, project.title]));
+  }, [projects]);
 
-        // Mock reports data
-        setReports([
-          {
-            id: '1',
-            name: 'Monthly Report - January 2026',
-            type: 'monthly',
-            generatedDate: '2026-01-20',
-            totalRevenue: 150000,
-            totalExpenses: 95000,
-            profit: 55000,
-            margin: 36.7
-          },
-          {
-            id: '2',
-            name: 'Quarterly Report - Q4 2025',
-            type: 'quarterly',
-            generatedDate: '2025-12-31',
-            totalRevenue: 450000,
-            totalExpenses: 285000,
-            profit: 165000,
-            margin: 36.7
-          }
-        ]);
+  const projectData = useMemo<ProjectFinancial[]>(() => {
+    return (finances || []).map(finance => {
+      const expenses = (Number(finance.direct_expenses) || 0) + (Number(finance.imputed_expenses) || 0);
+      const collected = Number(finance.total_collected) || 0;
+      const profit = collected - expenses;
+      const health = finance.health || (profit > 0 ? 'profitable' : profit === 0 ? 'break-even' : 'loss');
+      const projectName = projectNameById.get(finance.project_id) || `Project ${finance.project_id}`;
+      const lastUpdatedSource = finance.updated_at || finance.created_at;
+      const lastUpdated = lastUpdatedSource ? new Date(lastUpdatedSource).toLocaleDateString() : new Date().toLocaleDateString();
 
-      } catch (error) {
-        console.error('Failed to load financial data:', error);
-      } finally {
-        setLoading(false);
+      return {
+        id: finance.project_id,
+        projectName,
+        budget: Number(finance.total_agreed) || 0,
+        collected,
+        expenses,
+        profit,
+        health: health as ProjectFinancial['health'],
+        lastUpdated
+      };
+    });
+  }, [finances, projectNameById]);
+
+  const totals = useMemo(() => {
+    return (finances || []).reduce(
+      (acc, finance) => {
+        const agreed = Number(finance.total_agreed) || 0;
+        const collected = Number(finance.total_collected) || 0;
+        const expenses = (Number(finance.direct_expenses) || 0) + (Number(finance.imputed_expenses) || 0);
+        const marginValue = Number(finance.profit_margin);
+        const margin = Number.isFinite(marginValue) ? marginValue : 0;
+
+        acc.totalAgreed += agreed;
+        acc.totalCollected += collected;
+        acc.totalExpenses += expenses;
+        acc.totalMargin += margin;
+        acc.marginCount += Number.isFinite(marginValue) ? 1 : 0;
+        return acc;
+      },
+      {
+        totalAgreed: 0,
+        totalCollected: 0,
+        totalExpenses: 0,
+        totalMargin: 0,
+        marginCount: 0
       }
-    };
+    );
+  }, [finances]);
 
-    loadFinancialData();
-  }, [projectFinancials]);
+  const netProfit = totals.totalCollected - totals.totalExpenses;
+  const profitMargin = totals.totalCollected > 0 ? (netProfit / totals.totalCollected) * 100 : 0;
+  const targetMargin = totals.marginCount > 0 ? totals.totalMargin / totals.marginCount : 0;
 
-  const metrics: FinancialMetric[] = [
+  const metrics: FinancialMetric[] = useMemo(() => [
     {
       id: '1',
       title: 'Total Revenue',
-      value: '$150,000',
-      change: '+12.5%',
+      value: formatCurrency(totals.totalCollected),
       trend: 'up',
       status: 'positive'
     },
     {
       id: '2',
       title: 'Total Expenses',
-      value: '$95,000',
-      change: '+8.2%',
+      value: formatCurrency(totals.totalExpenses),
       trend: 'up',
       status: 'negative'
     },
     {
       id: '3',
       title: 'Net Profit',
-      value: '$55,000',
-      change: '+18.7%',
-      trend: 'up',
-      status: 'positive'
+      value: formatCurrency(netProfit),
+      trend: netProfit >= 0 ? 'up' : 'down',
+      status: netProfit >= 0 ? 'positive' : 'negative'
     },
     {
       id: '4',
       title: 'Profit Margin',
-      value: '36.7%',
-      change: '+2.1%',
-      trend: 'up',
-      status: 'positive'
+      value: formatPercent(profitMargin),
+      trend: profitMargin >= 0 ? 'up' : 'down',
+      status: profitMargin >= 0 ? 'positive' : 'negative'
     }
-  ];
+  ], [totals, netProfit, profitMargin]);
 
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'up': return <TrendingUp className="w-4 h-4" />;
-      case 'down': return <TrendingDown className="w-4 h-4" />;
-      default: return <div className="w-4 h-4" />;
-    }
+  const revenueVectors = useMemo(() => {
+    const totalRevenue = totals.totalCollected;
+    const sorted = [...projectData]
+      .filter(item => item.collected > 0)
+      .sort((a, b) => b.collected - a.collected)
+      .slice(0, 3);
+    const colors = ['emerald', 'blue', 'amber'];
+
+    return sorted.map((item, index) => ({
+      category: item.projectName,
+      amount: item.collected,
+      percentage: totalRevenue > 0 ? (item.collected / totalRevenue) * 100 : 0,
+      color: colors[index % colors.length]
+    }));
+  }, [projectData, totals.totalCollected]);
+
+  const openNewEntry = () => {
+    setEntryData({
+      projectId: projects[0]?.id || '',
+      totalAgreed: '',
+      totalCollected: '',
+      directExpenses: '',
+      imputedExpenses: '',
+      hoursWorked: '',
+      businessModel: 'fixed'
+    });
+    setEntryError(null);
+    setIsEntryOpen(true);
   };
 
-  const getStatusColor = (health: string) => {
-    switch (health) {
-      case 'profitable': return 'text-green-600 bg-green-50';
-      case 'break-even': return 'text-yellow-600 bg-yellow-50';
-      case 'loss': return 'text-red-600 bg-red-50';
-      default: return 'text-gray-600 bg-gray-50';
+  const closeNewEntry = () => {
+    setIsEntryOpen(false);
+    setEntryError(null);
+  };
+
+  const handleEntryChange = (field: keyof typeof entryData, value: string) => {
+    setEntryData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmitEntry = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!entryData.projectId) {
+      setEntryError('Select a project to attach this entry.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setEntryError(null);
+
+    try {
+      await createFinance(entryData.projectId, {
+        total_agreed: Number(entryData.totalAgreed) || 0,
+        total_collected: Number(entryData.totalCollected) || 0,
+        direct_expenses: Number(entryData.directExpenses) || 0,
+        imputed_expenses: Number(entryData.imputedExpenses) || 0,
+        hours_worked: Number(entryData.hoursWorked) || 0,
+        business_model: entryData.businessModel as 'fixed' | 'hourly' | 'retainer'
+      });
+      closeNewEntry();
+    } catch (error) {
+      setEntryError(error instanceof Error ? error.message : 'Unable to save entry.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (!hasPermission('finance', 'view')) {
     return (
-      <div className="p-6">
-        <Card>
-          <div className="text-center py-8">
-            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Denied</h3>
-            <p className="text-gray-600">You don't have permission to access financial data.</p>
-          </div>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-white dark:bg-zinc-900/50 rounded-[2.5rem] border border-zinc-200 dark:border-zinc-800">
+        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-6">
+          <Icons.Card className="w-12 h-12 text-zinc-400" />
+        </div>
+        <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2 font-sans tracking-tight">Financial Center Access</h3>
+        <p className="text-zinc-500 max-w-sm font-medium">You don't have the necessary level to access proprietary financial data.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Financial Center</h1>
-          <p className="text-gray-600">Track revenue, expenses, and profitability across all projects</p>
+    <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-zinc-100 dark:border-zinc-800 pb-10">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-[0.2em] mb-4">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+            Financial Intelligence
+          </div>
+          <h1 className="text-5xl font-extrabold text-zinc-900 dark:text-zinc-100 font-sans tracking-tightest">
+            Finance <span className="text-zinc-400 dark:text-zinc-500 font-medium italic">&</span> Capital.
+          </h1>
+          <p className="text-zinc-500 font-medium max-w-md">Precision tracking for organizational capital, project margins, and fiscal performance.</p>
         </div>
-        <div className="flex space-x-2">
+
+        <div className="flex gap-3">
           {hasPermission('finance', 'create') && (
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              <Plus className="w-4 h-4" />
-              <span>New Transaction</span>
+            <button
+              onClick={openNewEntry}
+              className="flex items-center gap-2.5 px-6 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl font-bold shadow-xl shadow-zinc-900/10 dark:shadow-zinc-100/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+            >
+              <Icons.Plus size={18} strokeWidth={3} />
+              <span>New Entry</span>
             </button>
           )}
-          <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            <Download className="w-4 h-4" />
-            <span>Export</span>
+          <button className="flex items-center gap-2.5 px-6 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-2xl font-bold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-300">
+            <Icons.Download size={18} />
+            <span>Generate Report</span>
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex space-x-1 border-b border-gray-200">
+      {/* Navigation Subtitles */}
+      <div className="flex overflow-x-auto no-scrollbar gap-1 p-1 bg-zinc-100/50 dark:bg-zinc-900/50 rounded-2xl w-fit border border-zinc-200/50 dark:border-zinc-800/50">
         {[
-          { id: 'overview', label: 'Overview', icon: DollarSign },
-          { id: 'projects', label: 'Projects', icon: Target },
-          { id: 'reports', label: 'Reports', icon: FileText },
-          { id: 'settings', label: 'Settings', icon: Settings }
+          { id: 'overview', label: 'Dashboard', icon: Icons.Chart },
+          { id: 'projects', label: 'Project P&L', icon: Icons.Target },
+          { id: 'reports', label: 'Archived Reports', icon: Icons.Docs },
+          { id: 'settings', label: 'Configuration', icon: Icons.Settings }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center space-x-2 px-4 py-2 border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            className={`
+              flex items-center gap-2.5 px-5 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm
+              ${activeTab === tab.id
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-700'
+                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+              }
+            `}
           >
-            <tab.icon className="w-4 h-4" />
+            <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
             <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {/* Financial Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-12 animate-in slide-in-from-bottom-2 duration-700">
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {metrics.map(metric => (
-              <Card key={metric.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">{metric.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
+              <div key={metric.id} className="group relative p-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-200 dark:border-zinc-800 hover:shadow-2xl hover:shadow-zinc-200/50 dark:hover:shadow-black/50 transition-all duration-500 overflow-hidden">
+                <div className="relative z-10 flex flex-col justify-between h-full">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/80 rounded-2xl border border-zinc-100 dark:border-zinc-700/50 group-hover:scale-110 transition-transform duration-500">
+                      <Icons.Dollar className="text-zinc-600 dark:text-zinc-300" size={24} />
+                    </div>
                     {metric.change && (
-                      <div className={`flex items-center space-x-1 text-sm ${
-                        metric.status === 'positive' ? 'text-green-600' : 
-                        metric.status === 'negative' ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {getTrendIcon(metric.trend)}
-                        <span>{metric.change}</span>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${metric.status === 'positive' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' :
+                          'bg-rose-50 text-rose-600 border border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                        }`}>
+                        {metric.change}
+                        {metric.trend === 'up' ? <Icons.TrendUp size={10} strokeWidth={3} /> : <Icons.TrendDown size={10} strokeWidth={3} />}
                       </div>
                     )}
                   </div>
-                  <DollarSign className="w-8 h-8 text-blue-500" />
+
+                  <div>
+                    <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-1">{metric.title}</p>
+                    <p className="text-4xl font-black text-zinc-900 dark:text-zinc-100 font-sans tracking-tight">{metric.value}</p>
+                  </div>
                 </div>
-              </Card>
+                {/* Background Accent */}
+                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-zinc-50 dark:bg-zinc-800/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+              </div>
             ))}
           </div>
 
-          {/* Profit/Loss Summary */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Breakdown</h3>
-                <div className="space-y-3">
-                  {[
-                    { category: 'Design Services', amount: 75000, percentage: 50 },
-                    { category: 'Development', amount: 60000, percentage: 40 },
-                    { category: 'Consulting', amount: 15000, percentage: 10 }
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{item.category}</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium">${item.amount.toLocaleString()}</span>
-                        <span className="text-xs text-gray-500">({item.percentage}%)</span>
-                      </div>
-                    </div>
-                  ))}
+          {/* Breakdown Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 p-10 bg-white dark:bg-zinc-900 rounded-[3rem] border border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between mb-10">
+                <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Revenue Vectors</h3>
+                <div className="flex gap-2">
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-widest px-3 py-1 bg-zinc-50 dark:bg-zinc-800 rounded-full">LIVE</span>
                 </div>
               </div>
-            </Card>
 
-            <Card>
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Expense Categories</h3>
-                <div className="space-y-3">
-                  {[
-                    { category: 'Direct Costs', amount: 55000, percentage: 57.9 },
-                    { category: 'Operating Costs', amount: 25000, percentage: 26.3 },
-                    { category: 'Administrative', amount: 15000, percentage: 15.8 }
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{item.category}</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium">${item.amount.toLocaleString()}</span>
-                        <span className="text-xs text-gray-500">({item.percentage}%)</span>
+              <div className="space-y-8">
+                {revenueVectors.length === 0 && !loading && (
+                  <div className="text-sm font-bold text-zinc-400 uppercase tracking-widest">No revenue data yet.</div>
+                )}
+                {revenueVectors.map((item, index) => (
+                  <div key={index} className="space-y-3 group cursor-default">
+                    <div className="flex justify-between items-end">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full bg-${item.color}-500 group-hover:scale-150 transition-transform duration-500 shadow-[0_0_12px_rgba(var(--${item.color}-rgb),0.5)]`}></div>
+                        <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors uppercase tracking-tight">{item.category}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight block">{formatCurrency(item.amount)}</span>
                       </div>
                     </div>
-                  ))}
+                    <div className="h-4 w-full bg-zinc-50 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-zinc-100 dark:border-zinc-700/50">
+                      <div
+                        className={`h-full bg-zinc-900 dark:bg-zinc-100 rounded-full transition-all duration-1000 ease-out`}
+                        style={{ width: `${item.percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-10 bg-zinc-900 dark:bg-zinc-100 rounded-[3rem] text-white dark:text-zinc-900 shadow-2xl relative overflow-hidden group">
+              <div className="relative z-10 flex flex-col justify-between h-full">
+                <div>
+                  <Icons.Target className="text-zinc-400 dark:text-zinc-500 mb-6" size={40} strokeWidth={2.5} />
+                  <h3 className="text-3xl font-black tracking-tightest leading-none mb-6">Efficiency Quotient</h3>
+                  <p className="text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-[0.15em] text-xs">Target Margin: <span className="text-white dark:text-zinc-900">{formatPercent(targetMargin)}</span></p>
+                </div>
+
+                <div className="mt-20">
+                  <div className="text-7xl font-black tracking-tightest mb-4">{formatPercent(profitMargin)}</div>
+                  <div className="flex items-center gap-2 text-rose-400 dark:text-rose-600 font-black text-sm uppercase tracking-widest group-hover:translate-x-4 transition-transform duration-500">
+                    Optimize Ops <Icons.ArrowUpRight size={16} strokeWidth={3} />
+                  </div>
                 </div>
               </div>
-            </Card>
+              {/* Decorative Element */}
+              <div className="absolute top-10 right-10 opacity-10 group-hover:scale-150 transition-transform duration-1000">
+                <Icons.Chart size={200} />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Projects Tab */}
       {activeTab === 'projects' && (
-        <div className="space-y-6">
-          <Card>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Project Financials</h3>
-                <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                  View All Projects
+        <div className="animate-in slide-in-from-bottom-2 duration-700">
+          <div className="bg-white dark:bg-zinc-900 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xl shadow-zinc-200/20 dark:shadow-none">
+            <div className="px-10 py-8 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Active Accounts Master List</h3>
+              <div className="flex gap-2">
+                <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-100 dark:border-zinc-700 flex items-center gap-2">
+                  <Icons.Activity size={14} className="text-zinc-400" />
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{projectData.length} Projects</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-zinc-50/50 dark:bg-zinc-800/30">
+                    <th className="px-10 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Account</th>
+                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Budgeted</th>
+                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Realized</th>
+                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Net Delta</th>
+                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Health Index</th>
+                    <th className="px-10 py-5 text-right text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Matrix</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800">
+                  {projectData.map(project => (
+                    <tr key={project.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all duration-300">
+                      <td className="px-10 py-6 whitespace-nowrap">
+                        <div className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight mb-1 group-hover:translate-x-2 transition-transform duration-300">{project.projectName}</div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+                          <Icons.Calendar size={10} />
+                          Sync: {project.lastUpdated}
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                        ${project.budget.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap text-sm font-black text-zinc-900 dark:text-zinc-100">
+                        ${project.collected.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap text-sm font-black text-zinc-900 dark:text-zinc-100">
+                        <span className={project.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                          {project.profit >= 0 ? '+' : ''}${project.profit.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap">
+                        <div className={`
+                                            inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border
+                                            ${project.health === 'profitable' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' :
+                            'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'}
+                                        `}>
+                          {project.health.replace('-', ' ')}
+                        </div>
+                      </td>
+                      <td className="px-10 py-6 whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <button className="p-2 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+                            <Icons.Eye size={16} />
+                          </button>
+                          <button className="p-2 bg-zinc-900 dark:bg-zinc-100 rounded-xl text-white dark:text-zinc-900 hover:opacity-90 transition-opacity shadow-lg shadow-zinc-900/10">
+                            <Icons.Edit size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {loading && (
+                <div className="flex flex-col items-center justify-center p-20 gap-4">
+                  <div className="w-12 h-12 border-4 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin"></div>
+                  <p className="text-zinc-400 text-xs font-black uppercase tracking-widest animate-pulse">Computing Matrix...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reports, Settings similarly styled... */}
+      {(activeTab === 'reports' || activeTab === 'settings') && (
+        <div className="flex flex-col items-center justify-center min-h-[40vh] bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 text-center p-12 animate-in fade-in duration-700">
+          <Icons.Chart className="w-12 h-12 text-zinc-300 mb-6 mx-auto" />
+          <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 mb-2 uppercase tracking-tight">Accessing Secured Vault</h3>
+          <p className="text-zinc-500 text-sm max-w-xs mx-auto">This section is currently under synchronization protocol. Please check back later.</p>
+        </div>
+      )}
+
+      {isEntryOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={closeNewEntry}>
+            <div
+              className="w-full max-w-2xl bg-white dark:bg-zinc-950 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-2xl p-8 animate-in zoom-in-95 duration-200"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-zinc-400">Finance Entry</p>
+                  <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">New Financial Record</h3>
+                </div>
+                <button
+                  onClick={closeNewEntry}
+                  className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+                >
+                  <Icons.X size={20} />
                 </button>
               </div>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Project
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Budget
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Collected
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Expenses
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Profit
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Health
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {projectData.map(project => (
-                      <tr key={project.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{project.projectName}</div>
-                          <div className="text-xs text-gray-500">{project.lastUpdated}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${project.budget.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${project.collected.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${project.expenses.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`font-medium ${
-                            project.profit >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            ${project.profit.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(project.health)}`}>
-                            {project.health.charAt(0).toUpperCase() + project.health.slice(1).replace('-', ' ')}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex space-x-2">
-                            {hasPermission('finance', 'view') && (
-                              <button className="text-blue-600 hover:text-blue-900">
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            )}
-                            {hasPermission('finance', 'edit') && (
-                              <button className="text-gray-600 hover:text-gray-900">
-                                <Edit className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+
+              <form className="space-y-6" onSubmit={handleSubmitEntry}>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project</label>
+                  <select
+                    value={entryData.projectId}
+                    onChange={(event) => handleEntryChange('projectId', event.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                  >
+                    {projects.length === 0 && <option value="">No projects available</option>}
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+                  </select>
+                </div>
 
-      {/* Reports Tab */}
-      {activeTab === 'reports' && (
-        <div className="space-y-6">
-          <Card>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Financial Reports</h3>
-                {hasPermission('finance', 'create') && (
-                  <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    <FileText className="w-4 h-4" />
-                    <span>Generate Report</span>
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total Agreed</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryData.totalAgreed}
+                      onChange={(event) => handleEntryChange('totalAgreed', event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total Collected</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryData.totalCollected}
+                      onChange={(event) => handleEntryChange('totalCollected', event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Direct Expenses</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryData.directExpenses}
+                      onChange={(event) => handleEntryChange('directExpenses', event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Imputed Expenses</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryData.imputedExpenses}
+                      onChange={(event) => handleEntryChange('imputedExpenses', event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Hours Worked</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={entryData.hoursWorked}
+                      onChange={(event) => handleEntryChange('hoursWorked', event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Business Model</label>
+                    <select
+                      value={entryData.businessModel}
+                      onChange={(event) => handleEntryChange('businessModel', event.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="fixed">Fixed</option>
+                      <option value="hourly">Hourly</option>
+                      <option value="retainer">Retainer</option>
+                    </select>
+                  </div>
+                </div>
+
+                {entryError && (
+                  <div className="text-sm font-semibold text-rose-500 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl px-4 py-3">
+                    {entryError}
+                  </div>
                 )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {reports.map(report => (
-                  <div key={report.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="text-sm font-medium text-gray-900 mb-1">{report.name}</h4>
-                        <p className="text-xs text-gray-500 mb-3">Generated: {report.generatedDate}</p>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Revenue:</span>
-                            <span className="font-medium">${report.totalRevenue.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Expenses:</span>
-                            <span className="font-medium">${report.totalExpenses.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Profit:</span>
-                            <span className="font-medium text-green-600">${report.profit.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Margin:</span>
-                            <span className="font-medium">{report.margin}%</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          report.type === 'monthly' ? 'bg-blue-100 text-blue-800' :
-                          report.type === 'quarterly' ? 'bg-purple-100 text-purple-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {report.type.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex space-x-2">
-                      <button className="flex items-center space-x-1 px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50">
-                        <Eye className="w-3 h-3" />
-                        <span>View</span>
-                      </button>
-                      <button className="flex items-center space-x-1 px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50">
-                        <Download className="w-3 h-3" />
-                        <span>Download</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
 
-      {/* Settings Tab */}
-      {activeTab === 'settings' && (
-        <div className="space-y-6">
-          <Card>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Settings</h3>
-              <div className="space-y-6">
-                {[
-                  {
-                    title: 'Currency Settings',
-                    description: 'Configure default currency and exchange rates',
-                    setting: 'USD ($)'
-                  },
-                  {
-                    title: 'Fiscal Year',
-                    description: 'Define your organization\'s fiscal year',
-                    setting: 'January - December'
-                  },
-                  {
-                    title: 'Tax Configuration',
-                    description: 'Set up tax rates and calculations',
-                    setting: 'Not configured'
-                  },
-                  {
-                    title: 'Payment Terms',
-                    description: 'Default payment terms for new projects',
-                    setting: 'Net 30 days'
-                  }
-                ].map((setting, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900">{setting.title}</h4>
-                      <p className="text-sm text-gray-600">{setting.description}</p>
-                    </div>
-                    <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
-                      {setting.setting}
-                    </button>
-                  </div>
-                ))}
-              </div>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeNewEntry}
+                    className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm font-bold text-zinc-500 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-bold shadow-lg shadow-zinc-900/15 dark:shadow-zinc-100/10 hover:opacity-90 disabled:opacity-60"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Entry'}
+                  </button>
+                </div>
+              </form>
             </div>
-          </Card>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
+
+export default Finance;

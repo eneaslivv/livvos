@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { useTenantId } from './TenantContext'
 
 export interface Folder {
   id: string
   owner_id: string
+  tenant_id?: string
+  client_id?: string | null
+  project_id?: string | null
   name: string
   parent_id: string | null
   color: string
@@ -16,6 +20,9 @@ export interface Folder {
 export interface File {
   id: string
   owner_id: string
+  tenant_id?: string
+  client_id?: string | null
+  project_id?: string | null
   folder_id: string | null
   name: string
   type: string
@@ -36,8 +43,8 @@ interface DocumentsContextType {
   error: string | null
   isInitialized: boolean
   setCurrentFolderId: (id: string | null) => void
-  createFolder: (name: string, color?: string) => Promise<Folder>
-  uploadFile: (file: any) => Promise<File>
+  createFolder: (name: string, color?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Folder>
+  uploadFile: (file: any, options?: { clientId?: string | null; projectId?: string | null }) => Promise<File>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
   refresh: () => Promise<void>
@@ -46,6 +53,7 @@ interface DocumentsContextType {
 const DocumentsContext = createContext<DocumentsContextType | undefined>(undefined)
 
 export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const tenantId = useTenantId()
   const [folders, setFolders] = useState<Folder[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
@@ -122,18 +130,35 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     loadDocuments()
   }, [loadDocuments])
 
-  const createFolder = async (name: string, color: string = '#3b82f6') => {
+  const createFolder = async (
+    name: string,
+    color: string = '#3b82f6',
+    options?: { clientId?: string | null; projectId?: string | null }
+  ) => {
+    const user = (await supabase.auth.getUser()).data.user
+    if (!user) throw new Error('Usuario no autenticado')
+    if (!tenantId) throw new Error('Tenant no disponible')
+
+    const { clientId = null, projectId = null } = options || {}
+
     const { data, error: err } = await supabase.from('folders').insert({
-      name, parent_id: currentFolderId, color, owner_id: (await supabase.auth.getUser()).data.user?.id
+      name,
+      parent_id: currentFolderId,
+      color,
+      owner_id: user.id,
+      tenant_id: tenantId,
+      client_id: clientId,
+      project_id: projectId
     }).select().single()
     if (err) throw err
     setFolders(prev => [...prev, data])
     return data
   }
 
-  const uploadFile = async (file: any) => {
+  const uploadFile = async (file: any, options?: { clientId?: string | null; projectId?: string | null }) => {
     const user = (await supabase.auth.getUser()).data.user
     if (!user) throw new Error('Usuario no autenticado')
+    if (!tenantId) throw new Error('Tenant no disponible')
     const fileName = `${user.id}/${Date.now()}_${file.name}`
     
     const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file)
@@ -141,9 +166,18 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     
     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(fileName)
     
+    const { clientId = null, projectId = null } = options || {}
+
     const { data: fileData, error: dbError } = await supabase.from('files').insert({
-      name: file.name, type: file.type, size: file.size, url: urlData.publicUrl,
-      folder_id: currentFolderId, owner_id: user.id
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      url: urlData.publicUrl,
+      folder_id: currentFolderId,
+      owner_id: user.id,
+      tenant_id: tenantId,
+      client_id: clientId,
+      project_id: projectId
     }).select().single()
     if (dbError) throw dbError
     

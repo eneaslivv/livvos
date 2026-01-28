@@ -5,9 +5,9 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
-import type { 
-  SkillTemplate, 
-  SkillInfo, 
+import type {
+  SkillTemplate,
+  SkillInfo,
   SkillRegistry,
   SkillExecutionState,
   SkillExecutionResult,
@@ -88,7 +88,7 @@ export class SkillLoader implements SkillManager {
   async executeSkill(name: string, agent: string): Promise<SkillExecutionResult> {
     const skill = await this.loadSkill(name);
     const executionId = `${name}-${agent}-${Date.now()}`;
-    
+
     // Initialize execution state
     const executionState: SkillExecutionState = {
       skillName: name,
@@ -120,13 +120,13 @@ export class SkillLoader implements SkillManager {
 
       // Execute skill steps
       const outputs: Record<string, any> = {};
-      
+
       for (let i = 0; i < skill.procedure.length; i++) {
         const step = skill.procedure[i];
         executionState.currentStep = i + 1;
-        
+
         this.log(executionId, `Executing step ${i + 1}: ${step.action}`);
-        
+
         try {
           const stepResult = await this.executeStep(step, executionId);
           outputs[`step_${i + 1}`] = stepResult;
@@ -139,11 +139,11 @@ export class SkillLoader implements SkillManager {
 
       // Validate results
       const validationResults = await this.validateExecutionResults(skill, outputs);
-      
+
       // Mark as completed
       executionState.status = 'completed';
       executionState.endTime = new Date();
-      
+
       const result: SkillExecutionResult = {
         success: true,
         skillName: name,
@@ -157,13 +157,13 @@ export class SkillLoader implements SkillManager {
 
       this.executionHistory.push(result);
       this.log(executionId, `Skill execution completed successfully in ${result.duration}ms`);
-      
+
       return result;
 
     } catch (error) {
       executionState.status = 'failed';
       executionState.endTime = new Date();
-      
+
       const result: SkillExecutionResult = {
         success: false,
         skillName: name,
@@ -177,7 +177,7 @@ export class SkillLoader implements SkillManager {
 
       this.executionHistory.push(result);
       this.log(executionId, `Skill execution failed: ${error.message}`);
-      
+
       return result;
     } finally {
       // Remove from active executions after completion
@@ -199,7 +199,7 @@ export class SkillLoader implements SkillManager {
     execution.status = 'cancelled';
     execution.endTime = new Date();
     this.log(executionId, 'Execution cancelled');
-    
+
     return true;
   }
 
@@ -293,10 +293,10 @@ export class SkillLoader implements SkillManager {
     // In a real implementation, this would execute the actual commands
     // For now, we'll simulate step execution
     this.log(executionId, `Executing commands: ${step.commands.join(', ')}`);
-    
+
     // Simulate command execution delay
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Return step result
     return {
       action: step.action,
@@ -379,7 +379,7 @@ export class SkillLoader implements SkillManager {
     }
 
     if (criteria.agent) {
-      skills = skills.filter(skill => 
+      skills = skills.filter(skill =>
         skill.requiredAgents.includes(criteria.agent!) ||
         skill.requiredAgents.includes('all-domain-agents')
       );
@@ -387,7 +387,7 @@ export class SkillLoader implements SkillManager {
 
     if (criteria.keyword) {
       const keyword = criteria.keyword.toLowerCase();
-      skills = skills.filter(skill => 
+      skills = skills.filter(skill =>
         skill.name.toLowerCase().includes(keyword) ||
         skill.description.toLowerCase().includes(keyword)
       );

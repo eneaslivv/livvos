@@ -1,0 +1,2 @@
+
+ALTER TABLE activity_logs DISABLE TRIGGER ALL;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRBAC } from '../../context/RBACContext';
+import { useTenant } from '../../context/TenantContext';
 import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
 import { UserProfile, Role } from '../../types/rbac';
@@ -8,6 +9,7 @@ interface Invitation {
     id: string;
     email: string;
     role_id: string;
+    tenant_id: string;
     token: string;
     status: 'pending' | 'accepted' | 'expired';
     created_at: string;
@@ -15,6 +17,7 @@ interface Invitation {
 
 export const UserManagement: React.FC = () => {
   const { isAdmin } = useRBAC();
+  const { currentTenant } = useTenant();
   const [users, setUsers] = useState<(UserProfile & { role: string })[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -28,6 +31,7 @@ export const UserManagement: React.FC = () => {
   // Fetch Data
   useEffect(() => {
     if (!isAdmin) return;
+    if (!currentTenant?.id) return;
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -36,7 +40,11 @@ export const UserManagement: React.FC = () => {
             const { data: profiles } = await supabase.from('profiles').select('*');
             const { data: userRoles } = await supabase.from('user_roles').select('user_id, roles(name)');
             const { data: allRoles } = await supabase.from('roles').select('*');
-            const { data: pendingInvites } = await supabase.from('invitations').select('*').eq('status', 'pending');
+            const { data: pendingInvites } = await supabase
+                .from('invitations')
+                .select('*')
+                .eq('status', 'pending')
+                .eq('tenant_id', currentTenant.id);
 
             setRoles(allRoles || []);
             setInvitations(pendingInvites || []);
@@ -45,9 +53,12 @@ export const UserManagement: React.FC = () => {
             if (profiles && userRoles) {
                 const mergedUsers = profiles.map(p => {
                     const roleEntry = userRoles.find((ur: any) => ur.user_id === p.id);
+                    const roleName = Array.isArray(roleEntry?.roles)
+                        ? roleEntry?.roles?.[0]?.name
+                        : (roleEntry as any)?.roles?.name;
                     return {
                         ...p,
-                        role: roleEntry?.roles?.name || 'No Role'
+                        role: roleName || 'No Role'
                     };
                 });
                 setUsers(mergedUsers);
@@ -67,16 +78,21 @@ export const UserManagement: React.FC = () => {
     };
 
     fetchData();
-  }, [isAdmin]);
+  }, [isAdmin, currentTenant?.id]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !selectedRole) return;
+    if (!currentTenant?.id) {
+        alert('Tenant is not ready yet. Please retry in a moment.');
+        return;
+    }
 
     try {
         const { data, error } = await supabase.from('invitations').insert({
             email: inviteEmail,
             role_id: selectedRole,
+            tenant_id: currentTenant.id,
             created_by: (await supabase.auth.getUser()).data.user?.id
         }).select().single();
 

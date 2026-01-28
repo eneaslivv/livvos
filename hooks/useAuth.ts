@@ -7,21 +7,30 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Obtener usuario actual
-    const getUser = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      setUser(currentUser)
+    let isMounted = true
+
+    const restoreSession = async () => {
+      const { data, error } = await supabase.auth.getSession()
+      if (!isMounted) return
+      if (error) {
+        console.warn('[Auth] Failed to restore session:', error.message)
+      }
+      setUser(data.session?.user ?? null)
       setLoading(false)
     }
 
-    getUser()
+    restoreSession()
 
-    // Escuchar cambios de autenticación
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return
       setUser(session?.user ?? null)
+      if (event === 'INITIAL_SESSION') {
+        setLoading(false)
+      }
     })
 
     return () => {
+      isMounted = false
       authListener.subscription.unsubscribe()
     }
   }, [])

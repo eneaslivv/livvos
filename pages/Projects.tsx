@@ -4,11 +4,13 @@ import { useProjects, Project, ProjectStatus } from '../context/ProjectsContext'
 import { errorLogger } from '../lib/errorLogger';
 import { logActivity } from '../lib/activity';
 import { supabase } from '../lib/supabase';
+import { useSupabase } from '../hooks/useSupabase';
 
 
 
 import { useTeam } from '../context/TeamContext';
 import { useAuth } from '../hooks/useAuth';
+import { useTenant } from '../context/TenantContext';
 
 const StatusBadge = ({ status }: { status: ProjectStatus }) => {
   const colors = {
@@ -29,6 +31,12 @@ export const Projects: React.FC = () => {
   const { projects, loading, error, createProject, updateProject } = useProjects();
   const { members } = useTeam();
   const { user: currentUser } = useAuth();
+  const { currentTenant } = useTenant();
+  const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask } = useSupabase<any>('tasks', {
+    enabled: true,
+    subscribe: true,
+    select: 'id,title,completed,project_id,due_date,assignee_id,priority'
+  });
 
   // Log inicial del componente
   useEffect(() => {
@@ -47,8 +55,14 @@ export const Projects: React.FC = () => {
   const [newTaskTitle, setNewTaskTitle] = useState<Record<number, string>>({});
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
+  const [clientInviteLink, setClientInviteLink] = useState<string | null>(null);
+  const [clientInviteError, setClientInviteError] = useState<string | null>(null);
+  const [isInvitingClient, setIsInvitingClient] = useState(false);
 
   const selectedProject = projects.find(p => p.id === selectedId) || projects[0];
+  const projectTasks = selectedProject
+    ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
+    : [];
 
   // Log cuando cambian los datos
   useEffect(() => {
@@ -91,6 +105,47 @@ export const Projects: React.FC = () => {
     } catch (err) {
       errorLogger.error('Error creando proyecto', err);
       alert('Error al crear el proyecto. Por favor intenta de nuevo.');
+    }
+  };
+
+  const handleInviteClientPortal = async () => {
+    if (!selectedProject?.client_id || !currentTenant?.id) return;
+    setIsInvitingClient(true);
+    setClientInviteError(null);
+    try {
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('id,email')
+        .eq('id', selectedProject.client_id)
+        .single();
+      if (clientError || !clientData?.email) throw clientError || new Error('Client email not found');
+
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'client')
+        .single();
+      if (roleError || !roleData) throw roleError || new Error('Client role not found');
+
+      const { data: invite, error: inviteError } = await supabase
+        .from('invitations')
+        .insert({
+          email: clientData.email,
+          role_id: roleData.id,
+          tenant_id: currentTenant.id,
+          client_id: clientData.id,
+          created_by: currentUser?.id,
+          type: 'client'
+        })
+        .select('token')
+        .single();
+      if (inviteError) throw inviteError;
+
+      setClientInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+    } catch (err: any) {
+      setClientInviteError(err.message || 'Error creating client invite');
+    } finally {
+      setIsInvitingClient(false);
     }
   };
 
@@ -170,10 +225,23 @@ export const Projects: React.FC = () => {
     if (!selectedProject) return
     const title = newTaskTitle[groupIdx]?.trim()
     if (!title) return
+    const taskId = crypto.randomUUID()
     const updated = selectedProject.tasksGroups.map((g, i) =>
-      i === groupIdx ? { ...g, tasks: [...g.tasks, { id: crypto.randomUUID(), title, done: false, assignee: currentUser?.id || 'Unknown' }] } : g
+      i === groupIdx ? { ...g, tasks: [...g.tasks, { id: taskId, title, done: false, assignee: currentUser?.id || 'Unknown' }] } : g
     )
     await updateProject(selectedProject.id, { tasksGroups: updated })
+    try {
+      await addSyncedTask({
+        id: taskId,
+        title,
+        completed: false,
+        project_id: selectedProject.id,
+        assignee_id: currentUser?.id || null,
+        priority: 'medium'
+      } as any)
+    } catch (err) {
+      errorLogger.error('Error creando tarea sincronizada', err)
+    }
     setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }))
     await logActivity({
       action: 'added task',
@@ -191,6 +259,14 @@ export const Projects: React.FC = () => {
         : g
     )
     await updateProject(selectedProject.id, { tasksGroups: updated })
+    try {
+      const task = updated[groupIdx]?.tasks.find(t => t.id === taskId)
+      if (task) {
+        await updateSyncedTask(taskId, { completed: task.done } as any)
+      }
+    } catch (err) {
+      errorLogger.error('Error actualizando tarea sincronizada', err)
+    }
     const task = selectedProject.tasksGroups[groupIdx].tasks.find(t => t.id === taskId)
     if (task) {
       await logActivity({
@@ -322,6 +398,23 @@ export const Projects: React.FC = () => {
             </div>
             <div className="flex gap-2">
               <button onClick={() => setIsShareModalOpen(true)} className="px-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800">Share</button>
+              {selectedProject?.client_id && (
+                <button
+                  onClick={() => window.open(`/?portal=client&projectId=${selectedProject.id}`, '_blank')}
+                  className="px-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  Open Portal
+                </button>
+              )}
+              {selectedProject?.client_id && (
+                <button
+                  onClick={handleInviteClientPortal}
+                  disabled={isInvitingClient}
+                  className="px-3 py-1.5 text-sm bg-zinc-900 text-white rounded-md hover:bg-zinc-800 disabled:opacity-60"
+                >
+                  {isInvitingClient ? 'Inviting...' : 'Invite Client'}
+                </button>
+              )}
               <button onClick={() => setIsClientPreviewMode(true)} className="px-3 py-1.5 text-sm bg-zinc-900 text-white rounded-md hover:bg-zinc-800">Client View</button>
             </div>
           </div>
@@ -343,6 +436,12 @@ export const Projects: React.FC = () => {
                   <button onClick={handleInviteMember} className="px-3 py-2 text-sm bg-zinc-900 text-white rounded-md">Invite</button>
                 </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">El usuario debe haber iniciado sesión al menos una vez para existir en perfiles.</p>
+                {clientInviteError && (
+                  <p className="text-xs text-rose-600 mt-2">{clientInviteError}</p>
+                )}
+                {clientInviteLink && (
+                  <p className="text-xs text-emerald-700 mt-2">Invitación cliente: <a className="underline" href={clientInviteLink} target="_blank" rel="noreferrer">{clientInviteLink}</a></p>
+                )}
               </div>
             </div>
           )}
@@ -423,6 +522,46 @@ export const Projects: React.FC = () => {
 
             {activeTab === 'tasks' && selectedProject && (
               <div className="space-y-6">
+                <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Synced Tasks</h3>
+                    <span className="text-xs text-zinc-400">{projectTasks.length} items</span>
+                  </div>
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {projectTasks.length === 0 && (
+                      <div className="px-5 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                        No tasks linked to this project yet.
+                      </div>
+                    )}
+                    {projectTasks.map((task: any) => (
+                      <div key={task.id} className="px-5 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={!!task.completed}
+                            onChange={() => updateSyncedTask(task.id, { completed: !task.completed } as any)}
+                            className="rounded border-zinc-300"
+                          />
+                          <span className={`text-sm ${task.completed ? 'line-through text-zinc-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                            {task.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {task.due_date && (
+                            <span className="text-[10px] text-zinc-500 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 rounded-full">
+                              {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                          {task.priority && (
+                            <span className="text-[10px] text-zinc-500 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 rounded-full capitalize">
+                              {task.priority}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     value={newGroupName}

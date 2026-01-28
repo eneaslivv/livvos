@@ -11,12 +11,15 @@ export interface CalendarEvent {
   end_date?: string
   start_time?: string
   duration?: number
-  type: 'meeting' | 'work-block' | 'deadline' | 'call' | 'note'
+  type: 'meeting' | 'work-block' | 'deadline' | 'call' | 'note' | 'content'
   color?: string
   all_day?: boolean
   location?: string
   client_id?: string
   project_id?: string
+  content_status?: 'draft' | 'ready' | 'published'
+  content_channel?: string
+  content_asset_type?: string
   created_at: string
   updated_at: string
 }
@@ -117,10 +120,32 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Intentar cargar tareas
       try {
         const { data: tasksData } = await supabase
-          .from('calendar_tasks')
+          .from('tasks')
           .select('*')
-          .order('order_index', { ascending: true })
-        setTasks(tasksData || [])
+          .order('created_at', { ascending: false })
+
+        const normalizedTasks = (tasksData || []).map((task: any) => ({
+          id: task.id,
+          owner_id: task.owner_id ?? task.user_id ?? '',
+          title: task.title ?? 'Untitled Task',
+          description: task.description ?? task.notes ?? '',
+          completed: !!task.completed,
+          priority: task.priority ?? 'medium',
+          start_date: task.start_date ?? task.due_date ?? undefined,
+          end_date: task.end_date ?? undefined,
+          start_time: task.start_time ?? undefined,
+          duration: task.duration ?? undefined,
+          status: task.status ?? 'todo',
+          assignee_id: task.assignee_id ?? undefined,
+          client_id: task.client_id ?? undefined,
+          project_id: task.project_id ?? undefined,
+          order_index: task.order_index ?? 0,
+          parent_task_id: task.parent_task_id ?? undefined,
+          created_at: task.created_at ?? new Date().toISOString(),
+          updated_at: task.updated_at ?? new Date().toISOString(),
+        }))
+
+        setTasks(normalizedTasks)
       } catch (e: any) {
         setTasks([])
       }
@@ -158,8 +183,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .subscribe()
 
     const tasksChannel = supabase
-      .channel('calendar-tasks-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_tasks' }, () => {
+      .channel('tasks-global')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
         loadCalendarData(true)
       })
       .subscribe()
@@ -190,21 +215,101 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (err) throw err
   }
 
+  const getMissingColumn = (message: string) => {
+    const match = message.match(/column\s+"([^"]+)"\s+does\s+not\s+exist/i)
+    return match?.[1] || null
+  }
+
   const createTask = async (taskData: Omit<CalendarTask, 'id' | 'created_at' | 'updated_at'>) => {
-    const { data, error: err } = await supabase.from('calendar_tasks').insert(taskData).select().single()
-    if (err) throw err
-    setTasks(prev => [...prev, data])
-    return data
+    const payload: any = {
+      title: taskData.title,
+      description: taskData.description,
+      completed: taskData.completed,
+      priority: taskData.priority,
+      status: taskData.status,
+      project_id: taskData.project_id,
+      assignee_id: taskData.assignee_id,
+      due_date: taskData.start_date,
+      owner_id: taskData.owner_id,
+    }
+
+    const { data, error: err } = await supabase.from('tasks').insert(payload).select().single()
+    if (err) {
+      const missingColumn = getMissingColumn(err.message || '')
+      if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+        const { [missingColumn]: _omitted, ...retryPayload } = payload
+        const { data: retryData, error: retryError } = await supabase.from('tasks').insert(retryPayload).select().single()
+        if (retryError) throw retryError
+        setTasks(prev => [...prev, {
+          id: retryData.id,
+          owner_id: retryData.owner_id ?? taskData.owner_id,
+          title: retryData.title ?? taskData.title,
+          description: retryData.description ?? taskData.description,
+          completed: !!retryData.completed,
+          priority: retryData.priority ?? taskData.priority,
+          start_date: retryData.start_date ?? retryData.due_date ?? taskData.start_date,
+          end_date: retryData.end_date,
+          start_time: retryData.start_time,
+          duration: retryData.duration,
+          status: retryData.status ?? taskData.status,
+          assignee_id: retryData.assignee_id ?? taskData.assignee_id,
+          client_id: retryData.client_id ?? taskData.client_id,
+          project_id: retryData.project_id ?? taskData.project_id,
+          order_index: retryData.order_index ?? 0,
+          parent_task_id: retryData.parent_task_id,
+          created_at: retryData.created_at ?? new Date().toISOString(),
+          updated_at: retryData.updated_at ?? new Date().toISOString(),
+        } as CalendarTask])
+        return retryData as CalendarTask
+      }
+      throw err
+    }
+    setTasks(prev => [...prev, {
+      id: data.id,
+      owner_id: data.owner_id ?? taskData.owner_id,
+      title: data.title ?? taskData.title,
+      description: data.description ?? taskData.description,
+      completed: !!data.completed,
+      priority: data.priority ?? taskData.priority,
+      start_date: data.start_date ?? data.due_date ?? taskData.start_date,
+      end_date: data.end_date,
+      start_time: data.start_time,
+      duration: data.duration,
+      status: data.status ?? taskData.status,
+      assignee_id: data.assignee_id ?? taskData.assignee_id,
+      client_id: data.client_id ?? taskData.client_id,
+      project_id: data.project_id ?? taskData.project_id,
+      order_index: data.order_index ?? 0,
+      parent_task_id: data.parent_task_id,
+      created_at: data.created_at ?? new Date().toISOString(),
+      updated_at: data.updated_at ?? new Date().toISOString(),
+    } as CalendarTask])
+    return data as CalendarTask
   }
 
   const updateTask = async (id: string, updates: Partial<CalendarTask>) => {
-    const { data, error: err } = await supabase.from('calendar_tasks').update(updates).eq('id', id).select().single()
-    if (err) throw err
-    return data
+    const payload: any = { ...updates }
+    if (payload.start_date) {
+      payload.due_date = payload.start_date
+      delete payload.start_date
+    }
+
+    const { data, error: err } = await supabase.from('tasks').update(payload).eq('id', id).select().single()
+    if (err) {
+      const missingColumn = getMissingColumn(err.message || '')
+      if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+        const { [missingColumn]: _omitted, ...retryPayload } = payload
+        const { data: retryData, error: retryError } = await supabase.from('tasks').update(retryPayload).eq('id', id).select().single()
+        if (retryError) throw retryError
+        return retryData as CalendarTask
+      }
+      throw err
+    }
+    return data as CalendarTask
   }
 
   const deleteTask = async (id: string) => {
-    const { error: err } = await supabase.from('calendar_tasks').delete().eq('id', id)
+    const { error: err } = await supabase.from('tasks').delete().eq('id', id)
     if (err) throw err
   }
 

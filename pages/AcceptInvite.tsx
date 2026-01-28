@@ -9,6 +9,7 @@ export const AcceptInvite: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [isValidToken, setIsValidToken] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [inviteType, setInviteType] = useState<string>('team');
 
     // Get token from URL
     const queryParams = new URLSearchParams(window.location.search);
@@ -26,7 +27,7 @@ export const AcceptInvite: React.FC = () => {
                 // Verify invitation existence
                 const { data, error } = await supabase
                     .from('invitations')
-                    .select('email, status')
+                    .select('email, status, type')
                     .eq('token', token)
                     .single();
 
@@ -36,6 +37,7 @@ export const AcceptInvite: React.FC = () => {
                     setError('This invitation has already been used.');
                 } else {
                     setEmail(data.email);
+                    setInviteType(data.type || 'team');
                     setIsValidToken(true);
                 }
             } catch (err) {
@@ -78,7 +80,7 @@ export const AcceptInvite: React.FC = () => {
             // But usually we want direct access.
             
             if (authData.session) {
-                 window.location.href = '/'; // Redirect to home
+                 window.location.href = inviteType === 'client' ? '/?portal=client' : '/';
             } else {
                  // If Supabase requires email confirmation
                  alert("Registration successful! Please check your email to confirm your account.");

@@ -3,11 +3,13 @@ import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { useClients, Client, ClientMessage, ClientTask, ClientHistory } from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
+import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 
 export const Clients: React.FC = () => {
   const { user } = useAuth();
+  const { currentTenant } = useTenant();
   const { 
     clients, 
     loading, 
@@ -30,6 +32,9 @@ export const Clients: React.FC = () => {
   const [history, setHistory] = useState<ClientHistory[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [showNewClientForm, setShowNewClientForm] = useState(false);
+  const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
+  const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
+  const [isInvitingPortal, setIsInvitingPortal] = useState(false);
   const [newClientData, setNewClientData] = useState({
     name: '',
     email: '',
@@ -127,6 +132,45 @@ export const Clients: React.FC = () => {
     } catch (err) {
       errorLogger.error('Error creando cliente', err);
       alert('Error al crear cliente. Por favor intenta de nuevo.');
+    }
+  };
+
+  const handleInvitePortal = async () => {
+    if (!selectedClient || !selectedClient.email) return;
+    if (!currentTenant?.id) {
+      alert('Tenant not ready yet.');
+      return;
+    }
+    setIsInvitingPortal(true);
+    setPortalInviteError(null);
+    try {
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'client')
+        .single();
+      if (roleError || !roleData) throw roleError || new Error('Client role not found');
+
+      const { data: invite, error: inviteError } = await supabase
+        .from('invitations')
+        .insert({
+          email: selectedClient.email,
+          role_id: roleData.id,
+          tenant_id: currentTenant.id,
+          client_id: selectedClient.id,
+          created_by: user?.id,
+          type: 'client'
+        })
+        .select('token')
+        .single();
+      if (inviteError) throw inviteError;
+
+      const link = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+      setPortalInviteLink(link);
+    } catch (err: any) {
+      setPortalInviteError(err.message || 'Error creating invitation');
+    } finally {
+      setIsInvitingPortal(false);
     }
   };
 
@@ -409,17 +453,41 @@ export const Clients: React.FC = () => {
                       <p className="text-zinc-600 dark:text-zinc-400">{selectedClient.company}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleUpdateClientStatus(selectedClient.status === 'active' ? 'inactive' : 'active')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      selectedClient.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
-                      selectedClient.status === 'prospect' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                      'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
-                    }`}
-                  >
-                    {selectedClient.status === 'prospect' ? 'Prospecto' : selectedClient.status === 'active' ? 'Activo' : 'Inactivo'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
+                      className="px-3 py-1 rounded text-sm font-medium border border-zinc-200 dark:border-zinc-700"
+                    >
+                      Ver portal
+                    </button>
+                    <button
+                      onClick={handleInvitePortal}
+                      disabled={!selectedClient.email || isInvitingPortal}
+                      className="px-3 py-1 rounded text-sm font-medium bg-zinc-900 text-white disabled:opacity-60"
+                    >
+                      {isInvitingPortal ? 'Invitando...' : 'Invitar'}
+                    </button>
+                    <button
+                      onClick={() => handleUpdateClientStatus(selectedClient.status === 'active' ? 'inactive' : 'active')}
+                      className={`px-3 py-1 rounded text-sm font-medium ${
+                        selectedClient.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
+                        selectedClient.status === 'prospect' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                        'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
+                      }`}
+                    >
+                      {selectedClient.status === 'prospect' ? 'Prospecto' : selectedClient.status === 'active' ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </div>
                 </div>
+
+                {portalInviteError && (
+                  <div className="mb-3 text-xs text-rose-600">{portalInviteError}</div>
+                )}
+                {portalInviteLink && (
+                  <div className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    Invitación creada: <a href={portalInviteLink} target="_blank" rel="noreferrer" className="underline">{portalInviteLink}</a>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   {selectedClient.email && (

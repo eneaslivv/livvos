@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Lead } from '../../types';
 import { Icons } from '../ui/Icons';
 
@@ -6,6 +6,7 @@ interface CRMBoardProps {
     leads: Lead[];
     onStatusChange: (id: string, status: 'new' | 'contacted' | 'following' | 'closed' | 'lost') => void;
     onConvert: (lead: Lead) => void;
+    onLeadClick?: (lead: Lead) => void;
     convertingId?: string | null;
 }
 
@@ -14,10 +15,21 @@ const COLUMNS: { id: 'new' | 'contacted' | 'following' | 'closed' | 'lost'; labe
     { id: 'contacted', label: 'In Contact', color: 'bg-amber-500' },
     { id: 'following', label: 'Following Up', color: 'bg-purple-500' },
     { id: 'closed', label: 'Won / Closed', color: 'bg-emerald-500' },
+    { id: 'lost', label: 'Lost', color: 'bg-zinc-400' },
 ];
 
-export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onConvert, convertingId }) => {
+export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onConvert, onLeadClick, convertingId }) => {
     const [draggedLead, setDraggedLead] = useState<string | null>(null);
+
+    const leadsByStatus = useMemo(() => {
+        const acc: Record<string, Lead[]> = {};
+        leads.forEach((lead) => {
+            const key = lead.status || 'new';
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(lead);
+        });
+        return acc;
+    }, [leads]);
 
     const handleDragStart = (e: React.DragEvent, id: string) => {
         setDraggedLead(id);
@@ -37,11 +49,18 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
         setDraggedLead(null);
     };
 
+    const handleCardClick = (lead: Lead) => {
+        if (draggedLead === lead.id) {
+            return;
+        }
+        onLeadClick?.(lead);
+    };
+
     return (
         <div className="h-full overflow-x-auto pb-4">
             <div className="flex gap-6 min-w-max h-full">
                 {COLUMNS.map(col => {
-                    const colLeads = leads.filter(l => l.status === col.id);
+                    const colLeads = leadsByStatus[col.id] || [];
 
                     return (
                         <div
@@ -73,6 +92,8 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
                                         key={lead.id}
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, lead.id)}
+                                        onDragEnd={() => setDraggedLead(null)}
+                                        onClick={() => handleCardClick(lead)}
                                         className="group bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing relative"
                                     >
                                         {/* Header */}
@@ -80,10 +101,10 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
                                             <div className="flex items-center gap-2">
                                                 {/* Avatar - Initials */}
                                                 <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                                                    {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                                    {(lead.name || 'Unknown').split(' ').map(n => n[0]).join('').slice(0, 2)}
                                                 </div>
                                                 <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[120px]">
-                                                    {lead.name}
+                                                    {lead.name || 'Unknown'}
                                                 </span>
                                             </div>
                                             <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">

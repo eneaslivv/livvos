@@ -169,5 +169,36 @@ export interface WebAnalytics {
   dailyVisits: { date: string; value: number }[]; // For charts
 }
 
+export type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
+
+export interface Proposal {
+  id: string;
+  tenant_id: string;
+  lead_id?: string | null;
+  client_id?: string | null;
+  title: string;
+  summary?: string | null;
+  status: ProposalStatus;
+  content?: string | null;
+  pricing_snapshot?: Record<string, any>;
+  timeline?: Record<string, any>;
+  currency?: string | null;
+  project_type?: string | null;
+  language?: string | null;
+  brief_text?: string | null;
+  portfolio_ids?: string[] | null;
+  complexity?: string | null;
+  complexity_factor?: number | null;
+  pricing_total?: number | null;
+  consent_text?: string | null;
+  public_token?: string | null;
+  public_enabled?: boolean;
+  sent_at?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type AppMode = 'os' | 'sales';
-export type PageView = 'home' | 'projects' | 'clients' | 'team' | 'calendar' | 'docs' | 'activity' | 'sales_dashboard' | 'sales_leads' | 'sales_analytics' | 'tenant_settings';
+export type PageView = 'home' | 'projects' | 'clients' | 'team' | 'team_clients' | 'calendar' | 'docs' | 'activity' | 'finance' | 'sales_dashboard' | 'sales_leads' | 'sales_analytics' | 'tenant_settings' | 'client_portal';

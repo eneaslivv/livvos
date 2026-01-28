@@ -5,6 +5,8 @@ import { TopNavbar } from './TopNavbar';
 import { useRBAC } from '../context/RBACContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { supabase } from '../lib/supabase';
+import { useSupabase } from '../hooks/useSupabase';
+import { generateTaskFromAI } from '../lib/ai';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,15 +18,10 @@ interface LayoutProps {
 
 // Define color themes for each navigation item
 const NAV_THEMES: Record<string, string> = {
-  home: 'hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
-  projects: 'hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400',
-  clients: 'hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-400',
-  calendar: 'hover:bg-orange-50 hover:text-orange-700 dark:hover:bg-orange-500/10 dark:hover:text-orange-400',
-  activity: 'hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-400',
-
   docs: 'hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400',
   // Sales Themes
   sales_dashboard: 'hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
+  finance: 'hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400',
   sales_leads: 'hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-500/10 dark:hover:text-purple-400',
   sales_analytics: 'hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-500/10 dark:hover:text-sky-400',
 };
@@ -35,10 +32,10 @@ const ACTIVE_THEMES: Record<string, string> = {
   clients: 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-300 shadow-sm',
   calendar: 'bg-orange-100 text-orange-900 dark:bg-orange-500/20 dark:text-orange-300 shadow-sm',
   activity: 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 shadow-sm',
-
   docs: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-500/20 dark:text-indigo-300 shadow-sm',
   // Sales Active
   sales_dashboard: 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm',
+  finance: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
   sales_leads: 'bg-purple-100 text-purple-900 dark:bg-purple-500/20 dark:text-purple-300 shadow-sm',
   sales_analytics: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-300 shadow-sm',
 };
@@ -91,13 +88,35 @@ const NavItem: React.FC<{
 };
 
 // --- GLOBAL TASK MODAL ---
-const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose: () => void, onAdd: (task: any) => void }) => {
+const CreateTaskModal = ({
+  isOpen,
+  onClose,
+  onAdd,
+  projects
+}: {
+  isOpen: boolean,
+  onClose: () => void,
+  onAdd: (task: any) => Promise<void> | void,
+  projects: { id: string; title: string }[]
+}) => {
   const [mode, setMode] = useState<'quick' | 'detailed' | 'ai'>('quick');
   const [title, setTitle] = useState('');
   const [tag, setTag] = useState('');
   const [priority, setPriority] = useState<Priority>(Priority.Medium);
   const [aiInput, setAiInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [projectId, setProjectId] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [aiResult, setAiResult] = useState<{ title: string; priority?: Priority; tag?: string } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const toPriority = (value?: string) => {
+    if (!value) return Priority.Medium;
+    const normalized = value.toLowerCase();
+    if (normalized === 'high' || normalized === 'urgent') return Priority.High;
+    if (normalized === 'low') return Priority.Low;
+    return Priority.Medium;
+  };
 
   // Reset when opening
   useEffect(() => {
@@ -107,10 +126,14 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
       setPriority(Priority.Medium);
       setAiInput('');
       setMode('quick');
+      setProjectId('');
+      setDueDate('');
+      setAiResult(null);
+      setAiError(null);
     }
   }, [isOpen]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if ((mode !== 'ai' && !title.trim()) || (mode === 'ai' && !aiInput.trim())) return;
 
     let finalTitle = title;
@@ -119,23 +142,24 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
 
     // Simple mock AI parser
     if (mode === 'ai') {
-      finalTitle = aiInput;
-      const lower = aiInput.toLowerCase();
-      if (lower.includes('urgent') || lower.includes('asap')) finalPriority = Priority.High;
-      else if (lower.includes('maybe') || lower.includes('later')) finalPriority = Priority.Low;
-
-      if (lower.includes('design')) finalTag = 'Design';
-      else if (lower.includes('dev') || lower.includes('code')) finalTag = 'Dev';
-      else if (lower.includes('call') || lower.includes('meet')) finalTag = 'Meeting';
-      else finalTag = 'AI Task';
+      if (aiResult?.title) {
+        finalTitle = aiResult.title;
+        finalTag = aiResult.tag || 'AI Task';
+        finalPriority = aiResult.priority || Priority.Medium;
+      } else {
+        finalTitle = aiInput;
+        finalTag = 'AI Task';
+        finalPriority = Priority.Medium;
+      }
     }
 
-    onAdd({
-      id: Date.now().toString(),
+    await onAdd({
       title: finalTitle,
       completed: false,
-      tag: finalTag,
-      priority: finalPriority
+      priority: finalPriority,
+      project_id: projectId || undefined,
+      due_date: dueDate || undefined,
+      status: 'todo'
     });
     onClose();
   };
@@ -143,16 +167,23 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
   const handleAiGenerate = () => {
     if (!aiInput.trim()) return;
     setIsThinking(true);
-    setTimeout(() => {
-      const lower = aiInput.toLowerCase();
-      setTitle(aiInput);
-      if (lower.includes('urgent')) setPriority(Priority.High);
-      if (lower.includes('design')) setTag('Design');
-      if (lower.includes('dev')) setTag('Dev');
-
-      setIsThinking(false);
-      setMode('detailed');
-    }, 800);
+    setAiError(null);
+    generateTaskFromAI(aiInput)
+      .then((result) => {
+        setAiResult({
+          title: result.title,
+          priority: toPriority(result.priority),
+          tag: result.tag || 'AI Task',
+        });
+        setTitle(result.title);
+        setPriority(toPriority(result.priority));
+        if (result.tag) setTag(result.tag);
+        setMode('detailed');
+      })
+      .catch((err) => {
+        setAiError(err?.message || 'AI error');
+      })
+      .finally(() => setIsThinking(false));
   };
 
   if (!isOpen) return null;
@@ -192,6 +223,9 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
                 placeholder="e.g. 'Remind me to call Sofia tomorrow regarding the UI kit urgently'"
                 className="w-full h-32 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 dark:text-zinc-100"
               />
+              {aiError && (
+                <div className="text-xs text-red-600 dark:text-red-400">{aiError}</div>
+              )}
               <div className="flex justify-end">
                 <button
                   onClick={handleAiGenerate}
@@ -249,6 +283,30 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
                   </div>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Due date</label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Project</label>
+                  <select
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="">No project</option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>{project.title}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -275,7 +333,7 @@ const CreateTaskModal = ({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose:
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, onNavigate, onSwitchMode }) => {
-  const { user, hasPermission } = useRBAC();
+  const { user, hasPermission, isInitialized } = useRBAC();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -283,6 +341,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
   // Global Task Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const { add: addTask } = useSupabase<any>('tasks', { enabled: false, subscribe: false });
+  const { data: taskProjects } = useSupabase<{ id: string; title: string }>('projects', {
+    enabled: isTaskModalOpen,
+    subscribe: false,
+    select: 'id,title'
+  });
 
   // Persistent Sidebar State
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
@@ -334,37 +398,37 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   }, []);
 
   // Mock Global Add Task Handler - In a real app this would use Context/Redux
-  const handleGlobalAddTask = (task: any) => {
-    console.log("Global task added:", task);
-    // Simulating a success toast/feedback since we can't update Home state directly from Layout without context
-    // In a real app, this would dispatch an action.
-    // For this demo, if we are on Home page, we might miss the update unless we lift state up to App.tsx.
-    // But for UI/UX demonstration of the Global Button, this suffices.
-    alert(`Task "${task.title}" created! (Check console)`);
+  const handleGlobalAddTask = async (task: any) => {
+    try {
+      await addTask(task);
+    } catch (err: any) {
+      alert('No se pudo crear la tarea: ' + (err?.message || 'Error'));
+    }
   };
 
   const osNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any } }[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
     { id: 'projects', label: 'Projects', icon: <Icons.Briefcase />, permission: { module: 'projects', action: 'view' } },
-    { id: 'team', label: 'Team', icon: <Icons.Users />, permission: { module: 'team', action: 'view' } },
-    { id: 'clients', label: 'Clients', icon: <Icons.User />, permission: { module: 'team', action: 'view' } },
+    { id: 'team_clients', label: 'Team/Clients', icon: <Icons.Users />, permission: { module: 'team', action: 'view' } },
     { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' } },
     { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
-
     { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' } },
   ];
 
   const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any } }[] = [
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' } },
     { id: 'sales_leads', label: 'Leads Inbox', icon: <Icons.Mail />, permission: { module: 'sales', action: 'view_leads' } },
+    { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' } },
     { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' } },
   ];
 
   const currentNavItems = (currentMode === 'os' ? osNavItems : salesNavItems).filter(item => {
     if (!item.permission) return true;
-    if (!hasPermission) return true; // Safety check if RBAC is loading or context is partial
+    if (!isInitialized) return true;
     return hasPermission(item.permission.module, item.permission.action);
   });
+
+  const navSkeletonCount = currentMode === 'os' ? 6 : 4;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans selection:bg-stone-200 selection:text-stone-900 flex overflow-hidden relative transition-colors duration-300">
@@ -374,6 +438,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
         onAdd={handleGlobalAddTask}
+        projects={taskProjects}
       />
 
       {/* Mobile Menu Button */}
@@ -428,13 +493,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
         {/* Navigation Items */}
         <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto no-scrollbar mask-image-linear-gradient mt-4 items-center">
-          {currentNavItems.map(item => (
+          {!isInitialized && (
+            <div className="w-full flex flex-col gap-2 px-3 animate-pulse">
+              {Array.from({ length: navSkeletonCount }).map((_, index) => (
+                <div
+                  key={index}
+                  className={`h-11 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`}
+                />
+              ))}
+              <div className={`h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 mt-3 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`} />
+            </div>
+          )}
+          {isInitialized && currentNavItems.map(item => (
             <NavItem
               key={item.id}
               id={item.id}
               icon={item.icon}
               label={item.label}
-              active={currentPage === item.id}
+              active={currentPage === item.id || (item.id === 'team_clients' && (currentPage === 'team' || currentPage === 'clients'))}
               expanded={isSidebarExpanded || isMobileMenuOpen}
               onClick={() => {
                 onNavigate(item.id);

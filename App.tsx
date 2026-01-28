@@ -1,20 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DebugPanel } from './components/DebugPanel';
 import { Layout } from './components/Layout';
-import { Home } from './pages/Home';
-import { Projects } from './pages/Projects';
-import { Docs } from './pages/Docs';
-import { Calendar } from './pages/Calendar';
-import { Clients } from './pages/Clients';
-import { Activity } from './pages/Activity';
-import { Sales } from './pages/Sales';
-import { Team } from './pages/Team';
 import { PageView, AppMode } from './types';
 import { ensureAuthSession } from './lib/auth';
-import { Auth } from './pages/Auth';
-import { AcceptInvite } from './pages/AcceptInvite';
-import { TenantSettings } from './pages/TenantSettings';
 import { supabase } from './lib/supabase';
 
 // Updated Context Providers with security and enhanced features
@@ -30,6 +19,369 @@ import { FinanceProvider } from './context/FinanceContext';
 import { ProjectsProvider } from './context/ProjectsContext';
 import { AnalyticsProvider } from './context/AnalyticsContext';
 import { SystemProvider } from './context/SystemContext';
+
+const loadHome = () => import('./pages/Home').then(module => ({ default: module.Home }));
+const loadProjects = () => import('./pages/Projects').then(module => ({ default: module.Projects }));
+const loadDocs = () => import('./pages/Docs').then(module => ({ default: module.Docs }));
+const loadCalendar = () => import('./pages/Calendar').then(module => ({ default: module.Calendar }));
+const loadClients = () => import('./pages/Clients').then(module => ({ default: module.Clients }));
+const loadTeamClients = () => import('./pages/TeamClients').then(module => ({ default: module.TeamClients }));
+const loadActivity = () => import('./pages/Activity').then(module => ({ default: module.Activity }));
+const loadSales = () => import('./pages/Sales').then(module => ({ default: module.Sales }));
+const loadFinance = () => import('./pages/Finance').then(module => ({ default: module.Finance }));
+const loadTeam = () => import('./pages/Team').then(module => ({ default: module.Team }));
+const loadAuth = () => import('./pages/Auth').then(module => ({ default: module.Auth }));
+const loadAcceptInvite = () => import('./pages/AcceptInvite').then(module => ({ default: module.AcceptInvite }));
+const loadTenantSettings = () => import('./pages/TenantSettings').then(module => ({ default: module.TenantSettings }));
+const loadProposalPublic = () => import('./pages/ProposalPublic').then(module => ({ default: module.ProposalPublic }));
+const loadClientPortal = () => import('./pages/ClientPortal').then(module => ({ default: module.ClientPortal }));
+
+const Home = React.lazy(loadHome);
+const Projects = React.lazy(loadProjects);
+const Docs = React.lazy(loadDocs);
+const Calendar = React.lazy(loadCalendar);
+const Clients = React.lazy(loadClients);
+const TeamClients = React.lazy(loadTeamClients);
+const Activity = React.lazy(loadActivity);
+const Sales = React.lazy(loadSales);
+const Finance = React.lazy(loadFinance);
+const Team = React.lazy(loadTeam);
+const Auth = React.lazy(loadAuth);
+const AcceptInvite = React.lazy(loadAcceptInvite);
+const TenantSettings = React.lazy(loadTenantSettings);
+const ProposalPublic = React.lazy(loadProposalPublic);
+const ClientPortal = React.lazy(loadClientPortal);
+
+const scheduleIdle = (callback: () => void) => {
+  if (typeof window === 'undefined') return;
+  const idle = (window as any).requestIdleCallback;
+  if (typeof idle === 'function') {
+    idle(callback, { timeout: 1500 });
+  } else {
+    setTimeout(callback, 400);
+  }
+};
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center h-[calc(100vh-120px)]">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-400"></div>
+  </div>
+);
+
+const ContentSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="flex items-end justify-between gap-4">
+      <div className="space-y-3">
+        <div className="h-4 w-40 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-10 w-72 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="h-9 w-28 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className="xl:col-span-8 space-y-6">
+        <div className="h-64 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-44 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="xl:col-span-4 space-y-5">
+        <div className="h-32 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-48 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+  </div>
+);
+
+const ListSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="flex items-end justify-between gap-4">
+      <div className="space-y-3">
+        <div className="h-4 w-32 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-56 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="h-9 w-28 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+    <div className="space-y-4">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="h-16 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+  </div>
+);
+
+const ProjectsSkeleton = () => (
+  <div className="animate-pulse py-6">
+    <div className="flex gap-4">
+      <div className="w-72 bg-zinc-200 dark:bg-zinc-800/70 rounded-xl p-4 space-y-3">
+        <div className="h-4 w-24 rounded-full bg-zinc-300/80 dark:bg-zinc-700/70" />
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="h-14 rounded-lg bg-zinc-300/80 dark:bg-zinc-700/70" />
+        ))}
+      </div>
+      <div className="flex-1 bg-zinc-200 dark:bg-zinc-800/70 rounded-xl overflow-hidden">
+        <div className="px-8 py-6 border-b border-zinc-300/60 dark:border-zinc-700/60 space-y-3">
+          <div className="h-4 w-32 rounded-full bg-zinc-300/80 dark:bg-zinc-700/70" />
+          <div className="h-7 w-64 rounded-full bg-zinc-300/80 dark:bg-zinc-700/70" />
+          <div className="h-4 w-48 rounded-full bg-zinc-300/80 dark:bg-zinc-700/70" />
+        </div>
+        <div className="px-8 py-4 border-b border-zinc-300/60 dark:border-zinc-700/60 flex gap-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="h-5 w-16 rounded-full bg-zinc-300/80 dark:bg-zinc-700/70" />
+          ))}
+        </div>
+        <div className="p-8 grid grid-cols-3 gap-6">
+          <div className="col-span-2 space-y-4">
+            <div className="h-32 rounded-xl bg-zinc-300/80 dark:bg-zinc-700/70" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-24 rounded-xl bg-zinc-300/80 dark:bg-zinc-700/70" />
+              <div className="h-24 rounded-xl bg-zinc-300/80 dark:bg-zinc-700/70" />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="h-44 rounded-xl bg-zinc-300/80 dark:bg-zinc-700/70" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const DocsSkeleton = () => (
+  <div className="animate-pulse py-6 space-y-6">
+    <div className="flex items-center justify-between">
+      <div className="space-y-3">
+        <div className="h-6 w-40 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-4 w-64 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-24 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-10 w-36 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-10 w-36 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div key={index} className="h-28 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+  </div>
+);
+
+const TeamSkeleton = () => (
+  <div className="animate-pulse py-6 space-y-6">
+    <div className="flex items-center justify-between">
+      <div className="space-y-2">
+        <div className="h-6 w-28 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-4 w-44 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="h-9 w-20 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-9 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="h-28 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+        ))}
+      </div>
+      <div className="h-[520px] rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+  </div>
+);
+
+const ClientsSkeleton = () => (
+  <div className="animate-pulse py-6 space-y-6">
+    <div className="flex items-center justify-between">
+      <div className="h-6 w-36 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      <div className="h-10 w-36 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-1 space-y-3">
+        <div className="h-8 w-32 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="h-20 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+        ))}
+      </div>
+      <div className="lg:col-span-2 space-y-4">
+        <div className="h-44 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-72 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-52 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-52 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+  </div>
+);
+
+const ActivitySkeleton = () => (
+  <div className="animate-pulse py-6 space-y-6">
+    <div className="flex items-center justify-between">
+      <div className="h-8 w-48 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      <div className="flex gap-2">
+        <div className="h-8 w-24 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-8 w-20 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="h-28 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="flex gap-6">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-6 w-28 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="h-36 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+    <div className="space-y-6">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="flex gap-4">
+          <div className="h-10 w-10 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+          <div className="flex-1 space-y-3">
+            <div className="h-4 w-3/4 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+            <div className="h-3 w-1/2 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const FinanceSkeleton = () => (
+  <div className="animate-pulse space-y-8 py-6">
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+      <div className="space-y-3">
+        <div className="h-3 w-32 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-12 w-80 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-4 w-64 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="flex gap-3">
+        <div className="h-11 w-32 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-11 w-40 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+    <div className="h-12 w-full rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-40 rounded-[2.5rem] bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-2 h-96 rounded-[3rem] bg-zinc-200 dark:bg-zinc-800/70" />
+      <div className="h-96 rounded-[3rem] bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+  </div>
+);
+
+const AnalyticsPageSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="flex items-center justify-between">
+      <div className="space-y-2">
+        <div className="h-7 w-56 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-4 w-72 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="flex gap-2">
+        <div className="h-9 w-28 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-24 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-24 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-10 rounded-lg bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+    </div>
+    <div className="flex gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-8 w-28 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-24 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="h-64 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+      <div className="h-64 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+  </div>
+);
+
+const BoardSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="flex items-end justify-between gap-4">
+      <div className="space-y-3">
+        <div className="h-4 w-36 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+        <div className="h-9 w-64 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      </div>
+      <div className="h-9 w-32 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-[360px] rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+  </div>
+);
+
+const CalendarSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="flex items-center justify-between gap-4">
+      <div className="h-9 w-56 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      <div className="h-9 w-32 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+    </div>
+    <div className="grid grid-cols-7 gap-2">
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div key={index} className="h-6 rounded-full bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="grid grid-cols-7 gap-2">
+      {Array.from({ length: 35 }).map((_, index) => (
+        <div key={index} className="h-24 rounded-xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+  </div>
+);
+
+const AnalyticsSkeleton = () => (
+  <div className="animate-pulse space-y-6 py-6">
+    <div className="h-9 w-52 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+      ))}
+    </div>
+    <div className="h-64 rounded-2xl bg-zinc-200 dark:bg-zinc-800/70" />
+  </div>
+);
+
+const getSkeletonForPage = (page: PageView): React.ReactNode => {
+  switch (page) {
+    case 'home':
+      return <ContentSkeleton />;
+    case 'projects':
+      return <ProjectsSkeleton />;
+    case 'docs':
+      return <DocsSkeleton />;
+    case 'team':
+      return <TeamSkeleton />;
+    case 'clients':
+      return <ClientsSkeleton />;
+    case 'team_clients':
+      return <TeamSkeleton />;
+    case 'activity':
+      return <ActivitySkeleton />;
+    case 'finance':
+      return <FinanceSkeleton />;
+    case 'calendar':
+      return <CalendarSkeleton />;
+    case 'client_portal':
+      return <ContentSkeleton />;
+    case 'sales_dashboard':
+    case 'sales_leads':
+      return <BoardSkeleton />;
+    case 'sales_analytics':
+      return <AnalyticsSkeleton />;
+    default:
+      return <ContentSkeleton />;
+  }
+};
 
 // Protected Route Wrapper with enhanced security
 const ProtectedRoute: React.FC<{
@@ -101,6 +453,25 @@ const AppContent: React.FC<{
   handleSwitchMode: (m: AppMode) => void;
   showDebug: boolean;
 }> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug }) => {
+  const { isInitialized } = useRBAC();
+
+  useEffect(() => {
+    scheduleIdle(() => {
+      [
+        loadProjects,
+        loadDocs,
+        loadCalendar,
+        loadClients,
+        loadActivity,
+        loadSales,
+        loadFinance,
+        loadTeam,
+        loadTeamClients,
+        loadTenantSettings,
+        loadClientPortal,
+      ].forEach(loader => loader());
+    });
+  }, []);
 
   const renderPage = () => {
     try {
@@ -119,13 +490,19 @@ const AppContent: React.FC<{
         case 'clients':
           return (
             <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-              <Clients />
+              <TeamClients initialTab="clients" />
             </ProtectedRoute>
           );
         case 'team':
           return (
             <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-              <Team />
+              <TeamClients initialTab="team" />
+            </ProtectedRoute>
+          );
+        case 'team_clients':
+          return (
+            <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
+              <TeamClients initialTab="team" />
             </ProtectedRoute>
           );
         case 'calendar':
@@ -145,6 +522,12 @@ const AppContent: React.FC<{
           return (
             <ProtectedRoute permission={{ module: 'activity', action: 'view' }}>
               <Activity onNavigate={handleNavigate} />
+            </ProtectedRoute>
+          );
+        case 'finance':
+          return (
+            <ProtectedRoute permission={{ module: 'finance', action: 'view' }}>
+              <Finance />
             </ProtectedRoute>
           );
 
@@ -173,6 +556,8 @@ const AppContent: React.FC<{
               <TenantSettings />
             </ProtectedRoute>
           );
+        case 'client_portal':
+          return <ClientPortal />;
 
         default:
           console.warn('⚠️ Página no encontrada:', currentPage);
@@ -184,6 +569,14 @@ const AppContent: React.FC<{
     }
   };
 
+  if (currentPage === 'client_portal') {
+    return (
+      <Suspense fallback={getSkeletonForPage(currentPage)}>
+        {renderPage()}
+      </Suspense>
+    );
+  }
+
   return (
     <Layout
       currentPage={currentPage}
@@ -191,7 +584,13 @@ const AppContent: React.FC<{
       onNavigate={handleNavigate}
       onSwitchMode={handleSwitchMode}
     >
-      {renderPage()}
+      {!isInitialized ? (
+        getSkeletonForPage(currentPage)
+      ) : (
+        <Suspense fallback={getSkeletonForPage(currentPage)}>
+          {renderPage()}
+        </Suspense>
+      )}
     </Layout>
   );
 };
@@ -201,9 +600,12 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('os');
   const [showDebug, setShowDebug] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const { hasRole, isInitialized: rbacReady } = useRBAC();
 
   // Check for invite URL
   const isInvite = window.location.pathname === '/accept-invite';
+  const proposalToken = new URLSearchParams(window.location.search).get('proposal');
+  const portalFlag = new URLSearchParams(window.location.search).get('portal');
 
   // Logging de navegación para debugging
   useEffect(() => {
@@ -213,6 +615,21 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString()
     });
   }, [currentPage, appMode]);
+
+  useEffect(() => {
+    if (!rbacReady) return;
+    if (hasRole('client')) {
+      setCurrentPage('client_portal');
+      setAppMode('os');
+    }
+  }, [hasRole, rbacReady]);
+
+  useEffect(() => {
+    if (portalFlag === 'client') {
+      setCurrentPage('client_portal');
+      setAppMode('os');
+    }
+  }, [portalFlag]);
 
   // Ensure auth
   useEffect(() => {
@@ -285,11 +702,27 @@ const App: React.FC = () => {
   };
 
   if (isInvite) {
-    return <AcceptInvite />;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AcceptInvite />
+      </Suspense>
+    );
+  }
+
+  if (proposalToken) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <ProposalPublic token={proposalToken} />
+      </Suspense>
+    );
   }
 
   if (!isAuthenticated) {
-    return <Auth onAuthenticated={() => setIsAuthenticated(true)} />;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <Auth onAuthenticated={() => setIsAuthenticated(true)} />
+      </Suspense>
+    );
   }
 
   return (

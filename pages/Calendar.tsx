@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
+import { useSupabase } from '../hooks/useSupabase';
 
 export const Calendar: React.FC = () => {
   const { user } = useAuth();
@@ -23,11 +24,29 @@ export const Calendar: React.FC = () => {
     getCalendarStats
   } = useCalendar();
 
+  const { data: projectOptions } = useSupabase<{ id: string; title: string }>('projects', {
+    enabled: true,
+    subscribe: false,
+    select: 'id,title'
+  });
+
+  const projectMap = projectOptions.reduce<Record<string, string>>((acc, project) => {
+    acc[project.id] = project.title;
+    return acc;
+  }, {});
+
+  const getProjectLabel = (task: CalendarTask) => {
+    const projectId = (task as any).project_id || (task as any).projectId;
+    if (!projectId) return 'No project';
+    return projectMap[projectId] || 'Project';
+  };
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [calendarMode, setCalendarMode] = useState<'schedule' | 'content'>('schedule');
   
   const [newEventData, setNewEventData] = useState({
     title: '',
@@ -40,13 +59,50 @@ export const Calendar: React.FC = () => {
     location: ''
   });
 
+  const [newContentData, setNewContentData] = useState({
+    title: '',
+    description: '',
+    start_date: '',
+    start_time: '',
+    duration: 60,
+    platform: 'instagram',
+    channel: 'feed',
+    asset_type: 'post',
+    status: 'draft'
+  });
+
+  const CONTENT_PLATFORMS: Record<string, { label: string; color: string }> = {
+    instagram: { label: 'Instagram', color: '#E1306C' },
+    tiktok: { label: 'TikTok', color: '#111827' },
+    youtube: { label: 'YouTube', color: '#EF4444' },
+    linkedin: { label: 'LinkedIn', color: '#0A66C2' },
+    twitter: { label: 'X / Twitter', color: '#0F172A' },
+    pinterest: { label: 'Pinterest', color: '#BD081C' },
+    behance: { label: 'Behance', color: '#1E40AF' }
+  };
+
+  const CONTENT_STATUSES: Array<{ id: 'draft' | 'ready' | 'published'; label: string; color: string }> = [
+    { id: 'draft', label: 'Draft', color: 'bg-zinc-200 text-zinc-700' },
+    { id: 'ready', label: 'Ready', color: 'bg-amber-200 text-amber-800' },
+    { id: 'published', label: 'Published', color: 'bg-emerald-200 text-emerald-800' }
+  ];
+
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(Object.keys(CONTENT_PLATFORMS));
+
+  useEffect(() => {
+    if (calendarMode === 'content') {
+      setSelectedPlatforms(Object.keys(CONTENT_PLATFORMS));
+    }
+  }, [calendarMode]);
+
   const [newTaskData, setNewTaskData] = useState({
     title: '',
     description: '',
     start_date: '',
     priority: 'medium' as const,
     status: 'todo' as const,
-    duration: 60
+    duration: 60,
+    project_id: ''
   });
 
   // Obtener semana actual
@@ -64,6 +120,21 @@ export const Calendar: React.FC = () => {
       weekDays.push(date);
     }
     return weekDays;
+  };
+
+  const getMonthDays = () => {
+    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const startDay = start.getDay() === 0 ? 6 : start.getDay() - 1;
+    const gridStart = new Date(start);
+    gridStart.setDate(start.getDate() - startDay);
+
+    const days: Date[] = [];
+    for (let i = 0; i < 42; i += 1) {
+      const day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + i);
+      days.push(day);
+    }
+    return days;
   };
 
   // Formatear fecha para mostrar
@@ -114,6 +185,44 @@ export const Calendar: React.FC = () => {
     }
   };
 
+  const handleCreateContent = async () => {
+    if (!newContentData.title.trim()) return;
+    const platformConfig = CONTENT_PLATFORMS[newContentData.platform];
+    try {
+      await createEvent({
+        title: newContentData.title,
+        description: `[${platformConfig?.label || newContentData.platform}] ${newContentData.channel.toUpperCase()} · ${newContentData.asset_type}\n${newContentData.description}`,
+        start_date: newContentData.start_date || selectedDate,
+        start_time: newContentData.start_time || undefined,
+        duration: newContentData.duration,
+        type: 'content',
+        color: platformConfig?.color || '#22c55e',
+        location: newContentData.platform,
+        content_status: newContentData.status as any,
+        content_channel: newContentData.channel,
+        content_asset_type: newContentData.asset_type,
+        owner_id: user?.id || '',
+        all_day: !newContentData.start_time
+      });
+
+      setNewContentData({
+        title: '',
+        description: '',
+        start_date: '',
+        start_time: '',
+        duration: 60,
+        platform: 'instagram',
+        channel: 'feed',
+        asset_type: 'post',
+        status: 'draft'
+      });
+      setShowNewEventForm(false);
+    } catch (err) {
+      errorLogger.error('Error creando contenido', err);
+      alert('Error al crear contenido: ' + (err as Error).message);
+    }
+  };
+
   // Crear tarea
   const handleCreateTask = async () => {
     if (!newTaskData.title.trim()) return;
@@ -123,6 +232,7 @@ export const Calendar: React.FC = () => {
         ...newTaskData,
         owner_id: user?.id || '',
         start_date: newTaskData.start_date || selectedDate,
+        project_id: newTaskData.project_id || undefined,
         completed: false
       });
 
@@ -132,7 +242,8 @@ export const Calendar: React.FC = () => {
         start_date: '',
         priority: 'medium',
         status: 'todo',
-        duration: 60
+        duration: 60,
+        project_id: ''
       });
       setShowNewTaskForm(false);
     } catch (err) {
@@ -152,12 +263,25 @@ export const Calendar: React.FC = () => {
   };
 
   // Obtener eventos y tareas para una fecha específica
+  const filteredEvents = calendarMode === 'content'
+    ? events.filter(event => event.type === 'content')
+    : events.filter(event => event.type !== 'content');
+
+  const platformFilteredEvents = calendarMode === 'content'
+    ? filteredEvents.filter(event => selectedPlatforms.includes((event.location || '').toLowerCase()))
+    : filteredEvents;
+
+  const contentEvents = platformFilteredEvents.map((event) => ({
+    ...event,
+    content_status: (event as any).content_status || 'draft'
+  }));
+
   const getDayEvents = (date: string) => {
-    return getEventsByDate(date);
+    return contentEvents.filter(event => event.start_date === date);
   };
 
   const getDayTasks = (date: string) => {
-    return getTasksByDate(date);
+    return calendarMode === 'content' ? [] : getTasksByDate(date);
   };
 
   // Estadísticas del calendario
@@ -190,10 +314,49 @@ export const Calendar: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Calendario</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {stats.totalEvents} eventos, {stats.totalTasks} tareas ({stats.completedTasks} completadas)
+            {calendarMode === 'content'
+              ? `${filteredEvents.length} contenidos programados`
+              : `${stats.totalEvents} eventos, ${stats.totalTasks} tareas (${stats.completedTasks} completadas)`}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
+            {(['schedule', 'content'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setCalendarMode(mode)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  calendarMode === mode
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                }`}
+              >
+                {mode === 'schedule' ? 'Agenda' : 'Contenido'}
+              </button>
+            ))}
+          </div>
+          {calendarMode === 'content' && (
+            <div className="flex flex-wrap items-center gap-2">
+              {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setSelectedPlatforms((prev) =>
+                      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+                    )
+                  }}
+                  className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
+                    selectedPlatforms.includes(key)
+                      ? 'bg-white border-zinc-200 text-zinc-900'
+                      : 'bg-zinc-100 border-transparent text-zinc-400'
+                  }`}
+                  style={selectedPlatforms.includes(key) ? { borderColor: value.color } : undefined}
+                >
+                  {value.label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Vista */}
           <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
             {(['week', 'month'] as const).map((v) => (
@@ -214,18 +377,22 @@ export const Calendar: React.FC = () => {
           {/* Botones de acción */}
           <button
             onClick={() => setShowNewEventForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              calendarMode === 'content' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
           >
             <Icons.Plus size={16} />
-            Evento
+            {calendarMode === 'content' ? 'Contenido' : 'Evento'}
           </button>
-          <button
-            onClick={() => setShowNewTaskForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors"
-          >
-            <Icons.Check size={16} />
-            Tarea
-          </button>
+          {calendarMode === 'schedule' && (
+            <button
+              onClick={() => setShowNewTaskForm(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <Icons.Check size={16} />
+              Tarea
+            </button>
+          )}
         </div>
       </div>
 
@@ -236,7 +403,9 @@ export const Calendar: React.FC = () => {
                 <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
                     <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                         {showNewEventForm ? <Icons.Calendar size={20}/> : <Icons.Check size={20}/>}
-                        {showNewEventForm ? 'Nuevo Evento' : 'Nueva Tarea'}
+                        {showNewEventForm
+                          ? (calendarMode === 'content' ? 'Nuevo Contenido' : 'Nuevo Evento')
+                          : 'Nueva Tarea'}
                     </h3>
                     <button 
                         onClick={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
@@ -253,47 +422,107 @@ export const Calendar: React.FC = () => {
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
                             <input
                                 type="text"
-                                placeholder="Ej: Reunión con Cliente"
-                                value={newEventData.title}
-                                onChange={(e) => setNewEventData({ ...newEventData, title: e.target.value })}
+                                placeholder={calendarMode === 'content' ? 'Ej: Reel lanzamiento' : 'Ej: Reunión con Cliente'}
+                                value={calendarMode === 'content' ? newContentData.title : newEventData.title}
+                                onChange={(e) => calendarMode === 'content'
+                                  ? setNewContentData({ ...newContentData, title: e.target.value })
+                                  : setNewEventData({ ...newEventData, title: e.target.value })
+                                }
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
                                 required
                                 autoFocus
                             />
                         </div>
-                        
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Tipo</label>
-                            <select
+                        {calendarMode === 'content' ? (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Plataforma</label>
+                              <select
+                                value={newContentData.platform}
+                                onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
+                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
+                              >
+                                {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
+                                  <option key={key} value={key}>{value.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Canal</label>
+                              <select
+                                value={newContentData.channel}
+                                onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
+                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
+                              >
+                                <option value="feed">Feed</option>
+                                <option value="stories">Stories</option>
+                                <option value="reels">Reels</option>
+                                <option value="shorts">Shorts</option>
+                                <option value="post">Post</option>
+                              </select>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Asset</label>
+                              <input
+                                type="text"
+                                placeholder="Ej: Carousel / Video / Copy"
+                                value={newContentData.asset_type}
+                                onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
+                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Estado</label>
+                              <select
+                                value={newContentData.status}
+                                onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
+                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
+                              >
+                                {CONTENT_STATUSES.map((status) => (
+                                  <option key={status.id} value={status.id}>{status.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Tipo</label>
+                              <select
                                 value={newEventData.type}
                                 onChange={(e) => setNewEventData({ ...newEventData, type: e.target.value as any })}
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
-                            >
+                              >
                                 <option value="meeting">Reunión</option>
                                 <option value="call">Llamada</option>
                                 <option value="deadline">Deadline</option>
                                 <option value="work-block">Bloque de trabajo</option>
                                 <option value="note">Nota</option>
-                            </select>
-                        </div>
+                              </select>
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Ubicación / Link</label>
-                            <input
+                            <div>
+                              <label className="block text-xs font-medium text-zinc-500 mb-1">Ubicación / Link</label>
+                              <input
                                 type="text"
                                 placeholder="Ej: Zoom / Oficina"
                                 value={newEventData.location}
                                 onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            />
-                        </div>
+                              />
+                            </div>
+                          </>
+                        )}
 
                         <div>
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha</label>
                             <input
                                 type="date"
-                                value={newEventData.start_date}
-                                onChange={(e) => setNewEventData({ ...newEventData, start_date: e.target.value })}
+                                value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
+                                onChange={(e) => calendarMode === 'content'
+                                  ? setNewContentData({ ...newContentData, start_date: e.target.value })
+                                  : setNewEventData({ ...newEventData, start_date: e.target.value })
+                                }
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
                             />
                         </div>
@@ -301,8 +530,11 @@ export const Calendar: React.FC = () => {
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Hora</label>
                             <input
                                 type="time"
-                                value={newEventData.start_time}
-                                onChange={(e) => setNewEventData({ ...newEventData, start_time: e.target.value })}
+                                value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
+                                onChange={(e) => calendarMode === 'content'
+                                  ? setNewContentData({ ...newContentData, start_time: e.target.value })
+                                  : setNewEventData({ ...newEventData, start_time: e.target.value })
+                                }
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
                             />
                         </div>
@@ -310,8 +542,11 @@ export const Calendar: React.FC = () => {
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Duración (min)</label>
                             <input
                                 type="number"
-                                value={newEventData.duration}
-                                onChange={(e) => setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })}
+                                value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
+                                onChange={(e) => calendarMode === 'content'
+                                  ? setNewContentData({ ...newContentData, duration: parseInt(e.target.value) })
+                                  : setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })
+                                }
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
                                 min="15"
                                 step="15"
@@ -322,8 +557,11 @@ export const Calendar: React.FC = () => {
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
                             <textarea
                                 placeholder="Detalles adicionales..."
-                                value={newEventData.description}
-                                onChange={(e) => setNewEventData({ ...newEventData, description: e.target.value })}
+                                value={calendarMode === 'content' ? newContentData.description : newEventData.description}
+                                onChange={(e) => calendarMode === 'content'
+                                  ? setNewContentData({ ...newContentData, description: e.target.value })
+                                  : setNewEventData({ ...newEventData, description: e.target.value })
+                                }
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
                                 rows={3}
                             />
@@ -367,6 +605,20 @@ export const Calendar: React.FC = () => {
                                 className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
                             />
                         </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-zinc-500 mb-1">Proyecto</label>
+                            <select
+                                value={newTaskData.project_id}
+                                onChange={(e) => setNewTaskData({ ...newTaskData, project_id: e.target.value })}
+                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
+                            >
+                                <option value="">Sin proyecto</option>
+                                {projectOptions.map((project) => (
+                                    <option key={project.id} value={project.id}>{project.title}</option>
+                                ))}
+                            </select>
+                        </div>
                         
                         <div className="col-span-2">
                             <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
@@ -393,12 +645,12 @@ export const Calendar: React.FC = () => {
                         Cancelar
                     </button>
                     <button
-                        onClick={showNewEventForm ? handleCreateEvent : handleCreateTask}
-                        disabled={showNewEventForm ? !newEventData.title.trim() : !newTaskData.title.trim()}
+                        onClick={showNewEventForm ? (calendarMode === 'content' ? handleCreateContent : handleCreateEvent) : handleCreateTask}
+                        disabled={showNewEventForm ? (calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()) : !newTaskData.title.trim()}
                         className="px-6 py-2.5 bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-sm font-bold shadow-lg shadow-zinc-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                     >
                         {showNewEventForm ? <Icons.Calendar size={16}/> : <Icons.Check size={16}/>}
-                        {showNewEventForm ? 'Crear Evento' : 'Crear Tarea'}
+                        {showNewEventForm ? (calendarMode === 'content' ? 'Crear Contenido' : 'Crear Evento') : 'Crear Tarea'}
                     </button>
                 </div>
             </div>
@@ -470,7 +722,9 @@ export const Calendar: React.FC = () => {
                         >
                           <div className="font-medium">{event.title}</div>
                           {event.location && (
-                            <div className="opacity-75">{event.location}</div>
+                            <div className="opacity-75">
+                              {CONTENT_PLATFORMS[event.location]?.label || event.location}
+                            </div>
                           )}
                         </div>
                       ))}
@@ -480,6 +734,117 @@ export const Calendar: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Vista de Mes */}
+      {view === 'month' && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800">
+            {['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'].map((day) => (
+              <div key={day} className="p-3 text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                {day}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {getMonthDays().map((day, idx) => {
+              const dateStr = day.toISOString().split('T')[0];
+              const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+              const dayEvents = getDayEvents(dateStr);
+              return (
+                <div
+                  key={`${dateStr}-${idx}`}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={`min-h-[120px] p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors ${
+                    isCurrentMonth ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/40'
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                    {day.getDate()}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <div
+                        key={event.id}
+                        className="text-[10px] px-2 py-1 rounded truncate"
+                        style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
+                      >
+                        {event.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <div className="text-[10px] text-zinc-400">+{dayEvents.length - 3} más</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {calendarMode === 'content' && (
+        <div className="mt-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Planner por red social</h3>
+              <div className="text-xs text-zinc-500">Arrastrar para cambiar estado</div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {CONTENT_STATUSES.map((status) => (
+                <div
+                  key={status.id}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const eventId = e.dataTransfer.getData('contentEventId');
+                    if (eventId) {
+                      updateEvent(eventId, { content_status: status.id as any });
+                    }
+                  }}
+                  className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 min-h-[220px]"
+                >
+                  <div className={`inline-flex px-2 py-1 rounded-full text-[10px] font-semibold ${status.color}`}>
+                    {status.label}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {contentEvents
+                      .filter((event) => (event as any).content_status === status.id)
+                      .map((event) => (
+                        <div
+                          key={event.id}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData('contentEventId', event.id)}
+                          className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs cursor-grab"
+                        >
+                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">{event.title}</div>
+                          <div className="text-[10px] text-zinc-500 mt-1">
+                            {CONTENT_PLATFORMS[event.location || '']?.label || event.location}
+                          </div>
+                          {event.start_date && (
+                            <div className="text-[10px] text-zinc-400 mt-1">{event.start_date}</div>
+                          )}
+                          <div className="flex gap-1 mt-2">
+                            {CONTENT_STATUSES.filter(s => s.id !== status.id).map((target) => (
+                              <button
+                                key={target.id}
+                                onClick={() => updateEvent(event.id, { content_status: target.id as any })}
+                                className="text-[10px] px-2 py-0.5 rounded-full border border-zinc-200 text-zinc-500"
+                              >
+                                {target.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    {contentEvents.filter((event) => (event as any).content_status === status.id).length === 0 && (
+                      <div className="text-xs text-zinc-400">Sin contenido</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       )}
 
@@ -501,7 +866,7 @@ export const Calendar: React.FC = () => {
               <div>
                 <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
                   <Icons.CalendarDays size={16} />
-                  Eventos ({getDayEvents(selectedDate).length})
+                  {calendarMode === 'content' ? `Contenidos (${getDayEvents(selectedDate).length})` : `Eventos (${getDayEvents(selectedDate).length})`}
                 </h4>
                 <div className="space-y-2">
                   {getDayEvents(selectedDate).length > 0 ? (
@@ -530,73 +895,80 @@ export const Calendar: React.FC = () => {
                           )}
                         </div>
                         <div className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
-                          {event.type}
+                          {event.type === 'content'
+                            ? (CONTENT_PLATFORMS[event.location || '']?.label || event.location || 'content')
+                            : event.type}
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                      No hay eventos para este día
+                      {calendarMode === 'content' ? 'No hay contenidos para este día' : 'No hay eventos para este día'}
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Tareas del día */}
-              <div>
-                <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
-                  <Icons.Check size={16} />
-                  Tareas ({getDayTasks(selectedDate).length})
-                </h4>
-                <div className="space-y-2">
-                  {getDayTasks(selectedDate).length > 0 ? (
-                    getDayTasks(selectedDate).map((task) => (
-                      <div
-                        key={task.id}
-                        className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
-                          className="rounded border-zinc-300"
-                        />
-                        <div className="flex-1">
-                          <div className={`font-medium ${
-                            task.completed 
-                              ? 'text-zinc-500 dark:text-zinc-400 line-through' 
-                              : 'text-zinc-900 dark:text-zinc-100'
-                          }`}>
-                            {task.title}
-                          </div>
-                          {task.description && (
-                            <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                              {task.description}
+              {calendarMode === 'schedule' && (
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
+                    <Icons.Check size={16} />
+                    Tareas ({getDayTasks(selectedDate).length})
+                  </h4>
+                  <div className="space-y-2">
+                    {getDayTasks(selectedDate).length > 0 ? (
+                      getDayTasks(selectedDate).map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
+                            className="rounded border-zinc-300"
+                          />
+                          <div className="flex-1">
+                            <div className={`font-medium ${
+                              task.completed 
+                                ? 'text-zinc-500 dark:text-zinc-400 line-through' 
+                                : 'text-zinc-900 dark:text-zinc-100'
+                            }`}>
+                              {task.title}
                             </div>
-                          )}
+                            {task.description && (
+                              <div className="text-sm text-zinc-500 dark:text-zinc-400">
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
+                              task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
+                              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                              'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                            }`}>
+                              {task.priority}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
+                              {getProjectLabel(task)}
+                            </span>
+                            <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
+                              {task.status}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                            task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
-                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                            'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                          }`}>
-                            {task.priority}
-                          </span>
-                          <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
-                            {task.status}
-                          </span>
-                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
+                        No hay tareas para este día
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                      No hay tareas para este día
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </Card>
         </div>
@@ -607,85 +979,98 @@ export const Calendar: React.FC = () => {
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Resumen</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Eventos totales</span>
-                <span className="font-semibold text-zinc-900 dark:text-zinc-100">{stats.totalEvents}</span>
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {calendarMode === 'content' ? 'Contenidos totales' : 'Eventos totales'}
+                </span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {calendarMode === 'content' ? filteredEvents.length : stats.totalEvents}
+                </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Tareas totales</span>
-                <span className="font-semibold text-zinc-900 dark:text-zinc-100">{stats.totalTasks}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Completadas</span>
-                <span className="font-semibold text-green-600 dark:text-green-400">{stats.completedTasks}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Pendientes</span>
-                <span className="font-semibold text-orange-600 dark:text-orange-400">{stats.pendingTasks}</span>
-              </div>
-              {stats.overdueTasks > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Atrasadas</span>
-                  <span className="font-semibold text-red-600 dark:text-red-400">{stats.overdueTasks}</span>
-                </div>
+              {calendarMode === 'schedule' && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Tareas totales</span>
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{stats.totalTasks}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Completadas</span>
+                    <span className="font-semibold text-green-600 dark:text-green-400">{stats.completedTasks}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Pendientes</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">{stats.pendingTasks}</span>
+                  </div>
+                  {stats.overdueTasks > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Atrasadas</span>
+                      <span className="font-semibold text-red-600 dark:text-red-400">{stats.overdueTasks}</span>
+                    </div>
+                  )}
+                  <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Progreso</span>
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{stats.completionRate}%</span>
+                    </div>
+                    <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
+                      <div
+                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${stats.completionRate}%` }}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
-              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Progreso</span>
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{stats.completionRate}%</span>
-                </div>
-                <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
-                  <div 
-                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${stats.completionRate}%` }}
-                  />
-                </div>
-              </div>
             </div>
           </Card>
 
           {/* Próximas tareas */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Próximas tareas</h3>
-            <div className="space-y-3">
-              {tasks
-                .filter(task => !task.completed && task.start_date)
-                .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-                .slice(0, 5)
-                .map((task) => (
-                  <div key={task.id} className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
-                      className="rounded border-zinc-300"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                        {task.title}
-                      </div>
-                      {task.start_date && (
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {new Date(task.start_date).toLocaleDateString('es-ES')}
+          {calendarMode === 'schedule' && (
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Próximas tareas</h3>
+              <div className="space-y-3">
+                {tasks
+                  .filter(task => !task.completed && task.start_date)
+                  .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
+                  .slice(0, 5)
+                  .map((task) => (
+                    <div key={task.id} className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
+                        className="rounded border-zinc-300"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                          {task.title}
                         </div>
-                      )}
+                        {task.start_date && (
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                            {new Date(task.start_date).toLocaleDateString('es-ES')}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
+                        task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
+                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                        'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                      }`}>
+                        {task.priority}
+                      </span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
+                        {getProjectLabel(task)}
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                      task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
-                      task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                      'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                    }`}>
-                      {task.priority}
-                    </span>
+                  ))}
+                {tasks.filter(task => !task.completed && task.start_date).length === 0 && (
+                  <div className="text-center py-4 text-zinc-500 dark:text-zinc-400 text-sm">
+                    No hay tareas pendientes
                   </div>
-                ))}
-              {tasks.filter(task => !task.completed && task.start_date).length === 0 && (
-                <div className="text-center py-4 text-zinc-500 dark:text-zinc-400 text-sm">
-                  No hay tareas pendientes
-                </div>
-              )}
-            </div>
-          </Card>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

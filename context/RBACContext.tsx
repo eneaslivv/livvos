@@ -146,10 +146,38 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
   // Load RBAC data
   const loadRBACData = useCallback(async () => {
+    console.log('[RBACContext] loadRBACData triggered. User:', authUser?.id, 'AuthLoading:', authLoading);
     if (authLoading) return;
 
     setIsLoading(true);
     setError(null);
+
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const fetchProfileWithRetry = async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser?.id)
+          .single();
+
+        if (!profileError && profile?.tenant_id) {
+          return profile as UserProfile;
+        }
+
+        if (profileError) {
+          console.warn('[RBACContext] Profile not ready yet:', profileError.message);
+        } else {
+          console.warn('[RBACContext] User is not assigned to any tenant yet.');
+        }
+
+        if (attempt < 4) {
+          await sleep(250 * (attempt + 1));
+        }
+      }
+
+      return null;
+    };
 
     try {
       if (!authUser) {
@@ -162,28 +190,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
         return;
       }
 
-      // 1. Fetch user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
-
-      if (profileError) {
-        console.error('❌ Error fetching profile:', profileError);
-        // If profile doesn't exist, this is a critical error
-        // Do NOT fall back to mock data for security
-        throw new Error(`User profile not found: ${profileError.message}`);
-      }
-
-      if (!profile?.tenant_id) {
-        throw new Error('User is not assigned to any tenant');
-      }
-
-      setUser(profile);
-
-      // 2. Fetch user roles with permissions
-      const { data: userRoles, error: rolesError } = await supabase
+      const rolesPromise = supabase
         .from('user_roles')
         .select(`
           role_id,
@@ -204,6 +211,24 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
         `)
         .eq('user_id', authUser.id);
 
+      // 1. Fetch user profile with short retry window
+      const profile = await fetchProfileWithRetry();
+
+      if (!profile) {
+        setUser(null);
+        setRoles([]);
+        setPermissions([]);
+        setUserRoleAssignments([]);
+        setIsInitialized(false);
+        return;
+      }
+
+      setUser(profile);
+      console.log('[RBACContext] Profile loaded:', profile.id, 'Tenant:', profile.tenant_id);
+
+      // 2. Fetch user roles with permissions
+      const { data: userRoles, error: rolesError } = await rolesPromise;
+
       if (rolesError) {
         throw new Error(`Failed to fetch user roles: ${rolesError.message}`);
       }
@@ -223,9 +248,12 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       setRoles(allRoles);
       setPermissions(allPermissions);
 
+      console.log('[RBACContext] Roles loaded:', allRoles.map(r => r.name));
+
       setIsInitialized(true);
 
     } catch (err) {
+      console.error('[RBACContext] Error loading RBAC data:', err);
       errorLogger.error('Error loading RBAC data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load RBAC data');
 
@@ -238,7 +266,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, authLoading]);
+  }, [authUser, authLoading, currentTenant?.id]);
 
   // Permission checking
   const hasPermission = useCallback((module: ModuleType, action: ActionType): boolean => {

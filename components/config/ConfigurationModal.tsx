@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import { Icons } from '../ui/Icons';
 import { GeneralSettings } from './GeneralSettings';
 import { ServiceManagement } from './ServiceManagement';
+import { RoleManagement } from './RoleManagement';
 import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
+import { ContentManagement } from './ContentManagement';
 import { useRBAC } from '../../context/RBACContext';
 
 interface ConfigurationModalProps {
@@ -12,7 +14,7 @@ interface ConfigurationModalProps {
   onClose: () => void;
 }
 
-type Tab = 'general' | 'services' | 'billing' | 'users';
+type Tab = 'general' | 'services' | 'billing' | 'users' | 'content';
 
 export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -23,6 +25,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
   const TABS: { id: Tab; label: string; icon: any }[] = [
     { id: 'general', label: 'General', icon: Icons.Settings },
     { id: 'services', label: 'Services', icon: Icons.Grid },
+    { id: 'content', label: 'Content', icon: Icons.File },
     { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
     { id: 'users', label: 'Members', icon: Icons.Users },
   ];
@@ -91,6 +94,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                 {activeTab === 'services' && <ServiceManagement />}
                 {activeTab === 'billing' && <PaymentSettings />}
                 {activeTab === 'users' && <UserManagement />}
+                {activeTab === 'content' && <ContentManagement />}
                 {activeTab === 'roles' && <RoleManagement />}
             </div>
         </div>

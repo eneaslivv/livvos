@@ -20,38 +20,38 @@ interface CommandDefinition {
 
 class SimpleCLI {
   private commands: Map<string, CommandDefinition> = new Map();
-  
+
   registerCommand(command: CommandDefinition) {
     this.commands.set(command.name, command);
   }
-  
+
   async execute() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
       this.showHelp();
       return;
     }
-    
+
     const commandName = args[0];
     const command = this.commands.get(commandName);
-    
+
     if (!command) {
       console.error(`Unknown command: ${commandName}`);
       this.showHelp();
       process.exit(1);
     }
-    
+
     // Parse options
     const options: Record<string, any> = {};
     const positionalArgs: string[] = [];
-    
+
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
       if (arg.startsWith('-')) {
-        const optionDef = command.options.find(opt => 
+        const optionDef = command.options.find(opt =>
           arg.includes(opt.name) || arg.startsWith(opt.flags.split(' ')[0])
         );
-        
+
         if (optionDef) {
           if (optionDef.hasValue) {
             const value = args[i + 1];
@@ -67,7 +67,7 @@ class SimpleCLI {
         positionalArgs.push(arg);
       }
     }
-    
+
     try {
       await command.handler(positionalArgs, options);
     } catch (error) {
@@ -75,7 +75,7 @@ class SimpleCLI {
       process.exit(1);
     }
   }
-  
+
   private showHelp() {
     console.log('Eneas-OS Agent Skill Management CLI');
     console.log('');
@@ -124,7 +124,7 @@ cli.registerCommand({
   ],
   handler: async (args, options) => {
     const skills = await skillLoader.searchSkills(options);
-    
+
     if (skills.length === 0) {
       console.log('No skills found matching your criteria.');
       return;
@@ -132,7 +132,7 @@ cli.registerCommand({
 
     console.log('\nAvailable Skills:');
     console.log('==================');
-    
+
     skills.forEach((skill: SkillInfo) => {
       const priorityIcon = getPriorityIcon(skill.priority);
       console.log(`${priorityIcon} ${skill.name}`);
@@ -166,28 +166,28 @@ cli.registerCommand({
     }
 
     const skill = await skillLoader.loadSkill(skillName);
-    
+
     console.log(`\nSkill: ${skill.name}`);
     console.log('='.repeat(skill.name.length + 6));
     console.log(`Description: ${skill.description}`);
     console.log(`Priority: ${skill.priority}`);
     console.log(`Expected Duration: ${skill.expectedDuration}`);
-    
+
     console.log('\nRequired Agents:');
     skill.requiredAgents.forEach(agent => console.log(`  - ${agent}`));
-    
+
     console.log('\nRequired Permissions:');
     skill.requiredPermissions.forEach(permission => console.log(`  - ${permission}`));
-    
+
     console.log('\nDependencies:');
     skill.dependencies.forEach(dep => console.log(`  - ${dep}`));
-    
+
     console.log('\nObjectives:');
     skill.objectives.forEach(obj => console.log(`  ✓ ${obj}`));
-    
+
     console.log('\nPrerequisites:');
     skill.prerequisites.forEach(prereq => console.log(`  • ${prereq}`));
-    
+
     console.log(`\nProcedure (${skill.procedure.length} steps):`);
     skill.procedure.forEach((step, index) => {
       console.log(`  ${index + 1}. ${step.action}`);
@@ -197,13 +197,13 @@ cli.registerCommand({
         console.log(`     Agent: ${agents}`);
       }
     });
-    
+
     console.log('\nExpected Outputs:');
     skill.expectedOutputs.forEach(output => {
       console.log(`  • ${output.name} (${output.type})`);
       if (output.location) console.log(`    Location: ${output.location}`);
     });
-    
+
     console.log('\nSuccess Metrics:');
     skill.successMetrics.forEach(metric => {
       console.log(`  • ${metric.name}: ${metric.target} (${metric.measurement})`);
@@ -234,10 +234,10 @@ cli.registerCommand({
     }
 
     const skill = await skillLoader.loadSkill(skillName);
-    
+
     // Validate agent permissions
-    if (!skill.requiredAgents.includes(options.agent) && 
-        !skill.requiredAgents.includes('all-domain-agents')) {
+    if (!skill.requiredAgents.includes(options.agent) &&
+      !skill.requiredAgents.includes('all-domain-agents')) {
       console.error(`Error: Agent '${options.agent}' is not authorized to execute skill '${skillName}'`);
       console.error(`Required agents: ${skill.requiredAgents.join(', ')}`);
       return;
@@ -247,7 +247,7 @@ cli.registerCommand({
     console.log(`Agent: ${options.agent}`);
     console.log(`Priority: ${skill.priority}`);
     console.log(`Expected Duration: ${skill.expectedDuration}`);
-    
+
     if (options.dryRun) {
       console.log('\nDry run - showing execution plan:');
       console.log('===================================');
@@ -264,31 +264,31 @@ cli.registerCommand({
 
     console.log('\nExecuting skill...');
     console.log('==================');
-    
+
     const startTime = Date.now();
     const result = await skillLoader.executeSkill(skillName, options.agent);
     const endTime = Date.now();
-    
+
     console.log(`\nExecution completed in ${endTime - startTime}ms`);
     console.log(`Status: ${result.success ? '✅ SUCCESS' : '❌ FAILED'}`);
-    
+
     if (result.success) {
       console.log(`Steps completed: ${result.stepsCompleted}/${skill.procedure.length}`);
-      
+
       if (Object.keys(result.outputs).length > 0) {
         console.log('\nOutputs:');
         Object.entries(result.outputs).forEach(([key, value]) => {
           console.log(`  ${key}: ${JSON.stringify(value, null, 2)}`);
         });
       }
-      
+
       if (Object.keys(result.validationResults).length > 0) {
         console.log('\nValidation Results:');
         console.log(JSON.stringify(result.validationResults, null, 2));
       }
     } else {
       console.log(`Steps completed: ${result.stepsCompleted}/${skill.procedure.length}`);
-      
+
       if (result.errors.length > 0) {
         console.log('\nErrors:');
         result.errors.forEach(error => console.log(`  ❌ ${error}`));
@@ -306,7 +306,7 @@ cli.registerCommand({
   ],
   handler: async (args, options) => {
     const executions = await skillLoader.getActiveExecutions();
-    
+
     let filteredExecutions = executions;
     if (options.agent) {
       filteredExecutions = executions.filter(exec => exec.agent === options.agent);
@@ -319,17 +319,17 @@ cli.registerCommand({
 
     console.log('\nActive Executions:');
     console.log('==================');
-    
+
     filteredExecutions.forEach(execution => {
       const statusIcon = getStatusIcon(execution.status);
-      const duration = execution.startTime ? 
+      const duration = execution.startTime ?
         `${Math.round((Date.now() - execution.startTime.getTime()) / 1000)}s` : 'N/A';
-      
+
       console.log(`${statusIcon} ${execution.skillName} (${execution.agent})`);
       console.log(`   Status: ${execution.status}`);
       console.log(`   Progress: ${execution.currentStep}/${execution.totalSteps} steps`);
       console.log(`   Duration: ${duration}`);
-      
+
       if (execution.logs.length > 0) {
         console.log(`   Last log: ${execution.logs[execution.logs.length - 1]}`);
       }
@@ -350,14 +350,14 @@ cli.registerCommand({
   handler: async (args, options) => {
     const limit = parseInt(options.limit) || 10;
     const history = await skillLoader.getExecutionHistory(options.agent);
-    
+
     let filteredHistory = history;
     if (options.failedOnly) {
       filteredHistory = history.filter(result => !result.success);
     }
 
     const limitedHistory = filteredHistory.slice(-limit).reverse();
-    
+
     if (limitedHistory.length === 0) {
       console.log('No execution history found.');
       return;
@@ -365,14 +365,14 @@ cli.registerCommand({
 
     console.log('\nExecution History:');
     console.log('==================');
-    
+
     limitedHistory.forEach((result: SkillExecutionResult) => {
       const statusIcon = result.success ? '✅' : '❌';
       const timestamp = new Date(Date.now() - result.duration).toLocaleString();
-      
+
       console.log(`${statusIcon} ${result.skillName} (${result.agent}) - ${timestamp}`);
       console.log(`   Duration: ${result.duration}ms | Steps: ${result.stepsCompleted}`);
-      
+
       if (!result.success && result.errors.length > 0) {
         console.log(`   Error: ${result.errors[0]}`);
       }
@@ -390,14 +390,14 @@ cli.registerCommand({
     console.log('\nSkill Categories:');
     console.log('=================');
     skillLoader.getCategories().forEach(cat => console.log(`  • ${cat}`));
-    
+
     console.log('\nPriorities:');
     console.log('===========');
     skillLoader.getPriorities().forEach(priority => {
       const icon = getPriorityIcon(priority);
       console.log(`  ${icon} ${priority}`);
     });
-    
+
     console.log('\nAgents:');
     console.log('=======');
     skillLoader.getAgents().forEach(agent => console.log(`  • ${agent}`));

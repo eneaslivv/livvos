@@ -1,0 +1,8 @@
+{
+  "name": "LIVV Mission Control",
+  "description": "High-end luxury B2B SaaS dashboard for project management and investment tracking, featuring a futuristic deep-dark aesthetic with Bento-grid layouts.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

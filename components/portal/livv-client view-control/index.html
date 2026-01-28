@@ -1,0 +1,113 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LIVV | Mission Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                dark: '#2c0405',
+                accent: '#822b2e',
+                light: '#fffffa',
+                cream: '#ede5d8',
+                grey: '#f5f4f3',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --brand-dark: #2c0405;
+        --brand-accent: #822b2e;
+        --brand-light: #fffffa;
+        --brand-cream: #ede5d8;
+        --brand-grey: #f5f4f3;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--brand-cream);
+        color: var(--brand-dark);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .glass-card {
+        background: rgba(255, 255, 250, 0.65);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(44, 4, 5, 0.08);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 20px -5px rgba(44, 4, 5, 0.05);
+      }
+      .glass-card:hover {
+        border-color: rgba(130, 43, 46, 0.2);
+        box-shadow: 0 10px 30px -10px rgba(44, 4, 5, 0.12);
+        transform: translateY(-2px);
+      }
+      .gradient-border-light {
+        position: relative;
+        border-radius: 1rem;
+      }
+      .gradient-border-light::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: 1rem;
+        padding: 1px;
+        background: linear-gradient(135deg, rgba(44, 4, 5, 0.1), rgba(130, 43, 46, 0.05), rgba(44, 4, 5, 0.02));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--brand-cream);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(44, 4, 5, 0.1);
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(44, 4, 5, 0.2);
+      }
+      @keyframes pulse-soft {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(1.1); }
+      }
+      .animate-pulse-soft {
+        animation: pulse-soft 3s infinite ease-in-out;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "framer-motion": "https://esm.sh/framer-motion@^12.23.26",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
