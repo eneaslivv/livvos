@@ -112,11 +112,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             {/* --- HEADER --- */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
-                    <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                        <span className="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-600"></span>
+                    <div className="flex items-center gap-2 text-sm text-zinc-500 mb-1 font-medium">
+                        <span className="w-1 h-1 rounded-full bg-zinc-400"></span>
                         <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
                     </div>
-                    <h2 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
+                    <h2 className="text-4xl font-bold text-zinc-900 tracking-tight">{greeting}, {userName}.</h2>
                 </div>
 
                 {/* Focus Mode Toggle */}
@@ -137,24 +137,24 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 <div className="xl:col-span-8 space-y-8">
 
                     {/* 1. Main Priority Card */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm relative overflow-hidden group">
+                    <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-sm relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-6 opacity-[0.05] pointer-events-none group-hover:opacity-[0.08] transition-opacity">
-                            <Icons.Target size={120} className="text-zinc-900 dark:text-zinc-100" />
+                            <Icons.Target size={120} className="text-zinc-900" />
                         </div>
 
                         <div className="flex justify-between items-end mb-6 relative z-10">
                             <div>
                                 <div className="flex items-center gap-3">
-                                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                                        <Icons.Check size={20} className="text-emerald-500 dark:text-emerald-400" /> Today's Focus
+                                    <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                        <Icons.Check size={20} className="text-emerald-500" /> Today's Focus
                                     </h3>
                                 </div>
                                 <p className="text-sm text-zinc-500">Keep focus on what moves the needle.</p>
                             </div>
                             <div className="text-right">
-                                <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{completedCount}/{tasks.length}</span>
-                                <div className="w-24 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mt-1 overflow-hidden">
-                                    <div className="h-full bg-zinc-800 dark:bg-zinc-200 transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
+                                <span className="text-3xl font-bold text-zinc-900">{completedCount}/{tasks.length}</span>
+                                <div className="w-24 h-1.5 bg-zinc-100 rounded-full mt-1 overflow-hidden">
+                                    <div className="h-full bg-zinc-800 transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
                                 </div>
                             </div>
                         </div>
@@ -168,17 +168,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                     key={task.id}
                                     onClick={() => toggleTask(task.id)}
                                     className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer group/item ${task.completed
-                                        ? 'bg-zinc-50 dark:bg-zinc-900/50 border-transparent opacity-60'
-                                        : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50/50 hover:shadow-sm'
+                                        ? 'bg-zinc-50 border-transparent opacity-60'
+                                        : 'bg-white border-zinc-100 hover:border-zinc-300 hover:bg-zinc-50/50 hover:shadow-sm'
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${task.completed ? 'bg-zinc-500 border-zinc-500 text-white' : 'border-zinc-300 dark:border-zinc-600 text-transparent'
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${task.completed ? 'bg-zinc-500 border-zinc-500 text-white' : 'border-zinc-300 text-transparent'
                                             }`}>
                                             <Icons.Check size={12} strokeWidth={4} />
                                         </div>
                                         <div>
-                                            <div className={`text-sm font-medium transition-all ${task.completed ? 'text-zinc-500 line-through' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                                            <div className={`text-sm font-medium transition-all ${task.completed ? 'text-zinc-500 line-through' : 'text-zinc-900'}`}>
                                                 {task.title}
                                             </div>
                                             {(() => {
@@ -203,7 +203,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         </div>
 
                         {/* Micro Tasks Integrated */}
-                        <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 relative z-10">
+                        <div className="mt-8 pt-6 border-t border-zinc-100 relative z-10">
                             <div className="flex items-center gap-2 mb-3">
                                 <Icons.List size={14} className="text-zinc-400" />
                                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quick Hits</span>
@@ -215,12 +215,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     {/* 2. Active Projects Grid */}
                     <div>
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                            <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
                                 <Icons.Briefcase size={20} className="text-zinc-400" /> Active Projects
                             </h3>
                             <button
                                 onClick={() => onNavigate('projects')}
-                                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-full transition-colors"
+                                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 bg-zinc-100 px-3 py-1 rounded-full transition-colors"
                             >
                                 View All Projects
                             </button>
@@ -234,16 +234,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                 <div
                                     key={project.id}
                                     onClick={() => onNavigate('projects')}
-                                    className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between h-full"
+                                    className="group bg-white rounded-xl border border-zinc-200 p-5 hover:border-zinc-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between h-full"
                                 >
                                     <div>
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-700">
+                                                <div className="w-10 h-10 rounded-lg bg-zinc-50 flex items-center justify-center text-xs font-bold text-zinc-600 border border-zinc-100">
                                                     {project.client?.substring(0, 2).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 leading-tight">{project.title}</h4>
+                                                    <h4 className="text-sm font-bold text-zinc-900 leading-tight">{project.title}</h4>
                                                     <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">{project.client}</span>
                                                 </div>
                                             </div>
@@ -255,18 +255,18 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                                 <span>Progress</span>
                                                 <span className="font-mono">{project.progress}%</span>
                                             </div>
-                                            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-zinc-800 dark:bg-zinc-200 h-full rounded-full" style={{ width: `${project.progress}%` }}></div>
+                                            <div className="w-full bg-zinc-100 h-1.5 rounded-full overflow-hidden">
+                                                <div className="bg-zinc-800 h-full rounded-full" style={{ width: `${project.progress}%` }}></div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="pt-4 border-t border-zinc-50 dark:border-zinc-800/50 flex items-center justify-between">
-                                        <span className="text-[10px] text-zinc-400 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800 px-2 py-1 rounded">
+                                    <div className="pt-4 border-t border-zinc-50 flex items-center justify-between">
+                                        <span className="text-[10px] text-zinc-400 flex items-center gap-1.5 bg-zinc-50 px-2 py-1 rounded">
                                             <Icons.Activity size={10} /> {project.nextSteps}
                                         </span>
                                         <div className="flex -space-x-2">
-                                            <div className="w-6 h-6 rounded-full border-2 border-white dark:border-zinc-900 bg-zinc-200 dark:bg-zinc-700"></div>
+                                            <div className="w-6 h-6 rounded-full border-2 border-white bg-zinc-200"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -284,47 +284,47 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div
                             onClick={() => onNavigate('activity')}
-                            className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between h-32 group hover:border-amber-200 dark:hover:border-amber-800/30 transition-colors cursor-pointer"
+                            className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm flex flex-col justify-between h-32 group hover:border-amber-200 transition-colors cursor-pointer"
                         >
-                            <div className="p-2 w-fit rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500">
+                            <div className="p-2 w-fit rounded-lg bg-amber-50 text-amber-600">
                                 <Icons.Zap size={18} />
                             </div>
                             <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">8.5hrs</div>
+                                <div className="text-2xl font-bold text-zinc-900">8.5hrs</div>
                                 <div className="text-xs text-zinc-500">Productive Time</div>
                             </div>
                         </div>
                         <div
                             onClick={() => onNavigate('calendar')}
-                            className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between h-32 group hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors cursor-pointer"
+                            className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm flex flex-col justify-between h-32 group hover:border-emerald-200 transition-colors cursor-pointer"
                         >
-                            <div className="p-2 w-fit rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-500">
+                            <div className="p-2 w-fit rounded-lg bg-emerald-50 text-emerald-600">
                                 <Icons.Check size={18} />
                             </div>
                             <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">12</div>
+                                <div className="text-2xl font-bold text-zinc-900">12</div>
                                 <div className="text-xs text-zinc-500">Tasks Done</div>
                             </div>
                         </div>
                     </div>
 
                     {/* Quick Actions Menu */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 flex justify-between items-center">
+                    <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
                             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quick Access</h3>
                             <Icons.Command size={12} className="text-zinc-400" />
                         </div>
                         <div className="p-2">
                             {[
-                                { icon: <Icons.Plus className="text-emerald-500" />, label: 'New Task', bg: 'hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-700' },
-                                { icon: <Icons.Calendar className="text-orange-500" />, label: 'Schedule Meeting', bg: 'hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-700' },
-                                { icon: <Icons.Docs className="text-blue-500" />, label: 'Create Document', bg: 'hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700' },
-                                { icon: <Icons.Mail className="text-purple-500" />, label: 'Email Client', bg: 'hover:bg-purple-50 dark:hover:bg-purple-500/10 hover:text-purple-700' }
+                                { icon: <Icons.Plus className="text-emerald-500" />, label: 'New Task', bg: 'hover:bg-emerald-50 hover:text-emerald-700' },
+                                { icon: <Icons.Calendar className="text-orange-500" />, label: 'Schedule Meeting', bg: 'hover:bg-orange-50 hover:text-orange-700' },
+                                { icon: <Icons.Docs className="text-blue-500" />, label: 'Create Document', bg: 'hover:bg-blue-50 hover:text-blue-700' },
+                                { icon: <Icons.Mail className="text-purple-500" />, label: 'Email Client', bg: 'hover:bg-purple-50 hover:text-purple-700' }
                             ].map((action, i) => (
                                 <button
                                     key={i}
                                     onClick={() => handleQuickAction(action.label)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors ${action.bg}`}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-700 transition-colors ${action.bg}`}
                                 >
                                     {React.cloneElement(action.icon as React.ReactElement, { size: 16 })}
                                     {action.label}
@@ -335,7 +335,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
 
                     {/* Account summary (Dynamic) */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm">
+                    <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
                                 <Icons.Users size={14} /> Account
@@ -344,13 +344,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                    <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600 border border-zinc-200">
                                         {userName.substring(0, 2).toUpperCase()}
                                     </div>
-                                    <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-zinc-900 bg-emerald-500"></div>
+                                    <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white bg-emerald-500"></div>
                                 </div>
                                 <div>
-                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 leading-none">{userName}</div>
+                                    <div className="text-sm font-medium text-zinc-900 leading-none">{userName}</div>
                                     <div className="text-[10px] text-zinc-500 mt-1 capitalize">{userRole}</div>
                                 </div>
                             </div>
@@ -358,17 +358,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
 
                     {/* AI Insight Pill */}
-                    <div className="p-5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl text-zinc-900 dark:text-zinc-100 shadow-sm cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-500 transition-colors" onClick={() => onNavigate('activity')}>
+                    <div className="p-5 bg-zinc-100 border border-zinc-200 rounded-2xl text-zinc-900 shadow-sm cursor-pointer hover:border-zinc-300 transition-colors" onClick={() => onNavigate('activity')}>
                         <div className="flex items-start gap-3">
-                            <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-600 shadow-sm">
-                                <Icons.Sparkles className="shrink-0 text-amber-600 dark:text-amber-500" size={14} />
+                            <div className="p-1.5 bg-white rounded-md border border-zinc-200 shadow-sm">
+                                <Icons.Sparkles className="shrink-0 text-amber-600" size={14} />
                             </div>
                             <div>
                                 <h4 className="text-sm font-bold mb-1.5 flex items-center gap-2">
                                     Weekly Insight
                                 </h4>
-                                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                                    You're 20% faster on Design tasks than last week. Consider moving "E-commerce API" to tomorrow morning.
+                                <p className="text-xs text-zinc-600 leading-relaxed">
+                                    {"You're 20% faster on Design tasks than last week. Consider moving \"E-commerce API\" to tomorrow morning."}
                                 </p>
                             </div>
                         </div>

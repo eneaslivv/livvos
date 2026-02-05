@@ -24,18 +24,18 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                 <div className="flex-1 flex items-center max-w-xl pointer-events-auto md:ml-6">
                     <div
                         onClick={onOpenSearch}
-                        className="group relative w-full max-w-sm flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-black/50 backdrop-blur-md border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl cursor-text transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-white/80 dark:hover:bg-zinc-900/80"
+                        className="group relative w-full max-w-sm flex items-center gap-2 px-3 py-1.5 bg-white/50 backdrop-blur-md border border-zinc-200/50 rounded-xl cursor-text transition-all hover:border-zinc-300 hover:bg-white/80"
                     >
-                        <Icons.Search size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">Search...</span>
+                        <Icons.Search size={14} className="text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        <span className="text-xs text-zinc-500 font-medium">Search...</span>
                         <div className="absolute right-2 flex items-center gap-1">
-                            <span className="text-[9px] font-bold text-zinc-400 bg-transparent border border-zinc-200/50 dark:border-zinc-700/50 px-1.5 py-0.5 rounded">⌘ K</span>
+                            <span className="text-[9px] font-bold text-zinc-400 bg-transparent border border-zinc-200/50 px-1.5 py-0.5 rounded">{'⌘ K'}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Center: Title (Floating Context) */}
-                <div className="hidden lg:block text-sm font-bold text-zinc-400/50 uppercase tracking-widest pointer-events-none select-none">
+                <div className="hidden lg:block text-sm font-bold text-zinc-300 uppercase tracking-widest pointer-events-none select-none">
                     {pageTitle === 'home' ? 'Dashboard' : pageTitle.replace('_', ' ')}
                 </div>
 
@@ -45,7 +45,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                     {/* Create Task Button */}
                     <button
                         onClick={onOpenTask}
-                        className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-rose-50/90 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 rounded-full text-xs font-bold uppercase tracking-wider transition-all backdrop-blur-md shadow-sm hover:shadow border border-rose-100/50 dark:border-rose-900/50"
+                        className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-rose-50/90 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-bold uppercase tracking-wider transition-all backdrop-blur-md shadow-sm hover:shadow border border-rose-100/50"
                     >
                         <div className="p-0.5 bg-rose-200 dark:bg-rose-800 rounded-full"><Icons.Plus size={12} /></div>
                         <span className="pr-1">New Task</span>
@@ -57,12 +57,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                     {/* User Menu */}
                     <button
                         onClick={() => setIsConfigOpen(true)}
-                        className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 ml-1"
+                        className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full hover:bg-zinc-100 transition-all border border-transparent hover:border-zinc-200 ml-1"
                     >
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white dark:ring-zinc-950">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white">
                             {user?.name?.[0] || 'U'}
                         </div>
-                        <span className="hidden md:block text-xs font-medium text-zinc-700 dark:text-zinc-200">{user?.name || 'User'}</span>
+                        <span className="hidden md:block text-xs font-medium text-zinc-700">{user?.name || 'User'}</span>
                     </button>
 
                     {/* Mobile Create Task (Only icon) */}

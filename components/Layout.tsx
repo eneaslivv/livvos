@@ -18,26 +18,26 @@ interface LayoutProps {
 
 // Define color themes for each navigation item
 const NAV_THEMES: Record<string, string> = {
-  docs: 'hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400',
+  docs: 'hover:bg-indigo-50 hover:text-indigo-700',
   // Sales Themes
-  sales_dashboard: 'hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
-  finance: 'hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400',
-  sales_leads: 'hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-500/10 dark:hover:text-purple-400',
-  sales_analytics: 'hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-500/10 dark:hover:text-sky-400',
+  sales_dashboard: 'hover:bg-zinc-100 hover:text-zinc-900',
+  finance: 'hover:bg-emerald-50 hover:text-emerald-700',
+  sales_leads: 'hover:bg-purple-50 hover:text-purple-700',
+  sales_analytics: 'hover:bg-sky-50 hover:text-sky-700',
 };
 
 const ACTIVE_THEMES: Record<string, string> = {
-  home: 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm', // Inverted for high contrast
-  projects: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
-  clients: 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-300 shadow-sm',
-  calendar: 'bg-orange-100 text-orange-900 dark:bg-orange-500/20 dark:text-orange-300 shadow-sm',
-  activity: 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 shadow-sm',
-  docs: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-500/20 dark:text-indigo-300 shadow-sm',
+  home: 'bg-zinc-900 text-white shadow-sm',
+  projects: 'bg-emerald-100 text-emerald-900 shadow-sm',
+  clients: 'bg-blue-100 text-blue-900 shadow-sm',
+  calendar: 'bg-orange-100 text-orange-900 shadow-sm',
+  activity: 'bg-rose-100 text-rose-900 shadow-sm',
+  docs: 'bg-indigo-100 text-indigo-900 shadow-sm',
   // Sales Active
-  sales_dashboard: 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm',
-  finance: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
-  sales_leads: 'bg-purple-100 text-purple-900 dark:bg-purple-500/20 dark:text-purple-300 shadow-sm',
-  sales_analytics: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-300 shadow-sm',
+  sales_dashboard: 'bg-zinc-900 text-white shadow-sm',
+  finance: 'bg-emerald-100 text-emerald-900 shadow-sm',
+  sales_leads: 'bg-purple-100 text-purple-900 shadow-sm',
+  sales_analytics: 'bg-sky-100 text-sky-900 shadow-sm',
 };
 
 const NavItem: React.FC<{
@@ -51,7 +51,7 @@ const NavItem: React.FC<{
 
   const themeClass = active
     ? ACTIVE_THEMES[id] || ACTIVE_THEMES.home
-    : `text-zinc-500 dark:text-zinc-400 ${NAV_THEMES[id] || NAV_THEMES.home}`;
+    : `text-zinc-500 ${NAV_THEMES[id] || NAV_THEMES.home}`;
 
   return (
     <button
@@ -78,7 +78,7 @@ const NavItem: React.FC<{
 
       {/* Tooltip for collapsed state */}
       {!expanded && (
-        <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-800 text-white dark:text-zinc-100 text-xs font-medium rounded-lg opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-xl border border-zinc-800 dark:border-zinc-700">
+        <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-900 text-white dark:text-white text-xs font-medium rounded-lg opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-xl border border-zinc-800 dark:border-zinc-800">
           {label}
           <div className="absolute top-1/2 -left-1 -mt-1 border-4 border-transparent border-r-zinc-900 dark:border-r-zinc-800"></div>
         </div>
@@ -190,9 +190,9 @@ const CreateTaskModal = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden flex flex-col">
         {/* Header / Tabs */}
-        <div className="flex border-b border-zinc-100 dark:border-zinc-800">
+        <div className="flex border-b border-zinc-100">
           {[
             { id: 'quick', label: 'Quick', icon: <Icons.Zap size={14} /> },
             { id: 'detailed', label: 'Detailed', icon: <Icons.List size={14} /> },
@@ -202,8 +202,8 @@ const CreateTaskModal = ({
               key={m.id}
               onClick={() => setMode(m.id as any)}
               className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${mode === m.id
-                ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100'
-                : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                ? 'bg-zinc-50 text-zinc-900 border-b-2 border-zinc-900'
+                : 'text-zinc-500 hover:bg-zinc-50'
                 }`}
             >
               {m.icon} {m.label}
@@ -221,7 +221,7 @@ const CreateTaskModal = ({
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
                 placeholder="e.g. 'Remind me to call Sofia tomorrow regarding the UI kit urgently'"
-                className="w-full h-32 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 dark:text-zinc-100"
+                className="w-full h-32 p-4 bg-zinc-50 border border-zinc-200 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900"
               />
               {aiError && (
                 <div className="text-xs text-red-600 dark:text-red-400">{aiError}</div>
@@ -247,7 +247,7 @@ const CreateTaskModal = ({
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   placeholder="What needs to be done?"
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"
+                  className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-400 text-zinc-900"
                   onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 />
               </div>
@@ -261,8 +261,8 @@ const CreateTaskModal = ({
                         key={p}
                         onClick={() => setPriority(p)}
                         className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all ${priority === p
-                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100'
-                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                          ? 'bg-zinc-900 text-white border-zinc-900'
+                          : 'bg-white border-zinc-200 text-zinc-500 hover:border-zinc-300'
                           }`}
                       >
                         {p}
@@ -278,7 +278,7 @@ const CreateTaskModal = ({
                       value={tag}
                       onChange={e => setTag(e.target.value)}
                       placeholder="e.g. Design"
-                      className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg outline-none text-sm text-zinc-900"
                     />
                   </div>
                 )}
@@ -290,7 +290,7 @@ const CreateTaskModal = ({
                     type="date"
                     value={dueDate}
                     onChange={e => setDueDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg outline-none text-sm text-zinc-900"
                   />
                 </div>
                 <div>
@@ -298,7 +298,7 @@ const CreateTaskModal = ({
                   <select
                     value={projectId}
                     onChange={e => setProjectId(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg outline-none text-sm text-zinc-900"
                   >
                     <option value="">No project</option>
                     {projects.map(project => (
@@ -313,14 +313,14 @@ const CreateTaskModal = ({
 
         {/* Footer */}
         {mode !== 'ai' && (
-          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+          <div className="p-4 bg-zinc-50 border-t border-zinc-100 flex justify-between items-center">
             <span className="text-xs text-zinc-400">Press <b>Enter</b> to create</span>
             <div className="flex gap-2">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">Cancel</button>
+              <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors">Cancel</button>
               <button
                 onClick={handleSubmit}
                 disabled={!title.trim()}
-                className="px-6 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+                className="px-6 py-2 bg-zinc-900 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
               >
                 Create Task
               </button>
@@ -359,16 +359,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   }, [isSidebarExpanded]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-    if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
-      setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setIsDarkMode(false);
-      document.documentElement.classList.remove('dark');
-    }
+    // Force light/white theme
+    setIsDarkMode(false);
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('theme', 'light');
   }, []);
 
   const toggleTheme = () => {
@@ -431,7 +425,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const navSkeletonCount = currentMode === 'os' ? 6 : 4;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans selection:bg-stone-200 selection:text-stone-900 flex overflow-hidden relative transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-white text-zinc-900 dark:text-zinc-900 font-sans selection:bg-zinc-200 selection:text-zinc-900 flex overflow-hidden relative transition-colors duration-300">
 
       {/* Global Task Modal */}
       <CreateTaskModal
@@ -445,7 +439,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       <div className="md:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2.5 bg-white dark:bg-zinc-900 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+          className="p-2.5 bg-white dark:bg-white rounded-full shadow-lg border border-zinc-200 dark:border-zinc-200 text-zinc-900 dark:text-zinc-900"
         >
           {isMobileMenuOpen ? <Icons.Close size={20} /> : <Icons.Menu size={20} />}
         </button>
@@ -456,8 +450,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       */}
       <aside className={`
         fixed z-50 h-[calc(100vh-32px)] top-4 bottom-4 left-4
-        bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 
-        shadow-2xl shadow-zinc-200/50 dark:shadow-black/80
+        bg-white dark:bg-white border border-zinc-200 dark:border-zinc-200 
+        shadow-2xl shadow-zinc-200/50 dark:shadow-zinc-200/50
         rounded-[2rem] flex flex-col items-center py-6 gap-2
         transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
         overflow-hidden
@@ -469,21 +463,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0">
           <button
             onClick={() => onSwitchMode(currentMode === 'os' ? 'sales' : 'os')}
-            className={`w-full flex items-center p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800 relative overflow-hidden ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
+            className={`w-full flex items-center p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-200 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-200 relative overflow-hidden ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
             title={currentMode === 'os' ? "Switch to Sales" : "Switch to OS"}
           >
             {/* Visual Indicator Background */}
-            <div className={`absolute top-0 bottom-0 w-1/2 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-all duration-300 ${currentMode === 'os' ? 'left-0' : 'left-1/2'}`}></div>
+            <div className={`absolute top-0 bottom-0 w-1/2 bg-white dark:bg-white rounded-full shadow-sm transition-all duration-300 ${currentMode === 'os' ? 'left-0' : 'left-1/2'}`}></div>
 
-            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Home size={16} className={currentMode === 'os' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
+            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500">
+              <Icons.Home size={16} className={currentMode === 'os' ? 'text-zinc-900' : ''} />
             </div>
-            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Chart size={16} className={currentMode === 'sales' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
+            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500">
+              <Icons.Chart size={16} className={currentMode === 'sales' ? 'text-zinc-900' : ''} />
             </div>
 
             <div className={`transition-opacity duration-300 absolute left-20 whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+              <div className="font-bold text-sm text-zinc-900">
                 {currentMode === 'os' ? 'System' : 'Sales'}
               </div>
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Switch View</div>
@@ -498,10 +492,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               {Array.from({ length: navSkeletonCount }).map((_, index) => (
                 <div
                   key={index}
-                  className={`h-11 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`}
+                  className={`h-11 rounded-2xl bg-zinc-100 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`}
                 />
               ))}
-              <div className={`h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 mt-3 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`} />
+              <div className={`h-10 rounded-2xl bg-zinc-100 mt-3 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`} />
             </div>
           )}
           {isInitialized && currentNavItems.map(item => (
@@ -524,7 +518,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         <div className="w-full flex flex-col gap-1 shrink-0 mt-2 items-center">
           <button
             onClick={toggleTheme}
-            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-300 dark:hover:bg-amber-500/10 transition-colors group/btn shrink-0"
+            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-amber-600 hover:bg-amber-50 transition-colors group/btn shrink-0"
             title={!isSidebarExpanded ? "Toggle Theme" : undefined}
           >
             <div className="flex items-center justify-center w-6 h-6 shrink-0">
@@ -536,7 +530,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           {/* Profile */}
           <div className={`relative w-[calc(100%-24px)] mx-3 mt-2 flex items-center transition-all duration-300 mb-2 shrink-0 h-10 cursor-pointer ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
             <div className="relative shrink-0 transition-all duration-300">
-              <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden">
                 <img
                   src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name || 'User'}&backgroundColor=E6E2D8&textColor=433E36`}
                   alt="User"
@@ -545,7 +539,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               </div>
             </div>
             <div className={`transition-opacity duration-300 absolute left-12 whitespace-nowrap pl-2 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="font-bold text-xs text-zinc-900 dark:text-zinc-100">{user?.name || 'User'}</div>
+              <div className="font-bold text-xs text-zinc-900">{user?.name || 'User'}</div>
             </div>
           </div>
 
@@ -555,7 +549,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               await supabase.auth.signOut();
               window.location.href = '/auth/login';
             }}
-            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors group/btn shrink-0"
+            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-red-600 hover:bg-red-50 transition-colors group/btn shrink-0"
             title={!isSidebarExpanded ? "Logout" : undefined}
           >
             <div className="flex items-center justify-center w-6 h-6 shrink-0">
@@ -567,7 +561,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           {/* Sidebar Toggle Button */}
           <button
             onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-            className="hidden md:flex items-center justify-center w-full py-3 mt-1 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
+            className="hidden md:flex items-center justify-center w-full py-3 mt-1 text-zinc-300 hover:text-zinc-500 transition-colors"
             title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
           >
             {isSidebarExpanded ? <Icons.ChevronLeft size={16} /> : <Icons.ChevronRight size={16} />}
@@ -579,7 +573,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       {/* Main Content Area */}
       <main
         className={`
-            flex-1 h-screen overflow-y-auto relative scroll-smooth bg-zinc-50 dark:bg-black 
+            flex-1 h-screen overflow-y-auto relative scroll-smooth bg-white dark:bg-white 
             transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
             ${isSidebarExpanded ? 'md:ml-[256px]' : 'md:ml-[88px]'}
         `}
@@ -599,24 +593,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
       {/* Command Palette Modal */}
       {showCommandPalette && (
-        <div className="fixed inset-0 bg-white/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center pt-[15vh]">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="fixed inset-0 bg-white/60 dark:bg-white/60 backdrop-blur-sm z-50 flex items-start justify-center pt-[15vh]">
+          <div className="bg-white dark:bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center px-4 py-3 border-b border-zinc-100">
               <Icons.Search className="text-zinc-400" size={18} />
               <input
                 autoFocus
                 type="text"
                 placeholder="Where to? (e.g., 'New Idea', 'Project X')"
-                className="flex-1 px-3 py-1 outline-none text-sm placeholder:text-zinc-400 bg-transparent text-zinc-900 dark:text-zinc-100"
+                className="flex-1 px-3 py-1 outline-none text-sm placeholder:text-zinc-400 bg-transparent text-zinc-900"
               />
-              <span className="text-xs text-zinc-400 font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">ESC</span>
+              <span className="text-xs text-zinc-400 font-mono bg-zinc-100 px-1.5 py-0.5 rounded">ESC</span>
             </div>
             <div className="py-2">
               <div className="px-3 py-1 text-xs font-medium text-zinc-400 uppercase tracking-wider">Switch Context</div>
-              <button onClick={() => { onSwitchMode('os'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+              <button onClick={() => { onSwitchMode('os'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 flex items-center gap-3 text-sm text-zinc-700">
                 <Icons.Home size={14} /> Eneas OS
               </button>
-              <button onClick={() => { onSwitchMode('sales'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+              <button onClick={() => { onSwitchMode('sales'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 flex items-center gap-3 text-sm text-zinc-700">
                 <Icons.Chart size={14} /> Sales & Leads
               </button>
             </div>

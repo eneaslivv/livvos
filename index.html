@@ -20,17 +20,17 @@
             colors: {
               // Redefining Zinc for "Warm Stone" (Light) and "Deep Black" (Dark)
               zinc: {
-                50: '#FDFBF7',  // Cream White
-                100: '#F5F2EB', // Light Beige
-                200: '#E6E2D8', // Stone Border
-                300: '#D6D1C7',
-                400: '#A8A29A', 
-                500: '#78736A', 
-                600: '#52525B', // Standard Zinc for text balance
-                700: '#3F3F46',
-                800: '#27272A', // Dark Borders
-                900: '#09090B', // DEEP CARD SURFACE (Almost Black)
-                950: '#000000', // PURE BLACK BACKGROUND
+                50: '#ffffff',  // Pure White
+                100: '#fafafa', // Near White
+                200: '#f0f0f0', // Light Grey Border
+                300: '#e0e0e0',
+                400: '#a0a0a0', 
+                500: '#717171', 
+                600: '#525252',
+                700: '#404040',
+                800: '#262626',
+                900: '#171717',
+                950: '#0a0a0a',
               },
               // Remapping standard colors to fit the theme if needed, 
               // but keeping them mostly standard ensures accessibility.
@@ -40,11 +40,11 @@
                 900: '#312e81', // For very dark accents
               },
               brand: {
-                dark: '#2c0405',
-                accent: '#822b2e',
-                light: '#fffffa',
-                cream: '#ede5d8',
-                grey: '#f5f4f3'
+                dark: '#171717',
+                accent: '#525252',
+                light: '#ffffff',
+                cream: '#fafafa',
+                grey: '#f5f5f5'
               }
             }
           }
@@ -53,14 +53,14 @@
     </script>
     <style>
       body {
-        background-color: #FDFBF7; /* Cream */
-        color: #09090B; /* Deep Black Text */
+        background-color: #ffffff;
+        color: #171717;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
       .dark body {
-        background-color: #000000; /* Pure Black */
-        color: #EDEDED; /* Soft White Text */
+        background-color: #ffffff;
+        color: #171717;
       }
       
       /* Custom Scrollbar - Darker */
@@ -72,19 +72,19 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #E6E2D8;
+        background: #e0e0e0;
         border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #D6D1C7;
+        background: #d0d0d0;
       }
       
       /* Dark mode scrollbar */
       .dark ::-webkit-scrollbar-thumb {
-        background: #27272A; 
+        background: #e0e0e0; 
       }
       .dark ::-webkit-scrollbar-thumb:hover {
-        background: #3F3F46; 
+        background: #d0d0d0; 
       }
 
       .fade-in {
@@ -112,15 +112,15 @@
         font-family: 'JetBrains Mono', monospace;
       }
       .glass-card {
-        background: rgba(255, 255, 250, 0.65);
+        background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(12px);
-        border: 1px solid rgba(44, 4, 5, 0.08);
+        border: 1px solid rgba(0, 0, 0, 0.06);
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 20px -5px rgba(44, 4, 5, 0.05);
+        box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.04);
       }
       .glass-card:hover {
-        border-color: rgba(130, 43, 46, 0.2);
-        box-shadow: 0 10px 30px -10px rgba(44, 4, 5, 0.12);
+        border-color: rgba(0, 0, 0, 0.12);
+        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
         transform: translateY(-2px);
       }
       .gradient-border-light {
@@ -133,7 +133,7 @@
         inset: -1px;
         border-radius: 1rem;
         padding: 1px;
-        background: linear-gradient(135deg, rgba(44, 4, 5, 0.1), rgba(130, 43, 46, 0.05), rgba(44, 4, 5, 0.02));
+        background: linear-gradient(135deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.01));
         -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         -webkit-mask-composite: xor;
         mask-composite: exclude;
