@@ -47,7 +47,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                         onClick={onOpenTask}
                         className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-rose-50/90 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-bold uppercase tracking-wider transition-all backdrop-blur-md shadow-sm hover:shadow border border-rose-100/50"
                     >
-                        <div className="p-0.5 bg-rose-200 dark:bg-rose-800 rounded-full"><Icons.Plus size={12} /></div>
+                        <div className="p-0.5 bg-rose-200 rounded-full"><Icons.Plus size={12} /></div>
                         <span className="pr-1">New Task</span>
                     </button>
 
