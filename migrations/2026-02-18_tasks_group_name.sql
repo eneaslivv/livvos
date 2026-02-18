@@ -44,20 +44,30 @@ DECLARE
   grp JSONB;
   tsk JSONB;
 BEGIN
-  FOR proj IN SELECT id, tasks_groups FROM public.projects WHERE tasks_groups IS NOT NULL AND tasks_groups != '[]'::jsonb LOOP
-    IF jsonb_typeof(proj.tasks_groups) = 'array' THEN
-      FOR grp IN SELECT * FROM jsonb_array_elements(proj.tasks_groups) LOOP
-        IF grp->>'name' IS NOT NULL AND jsonb_typeof(grp->'tasks') = 'array' THEN
-          FOR tsk IN SELECT * FROM jsonb_array_elements(grp->'tasks') LOOP
-            UPDATE public.tasks
-            SET group_name = grp->>'name'
-            WHERE id = (tsk->>'id')::uuid
-              AND (group_name IS NULL OR group_name = 'General');
-          END LOOP;
-        END IF;
-      END LOOP;
-    END IF;
-  END LOOP;
+  -- Only attempt backfill if the source column exists
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'projects' 
+    AND column_name = 'tasks_groups'
+  ) THEN
+    FOR proj IN SELECT id, tasks_groups FROM public.projects WHERE tasks_groups IS NOT NULL AND tasks_groups != '[]'::jsonb LOOP
+      IF jsonb_typeof(proj.tasks_groups) = 'array' THEN
+        FOR grp IN SELECT * FROM jsonb_array_elements(proj.tasks_groups) LOOP
+          IF grp->>'name' IS NOT NULL AND jsonb_typeof(grp->'tasks') = 'array' THEN
+            FOR tsk IN SELECT * FROM jsonb_array_elements(grp->'tasks') LOOP
+              UPDATE public.tasks
+              SET group_name = grp->>'name'
+              WHERE id = (tsk->>'id')::uuid
+                AND (group_name IS NULL OR group_name = 'General');
+            END LOOP;
+          END IF;
+        END LOOP;
+      END IF;
+    END LOOP;
+  ELSE
+    RAISE NOTICE 'Column tasks_groups does not exist in projects table, skipping backfill.';
+  END IF;
 END $$;
 
 NOTIFY pgrst, 'reload config';
