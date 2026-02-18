@@ -6,7 +6,7 @@ import { defaultBranding } from '../config/whitelabel'
 export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticated }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'signin' | 'signup' | 'magic'>('signin')
+  const [mode, setMode] = useState<'signin' | 'signup' | 'magic' | 'forgot'>('signin')
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -23,7 +23,13 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
     setLoading(true)
     setMessage(null)
     try {
-      if (mode === 'magic') {
+      if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}`,
+        })
+        if (error) throw error
+        setMessage({ text: 'Te enviamos un link para restablecer tu contraseña. Revisá tu email.', type: 'success' })
+      } else if (mode === 'magic') {
         const { error } = await supabase.auth.signInWithOtp({ email })
         if (error) throw error
         setMessage({ text: 'Te enviamos un magic link. Revisá tu email.', type: 'success' })
@@ -130,8 +136,8 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
                 key={m}
                 onClick={() => setMode(m)}
                 className={`text-sm transition-all pb-1 border-b-2 ${mode === m
-                    ? 'text-zinc-900 border-amber-500'
-                    : 'text-zinc-400 border-transparent hover:text-zinc-600'
+                  ? 'text-zinc-900 border-amber-500'
+                  : 'text-zinc-400 border-transparent hover:text-zinc-600'
                   }`}
               >
                 {m === 'signin' ? 'Sign In' : m === 'signup' ? 'Create Account' : 'Magic Link'}
@@ -158,13 +164,17 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
               </div>
             </div>
 
-            {mode !== 'magic' && (
+            {mode !== 'magic' && mode !== 'forgot' && (
               <div className="animate-fade-in">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     Password
                   </label>
-                  <button className="text-xs text-amber-600 hover:text-amber-700">
+                  <button
+                    type="button"
+                    onClick={() => { setMode('forgot'); setMessage(null); }}
+                    className="text-xs text-amber-600 hover:text-amber-700"
+                  >
                     Forgot password?
                   </button>
                 </div>
@@ -179,6 +189,19 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
                     className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                   />
                 </div>
+              </div>
+            )}
+
+            {mode === 'forgot' && (
+              <div className="animate-fade-in text-center">
+                <p className="text-sm text-zinc-500 mb-4">Enter your email and we'll send you a reset link.</p>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signin'); setMessage(null); }}
+                  className="text-xs text-amber-600 hover:text-amber-700"
+                >
+                  ← Back to Sign In
+                </button>
               </div>
             )}
 
@@ -197,7 +220,7 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
                 </>
               ) : (
                 <>
-                  {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Magic Link'}
+                  {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : mode === 'forgot' ? 'Send Reset Link' : 'Send Magic Link'}
                   <Icons.ChevronRight size={16} />
                 </>
               )}
@@ -207,8 +230,8 @@ export const Auth: React.FC<{ onAuthenticated: () => void }> = ({ onAuthenticate
             {message && (
               <div
                 className={`p-4 rounded-xl text-sm ${message.type === 'success'
-                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  : 'bg-red-50 border border-red-200 text-red-700'
                   }`}
               >
                 <div className="flex items-center gap-2">

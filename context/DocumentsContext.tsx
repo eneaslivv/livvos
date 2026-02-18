@@ -66,10 +66,10 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const loadDocuments = useCallback(async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       errorLogger.log('Cargando documentos...')
-      
+
       // Cargar carpetas del nivel actual
       let foldersQuery = supabase.from('folders').select('*').order('name', { ascending: true })
       if (currentFolderId) {
@@ -77,7 +77,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } else {
         foldersQuery = foldersQuery.is('parent_id', null)
       }
-      
+
       // Cargar archivos del nivel actual
       let filesQuery = supabase.from('files').select('*').order('name', { ascending: true })
       if (currentFolderId) {
@@ -87,7 +87,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const [foldersRes, filesRes] = await Promise.all([foldersQuery, filesQuery])
-      
+
       if (foldersRes.error) {
         if (foldersRes.error.code === 'PGRST116') setFolders([])
         else throw foldersRes.error
@@ -101,7 +101,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } else {
         setFiles(filesRes.data || [])
       }
-      
+
       // Construir breadcrumbs
       if (currentFolderId) {
         const buildBreadcrumbs = async (folderId: string, path: Folder[] = []): Promise<Folder[]> => {
@@ -116,7 +116,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } else {
         setBreadcrumbs([])
       }
-      
+
       setIsInitialized(true)
     } catch (err: any) {
       errorLogger.error('Error cargando documentos', err)
@@ -158,14 +158,21 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const uploadFile = async (file: any, options?: { clientId?: string | null; projectId?: string | null }) => {
     const user = (await supabase.auth.getUser()).data.user
     if (!user) throw new Error('Usuario no autenticado')
-    if (!tenantId) throw new Error('Tenant no disponible')
+
+    console.log('Context uploadFile - Tenant ID:', tenantId); // Debug logging
+    if (!tenantId) throw new Error('Tenant no disponible (ID es null/undefined)')
+
     const fileName = `${user.id}/${Date.now()}_${file.name}`
-    
+    console.log('Attempting storage upload:', fileName);
+
     const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file)
-    if (uploadError) throw uploadError
-    
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      throw new Error(`Storage Error: ${uploadError.message} (Code: ${uploadError.name})`);
+    }
+
     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(fileName)
-    
+
     const { clientId = null, projectId = null } = options || {}
 
     const { data: fileData, error: dbError } = await supabase.from('files').insert({
@@ -179,8 +186,12 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       client_id: clientId,
       project_id: projectId
     }).select().single()
-    if (dbError) throw dbError
-    
+
+    if (dbError) {
+      console.error('Database insert error:', dbError);
+      throw new Error(`Database Error: ${dbError.message} (Code: ${dbError.code})`);
+    }
+
     setFiles(prev => [...prev, fileData])
     return fileData
   }
@@ -194,10 +205,10 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const deleteFile = async (id: string, url: string) => {
     const { error: dbError } = await supabase.from('files').delete().eq('id', id)
     if (dbError) throw dbError
-    
+
     const path = url.split('/documents/')[1]
     if (path) await supabase.storage.from('documents').remove([path])
-    
+
     setFiles(prev => prev.filter(f => f.id !== id))
   }
 

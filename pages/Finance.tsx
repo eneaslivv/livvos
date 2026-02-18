@@ -333,7 +333,7 @@ export const Finance: React.FC = () => {
                     </div>
                     {metric.change && (
                       <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${metric.status === 'positive' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' :
-                          'bg-rose-50 text-rose-600 border border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                        'bg-rose-50 text-rose-600 border border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
                         }`}>
                         {metric.change}
                         {metric.trend === 'up' ? <Icons.TrendUp size={10} strokeWidth={3} /> : <Icons.TrendDown size={10} strokeWidth={3} />}
@@ -426,7 +426,7 @@ export const Finance: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="bg-zinc-50/50 dark:bg-zinc-800/30">
                     <th className="px-10 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Account</th>
@@ -492,12 +492,110 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* Reports, Settings similarly styled... */}
-      {(activeTab === 'reports' || activeTab === 'settings') && (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 text-center p-12 animate-in fade-in duration-700">
-          <Icons.Chart className="w-12 h-12 text-zinc-300 mb-6 mx-auto" />
-          <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 mb-2 uppercase tracking-tight">Accessing Secured Vault</h3>
-          <p className="text-zinc-500 text-sm max-w-xs mx-auto">This section is currently under synchronization protocol. Please check back later.</p>
+      {activeTab === 'reports' && (
+        <div className="space-y-6 animate-in fade-in duration-700">
+          <div className="bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">Financial Summary</h3>
+              <button
+                onClick={() => {
+                  const headers = ['Project', 'Budget', 'Collected', 'Expenses', 'Profit', 'Health'];
+                  const rows = projectData.map(p => [p.projectName, p.budget, p.collected, p.expenses, p.profit, p.health]);
+                  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `finance-report-${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                ↓ Export CSV
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
+                <div className="text-xs text-zinc-500 mb-1">Total Revenue</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalCollected)}</div>
+              </div>
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
+                <div className="text-xs text-zinc-500 mb-1">Total Expenses</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalExpenses)}</div>
+              </div>
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
+                <div className="text-xs text-zinc-500 mb-1">Net Profit</div>
+                <div className={`text-lg font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(netProfit)}</div>
+              </div>
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
+                <div className="text-xs text-zinc-500 mb-1">Avg. Margin</div>
+                <div className={`text-lg font-bold ${profitMargin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatPercent(profitMargin)}</div>
+              </div>
+            </div>
+            {projectData.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-8">No financial records yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                      <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Project</th>
+                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Budget</th>
+                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Collected</th>
+                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Expenses</th>
+                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Profit</th>
+                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectData.map(p => (
+                      <tr key={p.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                        <td className="py-3 px-4 font-medium text-zinc-900 dark:text-zinc-100">{p.projectName}</td>
+                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.budget)}</td>
+                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.collected)}</td>
+                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.expenses)}</td>
+                        <td className={`py-3 px-4 text-right font-semibold ${p.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(p.profit)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold uppercase ${p.health === 'profitable' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : p.health === 'break-even' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>{p.health}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="animate-in fade-in duration-700">
+          <div className="bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 p-8">
+            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 mb-6 uppercase tracking-tight">Finance Configuration</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Default Currency</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">USD ($)</div>
+                <p className="text-xs text-zinc-500 mt-1">All financial entries use this currency.</p>
+              </div>
+              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Active Projects</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{projectData.length}</div>
+                <p className="text-xs text-zinc-500 mt-1">Projects with financial records.</p>
+              </div>
+              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Business Model</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Fixed + Hourly</div>
+                <p className="text-xs text-zinc-500 mt-1">Supports both pricing models per project.</p>
+              </div>
+              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Target Margin</div>
+                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatPercent(targetMargin)}</div>
+                <p className="text-xs text-zinc-500 mt-1">Average target profit margin across projects.</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

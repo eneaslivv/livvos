@@ -14,18 +14,18 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { 
-      hasError: false, 
-      error: null, 
-      errorInfo: null 
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
     };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { 
-      hasError: true, 
+    return {
+      hasError: true,
       error,
-      errorInfo: null 
+      errorInfo: null
     };
   }
 
@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error Info:', errorInfo);
     console.error('Stack:', error.stack);
     console.error('Component Stack:', errorInfo.componentStack);
-    
+
     this.setState({
       error,
       errorInfo
@@ -57,11 +57,11 @@ export class ErrorBoundary extends Component<Props, State> {
                 <span className="text-red-600 dark:text-red-400 text-xl">🚨</span>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Error en la navegación</h2>
-                <p className="text-sm text-red-600 dark:text-red-400">{this.state.error?.message || 'Error desconocido'}</p>
+                <h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Algo salió mal</h2>
+                <p className="text-sm text-red-600 dark:text-red-400">Ha ocurrido un error inesperado.</p>
               </div>
             </div>
-            
+
             <div className="bg-white dark:bg-zinc-800 rounded-lg p-4 mb-4">
               <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-2">Detalles técnicos:</h3>
               <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-2 font-mono break-all">
@@ -78,13 +78,19 @@ export class ErrorBoundary extends Component<Props, State> {
                 </details>
               )}
             </div>
-            
+
             <div className="flex gap-3">
               <button
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 Recargar página
+              </button>
+              <button
+                onClick={() => { window.location.href = '/'; }}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm font-medium rounded-lg transition-colors"
+              >
+                Ir al inicio
               </button>
               <button
                 onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}

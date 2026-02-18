@@ -453,7 +453,13 @@ const AppContent: React.FC<{
   handleSwitchMode: (m: AppMode) => void;
   showDebug: boolean;
 }> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug }) => {
-  const { isInitialized } = useRBAC();
+  const { isInitialized, hasRole } = useRBAC();
+
+  useEffect(() => {
+    if (isInitialized && hasRole('client') && currentPage !== 'client_portal') {
+      handleNavigate('client_portal');
+    }
+  }, [isInitialized, hasRole, currentPage, handleNavigate]);
 
   useEffect(() => {
     scheduleIdle(() => {
@@ -600,8 +606,6 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('os');
   const [showDebug, setShowDebug] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const { hasRole, isInitialized: rbacReady } = useRBAC();
-
   // Check for invite URL
   const isInvite = window.location.pathname === '/accept-invite';
   const proposalToken = new URLSearchParams(window.location.search).get('proposal');
@@ -615,14 +619,6 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString()
     });
   }, [currentPage, appMode]);
-
-  useEffect(() => {
-    if (!rbacReady) return;
-    if (hasRole('client')) {
-      setCurrentPage('client_portal');
-      setAppMode('os');
-    }
-  }, [hasRole, rbacReady]);
 
   useEffect(() => {
     if (portalFlag === 'client') {

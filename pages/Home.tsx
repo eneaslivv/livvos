@@ -290,8 +290,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                 <Icons.Zap size={18} />
                             </div>
                             <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">8.5hrs</div>
-                                <div className="text-xs text-zinc-500">Productive Time</div>
+                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{tasks.length}</div>
+                                <div className="text-xs text-zinc-500">Total Tasks</div>
                             </div>
                         </div>
                         <div
@@ -302,7 +302,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                 <Icons.Check size={18} />
                             </div>
                             <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">12</div>
+                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{completedCount}</div>
                                 <div className="text-xs text-zinc-500">Tasks Done</div>
                             </div>
                         </div>
@@ -368,7 +368,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                     Weekly Insight
                                 </h4>
                                 <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                                    You're 20% faster on Design tasks than last week. Consider moving "E-commerce API" to tomorrow morning.
+                                    {tasks.length > 0
+                                        ? `You've completed ${completedCount} of ${tasks.length} tasks (${progressPercent}%). ${projects.length > 0 ? `${projects.length} active project${projects.length > 1 ? 's' : ''} in progress.` : 'No active projects yet.'}`
+                                        : 'Start adding tasks to see your weekly insight here.'
+                                    }
                                 </p>
                             </div>
                         </div>

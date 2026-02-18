@@ -35,7 +35,7 @@ export const Projects: React.FC = () => {
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
-    select: 'id,title,completed,project_id,due_date,assignee_id,priority'
+    select: 'id,title,completed,project_id,due_date,assignee_id,priority,group_name'
   });
 
   // Log inicial del componente
@@ -63,6 +63,33 @@ export const Projects: React.FC = () => {
   const projectTasks = selectedProject
     ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
     : [];
+
+  // Derive phase groups from the tasks table (single source of truth)
+  const derivedTasksGroups = React.useMemo(() => {
+    const groupMap = new Map<string, { name: string; tasks: any[] }>();
+    for (const task of projectTasks) {
+      const gName = task.group_name || 'General';
+      if (!groupMap.has(gName)) {
+        groupMap.set(gName, { name: gName, tasks: [] });
+      }
+      groupMap.get(gName)!.tasks.push({
+        id: task.id,
+        title: task.title,
+        done: !!task.completed,
+        assignee: task.assignee_id || '',
+        dueDate: task.due_date || undefined,
+      });
+    }
+    // Also include any empty groups from JSONB that don't have tasks yet
+    if (selectedProject) {
+      for (const g of selectedProject.tasksGroups) {
+        if (!groupMap.has(g.name)) {
+          groupMap.set(g.name, { name: g.name, tasks: [] });
+        }
+      }
+    }
+    return Array.from(groupMap.values());
+  }, [projectTasks, selectedProject]);
 
   // Log cuando cambian los datos
   useEffect(() => {
@@ -210,6 +237,7 @@ export const Projects: React.FC = () => {
 
   const handleAddGroup = async () => {
     if (!selectedProject || !newGroupName.trim()) return
+    // Add the new empty group to the JSONB for phase name tracking only
     const updated = [...selectedProject.tasksGroups, { name: newGroupName.trim(), tasks: [] }]
     await updateProject(selectedProject.id, { tasksGroups: updated })
     setNewGroupName('')
@@ -225,22 +253,18 @@ export const Projects: React.FC = () => {
     if (!selectedProject) return
     const title = newTaskTitle[groupIdx]?.trim()
     if (!title) return
-    const taskId = crypto.randomUUID()
-    const updated = selectedProject.tasksGroups.map((g, i) =>
-      i === groupIdx ? { ...g, tasks: [...g.tasks, { id: taskId, title, done: false, assignee: currentUser?.id || 'Unknown' }] } : g
-    )
-    await updateProject(selectedProject.id, { tasksGroups: updated })
+    const groupName = derivedTasksGroups[groupIdx]?.name || 'General'
     try {
       await addSyncedTask({
-        id: taskId,
         title,
         completed: false,
         project_id: selectedProject.id,
         assignee_id: currentUser?.id || null,
-        priority: 'medium'
+        priority: 'medium',
+        group_name: groupName,
       } as any)
     } catch (err) {
-      errorLogger.error('Error creando tarea sincronizada', err)
+      errorLogger.error('Error creando tarea', err)
     }
     setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }))
     await logActivity({
@@ -253,29 +277,20 @@ export const Projects: React.FC = () => {
 
   const handleToggleTask = async (groupIdx: number, taskId: string) => {
     if (!selectedProject) return
-    const updated = selectedProject.tasksGroups.map((g, i) =>
-      i === groupIdx
-        ? { ...g, tasks: g.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t) }
-        : g
-    )
-    await updateProject(selectedProject.id, { tasksGroups: updated })
+    const task = derivedTasksGroups[groupIdx]?.tasks.find((t: any) => t.id === taskId)
+    if (!task) return
+    const newDone = !task.done
     try {
-      const task = updated[groupIdx]?.tasks.find(t => t.id === taskId)
-      if (task) {
-        await updateSyncedTask(taskId, { completed: task.done } as any)
-      }
+      await updateSyncedTask(taskId, { completed: newDone } as any)
     } catch (err) {
-      errorLogger.error('Error actualizando tarea sincronizada', err)
+      errorLogger.error('Error actualizando tarea', err)
     }
-    const task = selectedProject.tasksGroups[groupIdx].tasks.find(t => t.id === taskId)
-    if (task) {
-      await logActivity({
-        action: task.done ? 'reopened task' : 'completed task',
-        target: task.title,
-        project_title: selectedProject.title,
-        type: 'task_completed',
-      })
-    }
+    await logActivity({
+      action: newDone ? 'completed task' : 'reopened task',
+      target: task.title,
+      project_title: selectedProject.title,
+      type: 'task_completed',
+    })
   }
 
   const handleInviteMember = async () => {
@@ -356,8 +371,8 @@ export const Projects: React.FC = () => {
                 key={p.id}
                 onClick={() => setSelectedId(p.id)}
                 className={`group p-3 rounded-lg border cursor-pointer transition-all ${selectedId === p.id
-                    ? 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-600 shadow-sm ring-1 ring-zinc-50 dark:ring-zinc-800'
-                    : 'bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                  ? 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-600 shadow-sm ring-1 ring-zinc-50 dark:ring-zinc-800'
+                  : 'bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                   }`}
               >
                 <div className="flex justify-between items-center mb-1.5">
@@ -452,8 +467,8 @@ export const Projects: React.FC = () => {
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`pb-2 border-b-2 capitalize transition-colors ${activeTab === tab
-                    ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-medium'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-medium'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
                   }`}
               >
                 {tab}
@@ -480,9 +495,9 @@ export const Projects: React.FC = () => {
                     <div className="p-4 bg-white dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm">
                       <div className="text-xs text-zinc-400 uppercase font-bold tracking-wider mb-2">Tasks Open</div>
                       <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-                        {selectedProject.tasksGroups.flatMap(g => g.tasks).filter(t => !t.done).length}
+                        {derivedTasksGroups.flatMap(g => g.tasks).filter((t: any) => !t.done).length}
                       </div>
-                      <div className="text-xs text-zinc-400">Across {selectedProject.tasksGroups.length} phases</div>
+                      <div className="text-xs text-zinc-400">Across {derivedTasksGroups.length} phases</div>
                     </div>
                   </div>
                 </div>
@@ -576,7 +591,7 @@ export const Projects: React.FC = () => {
                     Add Phase
                   </button>
                 </div>
-                {selectedProject.tasksGroups.map((group, gIdx) => (
+                {derivedTasksGroups.map((group: any, gIdx: number) => (
                   <div key={gIdx} className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
                     <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                       <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.name}</h3>
@@ -634,8 +649,40 @@ export const Projects: React.FC = () => {
 
             {activeTab === 'timeline' && selectedProject && (
               <div className="p-6 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-4">Timeline</h3>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Timeline view coming soon...</p>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-6">Timeline</h3>
+                {derivedTasksGroups.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No phases defined yet. Add task groups to see the timeline.</p>
+                ) : (
+                  <div className="space-y-6">
+                    {derivedTasksGroups.map((group: any, gIdx: number) => {
+                      const total = group.tasks.length;
+                      const done = group.tasks.filter(t => t.done).length;
+                      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                      return (
+                        <div key={gIdx} className="relative pl-8 border-l-2 border-zinc-200 dark:border-zinc-700">
+                          <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-950 ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{group.name}</h4>
+                              <span className="text-xs font-mono text-zinc-500">{done}/{total}</span>
+                            </div>
+                            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                              <div className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {group.tasks.map((task, tIdx) => (
+                              <div key={tIdx} className="flex items-center gap-2.5 text-sm">
+                                <div className={`w-3 h-3 rounded-full border ${task.done ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300 dark:border-zinc-600'}`} />
+                                <span className={task.done ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}>{task.title || task.name || `Task ${tIdx + 1}`}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

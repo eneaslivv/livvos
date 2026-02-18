@@ -51,13 +51,14 @@ export const Docs: React.FC = () => {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setIsUploading(true);
     try {
       const file = e.target.files[0];
       await uploadFile(file as any, currentLinkOptions); // Casting porque el tipo File del navegador es compatible
-    } catch (err) {
-      alert('Error al subir archivo');
+    } catch (err: any) {
+      console.error('Full upload error:', err);
+      alert(`Error al subir archivo: ${err.message || JSON.stringify(err)}`);
     } finally {
       setIsUploading(false);
     }
@@ -94,7 +95,7 @@ export const Docs: React.FC = () => {
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Documentos</h1>
           {activeTab === 'documents' && (
             <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-              <button 
+              <button
                 onClick={() => setCurrentFolderId(null)}
                 className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
               >
@@ -103,7 +104,7 @@ export const Docs: React.FC = () => {
               {breadcrumbs.map((folder) => (
                 <React.Fragment key={folder.id}>
                   <Icons.ChevronRight size={14} />
-                  <button 
+                  <button
                     onClick={() => setCurrentFolderId(folder.id)}
                     className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
                   >
@@ -119,31 +120,28 @@ export const Docs: React.FC = () => {
           <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
             <button
               onClick={() => setActiveTab('documents')}
-              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
-                activeTab === 'documents'
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${activeTab === 'documents'
                   ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-              }`}
+                }`}
             >
               Documentos
             </button>
             <button
               onClick={() => setActiveTab('proposals')}
-              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
-                activeTab === 'proposals'
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${activeTab === 'proposals'
                   ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-              }`}
+                }`}
             >
               Propuestas
             </button>
             <button
               onClick={() => setActiveTab('blog')}
-              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
-                activeTab === 'blog'
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-colors ${activeTab === 'blog'
                   ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-              }`}
+                }`}
             >
               Blog
             </button>
@@ -154,21 +152,19 @@ export const Docs: React.FC = () => {
               <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
                 <button
                   onClick={() => setView('grid')}
-                  className={`p-2 rounded-md transition-colors ${
-                    view === 'grid'
+                  className={`p-2 rounded-md transition-colors ${view === 'grid'
                       ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                       : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  }`}
+                    }`}
                 >
                   <Icons.Grid size={18} />
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`p-2 rounded-md transition-colors ${
-                    view === 'list'
+                  className={`p-2 rounded-md transition-colors ${view === 'list'
                       ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                       : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                  }`}
+                    }`}
                 >
                   <Icons.List size={18} />
                 </button>
@@ -223,13 +219,13 @@ export const Docs: React.FC = () => {
                 <Icons.Folder size={18} />
                 Nueva Carpeta
               </button>
-              
+
               <label className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer">
                 <Icons.Upload size={18} />
                 {isUploading ? 'Subiendo...' : 'Subir Archivo'}
-                <input 
-                  type="file" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  className="hidden"
                   onChange={handleFileUpload}
                   disabled={isUploading}
                 />
@@ -290,9 +286,8 @@ export const Docs: React.FC = () => {
             <div
               key={folder.id}
               onClick={() => setCurrentFolderId(folder.id)}
-              className={`group cursor-pointer border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-500 dark:hover:border-blue-500 transition-all ${
-                view === 'grid' ? 'bg-white dark:bg-zinc-900' : 'flex items-center gap-4 bg-white dark:bg-zinc-900'
-              }`}
+              className={`group cursor-pointer border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-500 dark:hover:border-blue-500 transition-all ${view === 'grid' ? 'bg-white dark:bg-zinc-900' : 'flex items-center gap-4 bg-white dark:bg-zinc-900'
+                }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className={`flex items-center gap-3 ${view === 'list' && 'flex-1'}`}>
@@ -302,7 +297,7 @@ export const Docs: React.FC = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if(confirm('¿Eliminar carpeta?')) deleteFolder(folder.id);
+                    if (confirm('¿Eliminar carpeta?')) deleteFolder(folder.id);
                   }}
                   className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
@@ -321,9 +316,8 @@ export const Docs: React.FC = () => {
           {files.map((file) => (
             <div
               key={file.id}
-              className={`group relative border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-500 dark:hover:border-blue-500 transition-all ${
-                view === 'grid' ? 'bg-white dark:bg-zinc-900' : 'flex items-center gap-4 bg-white dark:bg-zinc-900'
-              }`}
+              className={`group relative border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-500 dark:hover:border-blue-500 transition-all ${view === 'grid' ? 'bg-white dark:bg-zinc-900' : 'flex items-center gap-4 bg-white dark:bg-zinc-900'
+                }`}
             >
               <div className={`flex items-center justify-between ${view === 'grid' ? 'mb-2' : 'flex-1'}`}>
                 <div className="flex items-center gap-3">
@@ -344,7 +338,7 @@ export const Docs: React.FC = () => {
                   </a>
                   <button
                     onClick={() => {
-                      if(confirm('¿Eliminar archivo?')) deleteFile(file.id, file.url);
+                      if (confirm('¿Eliminar archivo?')) deleteFile(file.id, file.url);
                     }}
                     className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
