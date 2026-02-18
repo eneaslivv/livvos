@@ -1,8 +1,32 @@
--- Add group_name column to tasks table for phase grouping
--- This replaces the projects.tasks_groups JSONB dual-write pattern
-
+-- Add tasks table if missing and then group_name column
 DO $$
 BEGIN
+  -- Ensure tasks table exists
+  IF to_regclass('public.tasks') IS NULL THEN
+    CREATE TABLE public.tasks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      title text NOT NULL,
+      description text,
+      completed boolean DEFAULT false,
+      priority text DEFAULT 'medium',
+      status text DEFAULT 'todo',
+      owner_id uuid,
+      assignee_id uuid,
+      project_id uuid,
+      client_id uuid,
+      due_date date,
+      start_date date,
+      end_date date,
+      start_time time,
+      duration integer,
+      order_index integer DEFAULT 0,
+      parent_task_id uuid,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    );
+  END IF;
+
+  -- Add group_name column if missing
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
