@@ -11,7 +11,7 @@ export interface Client {
   company?: string
   phone?: string
   avatar_url?: string
-  status: 'active' | 'inactive' | 'prospect'
+  status: 'active' | 'inactive' | 'prospect' | 'archived'
   notes?: string
   address?: string
   industry?: string

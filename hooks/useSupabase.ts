@@ -40,7 +40,8 @@ const tenantScopedTables = new Set([
   'activity_logs',
   'calendar_events',
   'calendar_tasks',
-  'finances'
+  'finances',
+  'project_members'
 ])
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))

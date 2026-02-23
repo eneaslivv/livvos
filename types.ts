@@ -19,9 +19,24 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
-  priority?: Priority;
-  projectId?: string; // Link to project
-  dueDate?: string; // ISO String
+  priority?: 'low' | 'medium' | 'high';
+  status?: 'todo' | 'in_progress' | 'done' | 'blocked';
+  projectId?: string;
+  dueDate?: string;
+  startDate?: string;
+  endDate?: string;
+  startTime?: string;
+  duration?: number;
+  description?: string;
+  assigneeId?: string;
+  clientId?: string;
+  parentTaskId?: string;
+  groupName?: string;
+  orderIndex?: number;
+  tenantId?: string;
+  ownerId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Subtask {
@@ -40,13 +55,7 @@ export interface Comment {
 }
 
 export interface CalendarTask extends Task {
-  startDate?: string; // ISO String (YYYY-MM-DD)
-  endDate?: string;   // ISO String (YYYY-MM-DD)
-  startTime?: string; // e.g. "10:00"
-  duration?: number; // minutes
-  description?: string;
-  assignee?: Collaborator; // Now used as the selected user object
-  assigneeId?: string;
+  assignee?: Collaborator;
   subtasks?: Subtask[];
   comments?: Comment[];
 }
