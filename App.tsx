@@ -52,6 +52,7 @@ const AcceptInvite = React.lazy(loadAcceptInvite);
 const TenantSettings = React.lazy(loadTenantSettings);
 const ProposalPublic = React.lazy(loadProposalPublic);
 const ClientPortal = React.lazy(loadClientPortal);
+const GoogleCallback = React.lazy(loadGoogleCallback);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -720,7 +721,6 @@ const App: React.FC = () => {
   }
 
   if (isGoogleCallback && googleCode) {
-    const GoogleCallback = React.lazy(loadGoogleCallback);
     return (
       <Suspense fallback={<PageFallback />}>
         <GoogleCallback

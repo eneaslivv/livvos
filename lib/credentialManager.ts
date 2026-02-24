@@ -553,7 +553,7 @@ class CredentialManager {
   }
 }
 
-// Export singleton instance
+// Singleton – constructor is safe (no throws), master key is lazy-loaded on first use
 export const credentialManager = new CredentialManager();
 
 // Types are already exported via the export statements above
