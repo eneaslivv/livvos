@@ -380,49 +380,6 @@ export async function canPerformAction(
 }
 
 /**
- * Security validation hook for React components
- * Returns permission checks as reactive values
- */
-export function createSecurityHook() {
-  const [context, setContext] = useState<SecurityContext | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const refreshContext = async () => {
-    setLoading(true)
-    try {
-      const newContext = await getSecurityContext()
-      setContext(newContext)
-    } catch (error) {
-      console.error('Security: Failed to refresh context', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const checkPermission = useCallback(async (module: string, action: string) => {
-    if (!context) return false
-    return await hasPermission(module, action)
-  }, [context])
-
-  const checkRole = useCallback(async (roleName: string) => {
-    if (!context) return false
-    return context.roles.includes(roleName)
-  }, [context])
-
-  return {
-    context,
-    loading,
-    refreshContext,
-    checkPermission,
-    checkRole,
-    canCreate: (resource: string) => checkPermission(resource, 'create'),
-    canRead: (resource: string) => checkPermission(resource, 'view'),
-    canUpdate: (resource: string) => checkPermission(resource, 'edit'),
-    canDelete: (resource: string) => checkPermission(resource, 'delete')
-  }
-}
-
-/**
  * Tenant isolation validator for API calls
  * Ensures that all operations are properly scoped to the user's tenant
  */
@@ -469,6 +426,3 @@ export class TenantValidator {
  * Global tenant validator instance
  */
 export const tenantValidator = new TenantValidator()
-
-// Import useState and useCallback at the top of the file
-import { useState, useCallback } from 'react'
