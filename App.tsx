@@ -35,6 +35,7 @@ const loadAcceptInvite = () => import('./pages/AcceptInvite').then(module => ({ 
 const loadTenantSettings = () => import('./pages/TenantSettings').then(module => ({ default: module.TenantSettings }));
 const loadProposalPublic = () => import('./pages/ProposalPublic').then(module => ({ default: module.ProposalPublic }));
 const loadClientPortal = () => import('./pages/ClientPortal').then(module => ({ default: module.ClientPortal }));
+const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module => ({ default: module.GoogleCallback }));
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -610,6 +611,11 @@ const App: React.FC = () => {
   const isInvite = window.location.pathname === '/accept-invite';
   const proposalToken = new URLSearchParams(window.location.search).get('proposal');
   const portalFlag = new URLSearchParams(window.location.search).get('portal');
+  // Google OAuth callback detection
+  const urlParams = new URLSearchParams(window.location.search);
+  const googleCode = urlParams.get('code');
+  const googleScope = urlParams.get('scope');
+  const isGoogleCallback = !!(googleCode && googleScope?.includes('calendar'));
 
   // Logging de navegación para debugging
   useEffect(() => {
@@ -709,6 +715,21 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <ProposalPublic token={proposalToken} />
+      </Suspense>
+    );
+  }
+
+  if (isGoogleCallback && googleCode) {
+    const GoogleCallback = React.lazy(loadGoogleCallback);
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <GoogleCallback
+          code={googleCode}
+          onComplete={() => {
+            window.history.replaceState({}, '', window.location.pathname);
+            window.location.reload();
+          }}
+        />
       </Suspense>
     );
   }

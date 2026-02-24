@@ -81,7 +81,10 @@ import {
   Droplet,
   AlertTriangle,
   XCircle,
-  Edit
+  Edit,
+  Heart,
+  ThumbsUp,
+  Eye
 } from 'lucide-react';
 
 export const Icons = {
@@ -170,5 +173,8 @@ export const Icons = {
   AlertCircle,
   AlertTriangle,
   XCircle,
-  Edit
+  Edit,
+  Heart,
+  ThumbsUp,
+  Eye
 };

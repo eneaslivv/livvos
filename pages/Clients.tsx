@@ -35,6 +35,9 @@ export const Clients: React.FC = () => {
   const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
+  const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null }[]>([]);
+  const [assignedProject, setAssignedProject] = useState<{ id: string; title: string } | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [newClientData, setNewClientData] = useState({
     name: '',
     email: '',
@@ -94,6 +97,71 @@ export const Clients: React.FC = () => {
       setMessages(msgs);
     } catch (err) {
       errorLogger.error('Error cargando mensajes', err);
+    }
+  };
+
+  // Load available projects and check if client has one assigned
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const { data } = await supabase
+          .from('projects')
+          .select('id, title, client_id')
+          .order('created_at', { ascending: false });
+        setAvailableProjects(data || []);
+      } catch (err) {
+        errorLogger.error('Error loading projects', err);
+      }
+    };
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    if (selectedClient && availableProjects.length > 0) {
+      const linked = availableProjects.find(p => p.client_id === selectedClient.id);
+      setAssignedProject(linked ? { id: linked.id, title: linked.title } : null);
+      setSelectedProjectId('');
+    } else {
+      setAssignedProject(null);
+    }
+  }, [selectedClient, availableProjects]);
+
+  const handleAssignProject = async () => {
+    if (!selectedClient || !selectedProjectId) return;
+    try {
+      const { error: err } = await supabase
+        .from('projects')
+        .update({ client_id: selectedClient.id })
+        .eq('id', selectedProjectId);
+      if (err) throw err;
+      // Update local state
+      setAvailableProjects(prev => prev.map(p =>
+        p.id === selectedProjectId ? { ...p, client_id: selectedClient.id } : p
+      ));
+      setAssignedProject({ id: selectedProjectId, title: availableProjects.find(p => p.id === selectedProjectId)?.title || '' });
+      setSelectedProjectId('');
+      await addHistoryEntry({
+        client_id: selectedClient.id,
+        user_id: user?.id || '',
+        user_name: user?.email?.split('@')[0] || 'User',
+        action_type: 'note',
+        action_description: `Proyecto asignado: ${availableProjects.find(p => p.id === selectedProjectId)?.title}`
+      });
+    } catch (err) {
+      errorLogger.error('Error assigning project', err);
+    }
+  };
+
+  const handleUnassignProject = async () => {
+    if (!assignedProject) return;
+    try {
+      await supabase.from('projects').update({ client_id: null }).eq('id', assignedProject.id);
+      setAvailableProjects(prev => prev.map(p =>
+        p.id === assignedProject.id ? { ...p, client_id: null } : p
+      ));
+      setAssignedProject(null);
+    } catch (err) {
+      errorLogger.error('Error unassigning project', err);
     }
   };
 
@@ -520,6 +588,53 @@ export const Clients: React.FC = () => {
                   <div className="mt-4">
                     <label className="text-xs text-zinc-500 dark:text-zinc-400">Notas</label>
                     <p className="text-sm text-zinc-900 dark:text-zinc-100">{selectedClient.notes}</p>
+                  </div>
+                )}
+              </Card>
+
+              {/* Proyecto asignado */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Proyecto</h3>
+                {assignedProject ? (
+                  <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{assignedProject.title}</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Proyecto vinculado</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => window.open(`/?portal=client&projectId=${assignedProject.id}`, '_blank')}
+                        className="px-3 py-1 text-xs bg-zinc-900 text-white rounded-lg hover:bg-zinc-800"
+                      >
+                        Ver portal
+                      </button>
+                      <button
+                        onClick={handleUnassignProject}
+                        className="px-3 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      >
+                        Desvincular
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-sm"
+                    >
+                      <option value="">Seleccionar proyecto...</option>
+                      {availableProjects.filter(p => !p.client_id).map(p => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAssignProject}
+                      disabled={!selectedProjectId}
+                      className="px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 text-sm"
+                    >
+                      Asignar
+                    </button>
                   </div>
                 )}
               </Card>

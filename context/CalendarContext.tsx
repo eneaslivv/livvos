@@ -20,6 +20,11 @@ export interface CalendarEvent {
   content_status?: 'draft' | 'ready' | 'published'
   content_channel?: string
   content_asset_type?: string
+  // Google Calendar sync fields
+  source?: 'local' | 'google'
+  external_id?: string
+  external_updated_at?: string
+  read_only?: boolean
   created_at: string
   updated_at: string
 }
@@ -335,13 +340,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => task.start_date && task.start_date >= startDate && task.start_date <= endDate)
 
   const getCalendarStats = () => {
-    const totalEvents = events.length
+    // Exclude synced Google events from local stats
+    const localEvents = events.filter(e => e.source !== 'google')
+    const totalEvents = localEvents.length
     const totalTasks = tasks.length
     const completedTasks = tasks.filter(task => task.completed).length
     const pendingTasks = tasks.filter(task => !task.completed).length
     const today = new Date().toISOString().split('T')[0]
     const overdueTasks = tasks.filter(task => task.start_date && task.start_date < today && !task.completed).length
-    
+
     return {
       totalEvents,
       totalTasks,

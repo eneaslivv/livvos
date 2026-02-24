@@ -5,6 +5,9 @@ import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
 import { useSupabase } from '../hooks/useSupabase';
+import { TimeSlotPopover } from '../components/calendar/TimeSlotPopover';
+import { GoogleCalendarSettings } from '../components/calendar/GoogleCalendarSettings';
+import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 
 export const Calendar: React.FC = () => {
   const { user } = useAuth();
@@ -41,6 +44,23 @@ export const Calendar: React.FC = () => {
     return projectMap[projectId] || 'Project';
   };
 
+  // Google Calendar sync
+  const {
+    isConnected: googleConnected,
+    syncing: googleSyncing,
+    sync: syncGoogle,
+  } = useGoogleCalendar();
+
+  // Auto-sync Google Calendar on mount if connected
+  const [googleAutoSynced, setGoogleAutoSynced] = useState(false);
+  useEffect(() => {
+    if (googleConnected && !googleAutoSynced) {
+      setGoogleAutoSynced(true);
+      syncGoogle().catch(() => {});
+    }
+  }, [googleConnected, googleAutoSynced, syncGoogle]);
+
+  const [showGoogleSettings, setShowGoogleSettings] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -94,6 +114,14 @@ export const Calendar: React.FC = () => {
       setSelectedPlatforms(Object.keys(CONTENT_PLATFORMS));
     }
   }, [calendarMode]);
+
+  // Click-to-create popover state
+  const [slotPopover, setSlotPopover] = useState<{
+    x: number;
+    y: number;
+    date: string;
+    hour: number;
+  } | null>(null);
 
   const [newTaskData, setNewTaskData] = useState({
     title: '',
@@ -262,6 +290,51 @@ export const Calendar: React.FC = () => {
     }
   };
 
+  // Handler para click-to-create desde time slot
+  const handleSlotSelect = (type: 'event' | 'task' | 'block' | 'content') => {
+    if (!slotPopover) return;
+    const timeStr = `${slotPopover.hour.toString().padStart(2, '0')}:00`;
+    const dateStr = slotPopover.date;
+
+    if (type === 'content') {
+      setNewContentData(prev => ({
+        ...prev,
+        start_date: dateStr,
+        start_time: timeStr,
+      }));
+      setCalendarMode('content');
+      setShowNewEventForm(true);
+    } else if (type === 'event') {
+      setNewEventData(prev => ({
+        ...prev,
+        start_date: dateStr,
+        start_time: timeStr,
+        type: 'meeting',
+      }));
+      setCalendarMode('schedule');
+      setShowNewEventForm(true);
+    } else if (type === 'task') {
+      setNewTaskData(prev => ({
+        ...prev,
+        start_date: dateStr,
+      }));
+      setShowNewTaskForm(true);
+    } else if (type === 'block') {
+      setNewEventData(prev => ({
+        ...prev,
+        start_date: dateStr,
+        start_time: timeStr,
+        type: 'work-block',
+        title: '',
+        color: '#8b5cf6',
+      }));
+      setCalendarMode('schedule');
+      setShowNewEventForm(true);
+    }
+
+    setSlotPopover(null);
+  };
+
   // Obtener eventos y tareas para una fecha específica
   const filteredEvents = calendarMode === 'content'
     ? events.filter(event => event.type === 'content')
@@ -393,6 +466,26 @@ export const Calendar: React.FC = () => {
               Tarea
             </button>
           )}
+
+          {/* Google Calendar sync controls */}
+          {googleConnected && (
+            <button
+              onClick={() => syncGoogle().catch(() => {})}
+              disabled={googleSyncing}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
+              title="Sincronizar Google Calendar"
+            >
+              <Icons.RefreshCw size={14} className={googleSyncing ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Sync</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowGoogleSettings(prev => !prev)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
+            title="Integraciones de calendario"
+          >
+            <Icons.Settings size={14} />
+          </button>
         </div>
       </div>
 
@@ -657,6 +750,26 @@ export const Calendar: React.FC = () => {
         </div>
       )}
 
+      {/* Google Calendar Settings Panel */}
+      {showGoogleSettings && (
+        <div className="mb-4">
+          <GoogleCalendarSettings />
+        </div>
+      )}
+
+      {/* Popover de click-to-create */}
+      {slotPopover && (
+        <TimeSlotPopover
+          x={slotPopover.x}
+          y={slotPopover.y}
+          date={slotPopover.date}
+          hour={slotPopover.hour}
+          mode={calendarMode}
+          onSelect={handleSlotSelect}
+          onClose={() => setSlotPopover(null)}
+        />
+      )}
+
       {/* Vista de Semana */}
       {view === 'week' && (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -711,7 +824,17 @@ export const Calendar: React.FC = () => {
                   return (
                     <div
                       key={dayIndex}
-                      className="p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative"
+                      className="p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer"
+                      onClick={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setSlotPopover({
+                          x: rect.left + rect.width / 2,
+                          y: rect.top,
+                          date: dateStr,
+                          hour: hour,
+                        });
+                      }}
                     >
                       {dayEvents.map((event) => (
                         <div
@@ -719,8 +842,14 @@ export const Calendar: React.FC = () => {
                           className="text-xs p-2 rounded mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity"
                           style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
                           title={event.title}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="font-medium">{event.title}</div>
+                          <div className="font-medium flex items-center gap-1">
+                            {event.source === 'google' && (
+                              <span className="opacity-75 text-[10px] flex-shrink-0">G</span>
+                            )}
+                            {event.title}
+                          </div>
                           {event.location && (
                             <div className="opacity-75">
                               {CONTENT_PLATFORMS[event.location]?.label || event.location}
@@ -755,7 +884,19 @@ export const Calendar: React.FC = () => {
               return (
                 <div
                   key={`${dateStr}-${idx}`}
-                  onClick={() => setSelectedDate(dateStr)}
+                  onClick={(e) => {
+                    setSelectedDate(dateStr);
+                    // Double-click to create (single click selects date)
+                  }}
+                  onDoubleClick={(e) => {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setSlotPopover({
+                      x: rect.left + rect.width / 2,
+                      y: rect.top + rect.height / 2,
+                      date: dateStr,
+                      hour: 9, // Default to 9:00 for month view
+                    });
+                  }}
                   className={`min-h-[120px] p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors ${
                     isCurrentMonth ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/40'
                   }`}
@@ -767,9 +908,10 @@ export const Calendar: React.FC = () => {
                     {dayEvents.slice(0, 3).map((event) => (
                       <div
                         key={event.id}
-                        className="text-[10px] px-2 py-1 rounded truncate"
+                        className="text-[10px] px-2 py-1 rounded truncate flex items-center gap-0.5"
                         style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
                       >
+                        {event.source === 'google' && <span className="opacity-75">G</span>}
                         {event.title}
                       </div>
                     ))}
@@ -880,8 +1022,13 @@ export const Calendar: React.FC = () => {
                           style={{ backgroundColor: event.color || '#3b82f6' }}
                         />
                         <div className="flex-1">
-                          <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                          <div className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
                             {event.title}
+                            {event.source === 'google' && (
+                              <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                Google
+                              </span>
+                            )}
                           </div>
                           {event.start_time && (
                             <div className="text-sm text-zinc-500 dark:text-zinc-400">

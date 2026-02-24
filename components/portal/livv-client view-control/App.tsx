@@ -54,6 +54,10 @@ interface ClientPortalAppProps {
   forceOnboarded?: boolean;
   disableLoading?: boolean;
   hideCreatorToggle?: boolean;
+  clientId?: string;
+  clientName?: string;
+  clientEmail?: string;
+  onLogout?: () => void;
 }
 
 const App: React.FC<ClientPortalAppProps> = ({
@@ -63,7 +67,11 @@ const App: React.FC<ClientPortalAppProps> = ({
   clientLogo: clientLogoProp,
   forceOnboarded = true,
   disableLoading = true,
-  hideCreatorToggle = true
+  hideCreatorToggle = true,
+  clientId,
+  clientName,
+  clientEmail,
+  onLogout
 }) => {
   const [data, setData] = useState<DashboardData>(initialData || INITIAL_DATA);
   const [projectTitle, setProjectTitle] = useState(projectTitleProp || "MISSION CONTROL");
@@ -187,8 +195,19 @@ const App: React.FC<ClientPortalAppProps> = ({
           </div>
           
           <div className="flex items-center gap-4">
+            {clientName && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-white border border-brand-dark/5 rounded-2xl">
+                <div className="w-8 h-8 bg-brand-accent rounded-lg flex items-center justify-center text-white font-black text-sm">
+                  {clientName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-brand-dark leading-none">{clientName}</p>
+                  {clientEmail && <p className="text-[8px] mono opacity-40 mt-0.5">{clientEmail}</p>}
+                </div>
+              </div>
+            )}
             {mode === 'creator' && (
-              <button 
+              <button
                 onClick={() => setIsCreatorOpen(true)}
                 className="flex items-center gap-2 px-6 py-3 bg-brand-accent text-white rounded-2xl hover:shadow-xl hover:shadow-brand-accent/20 transition-all text-[10px] font-black uppercase tracking-widest"
               >
@@ -196,20 +215,22 @@ const App: React.FC<ClientPortalAppProps> = ({
                 <span>Configure Client View</span>
               </button>
             )}
-            <button 
-              onClick={() => setIsConfigOpen(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-white border border-brand-dark/10 rounded-2xl hover:bg-brand-grey transition-all text-[10px] font-bold uppercase tracking-widest text-brand-dark"
-            >
-              <Settings size={14} className="opacity-50" />
-              <span>Preferences</span>
-            </button>
-            <button 
+            <button
               onClick={() => setIsChatOpen(true)}
               className="flex items-center gap-2 px-8 py-3 bg-brand-accent text-brand-light rounded-2xl hover:shadow-xl hover:shadow-brand-accent/20 transition-all text-[10px] font-black uppercase tracking-[0.2em]"
             >
               <MessageSquare size={14} />
               <span>Priority Support</span>
             </button>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-5 py-3 bg-white border border-brand-dark/10 rounded-2xl hover:bg-red-50 hover:border-red-200 transition-all text-[10px] font-bold uppercase tracking-widest text-brand-dark"
+              >
+                <Share2 size={14} className="opacity-50 rotate-180" />
+                <span>Salir</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -268,7 +289,7 @@ const App: React.FC<ClientPortalAppProps> = ({
 
       <AnimatePresence>
         {isChatOpen && (
-          <ChatSupport onClose={() => setIsChatOpen(false)} />
+          <ChatSupport onClose={() => setIsChatOpen(false)} clientId={clientId} clientName={clientName} />
         )}
         {isConfigOpen && (
           <PreferencesPanel onClose={() => setIsConfigOpen(false)} />

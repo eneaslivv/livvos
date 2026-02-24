@@ -253,133 +253,122 @@ export const Finance: React.FC = () => {
 
   if (!hasPermission('finance', 'view')) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-white dark:bg-zinc-900/50 rounded-[2.5rem] border border-zinc-200 dark:border-zinc-800">
-        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-6">
-          <Icons.Card className="w-12 h-12 text-zinc-400" />
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+        <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg mb-4">
+          <Icons.Card className="w-8 h-8 text-zinc-400" />
         </div>
-        <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2 font-sans tracking-tight">Financial Center Access</h3>
-        <p className="text-zinc-500 max-w-sm font-medium">You don't have the necessary level to access proprietary financial data.</p>
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Financial Center Access</h3>
+        <p className="text-zinc-400 text-xs max-w-xs">You don't have the necessary level to access proprietary financial data.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 pb-16">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-zinc-100 dark:border-zinc-800 pb-10">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-[0.2em] mb-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-zinc-100 dark:border-zinc-800/60">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-2">
+            <div className="w-1 h-1 rounded-full bg-emerald-500"></div>
             Financial Intelligence
           </div>
-          <h1 className="text-5xl font-extrabold text-zinc-900 dark:text-zinc-100 font-sans tracking-tightest">
-            Finance <span className="text-zinc-400 dark:text-zinc-500 font-medium italic">&</span> Capital.
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
+            Finance <span className="text-zinc-300 dark:text-zinc-600 font-light">&</span> Capital
           </h1>
-          <p className="text-zinc-500 font-medium max-w-md">Precision tracking for organizational capital, project margins, and fiscal performance.</p>
+          <p className="text-zinc-400 text-xs max-w-sm">Precision tracking for organizational capital, project margins, and fiscal performance.</p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {hasPermission('finance', 'create') && (
             <button
               onClick={openNewEntry}
-              className="flex items-center gap-2.5 px-6 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl font-bold shadow-xl shadow-zinc-900/10 dark:shadow-zinc-100/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-medium shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200"
             >
-              <Icons.Plus size={18} strokeWidth={3} />
+              <Icons.Plus size={14} strokeWidth={2.5} />
               <span>New Entry</span>
             </button>
           )}
-          <button className="flex items-center gap-2.5 px-6 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-2xl font-bold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-300">
-            <Icons.Download size={18} />
-            <span>Generate Report</span>
+          <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
+            <Icons.Download size={14} />
+            <span>Export</span>
           </button>
         </div>
       </div>
 
-      {/* Navigation Subtitles */}
-      <div className="flex overflow-x-auto no-scrollbar gap-1 p-1 bg-zinc-100/50 dark:bg-zinc-900/50 rounded-2xl w-fit border border-zinc-200/50 dark:border-zinc-800/50">
+      {/* Navigation Tabs */}
+      <div className="flex overflow-x-auto no-scrollbar gap-0.5 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg w-fit">
         {[
           { id: 'overview', label: 'Dashboard', icon: Icons.Chart },
           { id: 'projects', label: 'Project P&L', icon: Icons.Target },
-          { id: 'reports', label: 'Archived Reports', icon: Icons.Docs },
+          { id: 'reports', label: 'Reports', icon: Icons.Docs },
           { id: 'settings', label: 'Configuration', icon: Icons.Settings }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`
-              flex items-center gap-2.5 px-5 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm
+              flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all duration-200 font-medium text-xs
               ${activeTab === tab.id
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200 dark:border-zinc-700'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
               }
             `}
           >
-            <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+            <tab.icon size={13} strokeWidth={activeTab === tab.id ? 2 : 1.5} />
             <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
       {activeTab === 'overview' && (
-        <div className="space-y-12 animate-in slide-in-from-bottom-2 duration-700">
+        <div className="space-y-5 animate-in slide-in-from-bottom-2 duration-500">
           {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {metrics.map(metric => (
-              <div key={metric.id} className="group relative p-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-200 dark:border-zinc-800 hover:shadow-2xl hover:shadow-zinc-200/50 dark:hover:shadow-black/50 transition-all duration-500 overflow-hidden">
-                <div className="relative z-10 flex flex-col justify-between h-full">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/80 rounded-2xl border border-zinc-100 dark:border-zinc-700/50 group-hover:scale-110 transition-transform duration-500">
-                      <Icons.Dollar className="text-zinc-600 dark:text-zinc-300" size={24} />
+              <div key={metric.id} className="group relative p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all duration-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg">
+                    <Icons.Dollar className="text-zinc-400 dark:text-zinc-500" size={14} />
+                  </div>
+                  <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">{metric.title}</p>
+                  {metric.change && (
+                    <div className={`ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${metric.status === 'positive' ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10' :
+                      'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10'
+                      }`}>
+                      {metric.change}
+                      {metric.trend === 'up' ? <Icons.TrendUp size={8} /> : <Icons.TrendDown size={8} />}
                     </div>
-                    {metric.change && (
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${metric.status === 'positive' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' :
-                        'bg-rose-50 text-rose-600 border border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
-                        }`}>
-                        {metric.change}
-                        {metric.trend === 'up' ? <Icons.TrendUp size={10} strokeWidth={3} /> : <Icons.TrendDown size={10} strokeWidth={3} />}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-1">{metric.title}</p>
-                    <p className="text-4xl font-black text-zinc-900 dark:text-zinc-100 font-sans tracking-tight">{metric.value}</p>
-                  </div>
+                  )}
                 </div>
-                {/* Background Accent */}
-                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-zinc-50 dark:bg-zinc-800/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                <p className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">{metric.value}</p>
               </div>
             ))}
           </div>
 
           {/* Breakdown Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 p-10 bg-white dark:bg-zinc-900 rounded-[3rem] border border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-10">
-                <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Revenue Vectors</h3>
-                <div className="flex gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-widest px-3 py-1 bg-zinc-50 dark:bg-zinc-800 rounded-full">LIVE</span>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-2 p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Revenue Vectors</h3>
+                <span className="flex items-center gap-1 text-[9px] font-medium text-zinc-400 uppercase tracking-wider px-2 py-0.5 bg-zinc-50 dark:bg-zinc-800/60 rounded">Live</span>
               </div>
 
-              <div className="space-y-8">
+              <div className="space-y-4">
                 {revenueVectors.length === 0 && !loading && (
-                  <div className="text-sm font-bold text-zinc-400 uppercase tracking-widest">No revenue data yet.</div>
+                  <div className="text-xs text-zinc-400">No revenue data yet.</div>
                 )}
                 {revenueVectors.map((item, index) => (
-                  <div key={index} className="space-y-3 group cursor-default">
-                    <div className="flex justify-between items-end">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full bg-${item.color}-500 group-hover:scale-150 transition-transform duration-500 shadow-[0_0_12px_rgba(var(--${item.color}-rgb),0.5)]`}></div>
-                        <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors uppercase tracking-tight">{item.category}</span>
+                  <div key={index} className="space-y-1.5 group cursor-default">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full bg-${item.color}-500`}></div>
+                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{item.category}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight block">{formatCurrency(item.amount)}</span>
-                      </div>
+                      <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{formatCurrency(item.amount)}</span>
                     </div>
-                    <div className="h-4 w-full bg-zinc-50 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-zinc-100 dark:border-zinc-700/50">
+                    <div className="h-1.5 w-full bg-zinc-100 dark:bg-zinc-800/60 rounded-full overflow-hidden">
                       <div
-                        className={`h-full bg-zinc-900 dark:bg-zinc-100 rounded-full transition-all duration-1000 ease-out`}
+                        className="h-full bg-zinc-800 dark:bg-zinc-300 rounded-full transition-all duration-700 ease-out"
                         style={{ width: `${item.percentage}%` }}
                       ></div>
                     </div>
@@ -388,24 +377,23 @@ export const Finance: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-10 bg-zinc-900 dark:bg-zinc-100 rounded-[3rem] text-white dark:text-zinc-900 shadow-2xl relative overflow-hidden group">
-              <div className="relative z-10 flex flex-col justify-between h-full">
+            <div className="p-5 bg-zinc-900 dark:bg-zinc-100 rounded-xl text-white dark:text-zinc-900 relative overflow-hidden group">
+              <div className="relative z-10 flex flex-col justify-between h-full min-h-[180px]">
                 <div>
-                  <Icons.Target className="text-zinc-400 dark:text-zinc-500 mb-6" size={40} strokeWidth={2.5} />
-                  <h3 className="text-3xl font-black tracking-tightest leading-none mb-6">Efficiency Quotient</h3>
-                  <p className="text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-[0.15em] text-xs">Target Margin: <span className="text-white dark:text-zinc-900">{formatPercent(targetMargin)}</span></p>
+                  <Icons.Target className="text-zinc-500 dark:text-zinc-400 mb-3" size={20} />
+                  <h3 className="text-base font-semibold tracking-tight leading-tight mb-1.5">Efficiency Quotient</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Target: <span className="text-zinc-300 dark:text-zinc-600">{formatPercent(targetMargin)}</span></p>
                 </div>
 
-                <div className="mt-20">
-                  <div className="text-7xl font-black tracking-tightest mb-4">{formatPercent(profitMargin)}</div>
-                  <div className="flex items-center gap-2 text-rose-400 dark:text-rose-600 font-black text-sm uppercase tracking-widest group-hover:translate-x-4 transition-transform duration-500">
-                    Optimize Ops <Icons.ArrowUpRight size={16} strokeWidth={3} />
+                <div className="mt-6">
+                  <div className="text-3xl font-semibold tracking-tight mb-1.5">{formatPercent(profitMargin)}</div>
+                  <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 text-[10px] font-medium uppercase tracking-wider group-hover:text-zinc-300 dark:group-hover:text-zinc-600 transition-colors duration-300">
+                    Optimize <Icons.ArrowUpRight size={10} />
                   </div>
                 </div>
               </div>
-              {/* Decorative Element */}
-              <div className="absolute top-10 right-10 opacity-10 group-hover:scale-150 transition-transform duration-1000">
-                <Icons.Chart size={200} />
+              <div className="absolute top-4 right-4 opacity-[0.06]">
+                <Icons.Chart size={100} />
               </div>
             </div>
           </div>
@@ -413,67 +401,64 @@ export const Finance: React.FC = () => {
       )}
 
       {activeTab === 'projects' && (
-        <div className="animate-in slide-in-from-bottom-2 duration-700">
-          <div className="bg-white dark:bg-zinc-900 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xl shadow-zinc-200/20 dark:shadow-none">
-            <div className="px-10 py-8 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-              <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Active Accounts Master List</h3>
-              <div className="flex gap-2">
-                <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-100 dark:border-zinc-700 flex items-center gap-2">
-                  <Icons.Activity size={14} className="text-zinc-400" />
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{projectData.length} Projects</span>
-                </div>
+        <div className="animate-in slide-in-from-bottom-2 duration-500">
+          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 flex justify-between items-center">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Active Accounts</h3>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-50 dark:bg-zinc-800/60 rounded-md">
+                <Icons.Activity size={11} className="text-zinc-400" />
+                <span className="text-[10px] font-medium text-zinc-500">{projectData.length} projects</span>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[700px]">
                 <thead>
-                  <tr className="bg-zinc-50/50 dark:bg-zinc-800/30">
-                    <th className="px-10 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Account</th>
-                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Budgeted</th>
-                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Realized</th>
-                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Net Delta</th>
-                    <th className="px-6 py-5 text-left text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Health Index</th>
-                    <th className="px-10 py-5 text-right text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-b border-zinc-100 dark:border-zinc-800">Matrix</th>
+                  <tr className="bg-zinc-50/50 dark:bg-zinc-800/20">
+                    <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Account</th>
+                    <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Budgeted</th>
+                    <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Realized</th>
+                    <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Net Delta</th>
+                    <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Health</th>
+                    <th className="px-5 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800">
+                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/40">
                   {projectData.map(project => (
-                    <tr key={project.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all duration-300">
-                      <td className="px-10 py-6 whitespace-nowrap">
-                        <div className="text-sm font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight mb-1 group-hover:translate-x-2 transition-transform duration-300">{project.projectName}</div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
-                          <Icons.Calendar size={10} />
-                          Sync: {project.lastUpdated}
+                    <tr key={project.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition-colors duration-200">
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 mb-0.5">{project.projectName}</div>
+                        <div className="flex items-center gap-1 text-[9px] text-zinc-400">
+                          <Icons.Calendar size={8} />
+                          {project.lastUpdated}
                         </div>
                       </td>
-                      <td className="px-6 py-6 whitespace-nowrap text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400">
                         ${project.budget.toLocaleString()}
                       </td>
-                      <td className="px-6 py-6 whitespace-nowrap text-sm font-black text-zinc-900 dark:text-zinc-100">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-zinc-900 dark:text-zinc-100">
                         ${project.collected.toLocaleString()}
                       </td>
-                      <td className="px-6 py-6 whitespace-nowrap text-sm font-black text-zinc-900 dark:text-zinc-100">
-                        <span className={project.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
+                        <span className={project.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                           {project.profit >= 0 ? '+' : ''}${project.profit.toLocaleString()}
                         </span>
                       </td>
-                      <td className="px-6 py-6 whitespace-nowrap">
-                        <div className={`
-                                            inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border
-                                            ${project.health === 'profitable' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' :
-                            'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'}
-                                        `}>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-medium uppercase tracking-wide
+                          ${project.health === 'profitable' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                            'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'}
+                        `}>
                           {project.health.replace('-', ' ')}
-                        </div>
+                        </span>
                       </td>
-                      <td className="px-10 py-6 whitespace-nowrap text-right">
-                        <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <button className="p-2 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-                            <Icons.Eye size={16} />
+                      <td className="px-5 py-3 whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <button className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            <Icons.Eye size={13} />
                           </button>
-                          <button className="p-2 bg-zinc-900 dark:bg-zinc-100 rounded-xl text-white dark:text-zinc-900 hover:opacity-90 transition-opacity shadow-lg shadow-zinc-900/10">
-                            <Icons.Edit size={16} />
+                          <button className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            <Icons.Edit size={13} />
                           </button>
                         </div>
                       </td>
@@ -482,9 +467,9 @@ export const Finance: React.FC = () => {
                 </tbody>
               </table>
               {loading && (
-                <div className="flex flex-col items-center justify-center p-20 gap-4">
-                  <div className="w-12 h-12 border-4 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin"></div>
-                  <p className="text-zinc-400 text-xs font-black uppercase tracking-widest animate-pulse">Computing Matrix...</p>
+                <div className="flex flex-col items-center justify-center p-10 gap-2">
+                  <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin"></div>
+                  <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Loading...</p>
                 </div>
               )}
             </div>
@@ -493,10 +478,10 @@ export const Finance: React.FC = () => {
       )}
 
       {activeTab === 'reports' && (
-        <div className="space-y-6 animate-in fade-in duration-700">
-          <div className="bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">Financial Summary</h3>
+        <div className="space-y-4 animate-in fade-in duration-500">
+          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Financial Summary</h3>
               <button
                 onClick={() => {
                   const headers = ['Project', 'Budget', 'Collected', 'Expenses', 'Profit', 'Health'];
@@ -510,54 +495,54 @@ export const Finance: React.FC = () => {
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
-                className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                className="px-2.5 py-1 text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
               >
-                ↓ Export CSV
+                Export CSV
               </button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                <div className="text-xs text-zinc-500 mb-1">Total Revenue</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalCollected)}</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-5">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] text-zinc-400 mb-0.5">Total Revenue</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalCollected)}</div>
               </div>
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                <div className="text-xs text-zinc-500 mb-1">Total Expenses</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalExpenses)}</div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] text-zinc-400 mb-0.5">Total Expenses</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatCurrency(totals.totalExpenses)}</div>
               </div>
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                <div className="text-xs text-zinc-500 mb-1">Net Profit</div>
-                <div className={`text-lg font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(netProfit)}</div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] text-zinc-400 mb-0.5">Net Profit</div>
+                <div className={`text-sm font-semibold ${netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatCurrency(netProfit)}</div>
               </div>
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                <div className="text-xs text-zinc-500 mb-1">Avg. Margin</div>
-                <div className={`text-lg font-bold ${profitMargin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatPercent(profitMargin)}</div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] text-zinc-400 mb-0.5">Avg. Margin</div>
+                <div className={`text-sm font-semibold ${profitMargin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatPercent(profitMargin)}</div>
               </div>
             </div>
             {projectData.length === 0 ? (
-              <p className="text-sm text-zinc-500 text-center py-8">No financial records yet.</p>
+              <p className="text-xs text-zinc-400 text-center py-6">No financial records yet.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] text-sm">
+                <table className="w-full min-w-[550px] text-xs">
                   <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                      <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Project</th>
-                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Budget</th>
-                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Collected</th>
-                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Expenses</th>
-                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Profit</th>
-                      <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Health</th>
+                    <tr className="border-b border-zinc-100 dark:border-zinc-800/60">
+                      <th className="text-left py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Project</th>
+                      <th className="text-right py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Budget</th>
+                      <th className="text-right py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Collected</th>
+                      <th className="text-right py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Expenses</th>
+                      <th className="text-right py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Profit</th>
+                      <th className="text-right py-2 px-3 text-[10px] font-medium uppercase tracking-wider text-zinc-400">Health</th>
                     </tr>
                   </thead>
                   <tbody>
                     {projectData.map(p => (
-                      <tr key={p.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-3 px-4 font-medium text-zinc-900 dark:text-zinc-100">{p.projectName}</td>
-                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.budget)}</td>
-                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.collected)}</td>
-                        <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">{formatCurrency(p.expenses)}</td>
-                        <td className={`py-3 px-4 text-right font-semibold ${p.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(p.profit)}</td>
-                        <td className="py-3 px-4 text-right">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold uppercase ${p.health === 'profitable' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : p.health === 'break-even' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>{p.health}</span>
+                      <tr key={p.id} className="border-b border-zinc-50 dark:border-zinc-800/30 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition-colors">
+                        <td className="py-2.5 px-3 font-medium text-zinc-900 dark:text-zinc-100">{p.projectName}</td>
+                        <td className="py-2.5 px-3 text-right text-zinc-500 dark:text-zinc-400">{formatCurrency(p.budget)}</td>
+                        <td className="py-2.5 px-3 text-right text-zinc-500 dark:text-zinc-400">{formatCurrency(p.collected)}</td>
+                        <td className="py-2.5 px-3 text-right text-zinc-500 dark:text-zinc-400">{formatCurrency(p.expenses)}</td>
+                        <td className={`py-2.5 px-3 text-right font-medium ${p.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatCurrency(p.profit)}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium uppercase ${p.health === 'profitable' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : p.health === 'break-even' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'}`}>{p.health}</span>
                         </td>
                       </tr>
                     ))}
@@ -570,29 +555,29 @@ export const Finance: React.FC = () => {
       )}
 
       {activeTab === 'settings' && (
-        <div className="animate-in fade-in duration-700">
-          <div className="bg-white dark:bg-zinc-900/50 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 p-8">
-            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 mb-6 uppercase tracking-tight">Finance Configuration</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
-                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Default Currency</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">USD ($)</div>
-                <p className="text-xs text-zinc-500 mt-1">All financial entries use this currency.</p>
+        <div className="animate-in fade-in duration-500">
+          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Configuration</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Default Currency</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">USD ($)</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">All financial entries use this currency.</p>
               </div>
-              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
-                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Active Projects</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{projectData.length}</div>
-                <p className="text-xs text-zinc-500 mt-1">Projects with financial records.</p>
+              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Active Projects</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectData.length}</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Projects with financial records.</p>
               </div>
-              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
-                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Business Model</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Fixed + Hourly</div>
-                <p className="text-xs text-zinc-500 mt-1">Supports both pricing models per project.</p>
+              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Business Model</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Fixed + Hourly</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Supports both pricing models per project.</p>
               </div>
-              <div className="p-6 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
-                <div className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">Target Margin</div>
-                <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{formatPercent(targetMargin)}</div>
-                <p className="text-xs text-zinc-500 mt-1">Average target profit margin across projects.</p>
+              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Target Margin</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatPercent(targetMargin)}</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Average target profit margin across projects.</p>
               </div>
             </div>
           </div>
@@ -601,31 +586,31 @@ export const Finance: React.FC = () => {
 
       {isEntryOpen &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6" onClick={closeNewEntry}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4" onClick={closeNewEntry}>
             <div
-              className="w-full max-w-2xl bg-white dark:bg-zinc-950 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-2xl p-8 animate-in zoom-in-95 duration-200"
+              className="w-full max-w-lg bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-xl p-5 animate-in zoom-in-95 duration-200"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-5">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-zinc-400">Finance Entry</p>
-                  <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">New Financial Record</h3>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-0.5">Finance Entry</p>
+                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">New Financial Record</h3>
                 </div>
                 <button
                   onClick={closeNewEntry}
-                  className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
                 >
-                  <Icons.X size={20} />
+                  <Icons.X size={16} />
                 </button>
               </div>
 
-              <form className="space-y-6" onSubmit={handleSubmitEntry}>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project</label>
+              <form className="space-y-4" onSubmit={handleSubmitEntry}>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Project</label>
                   <select
                     value={entryData.projectId}
                     onChange={(event) => handleEntryChange('projectId', event.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                   >
                     {projects.length === 0 && <option value="">No projects available</option>}
                     {projects.map(project => (
@@ -636,9 +621,9 @@ export const Finance: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total Agreed</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Agreed</label>
                     <input
                       type="number"
                       min="0"
@@ -646,11 +631,11 @@ export const Finance: React.FC = () => {
                       value={entryData.totalAgreed}
                       onChange={(event) => handleEntryChange('totalAgreed', event.target.value)}
                       placeholder="0"
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total Collected</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Collected</label>
                     <input
                       type="number"
                       min="0"
@@ -658,11 +643,11 @@ export const Finance: React.FC = () => {
                       value={entryData.totalCollected}
                       onChange={(event) => handleEntryChange('totalCollected', event.target.value)}
                       placeholder="0"
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Direct Expenses</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Direct Expenses</label>
                     <input
                       type="number"
                       min="0"
@@ -670,11 +655,11 @@ export const Finance: React.FC = () => {
                       value={entryData.directExpenses}
                       onChange={(event) => handleEntryChange('directExpenses', event.target.value)}
                       placeholder="0"
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Imputed Expenses</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Imputed Expenses</label>
                     <input
                       type="number"
                       min="0"
@@ -682,11 +667,11 @@ export const Finance: React.FC = () => {
                       value={entryData.imputedExpenses}
                       onChange={(event) => handleEntryChange('imputedExpenses', event.target.value)}
                       placeholder="0"
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Hours Worked</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Hours Worked</label>
                     <input
                       type="number"
                       min="0"
@@ -694,15 +679,15 @@ export const Finance: React.FC = () => {
                       value={entryData.hoursWorked}
                       onChange={(event) => handleEntryChange('hoursWorked', event.target.value)}
                       placeholder="0"
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Business Model</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Business Model</label>
                     <select
                       value={entryData.businessModel}
                       onChange={(event) => handleEntryChange('businessModel', event.target.value)}
-                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
                     >
                       <option value="fixed">Fixed</option>
                       <option value="hourly">Hourly</option>
@@ -712,23 +697,23 @@ export const Finance: React.FC = () => {
                 </div>
 
                 {entryError && (
-                  <div className="text-sm font-semibold text-rose-500 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl px-4 py-3">
+                  <div className="text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg px-3 py-2">
                     {entryError}
                   </div>
                 )}
 
-                <div className="flex items-center justify-end gap-3">
+                <div className="flex items-center justify-end gap-2 pt-1">
                   <button
                     type="button"
                     onClick={closeNewEntry}
-                    className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm font-bold text-zinc-500 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                    className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-6 py-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-bold shadow-lg shadow-zinc-900/15 dark:shadow-zinc-100/10 hover:opacity-90 disabled:opacity-60"
+                    className="px-4 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
                   >
                     {isSubmitting ? 'Saving...' : 'Save Entry'}
                   </button>

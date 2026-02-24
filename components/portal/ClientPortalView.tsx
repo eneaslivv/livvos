@@ -66,6 +66,14 @@ export const ClientPortalView: React.FC = () => {
   const [projectSubtitle, setProjectSubtitle] = useState<string>('LIVV CLIENT ACCESS');
   const [clientLogo, setClientLogo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | undefined>();
+  const [clientName, setClientName] = useState<string | undefined>();
+  const [clientEmail, setClientEmail] = useState<string | undefined>();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  };
 
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const clientIdParam = params.get('clientId');
@@ -141,6 +149,11 @@ export const ClientPortalView: React.FC = () => {
           setLoading(false);
           return;
         }
+
+        // Store client identity for header/chat
+        setClientId(client.id);
+        setClientName(client.name);
+        setClientEmail(client.email || undefined);
 
         const projectId = project?.id || null;
 
@@ -281,6 +294,10 @@ export const ClientPortalView: React.FC = () => {
       forceOnboarded
       disableLoading
       hideCreatorToggle
+      clientId={clientId}
+      clientName={clientName}
+      clientEmail={clientEmail}
+      onLogout={handleLogout}
     />
   );
 };
