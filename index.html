@@ -7,11 +7,175 @@
   <title>Eneas OS</title>
   <link rel="dns-prefetch" href="https://ngswutcpsgdgmmjnfddi.supabase.co">
   <link rel="preconnect" href="https://ngswutcpsgdgmmjnfddi.supabase.co" crossorigin>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
     rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            zinc: {
+              50: '#FDFBF7',
+              100: '#F5F2EB',
+              200: '#E6E2D8',
+              300: '#D6D1C7',
+              400: '#A8A29A',
+              500: '#78736A',
+              600: '#52525B',
+              700: '#3F3F46',
+              800: '#27272A',
+              900: '#09090B',
+              950: '#000000',
+            },
+            indigo: {
+              500: '#6366f1',
+              600: '#4f46e5',
+              900: '#312e81',
+            },
+            brand: {
+              dark: '#2c0405',
+              accent: '#822b2e',
+              light: '#fffffa',
+              cream: '#ede5d8',
+              grey: '#f5f4f3'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #FDFBF7;
+      color: #09090B;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .dark body {
+      background-color: #000000;
+      color: #EDEDED;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #E6E2D8;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #D6D1C7;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #27272A;
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+      background: #3F3F46;
+    }
+
+    .fade-in {
+      animation: fadeIn 0.4s ease-out forwards;
+      opacity: 0;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .mask-image-linear-gradient {
+      mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 250, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(44, 4, 5, 0.08);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 20px -5px rgba(44, 4, 5, 0.05);
+    }
+
+    .glass-card:hover {
+      border-color: rgba(130, 43, 46, 0.2);
+      box-shadow: 0 10px 30px -10px rgba(44, 4, 5, 0.12);
+      transform: translateY(-2px);
+    }
+
+    .gradient-border-light {
+      position: relative;
+      border-radius: 1rem;
+    }
+
+    .gradient-border-light::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: 1rem;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(44, 4, 5, 0.1), rgba(130, 43, 46, 0.05), rgba(44, 4, 5, 0.02));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    @keyframes pulse-soft {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.6;
+        transform: scale(1.1);
+      }
+    }
+
+    .animate-pulse-soft {
+      animation: pulse-soft 3s infinite ease-in-out;
+    }
+  </style>
 </head>
 
 <body>
