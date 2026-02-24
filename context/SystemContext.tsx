@@ -322,26 +322,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     loadSystemData();
   }, [loadSystemData]);
 
-  // Health monitoring
-  useEffect(() => {
-    if (canManageSystem && !healthMonitoringInterval) {
-      const interval = setInterval(async () => {
-        const health = await checkSystemHealth();
-        setSystemHealth(health);
-      }, 30000); // Check every 30 seconds
-
-      setHealthMonitoringInterval(interval);
-    }
-
-    return () => {
-      if (healthMonitoringInterval) {
-        clearInterval(healthMonitoringInterval);
-        setHealthMonitoringInterval(null);
-      }
-    };
-  }, [canManageSystem, healthMonitoringInterval]);
-
-  // Check system health
+  // Check system health (declared before useEffects that depend on it)
   const checkSystemHealth = useCallback(async (): Promise<SystemHealth> => {
     try {
       const healthChecks = await Promise.allSettled([
@@ -357,7 +338,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
       const storageHealthy = healthChecks[1].status === 'fulfilled';
       const authHealthy = healthChecks[2].status === 'fulfilled';
 
-      const overallStatus = dbHealthy && storageHealthy && authHealthy ? 'healthy' : 
+      const overallStatus = dbHealthy && storageHealthy && authHealthy ? 'healthy' :
                            (dbHealthy || storageHealthy || authHealthy) ? 'warning' : 'critical';
 
       return {
@@ -385,6 +366,25 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
       };
     }
   }, []);
+
+  // Health monitoring
+  useEffect(() => {
+    if (canManageSystem && !healthMonitoringInterval) {
+      const interval = setInterval(async () => {
+        const health = await checkSystemHealth();
+        setSystemHealth(health);
+      }, 30000); // Check every 30 seconds
+
+      setHealthMonitoringInterval(interval);
+    }
+
+    return () => {
+      if (healthMonitoringInterval) {
+        clearInterval(healthMonitoringInterval);
+        setHealthMonitoringInterval(null);
+      }
+    };
+  }, [canManageSystem, healthMonitoringInterval, checkSystemHealth]);
 
   const getHealthStatus = useCallback((): 'healthy' | 'warning' | 'critical' => {
     if (!systemHealth) return 'critical';
