@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { useTenantId } from './TenantContext'
 
 export interface CalendarEvent {
   id: string
@@ -87,12 +88,15 @@ interface CalendarContextType {
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined)
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const tenantId = useTenantId()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tasks, setTasks] = useState<CalendarTask[]>([])
   const [labels, setLabels] = useState<CalendarLabel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const ensureLoadedRef = useRef(false)
+  const channelRefs = useRef<any[]>([])
 
   const loadCalendarData = useCallback(async (force = false) => {
     if (isInitialized && !force) {
@@ -102,79 +106,68 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setLoading(true)
     setError(null)
-    
+
     try {
-      errorLogger.log('Cargando datos del calendario...')
-      
-      // Intentar cargar eventos
-      try {
-        const { data: eventsData } = await supabase
-          .from('calendar_events')
-          .select('*')
-          .order('start_date', { ascending: true })
-        setEvents(eventsData || [])
-      } catch (e: any) {
-        setEvents([])
-      }
-      
-      // Intentar cargar tareas
-      try {
-        const { data: tasksData } = await supabase
-          .from('tasks')
-          .select('*')
-          .order('created_at', { ascending: false })
+      // Parallel fetch all calendar data - scoped to tenant
+      let eventsQuery = supabase.from('calendar_events').select('id, owner_id, title, description, start_date, end_date, start_time, duration, type, color, all_day, location, client_id, project_id, content_status, content_channel, content_asset_type, created_at, updated_at').order('start_date', { ascending: true })
+      let tasksQuery = supabase.from('tasks').select('id, owner_id, user_id, title, description, notes, completed, priority, start_date, due_date, end_date, start_time, duration, status, assignee_id, client_id, project_id, order_index, parent_task_id, tenant_id, created_at, updated_at').order('created_at', { ascending: false })
+      let labelsQuery = supabase.from('calendar_labels').select('id, owner_id, name, color, created_at').order('name', { ascending: true })
 
-        const normalizedTasks = (tasksData || []).map((task: any) => ({
-          id: task.id,
-          owner_id: task.owner_id ?? task.user_id ?? '',
-          title: task.title ?? 'Untitled Task',
-          description: task.description ?? task.notes ?? '',
-          completed: !!task.completed,
-          priority: task.priority ?? 'medium',
-          start_date: task.start_date ?? task.due_date ?? undefined,
-          end_date: task.end_date ?? undefined,
-          start_time: task.start_time ?? undefined,
-          duration: task.duration ?? undefined,
-          status: task.status ?? 'todo',
-          assignee_id: task.assignee_id ?? undefined,
-          client_id: task.client_id ?? undefined,
-          project_id: task.project_id ?? undefined,
-          order_index: task.order_index ?? 0,
-          parent_task_id: task.parent_task_id ?? undefined,
-          created_at: task.created_at ?? new Date().toISOString(),
-          updated_at: task.updated_at ?? new Date().toISOString(),
-        }))
+      if (tenantId) {
+        tasksQuery = tasksQuery.eq('tenant_id', tenantId)
+      }
 
-        setTasks(normalizedTasks)
-      } catch (e: any) {
-        setTasks([])
-      }
-      
-      // Intentar cargar etiquetas
-      try {
-        const { data: labelsData } = await supabase
-          .from('calendar_labels')
-          .select('*')
-          .order('name', { ascending: true })
-        setLabels(labelsData || [])
-      } catch (e: any) {
-        setLabels([])
-      }
-      
+      const [eventsResult, tasksResult, labelsResult] = await Promise.allSettled([
+        eventsQuery,
+        tasksQuery,
+        labelsQuery,
+      ])
+
+      const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value.data : null
+      setEvents(eventsData || [])
+
+      const tasksData = tasksResult.status === 'fulfilled' ? tasksResult.value.data : null
+      const normalizedTasks = (tasksData || []).map((task: any) => ({
+        id: task.id,
+        owner_id: task.owner_id ?? task.user_id ?? '',
+        title: task.title ?? 'Untitled Task',
+        description: task.description ?? task.notes ?? '',
+        completed: !!task.completed,
+        priority: task.priority ?? 'medium',
+        start_date: task.start_date ?? task.due_date ?? undefined,
+        end_date: task.end_date ?? undefined,
+        start_time: task.start_time ?? undefined,
+        duration: task.duration ?? undefined,
+        status: task.status ?? 'todo',
+        assignee_id: task.assignee_id ?? undefined,
+        client_id: task.client_id ?? undefined,
+        project_id: task.project_id ?? undefined,
+        order_index: task.order_index ?? 0,
+        parent_task_id: task.parent_task_id ?? undefined,
+        created_at: task.created_at ?? new Date().toISOString(),
+        updated_at: task.updated_at ?? new Date().toISOString(),
+      }))
+      setTasks(normalizedTasks)
+
+      const labelsData = labelsResult.status === 'fulfilled' ? labelsResult.value.data : null
+      setLabels(labelsData || [])
+
       setIsInitialized(true)
-      
     } catch (err: any) {
       errorLogger.error('Error cargando datos del calendario', err)
       setIsInitialized(true)
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, [isInitialized, tenantId])
 
-  useEffect(() => {
+  // Lazy load: only fetch + subscribe when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return
+    ensureLoadedRef.current = true
     loadCalendarData()
 
-    // Suscribirse a cambios en tiempo real
+    // Realtime subscriptions
     const eventsChannel = supabase
       .channel('calendar-events-global')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, () => {
@@ -189,11 +182,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       })
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(eventsChannel)
-      supabase.removeChannel(tasksChannel)
-    }
+    channelRefs.current = [eventsChannel, tasksChannel]
   }, [loadCalendarData])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      channelRefs.current.forEach(ch => supabase.removeChannel(ch))
+    }
+  }, [])
 
   // ... (Funciones de mutación copiadas y adaptadas)
   const createEvent = async (eventData: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) => {
@@ -359,8 +356,9 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createTask, updateTask, deleteTask,
       moveTask, moveEvent,
       getEventsByDate, getTasksByDate, getEventsByDateRange, getTasksByDateRange,
-      createLabel, getCalendarStats, refreshData: () => loadCalendarData(true)
-    }}>
+      createLabel, getCalendarStats, refreshData: () => loadCalendarData(true),
+      _ensureLoaded
+    } as any}>
       {children}
     </CalendarContext.Provider>
   )
@@ -371,5 +369,6 @@ export const useCalendar = () => {
   if (context === undefined) {
     throw new Error('useCalendar must be used within a CalendarProvider')
   }
+  useEffect(() => { (context as any)._ensureLoaded?.() }, [])
   return context
 }

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from '../context/TenantContext'
@@ -62,6 +62,7 @@ export const useFinance = () => {
   if (context === undefined) {
     throw new Error('useFinance must be used within a FinanceProvider')
   }
+  useEffect(() => { (context as any)._ensureLoaded?.() }, [])
   return context
 }
 
@@ -77,6 +78,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [error, setError] = useState<string | null>(null);
   const [canViewFinances, setCanViewFinances] = useState(false)
   const [canEditFinances, setCanEditFinances] = useState(false)
+  const ensureLoadedRef = useRef(false)
+  const shouldLoadRef = useRef(false)
 
   // Check permissions
   useEffect(() => {
@@ -95,10 +98,10 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
 
     checkPermissions()
-  }, [user, currentTenant])
+  }, [user?.id, currentTenant?.id])
 
   // Load finances for current tenant
-  const loadFinances = async () => {
+  const loadFinances = useCallback(async () => {
     if (!user || !currentTenant || !canViewFinances) {
       setFinances([])
       setLoading(false)
@@ -124,11 +127,22 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, currentTenant?.id, canViewFinances])
 
-  useEffect(() => {
+  // Lazy load: only fetch when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return
+    ensureLoadedRef.current = true
+    shouldLoadRef.current = true
     loadFinances()
-  }, [user, currentTenant, canViewFinances])
+  }, [])
+
+  // When permissions become available, load data if consumer is mounted
+  useEffect(() => {
+    if (shouldLoadRef.current && canViewFinances) {
+      loadFinances()
+    }
+  }, [canViewFinances])
 
   // CRUD operations
   const createFinance = async (projectId: string, data: Partial<Finance>): Promise<Finance | null> => {
@@ -291,8 +305,9 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     getFinanceByProject,
     getFinancialSummary,
     getTenantFinancials,
-    updateProjectFinancials
-  }
+    updateProjectFinancials,
+    _ensureLoaded,
+  } as any
 
   return (
     <FinanceContext.Provider value={value}>

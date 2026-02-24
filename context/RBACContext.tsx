@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -135,6 +135,7 @@ interface RBACProviderProps {
 
 export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
   const { user: authUser, loading: authLoading } = useAuth();
+  const authUserId = authUser?.id;
   const { currentTenant } = useTenant();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -144,21 +145,28 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Guard against concurrent fetches
+  const isFetchingRef = useRef(false);
+
   // Load RBAC data
   const loadRBACData = useCallback(async () => {
-    console.log('[RBACContext] loadRBACData triggered. User:', authUser?.id, 'AuthLoading:', authLoading);
+    console.log('[RBACContext] loadRBACData triggered. User:', authUserId, 'AuthLoading:', authLoading);
     if (authLoading) return;
+
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
     setIsLoading(true);
     setError(null);
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     const fetchProfileWithRetry = async () => {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
-          .eq('id', authUser?.id)
+          .select('id, email, name, avatar_url, status, tenant_id, created_at, updated_at')
+          .eq('id', authUserId!)
           .single();
 
         if (!profileError && profile?.tenant_id) {
@@ -171,8 +179,8 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
           console.warn('[RBACContext] User is not assigned to any tenant yet.');
         }
 
-        if (attempt < 4) {
-          await sleep(250 * (attempt + 1));
+        if (attempt < 2) {
+          await sleep(150);
         }
       }
 
@@ -180,13 +188,14 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     };
 
     try {
-      if (!authUser) {
+      if (!authUserId) {
         // Clear data on logout
         setUser(null);
         setRoles([]);
         setPermissions([]);
         setUserRoleAssignments([]);
         setIsInitialized(false);
+        isFetchingRef.current = false;
         return;
       }
 
@@ -209,7 +218,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
             )
           )
         `)
-        .eq('user_id', authUser.id);
+        .eq('user_id', authUserId);
 
       // 1. Fetch user profile with short retry window
       const profile = await fetchProfileWithRetry();
@@ -220,6 +229,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
         setPermissions([]);
         setUserRoleAssignments([]);
         setIsInitialized(false);
+        isFetchingRef.current = false;
         return;
       }
 
@@ -234,7 +244,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       }
 
       const rolesWithPermissions: UserRole[] = (userRoles || []).map((ur: any) => ({
-        user_id: authUser.id,
+        user_id: authUserId!,
         role: ur.roles,
         permissions: (ur.roles.role_permissions || []).map((rp: any) => rp.permissions)
       }));
@@ -265,8 +275,9 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       setIsInitialized(false);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [authUser, authLoading, currentTenant?.id]);
+  }, [authUserId, authLoading]);
 
   // Permission checking
   const hasPermission = useCallback((module: ModuleType, action: ActionType): boolean => {

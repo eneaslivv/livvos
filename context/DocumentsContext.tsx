@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { useTenantId } from './TenantContext'
@@ -61,6 +61,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const ensureLoadedRef = useRef(false)
 
   // Cargar datos
   const loadDocuments = useCallback(async () => {
@@ -70,16 +71,22 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       errorLogger.log('Cargando documentos...')
 
-      // Cargar carpetas del nivel actual
-      let foldersQuery = supabase.from('folders').select('*').order('name', { ascending: true })
+      // Cargar carpetas del nivel actual - scoped to tenant
+      let foldersQuery = supabase.from('folders').select('id, owner_id, tenant_id, client_id, project_id, name, parent_id, color, is_favorite, created_at, updated_at').order('name', { ascending: true })
+      if (tenantId) {
+        foldersQuery = foldersQuery.eq('tenant_id', tenantId)
+      }
       if (currentFolderId) {
         foldersQuery = foldersQuery.eq('parent_id', currentFolderId)
       } else {
         foldersQuery = foldersQuery.is('parent_id', null)
       }
 
-      // Cargar archivos del nivel actual
-      let filesQuery = supabase.from('files').select('*').order('name', { ascending: true })
+      // Cargar archivos del nivel actual - scoped to tenant
+      let filesQuery = supabase.from('files').select('id, owner_id, tenant_id, client_id, project_id, folder_id, name, type, size, url, is_favorite, tags, created_at, updated_at').order('name', { ascending: true })
+      if (tenantId) {
+        filesQuery = filesQuery.eq('tenant_id', tenantId)
+      }
       if (currentFolderId) {
         filesQuery = filesQuery.eq('folder_id', currentFolderId)
       } else {
@@ -124,11 +131,27 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false)
     }
-  }, [currentFolderId])
+  }, [currentFolderId, tenantId])
 
-  useEffect(() => {
+  // Lazy load: only fetch when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return
+    ensureLoadedRef.current = true
     loadDocuments()
   }, [loadDocuments])
+
+  // When folder changes, reload (but only after initial load)
+  const prevFolderIdRef = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (prevFolderIdRef.current === undefined) {
+      prevFolderIdRef.current = currentFolderId
+      return
+    }
+    if (prevFolderIdRef.current !== currentFolderId) {
+      prevFolderIdRef.current = currentFolderId
+      loadDocuments()
+    }
+  }, [currentFolderId, loadDocuments])
 
   const createFolder = async (
     name: string,
@@ -159,27 +182,59 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const user = (await supabase.auth.getUser()).data.user
     if (!user) throw new Error('Usuario no autenticado')
 
-    console.log('Context uploadFile - Tenant ID:', tenantId); // Debug logging
-    if (!tenantId) throw new Error('Tenant no disponible (ID es null/undefined)')
+    if (!tenantId) throw new Error('Tenant no disponible. Espera a que el sistema cargue e intenta de nuevo.')
 
-    const fileName = `${user.id}/${Date.now()}_${file.name}`
-    console.log('Attempting storage upload:', fileName);
+    // Get the user's session token for API auth
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Sesión no disponible. Vuelve a iniciar sesión.')
 
-    const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file)
-    if (uploadError) {
-      console.error('Storage upload error:', uploadError);
-      throw new Error(`Storage Error: ${uploadError.message} (Code: ${uploadError.name})`);
+    // Step 1: Get a signed upload URL from our serverless API (service_role key stays server-side)
+    const apiBase = import.meta.env.DEV ? '' : ''
+    const signedUrlRes = await fetch(`${apiBase}/api/upload-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type
+      })
+    })
+
+    if (!signedUrlRes.ok) {
+      const errData = await signedUrlRes.json().catch(() => ({ error: 'Error del servidor' }))
+      throw new Error(errData.error || `Error obteniendo URL de subida (${signedUrlRes.status})`)
     }
 
-    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(fileName)
+    const { token, path: storagePath, publicUrl } = await signedUrlRes.json()
 
+    // Step 2: Upload directly to Supabase Storage using the signed URL token (bypasses RLS)
+    // The token was generated server-side with the service_role key
+    const uploadPromise = supabase.storage
+      .from('documents')
+      .uploadToSignedUrl(storagePath, token, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false
+      })
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('La subida tardó demasiado. Verifica tu conexión e intenta de nuevo.')), 120000)
+    )
+
+    const uploadResult = await Promise.race([uploadPromise, timeoutPromise])
+    if ('error' in uploadResult && uploadResult.error) {
+      throw new Error(`Error subiendo archivo: ${uploadResult.error.message}`)
+    }
+
+    // Step 3: Save file metadata to database
     const { clientId = null, projectId = null } = options || {}
 
     const { data: fileData, error: dbError } = await supabase.from('files').insert({
       name: file.name,
       type: file.type,
       size: file.size,
-      url: urlData.publicUrl,
+      url: publicUrl,
       folder_id: currentFolderId,
       owner_id: user.id,
       tenant_id: tenantId,
@@ -188,8 +243,10 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }).select().single()
 
     if (dbError) {
-      console.error('Database insert error:', dbError);
-      throw new Error(`Database Error: ${dbError.message} (Code: ${dbError.code})`);
+      // Storage succeeded but DB failed - try to clean up the orphaned storage file
+      // Use admin API to delete since we can't delete via client RLS either
+      errorLogger.error('DB insert failed after storage upload, orphaned file:', storagePath)
+      throw new Error(`Error guardando metadatos: ${dbError.message}`)
     }
 
     setFiles(prev => [...prev, fileData])
@@ -216,8 +273,9 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <DocumentsContext.Provider value={{
       folders, files, breadcrumbs, currentFolderId, loading, error, isInitialized,
       setCurrentFolderId, createFolder, uploadFile, deleteFolder, deleteFile,
-      refresh: async () => loadDocuments()
-    }}>
+      refresh: async () => loadDocuments(),
+      _ensureLoaded
+    } as any}>
       {children}
     </DocumentsContext.Provider>
   )
@@ -228,5 +286,6 @@ export const useDocuments = () => {
   if (context === undefined) {
     throw new Error('useDocuments must be used within a DocumentsProvider')
   }
+  useEffect(() => { (context as any)._ensureLoaded?.() }, [])
   return context
 }

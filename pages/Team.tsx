@@ -51,15 +51,21 @@ export const Team: React.FC = () => {
 
     // Load tasks when member is selected
     useEffect(() => {
+        let cancelled = false;
         if (selectedMember) {
             setTasksLoading(true);
             getMemberTasks(selectedMember.id)
-                .then(setMemberTasks)
-                .finally(() => setTasksLoading(false));
+                .then((tasks) => {
+                    if (!cancelled) setMemberTasks(tasks);
+                })
+                .finally(() => {
+                    if (!cancelled) setTasksLoading(false);
+                });
         } else {
             setMemberTasks([]);
         }
-    }, [selectedMember, getMemberTasks]);
+        return () => { cancelled = true; };
+    }, [selectedMember?.id, getMemberTasks]);
 
     if (isLoading) {
         return (

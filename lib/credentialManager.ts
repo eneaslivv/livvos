@@ -67,15 +67,23 @@ export interface CredentialUpdateInput {
 }
 
 class CredentialManager {
-  private masterKey: string;
+  private masterKey: string | null = null;
 
   constructor() {
     try {
       this.masterKey = getEncryptionMasterKey();
     } catch (error) {
       errorLogger.error('Failed to initialize CredentialManager: Master key not available', error);
-      throw error;
+      // Don't throw - allow app to boot without encryption configured
+      this.masterKey = null;
     }
+  }
+
+  private ensureMasterKey(): string {
+    if (!this.masterKey) {
+      throw new Error('CredentialManager: encryption master key is not configured. Set VITE_ENCRYPTION_MASTER_KEY.');
+    }
+    return this.masterKey;
   }
 
   /**
@@ -90,7 +98,7 @@ class CredentialManager {
       });
 
       // Encrypt the main credential
-      const credentialEncryption = encrypt(input.credential, this.masterKey);
+      const credentialEncryption = encrypt(input.credential, this.ensureMasterKey());
       if (!credentialEncryption.success) {
         throw new Error(`Failed to encrypt credential: ${credentialEncryption.error}`);
       }
@@ -98,7 +106,7 @@ class CredentialManager {
       // Encrypt username if provided
       let encryptedUsername: EncryptedData | undefined;
       if (input.username) {
-        const usernameEncryption = encrypt(input.username, this.masterKey);
+        const usernameEncryption = encrypt(input.username, this.ensureMasterKey());
         if (!usernameEncryption.success) {
           throw new Error(`Failed to encrypt username: ${usernameEncryption.error}`);
         }
@@ -109,7 +117,7 @@ class CredentialManager {
       let encryptedAdditionalData: EncryptedData | undefined;
       if (input.additionalData) {
         const additionalDataString = JSON.stringify(input.additionalData);
-        const additionalDataEncryption = encrypt(additionalDataString, this.masterKey);
+        const additionalDataEncryption = encrypt(additionalDataString, this.ensureMasterKey());
         if (!additionalDataEncryption.success) {
           throw new Error(`Failed to encrypt additional data: ${additionalDataEncryption.error}`);
         }
@@ -236,7 +244,7 @@ class CredentialManager {
 
       // Handle sensitive fields (encrypt if provided)
       if (updates.credential !== undefined) {
-        const encryption = encrypt(updates.credential, this.masterKey);
+        const encryption = encrypt(updates.credential, this.ensureMasterKey());
         if (!encryption.success) {
           throw new Error(`Failed to encrypt credential: ${encryption.error}`);
         }
@@ -245,7 +253,7 @@ class CredentialManager {
 
       if (updates.username !== undefined) {
         if (updates.username) {
-          const encryption = encrypt(updates.username, this.masterKey);
+          const encryption = encrypt(updates.username, this.ensureMasterKey());
           if (!encryption.success) {
             throw new Error(`Failed to encrypt username: ${encryption.error}`);
           }
@@ -258,7 +266,7 @@ class CredentialManager {
       if (updates.additionalData !== undefined) {
         if (updates.additionalData) {
           const additionalDataString = JSON.stringify(updates.additionalData);
-          const encryption = encrypt(additionalDataString, this.masterKey);
+          const encryption = encrypt(additionalDataString, this.ensureMasterKey());
           if (!encryption.success) {
             throw new Error(`Failed to encrypt additional data: ${encryption.error}`);
           }
@@ -460,7 +468,7 @@ class CredentialManager {
     customKey?: string
   ): Promise<DecryptedCredential> {
     try {
-      const key = customKey || this.masterKey;
+      const key = customKey || this.ensureMasterKey();
 
       // Validate encrypted credential format
       if (!validateEncryptedFormat(credential.encrypted_credential)) {

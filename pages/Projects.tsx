@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { useProjects, Project, ProjectStatus } from '../context/ProjectsContext';
 import { errorLogger } from '../lib/errorLogger';
@@ -58,6 +58,11 @@ export const Projects: React.FC = () => {
   const [clientInviteLink, setClientInviteLink] = useState<string | null>(null);
   const [clientInviteError, setClientInviteError] = useState<string | null>(null);
   const [isInvitingClient, setIsInvitingClient] = useState(false);
+
+  // Project files state
+  const [projectFiles, setProjectFiles] = useState<any[]>([]);
+  const [isUploadingProjectFile, setIsUploadingProjectFile] = useState(false);
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedProject = projects.find(p => p.id === selectedId) || projects[0];
   const projectTasks = selectedProject
@@ -174,6 +179,84 @@ export const Projects: React.FC = () => {
     } finally {
       setIsInvitingClient(false);
     }
+  };
+
+  // Load real project files from DB
+  useEffect(() => {
+    if (!selectedProject?.id) return;
+    const loadProjectFiles = async () => {
+      const { data } = await supabase
+        .from('files')
+        .select('id,name,type,size,url,created_at')
+        .eq('project_id', selectedProject.id)
+        .order('created_at', { ascending: false });
+      setProjectFiles(data || []);
+    };
+    loadProjectFiles();
+  }, [selectedProject?.id]);
+
+  const handleProjectFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProject) return;
+    setIsUploadingProjectFile(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Sesión no disponible');
+      const res = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ fileName: file.name, contentType: file.type })
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: 'Error del servidor' }));
+        throw new Error(errBody.error || `Error ${res.status}`);
+      }
+      const { token, path: storagePath, publicUrl } = await res.json();
+      const { error: uploadError } = await supabase.storage.from('documents')
+        .uploadToSignedUrl(storagePath, token, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (uploadError) throw new Error(uploadError.message);
+      const { data: fileData, error: dbError } = await supabase.from('files').insert({
+        name: file.name, type: file.type, size: file.size, url: publicUrl,
+        folder_id: null, owner_id: currentUser?.id || '',
+        tenant_id: currentTenant?.id || '',
+        project_id: selectedProject.id,
+        client_id: selectedProject.client_id || null
+      }).select().single();
+      if (dbError) throw new Error(dbError.message);
+      setProjectFiles(prev => [fileData, ...prev]);
+      await logActivity({
+        action: 'uploaded file',
+        target: file.name,
+        project_title: selectedProject.title,
+        type: 'update',
+        details: `File uploaded to project: ${file.name}`
+      });
+    } catch (err: any) {
+      errorLogger.error('Error uploading project file', err);
+      alert(`Error al subir archivo: ${err.message}`);
+    } finally {
+      setIsUploadingProjectFile(false);
+      if (projectFileInputRef.current) projectFileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteProjectFile = async (fileId: string, fileName: string) => {
+    if (!confirm(`¿Eliminar "${fileName}"?`)) return;
+    try {
+      const { error } = await supabase.from('files').delete().eq('id', fileId);
+      if (error) throw error;
+      setProjectFiles(prev => prev.filter(f => f.id !== fileId));
+    } catch (err: any) {
+      errorLogger.error('Error deleting project file', err);
+      alert(`Error al eliminar: ${err.message}`);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
   const handleUpdateProject = async (updates: Partial<Project>) => {
@@ -687,19 +770,50 @@ export const Projects: React.FC = () => {
             )}
 
             {activeTab === 'files' && selectedProject && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {selectedProject.files.map((file, i) => (
-                  <div key={i} className="group p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all cursor-pointer flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-950 rounded-lg flex items-center justify-center text-zinc-400 mb-3 group-hover:scale-110 transition-transform">
-                      <Icons.File size={24} />
+              <div>
+                <input type="file" ref={projectFileInputRef} onChange={handleProjectFileUpload} className="hidden" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {projectFiles.map((file) => (
+                    <div key={file.id} className="group p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all cursor-pointer flex flex-col items-center text-center relative">
+                      <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-950 rounded-lg flex items-center justify-center text-zinc-400 mb-3 group-hover:scale-110 transition-transform">
+                        {file.type?.startsWith('image/') ? <Icons.FileImage size={24} /> : <Icons.File size={24} />}
+                      </div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate w-full mb-1">{file.name}</div>
+                      <div className="text-xs text-zinc-400">{formatFileSize(file.size)}</div>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); window.open(file.url, '_blank'); }}
+                          className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600"
+                          title="Abrir"
+                        >
+                          <Icons.External size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProjectFile(file.id, file.name); }}
+                          className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-zinc-400 hover:text-red-500"
+                          title="Eliminar"
+                        >
+                          <Icons.Trash size={14} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate w-full mb-1">{file.name}</div>
-                    <div className="text-xs text-zinc-400">{file.size} • {file.date}</div>
+                  ))}
+                  <div
+                    onClick={() => !isUploadingProjectFile && projectFileInputRef.current?.click()}
+                    className={`border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer transition-colors min-h-[160px] ${isUploadingProjectFile ? 'opacity-50 cursor-wait' : ''}`}
+                  >
+                    {isUploadingProjectFile ? (
+                      <>
+                        <Icons.Loader size={24} className="mb-2 animate-spin" />
+                        <span className="text-sm">Subiendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Icons.Upload size={24} className="mb-2" />
+                        <span className="text-sm">Upload File</span>
+                      </>
+                    )}
                   </div>
-                ))}
-                <div className="border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer transition-colors min-h-[160px]">
-                  <Icons.Upload size={24} className="mb-2" />
-                  <span className="text-sm">Upload File</span>
                 </div>
               </div>
             )}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
@@ -155,6 +155,7 @@ export const useNotifications = () => {
   if (context === undefined) {
     throw new Error('useNotifications must be used within a NotificationsProvider');
   }
+  useEffect(() => { (context as any)._ensureLoaded?.(); }, []);
   return context;
 };
 
@@ -173,6 +174,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
+  const ensureLoadedRef = useRef(false);
+  const channelRef = useRef<any>(null);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -206,51 +209,52 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentTenant]);
+  }, [user?.id, currentTenant?.id]);
 
-  // Load initial data
-  useEffect(() => {
+  // Lazy load: only fetch + subscribe when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return;
+    ensureLoadedRef.current = true;
     fetchNotifications();
-  }, [fetchNotifications]);
 
-  // Real-time subscription
-  useEffect(() => {
-    if (!user || !currentTenant) return;
+    // Setup realtime subscription
+    if (user && currentTenant) {
+      channelRef.current = supabase
+        .channel(`notifications-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('🔔 Notification change:', payload.eventType);
 
-    const channel = supabase
-      .channel(`notifications-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          console.log('🔔 Notification change:', payload.eventType);
-          
-          if (payload.eventType === 'INSERT') {
-            setNotifications((prev) => [payload.new as Notification, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            setNotifications((prev) =>
-              prev.map((n) => (n.id === payload.new.id ? (payload.new as Notification) : n))
-            );
-          } else if (payload.eventType === 'DELETE') {
-            setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
+            if (payload.eventType === 'INSERT') {
+              setNotifications((prev) => [payload.new as Notification, ...prev]);
+            } else if (payload.eventType === 'UPDATE') {
+              setNotifications((prev) =>
+                prev.map((n) => (n.id === payload.new.id ? (payload.new as Notification) : n))
+              );
+            } else if (payload.eventType === 'DELETE') {
+              setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    }
+  }, [fetchNotifications, user, currentTenant]);
 
-    setSubscription(channel);
-
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
       }
     };
-  }, [user, currentTenant]);
+  }, []);
 
   // Calculate unread count
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -720,7 +724,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     // Real-time
     subscribeToNotifications,
     unsubscribeFromNotifications,
-  };
+    _ensureLoaded,
+  } as any;
 
   return (
     <NotificationsContext.Provider value={value}>

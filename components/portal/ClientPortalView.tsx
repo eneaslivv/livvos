@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PortalApp from './livv-client view-control/App';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { DashboardData, Milestone, LogEntry } from './livv-client view-control/types';
+import { DashboardData, Milestone, LogEntry, TaskItem, MessageItem } from './livv-client view-control/types';
 
 type ClientRecord = {
   id: string;
@@ -56,6 +56,31 @@ type FileRecord = {
   type?: string | null;
   size?: number | null;
   url: string;
+};
+
+type ClientTaskRecord = {
+  id: string;
+  title?: string | null;
+  completed?: boolean | null;
+  priority?: string | null;
+  due_date?: string | null;
+  created_at?: string | null;
+};
+
+type ClientHistoryRecord = {
+  id: string;
+  action_description?: string | null;
+  action_date?: string | null;
+  user_name?: string | null;
+  action_type?: string | null;
+};
+
+type ClientMessageRecord = {
+  id: string;
+  message?: string | null;
+  sender_name?: string | null;
+  sender_type?: string | null;
+  created_at?: string | null;
 };
 
 export const ClientPortalView: React.FC = () => {
@@ -144,7 +169,7 @@ export const ClientPortalView: React.FC = () => {
 
         const projectId = project?.id || null;
 
-        const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }] = await Promise.all([
+        const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }, { data: clientTasksData }, { data: clientHistoryData }, { data: clientMessagesData }] = await Promise.all([
           projectId
             ? supabase.from('tasks').select('id,title,completed,start_date,due_date,created_at,client_id').eq('project_id', projectId)
             : client?.id
@@ -167,6 +192,16 @@ export const ClientPortalView: React.FC = () => {
             : Promise.resolve({ data: [] }),
           projectId
             ? supabase.from('files').select('id,name,type,size,url').eq('project_id', projectId).order('created_at', { ascending: false })
+            : Promise.resolve({ data: [] }),
+          // CRM data: client tasks, history, messages
+          client?.id
+            ? supabase.from('client_tasks').select('id,title,completed,priority,due_date,created_at').eq('client_id', client.id).order('created_at', { ascending: true })
+            : Promise.resolve({ data: [] }),
+          client?.id
+            ? supabase.from('client_history').select('id,action_description,action_date,user_name,action_type').eq('client_id', client.id).order('action_date', { ascending: false }).limit(10)
+            : Promise.resolve({ data: [] }),
+          client?.id
+            ? supabase.from('client_messages').select('id,message,sender_name,sender_type,created_at').eq('client_id', client.id).order('created_at', { ascending: false }).limit(20)
             : Promise.resolve({ data: [] })
         ]);
 
@@ -231,6 +266,32 @@ export const ClientPortalView: React.FC = () => {
           pass: cred.secret || undefined
         }));
 
+        // Map CRM client tasks
+        const clientTasks: TaskItem[] = (clientTasksData || []).map((t: ClientTaskRecord) => ({
+          id: t.id,
+          title: t.title || 'Task',
+          completed: t.completed || false,
+          priority: t.priority || undefined,
+          dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined
+        }));
+
+        // Merge CRM history into logs
+        const historyLogs: LogEntry[] = (clientHistoryData || []).map((h: ClientHistoryRecord) => ({
+          id: `h-${h.id}`,
+          timestamp: h.action_date ? new Date(h.action_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recent',
+          message: `${h.user_name || 'Team'}: ${h.action_description || 'Activity'}`
+        }));
+        const mergedLogs = [...logs, ...historyLogs].sort((a, b) => 0); // keep interleaved order
+
+        // Map CRM messages
+        const clientMessages: MessageItem[] = (clientMessagesData || []).map((m: ClientMessageRecord) => ({
+          id: m.id,
+          message: m.message || '',
+          senderName: m.sender_name || 'Team',
+          senderType: (m.sender_type === 'client' ? 'client' : 'user') as 'user' | 'client',
+          timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''
+        }));
+
         const dashboard: DashboardData = {
           progress,
           startDate,
@@ -243,11 +304,13 @@ export const ClientPortalView: React.FC = () => {
           milestones: milestones.length ? milestones : [
             { id: 'm1', title: 'Project kickoff', description: 'Initial project setup.', status: 'current' }
           ],
-          logs: logs.length ? logs : [
+          logs: mergedLogs.length ? mergedLogs : [
             { id: 'l1', timestamp: 'Today', message: 'Portal connected to live project data.' }
           ],
           assets: [...assets, ...fileAssets, ...projectFileAssets],
-          credentials
+          credentials,
+          tasks: clientTasks,
+          messages: clientMessages
         };
 
         setProjectTitle(project?.title || client.company || client.name || 'Client Portal');

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -220,6 +220,7 @@ export const useSystem = () => {
   if (context === undefined) {
     throw new Error('useSystem must be used within a SystemProvider');
   }
+  useEffect(() => { (context as any)._ensureLoaded?.(); }, []);
   return context;
 };
 
@@ -239,6 +240,8 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
   const [canManageSystem, setCanManageSystem] = useState(false);
   const [canViewSystem, setCanViewSystem] = useState(false);
   const [healthMonitoringInterval, setHealthMonitoringInterval] = useState<NodeJS.Timeout | null>(null);
+  const ensureLoadedRef = useRef(false);
+  const shouldLoadRef = useRef(false);
 
   // Check permissions
   useEffect(() => {
@@ -271,7 +274,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     };
 
     checkPermissions();
-  }, [user]);
+  }, [user?.id]);
 
   // Load initial system data
   const loadSystemData = useCallback(async () => {
@@ -289,57 +292,54 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      // Check system health
-      const health = await checkSystemHealth();
-      setSystemHealth(health);
+      // Parallel fetch all system data
+      const [healthResult, agentsResult, metricsResult, executionsResult, nodesResult] = await Promise.allSettled([
+        checkSystemHealth(),
+        getAgentStatus(),
+        getSystemMetrics(),
+        getSkillExecutions(),
+        getClusterNodes(),
+      ]);
 
-      // Load agent statuses
-      const agentStatuses = await getAgentStatus();
-      setAgents(agentStatuses);
-
-      // Load current metrics
-      const currentMetrics = await getSystemMetrics();
-      if (currentMetrics.length > 0) {
-        setMetrics(currentMetrics[0]);
-      }
-
-      // Load recent skill executions
-      const executions = await getSkillExecutions();
-      setSkillExecutions(executions);
-
-      // Load cluster nodes
-      const nodes = await getClusterNodes();
-      setClusterNodes(nodes);
+      if (healthResult.status === 'fulfilled') setSystemHealth(healthResult.value);
+      if (agentsResult.status === 'fulfilled') setAgents(agentsResult.value);
+      if (metricsResult.status === 'fulfilled' && metricsResult.value.length > 0) setMetrics(metricsResult.value[0]);
+      if (executionsResult.status === 'fulfilled') setSkillExecutions(executionsResult.value);
+      if (nodesResult.status === 'fulfilled') setClusterNodes(nodesResult.value);
     } catch (err) {
       errorLogger.error('Error loading system data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load system data');
     } finally {
       setLoading(false);
     }
-  }, [user, canViewSystem]);
+  }, [user?.id, canViewSystem]);
 
-  useEffect(() => {
+  // Lazy load: only fetch + monitor when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return;
+    ensureLoadedRef.current = true;
+    shouldLoadRef.current = true;
     loadSystemData();
-  }, [loadSystemData]);
+  }, []);
 
-  // Health monitoring
+  // When permissions load, try fetching if consumer is mounted
   useEffect(() => {
-    if (canManageSystem && !healthMonitoringInterval) {
-      const interval = setInterval(async () => {
-        const health = await checkSystemHealth();
-        setSystemHealth(health);
-      }, 30000); // Check every 30 seconds
-
-      setHealthMonitoringInterval(interval);
+    if (shouldLoadRef.current && canViewSystem) {
+      loadSystemData();
     }
+  }, [canViewSystem]);
 
-    return () => {
-      if (healthMonitoringInterval) {
-        clearInterval(healthMonitoringInterval);
-        setHealthMonitoringInterval(null);
-      }
-    };
-  }, [canManageSystem, healthMonitoringInterval]);
+  // Health monitoring - only start after load
+  useEffect(() => {
+    if (!shouldLoadRef.current || !canManageSystem) return;
+
+    const interval = setInterval(async () => {
+      const health = await checkSystemHealth();
+      setSystemHealth(health);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [canManageSystem, checkSystemHealth]);
 
   // Check system health
   const checkSystemHealth = useCallback(async (): Promise<SystemHealth> => {
@@ -1420,7 +1420,8 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     // Utilities
     refreshSystemData,
     getSystemLogs,
-  };
+    _ensureLoaded,
+  } as any;
 
   return (
     <SystemContext.Provider value={value}>

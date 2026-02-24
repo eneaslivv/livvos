@@ -135,6 +135,7 @@ interface TenantProviderProps {
 
 export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     const { user } = useAuth();
+    const userId = user?.id;
     const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
     const [tenantConfig, setTenantConfig] = useState<TenantConfig | null>(null);
     const [tenantUsage, setTenantUsage] = useState<TenantUsage | null>(null);
@@ -146,31 +147,31 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/(^-|-$)/g, '');
-        return slug || `tenant-${user?.id?.slice(0, 8) || 'default'}`;
-    }, [user?.id]);
+        return slug || `tenant-${userId?.slice(0, 8) || 'default'}`;
+    }, [userId]);
 
     const ensureTenantAssignment = useCallback(async (profile: { id: string; name?: string | null; email?: string | null } | null) => {
-        if (!user) return null;
+        if (!userId) return null;
 
         const { data: existingTenant } = await supabase
             .from('tenants')
             .select('id')
-            .eq('owner_id', user.id)
+            .eq('owner_id', userId)
             .maybeSingle();
 
         if (existingTenant?.id) {
             await supabase
                 .from('profiles')
                 .update({ tenant_id: existingTenant.id })
-                .eq('id', user.id);
+                .eq('id', userId);
             return existingTenant.id;
         }
 
         if (!profile) {
             const profilePayload = {
-                id: user.id,
-                email: user.email ?? '',
-                name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                id: userId,
+                email: user?.email ?? '',
+                name: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User',
                 status: 'active'
             };
 
@@ -185,18 +186,18 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
         const tenantName =
             profile?.name?.trim() ||
-            user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            user.email?.split('@')[0] ||
+            user?.user_metadata?.full_name ||
+            user?.user_metadata?.name ||
+            user?.email?.split('@')[0] ||
             'My Workspace';
         const tenantSlug = buildTenantSlug(tenantName);
-        const fallbackSlug = `${tenantSlug}-${user.id.slice(0, 6)}`;
+        const fallbackSlug = `${tenantSlug}-${userId!.slice(0, 6)}`;
 
         const { data: tenantId, error: tenantError } = await supabase
             .rpc('create_tenant_with_config', {
                 p_name: tenantName,
                 p_slug: tenantSlug,
-                p_owner_id: user.id
+                p_owner_id: userId
             });
 
         if (tenantError) {
@@ -205,7 +206,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                     .rpc('create_tenant_with_config', {
                         p_name: tenantName,
                         p_slug: fallbackSlug,
-                        p_owner_id: user.id
+                        p_owner_id: userId
                     });
 
                 if (retryError) {
@@ -219,12 +220,12 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         }
 
         return tenantId as string;
-    }, [buildTenantSlug, user]);
+    }, [buildTenantSlug, userId]);
 
     // Fetch tenant data for current user
     const fetchTenantData = useCallback(async () => {
-        console.log('[TenantContext] fetchTenantData triggered. User:', user?.id);
-        if (!user) {
+        console.log('[TenantContext] fetchTenantData triggered. User:', userId);
+        if (!userId) {
             setCurrentTenant(null);
             setTenantConfig(null);
             setTenantUsage(null);
@@ -240,7 +241,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('id, name, email, tenant_id')
-                .eq('id', user.id)
+                .eq('id', userId)
                 .single();
 
             if (profileError) {
@@ -254,7 +255,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             const { data: updatedProfile, error: updatedProfileError } = await supabase
                 .from('profiles')
                 .select('tenant_id')
-                .eq('id', user.id)
+                .eq('id', userId)
                 .single();
 
             if (updatedProfileError) {
@@ -279,30 +280,43 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             setCurrentTenant(tenant);
             console.log('[TenantContext] Tenant loaded:', tenant.id);
 
-            // Fetch tenant configuration
-            const { data: config, error: configError } = await supabase
-                .from('tenant_config')
-                .select('*')
-                .eq('tenant_id', profile.tenant_id)
-                .single();
+            // Parallel fetch tenant config and usage
+            const [configResult, usageResults] = await Promise.allSettled([
+                supabase.from('tenant_config').select('*').eq('tenant_id', updatedProfile.tenant_id).single(),
+                Promise.all([
+                    supabase.from('profiles').select('id').eq('tenant_id', tenant.id),
+                    supabase.from('projects').select('id').eq('tenant_id', tenant.id),
+                    supabase.rpc('calculate_tenant_storage_usage', { p_tenant_id: tenant.id })
+                ])
+            ]);
 
-            if (configError && configError.code !== 'PGRST116') {
-                throw new Error(`Failed to fetch tenant config: ${configError.message}`);
+            if (configResult.status === 'fulfilled') {
+                const { data: config, error: configError } = configResult.value;
+                if (configError && configError.code !== 'PGRST116') {
+                    console.warn('Failed to fetch tenant config:', configError.message);
+                } else if (config) {
+                    const parsedConfig = {
+                        ...config,
+                        branding: typeof config.branding === 'string'
+                            ? JSON.parse(config.branding)
+                            : config.branding
+                    };
+                    setTenantConfig(parsedConfig);
+                }
             }
 
-            if (config) {
-                // Parse branding if it's stored as string
-                const parsedConfig = {
-                    ...config,
-                    branding: typeof config.branding === 'string'
-                        ? JSON.parse(config.branding)
-                        : config.branding
+            if (usageResults.status === 'fulfilled') {
+                const [usersResult, projectsResult, storageResult] = usageResults.value;
+                const usage: TenantUsage = {
+                    tenant_id: tenant.id,
+                    current_users: usersResult.data?.length || 0,
+                    current_projects: projectsResult.data?.length || 0,
+                    storage_used_mb: Math.round((storageResult.data || 0) / (1024 * 1024)),
+                    api_calls_this_month: 0,
+                    last_calculated: new Date().toISOString()
                 };
-                setTenantConfig(parsedConfig);
+                setTenantUsage(usage);
             }
-
-            // Fetch tenant usage
-            await refreshUsage();
 
         } catch (err) {
             console.error('[TenantContext] Error loading tenant:', err);
@@ -311,7 +325,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [ensureTenantAssignment, user]);
+    }, [ensureTenantAssignment, userId]);
 
     // Merge tenant config with defaults to get final branding
     const branding = useMemo(() => {
@@ -613,14 +627,14 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
     // Switch tenant (for multi-tenant users)
     const switchTenant = useCallback(async (tenantId: string): Promise<boolean> => {
-        if (!user) return false;
+        if (!userId) return false;
 
         try {
             // Update user's profile with new tenant
             const { error } = await supabase
                 .from('profiles')
                 .update({ tenant_id: tenantId })
-                .eq('id', user.id);
+                .eq('id', userId);
 
             if (error) throw error;
 
@@ -631,7 +645,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             errorLogger.error('Error switching tenant:', err);
             return false;
         }
-    }, [user, fetchTenantData]);
+    }, [userId, fetchTenantData]);
 
     // Update integration
     const updateIntegration = useCallback(async (provider: keyof TenantConfig['integrations'], config: any) => {

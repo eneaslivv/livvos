@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { useTenantId } from './TenantContext'
 
 // Interfaces (copiadas de useClients.ts)
 export interface Client {
@@ -77,10 +78,13 @@ interface ClientsContextType {
 const ClientsContext = createContext<ClientsContextType | undefined>(undefined)
 
 export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const tenantId = useTenantId()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const ensureLoadedRef = useRef(false)
+  const channelRef = useRef<any>(null)
 
   const fetchClients = useCallback(async (force = false) => {
     // Si ya está inicializado y no forzamos, no hacemos nada (cache hit)
@@ -94,10 +98,16 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     try {
       errorLogger.log('Fetching clients from Supabase...')
-      const { data, error: err } = await supabase
+      let query = supabase
         .from('clients')
-        .select('*')
+        .select('id, owner_id, tenant_id, name, email, company, phone, avatar_url, status, notes, address, industry, created_at, updated_at')
         .order('created_at', { ascending: false })
+
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId)
+      }
+
+      const { data, error: err } = await query
       
       if (err) {
         // Ignorar error si la tabla no existe aún (primera carga)
@@ -121,22 +131,24 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, [isInitialized, tenantId])
 
-  // Cargar clientes al montar el Provider (una sola vez por sesión de app)
-  useEffect(() => {
+  // Lazy load: only fetch + subscribe when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return
+    ensureLoadedRef.current = true
     fetchClients()
 
-    // Suscribirse a cambios en tiempo real
-    const channel = supabase
+    // Realtime subscription
+    channelRef.current = supabase
       .channel('clients-changes-global')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, (payload) => {
         errorLogger.log('Cambio en clients (Realtime):', payload.eventType)
-        
+
         if (payload.eventType === 'INSERT') {
           setClients(prev => [payload.new as Client, ...prev])
         } else if (payload.eventType === 'UPDATE') {
-          setClients(prev => prev.map(client => 
+          setClients(prev => prev.map(client =>
             client.id === payload.new.id ? payload.new as Client : client
           ))
         } else if (payload.eventType === 'DELETE') {
@@ -144,11 +156,16 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       })
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }, [fetchClients])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+      }
+    }
+  }, [])
 
   const createClient = async (clientData: Omit<Client, 'id' | 'owner_id' | 'created_at' | 'updated_at'>) => {
     try {
@@ -310,8 +327,9 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updateTask,
       getClientHistory,
       addHistoryEntry,
-      refreshClients: () => fetchClients(true)
-    }}>
+      refreshClients: () => fetchClients(true),
+      _ensureLoaded
+    } as any}>
       {children}
     </ClientsContext.Provider>
   )
@@ -323,5 +341,6 @@ export const useClients = () => {
   if (context === undefined) {
     throw new Error('useClients must be used within a ClientsProvider')
   }
+  useEffect(() => { (context as any)._ensureLoaded?.() }, [])
   return context
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { useClients, Client, ClientMessage, ClientTask, ClientHistory } from '../hooks/useClients';
@@ -46,6 +46,37 @@ export const Clients: React.FC = () => {
     address: ''
   });
 
+  // Documents state
+  const [clientDocs, setClientDocs] = useState<any[]>([]);
+  const [clientDocsLoading, setClientDocsLoading] = useState(false);
+  const [isUploadingClientDoc, setIsUploadingClientDoc] = useState(false);
+  const clientFileInputRef = useRef<HTMLInputElement>(null);
+  const [clientDocCounts, setClientDocCounts] = useState<Record<string, number>>({});
+
+  // Load document counts for all clients
+  useEffect(() => {
+    const loadDocCounts = async () => {
+      if (clients.length === 0) return;
+      try {
+        const { data, error: countErr } = await supabase
+          .from('files')
+          .select('client_id')
+          .not('client_id', 'is', null);
+        if (countErr) throw countErr;
+        const counts: Record<string, number> = {};
+        data?.forEach((f: any) => {
+          if (f.client_id) {
+            counts[f.client_id] = (counts[f.client_id] || 0) + 1;
+          }
+        });
+        setClientDocCounts(counts);
+      } catch (err) {
+        errorLogger.error('Error loading doc counts', err);
+      }
+    };
+    loadDocCounts();
+  }, [clients]);
+
   // Cargar datos del cliente seleccionado
   useEffect(() => {
     if (selectedClient) {
@@ -75,16 +106,21 @@ export const Clients: React.FC = () => {
 
   const loadClientData = async (clientId: string) => {
     try {
-      const [msgs, tsks, hist] = await Promise.all([
+      setClientDocsLoading(true);
+      const [msgs, tsks, hist, docsRes] = await Promise.all([
         getClientMessages(clientId),
         getClientTasks(clientId),
-        getClientHistory(clientId)
+        getClientHistory(clientId),
+        supabase.from('files').select('id,name,type,size,url,created_at').eq('client_id', clientId).order('created_at', { ascending: false })
       ]);
       setMessages(msgs);
       setTasks(tsks);
       setHistory(hist);
+      setClientDocs(docsRes.data || []);
     } catch (err) {
       errorLogger.error('Error cargando datos del cliente', err);
+    } finally {
+      setClientDocsLoading(false);
     }
   };
 
@@ -270,6 +306,108 @@ export const Clients: React.FC = () => {
     }
   };
 
+  // Helper: Format file size
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // Helper: Get icon by file type
+  const getFileIcon = (type: string) => {
+    if (type?.startsWith('image/')) return Icons.FileImage;
+    if (type?.includes('spreadsheet') || type?.includes('excel') || type?.includes('csv')) return Icons.FileSheet;
+    if (type?.includes('code') || type?.includes('javascript') || type?.includes('json') || type?.includes('html')) return Icons.FileCode;
+    if (type?.includes('pdf') || type?.includes('document') || type?.includes('text')) return Icons.Docs;
+    return Icons.File;
+  };
+
+  // Upload document for current client
+  const handleClientDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedClient) return;
+
+    setIsUploadingClientDoc(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Sesión no disponible');
+
+      // Get signed upload URL
+      const res = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ fileName: file.name, contentType: file.type })
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: 'Error del servidor' }));
+        throw new Error(errBody.error || `Error ${res.status}`);
+      }
+      const { token, path: storagePath, publicUrl } = await res.json();
+
+      // Upload file
+      const { error: uploadError } = await supabase.storage.from('documents')
+        .uploadToSignedUrl(storagePath, token, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (uploadError) throw new Error(uploadError.message);
+
+      // Save metadata
+      const { data: fileData, error: dbError } = await supabase.from('files').insert({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: publicUrl,
+        folder_id: null,
+        owner_id: user?.id || '',
+        tenant_id: currentTenant?.id || '',
+        client_id: selectedClient.id,
+        project_id: null
+      }).select().single();
+      if (dbError) throw new Error(dbError.message);
+
+      // Update local state
+      setClientDocs(prev => [fileData, ...prev]);
+      setClientDocCounts(prev => ({
+        ...prev,
+        [selectedClient.id]: (prev[selectedClient.id] || 0) + 1
+      }));
+
+      // Log in history
+      await addHistoryEntry({
+        client_id: selectedClient.id,
+        user_id: user?.id || '',
+        user_name: user?.email?.split('@')[0] || 'User',
+        action_type: 'note',
+        action_description: `Documento subido: ${file.name}`
+      });
+
+      // Refresh history
+      const hist = await getClientHistory(selectedClient.id);
+      setHistory(hist);
+    } catch (err: any) {
+      errorLogger.error('Error uploading client doc', err);
+      alert(`Error al subir archivo: ${err.message}`);
+    } finally {
+      setIsUploadingClientDoc(false);
+      if (clientFileInputRef.current) clientFileInputRef.current.value = '';
+    }
+  };
+
+  // Delete a client document
+  const handleDeleteClientDoc = async (doc: any) => {
+    if (!selectedClient || !confirm(`¿Eliminar "${doc.name}"?`)) return;
+    try {
+      const { error: delErr } = await supabase.from('files').delete().eq('id', doc.id);
+      if (delErr) throw delErr;
+      setClientDocs(prev => prev.filter(d => d.id !== doc.id));
+      setClientDocCounts(prev => ({
+        ...prev,
+        [selectedClient.id]: Math.max(0, (prev[selectedClient.id] || 1) - 1)
+      }));
+    } catch (err: any) {
+      errorLogger.error('Error deleting client doc', err);
+      alert(`Error al eliminar: ${err.message}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -426,6 +564,12 @@ export const Clients: React.FC = () => {
                   )}
                   {client.notes && (
                     <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-2 line-clamp-2">{client.notes}</p>
+                  )}
+                  {clientDocCounts[client.id] > 0 && (
+                    <div className="flex items-center gap-1 mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      <Icons.Paperclip size={12} />
+                      <span>{clientDocCounts[client.id]} doc{clientDocCounts[client.id] !== 1 ? 's' : ''}</span>
+                    </div>
                   )}
                 </div>
               ))}
@@ -630,6 +774,85 @@ export const Clients: React.FC = () => {
                       <Icons.CheckCircle size={24} className="mx-auto text-zinc-400 mb-2" />
                       <p className="text-zinc-500 dark:text-zinc-400">No hay tareas</p>
                       <p className="text-xs text-zinc-400 dark:text-zinc-500">Crea tu primera tarea</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Documentos del cliente */}
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Documentos</h3>
+                    {clientDocs.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                        {clientDocs.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={clientFileInputRef}
+                      onChange={handleClientDocUpload}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => clientFileInputRef.current?.click()}
+                      disabled={isUploadingClientDoc}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors text-sm"
+                    >
+                      {isUploadingClientDoc ? (
+                        <Icons.Loader size={14} className="animate-spin" />
+                      ) : (
+                        <Icons.Upload size={14} />
+                      )}
+                      <span className="hidden sm:inline">{isUploadingClientDoc ? 'Subiendo...' : 'Subir'}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {clientDocsLoading ? (
+                    <div className="text-center py-6">
+                      <Icons.Loader size={24} className="mx-auto text-zinc-400 mb-2 animate-spin" />
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando documentos...</p>
+                    </div>
+                  ) : clientDocs.length > 0 ? (
+                    clientDocs.map((doc) => {
+                      const FileIcon = getFileIcon(doc.type);
+                      return (
+                        <div key={doc.id} className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group">
+                          <div className="w-8 h-8 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center flex-shrink-0">
+                            <FileIcon size={16} className="text-zinc-600 dark:text-zinc-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-zinc-900 dark:text-zinc-100 truncate">{doc.name}</p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">{formatSize(doc.size)}</p>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => window.open(doc.url, '_blank')}
+                              className="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                              title="Abrir"
+                            >
+                              <Icons.External size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClientDoc(doc)}
+                              className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+                              title="Eliminar"
+                            >
+                              <Icons.Trash size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-6">
+                      <Icons.Docs size={24} className="mx-auto text-zinc-400 mb-2" />
+                      <p className="text-zinc-500 dark:text-zinc-400">No hay documentos</p>
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">Sube archivos para este cliente</p>
                     </div>
                   )}
                 </div>

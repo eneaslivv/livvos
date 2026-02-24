@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { useTenantId } from './TenantContext'
 
 export enum ProjectStatus {
   Active = 'Active',
@@ -72,10 +73,13 @@ interface ProjectsContextType {
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined)
 
 export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const tenantId = useTenantId()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const ensureLoadedRef = useRef(false)
+  const channelRef = useRef<any>(null)
 
   // Función para normalizar datos de la DB al formato de la UI
   const normalizeProject = (p: any): Project => ({
@@ -132,10 +136,16 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     
     try {
       errorLogger.log('Fetching projects from Supabase...')
-      const { data, error: err } = await supabase
+      let query = supabase
         .from('projects')
-        .select('*')
+        .select('id, title, description, progress, status, client, client_name, client_avatar, deadline, updated_at, next_steps, tags, team, tasks_groups, files, activity, color, created_at, tenant_id')
         .order('created_at', { ascending: false })
+
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId)
+      }
+
+      const { data, error: err } = await query
       
       if (err) {
         if (err.code === 'PGRST116') {
@@ -154,23 +164,31 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, [isInitialized, tenantId])
 
-  useEffect(() => {
+  // Lazy load: only fetch + subscribe when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return
+    ensureLoadedRef.current = true
     fetchProjects()
 
     // Realtime subscription
-    const channel = supabase
+    channelRef.current = supabase
       .channel('projects-global')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
         fetchProjects(true)
       })
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }, [fetchProjects])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+      }
+    }
+  }, [])
 
   const createProject = async (projectData: Partial<Project>) => {
     try {
@@ -235,8 +253,9 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createProject,
       updateProject,
       deleteProject,
-      refreshProjects: () => fetchProjects(true)
-    }}>
+      refreshProjects: () => fetchProjects(true),
+      _ensureLoaded
+    } as any}>
       {children}
     </ProjectsContext.Provider>
   )
@@ -247,5 +266,6 @@ export const useProjects = () => {
   if (context === undefined) {
     throw new Error('useProjects must be used within a ProjectsProvider')
   }
+  useEffect(() => { (context as any)._ensureLoaded?.() }, [])
   return context
 }

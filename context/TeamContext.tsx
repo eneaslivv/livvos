@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useTenant } from './TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 
 // Types
@@ -43,86 +44,95 @@ const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
 export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
+    const { currentTenant } = useTenant();
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch team members
+    // Guard against concurrent fetches
+    const isFetchingRef = useRef(false);
+    const lastFetchKeyRef = useRef<string | null>(null);
+
+    // Fetch team members - depends on stable IDs, not object references
     const fetchTeamMembers = useCallback(async () => {
-        if (!user) {
+        const userId = user?.id;
+        const tenantId = currentTenant?.id;
+
+        if (!userId || !tenantId) {
             setMembers([]);
             setIsLoading(false);
             return;
         }
 
+        // Prevent duplicate concurrent fetches for the same key
+        const fetchKey = `${userId}-${tenantId}`;
+        if (isFetchingRef.current && lastFetchKeyRef.current === fetchKey) {
+            return;
+        }
+
+        isFetchingRef.current = true;
+        lastFetchKeyRef.current = fetchKey;
         setIsLoading(true);
         setError(null);
 
         try {
-            // 1. Fetch profiles
-            const { data: profiles, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('name');
+            // Parallel fetch all data sources - scoped to tenant
+            const [profilesResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.allSettled([
+                supabase.from('profiles').select('id, email, name, avatar_url, status').eq('tenant_id', tenantId).order('name'),
+                supabase.from('user_roles').select('user_id, roles(id, name)'),
+                supabase.from('tasks').select('assignee_id, completed').eq('tenant_id', tenantId),
+                supabase.from('project_members').select('member_id, project_id'),
+            ]);
 
-            if (profileError) {
-                // Table might not exist yet
-                console.warn('Could not fetch profiles:', profileError.message);
+            const profiles = profilesResult.status === 'fulfilled' && !profilesResult.value.error
+                ? profilesResult.value.data : null;
+
+            if (!profiles) {
+                const profileError = profilesResult.status === 'fulfilled' ? profilesResult.value.error : null;
+                console.warn('Could not fetch profiles:', profileError?.message || 'unknown error');
                 setMembers([]);
                 setIsLoading(false);
+                isFetchingRef.current = false;
                 return;
             }
 
-            // 2. Fetch user roles
-            const { data: userRoles } = await supabase
-                .from('user_roles')
-                .select('user_id, roles(id, name)');
+            const userRoles = userRolesResult.status === 'fulfilled' && !userRolesResult.value.error
+                ? userRolesResult.value.data : null;
 
-            // 3. Fetch task counts per user (from tasks table if exists)
             let taskCounts: Record<string, { open: number; completed: number }> = {};
-            try {
-                const { data: tasks } = await supabase
-                    .from('tasks')
-                    .select('assignee_id, completed');
-
-                if (tasks) {
-                    tasks.forEach((task: any) => {
-                        if (task.assignee_id) {
-                            if (!taskCounts[task.assignee_id]) {
-                                taskCounts[task.assignee_id] = { open: 0, completed: 0 };
-                            }
-                            if (task.completed) {
-                                taskCounts[task.assignee_id].completed++;
-                            } else {
-                                taskCounts[task.assignee_id].open++;
-                            }
+            const tasks = tasksResult.status === 'fulfilled' && !tasksResult.value.error
+                ? tasksResult.value.data : null;
+            if (tasks) {
+                tasks.forEach((task: any) => {
+                    if (task.assignee_id) {
+                        if (!taskCounts[task.assignee_id]) {
+                            taskCounts[task.assignee_id] = { open: 0, completed: 0 };
                         }
-                    });
-                }
-            } catch (e) {
-                // Tasks table might not have assignee_id
+                        if (task.completed) {
+                            taskCounts[task.assignee_id].completed++;
+                        } else {
+                            taskCounts[task.assignee_id].open++;
+                        }
+                    }
+                });
             }
 
-            // 4. Fetch project member counts
             let projectCounts: Record<string, number> = {};
-            try {
-                const { data: projectMembers } = await supabase
-                    .from('project_members')
-                    .select('member_id');
-
-                if (projectMembers) {
-                    projectMembers.forEach((pm: any) => {
-                        projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
-                    });
-                }
-            } catch (e) {
-                // Table might not exist
+            const projectMembers = projectMembersResult.status === 'fulfilled' && !projectMembersResult.value.error
+                ? projectMembersResult.value.data : null;
+            if (projectMembers) {
+                projectMembers.forEach((pm: any) => {
+                    projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
+                });
             }
 
-            // 5. Merge data
-            const enrichedMembers: TeamMember[] = (profiles || []).map((profile: any) => {
+            // Build member ID set for filtering roles
+            const profileIds = new Set(profiles.map((p: any) => p.id));
+
+            // Merge data
+            const enrichedMembers: TeamMember[] = profiles.map((profile: any) => {
                 const roleEntry = userRoles?.find((ur: any) => ur.user_id === profile.id);
-                const tasks = taskCounts[profile.id] || { open: 0, completed: 0 };
+                const memberTasks = taskCounts[profile.id] || { open: 0, completed: 0 };
 
                 // Handle roles which could be an object or null
                 const roleData: any = roleEntry?.roles;
@@ -138,34 +148,42 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     role: roleName || 'No Role',
                     role_id: roleId || null,
                     assignedProjects: projectCounts[profile.id] || 0,
-                    openTasks: tasks.open,
-                    completedTasks: tasks.completed,
+                    openTasks: memberTasks.open,
+                    completedTasks: memberTasks.completed,
                 };
             });
 
             setMembers(enrichedMembers);
         } catch (err: any) {
             errorLogger.error('Error fetching team members:', err);
-            setError(err.message);
+            setError(err.message || 'Failed to load team');
         } finally {
             setIsLoading(false);
+            isFetchingRef.current = false;
         }
-    }, [user]);
+    }, [user?.id, currentTenant?.id]);
 
-    // Initial fetch
+    // Initial fetch - only when user + tenant are ready
     useEffect(() => {
         fetchTeamMembers();
     }, [fetchTeamMembers]);
 
-    // Get tasks for a specific member
-    const getMemberTasks = async (memberId: string): Promise<TeamTask[]> => {
+    // Get tasks for a specific member (memoized to prevent re-render cascades)
+    const getMemberTasks = useCallback(async (memberId: string): Promise<TeamTask[]> => {
         try {
-            const { data, error } = await supabase
+            const query = supabase
                 .from('tasks')
                 .select('id, title, project_id, assignee_id, completed, due_date, priority')
                 .eq('assignee_id', memberId)
                 .order('completed', { ascending: true })
                 .order('due_date', { ascending: true });
+
+            // Scope to tenant if available
+            if (currentTenant?.id) {
+                query.eq('tenant_id', currentTenant.id);
+            }
+
+            const { data, error } = await query;
 
             if (error) {
                 console.warn('Could not fetch member tasks:', error.message);
@@ -177,10 +195,10 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error fetching member tasks:', err);
             return [];
         }
-    };
+    }, [currentTenant?.id]);
 
     // Assign task to member
-    const assignTaskToMember = async (taskId: string, memberId: string): Promise<void> => {
+    const assignTaskToMember = useCallback(async (taskId: string, memberId: string): Promise<void> => {
         try {
             const { error } = await supabase
                 .from('tasks')
@@ -195,16 +213,16 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error assigning task:', err);
             throw err;
         }
-    };
+    }, [fetchTeamMembers]);
 
     // Get workload summary for all members
-    const getWorkloadSummary = () => {
+    const getWorkloadSummary = useCallback(() => {
         return members.map((m) => ({
             memberId: m.id,
             name: m.name || m.email,
             load: m.openTasks,
         }));
-    };
+    }, [members]);
 
     return (
         <TeamContext.Provider

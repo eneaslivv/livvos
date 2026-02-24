@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
@@ -100,6 +100,7 @@ export const useAnalytics = () => {
   if (context === undefined) {
     throw new Error('useAnalytics must be used within an AnalyticsProvider');
   }
+  useEffect(() => { (context as any)._ensureLoaded?.(); }, []);
   return context;
 };
 
@@ -118,6 +119,8 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
   const [error, setError] = useState<string | null>(null);
   const [canViewAnalytics, setCanViewAnalytics] = useState(false);
   const [canManageAnalytics, setCanManageAnalytics] = useState(false);
+  const ensureLoadedRef = useRef(false);
+  const shouldLoadRef = useRef(false);
 
   // Check permissions
   useEffect(() => {
@@ -151,7 +154,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     };
 
     checkPermissions();
-  }, [user, currentTenant]);
+  }, [user?.id, currentTenant?.id]);
 
   // Load initial analytics data
   const loadAnalyticsData = useCallback(async () => {
@@ -168,50 +171,22 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
       setLoading(true);
       setError(null);
 
-      // Load web analytics for last 30 days
+      // Parallel fetch all analytics data
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { data: webData, error: webError } = await supabase
-        .from('web_analytics')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-        .order('date', { ascending: false });
+      const dateStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-      if (webError && webError.code !== 'PGRST116') {
-        console.warn('Web analytics table may not exist:', webError.message);
-      }
+      const [webResult, metricsResult, insightsResult] = await Promise.allSettled([
+        supabase.from('web_analytics').select('*').eq('tenant_id', tenantId).gte('date', dateStr).order('date', { ascending: false }),
+        supabase.from('analytics_metrics').select('*').eq('tenant_id', tenantId).gte('date', dateStr).order('date', { ascending: false }),
+        supabase.from('analytics_insights').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(50),
+      ]);
 
-      // Load metrics for last 30 days
-      const { data: metricsData, error: metricsError } = await supabase
-        .from('analytics_metrics')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-        .order('date', { ascending: false });
+      setWebAnalytics(webResult.status === 'fulfilled' ? webResult.value.data || [] : []);
+      setMetrics(metricsResult.status === 'fulfilled' ? metricsResult.value.data || [] : []);
+      setInsights(insightsResult.status === 'fulfilled' ? insightsResult.value.data || [] : []);
 
-      if (metricsError && metricsError.code !== 'PGRST116') {
-        console.warn('Analytics metrics table may not exist:', metricsError.message);
-      }
-
-      // Load insights
-      const { data: insightsData, error: insightsError } = await supabase
-        .from('analytics_insights')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (insightsError && insightsError.code !== 'PGRST116') {
-        console.warn('Analytics insights table may not exist:', insightsError.message);
-      }
-
-      setWebAnalytics(webData || []);
-      setMetrics(metricsData || []);
-      setInsights(insightsData || []);
-
-      // Calculate KPIs
+      // Calculate KPIs (depends on data above being set)
       await calculateKPIs();
     } catch (err) {
       errorLogger.error('Error loading analytics data:', err);
@@ -219,11 +194,22 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     } finally {
       setLoading(false);
     }
-  }, [user, tenantId, canViewAnalytics]);
+  }, [user?.id, tenantId, canViewAnalytics]);
 
-  useEffect(() => {
+  // Lazy load: only fetch when first consumer mounts
+  const _ensureLoaded = useCallback(() => {
+    if (ensureLoadedRef.current) return;
+    ensureLoadedRef.current = true;
+    shouldLoadRef.current = true;
     loadAnalyticsData();
-  }, [loadAnalyticsData]);
+  }, []);
+
+  // When permissions load, try fetching if consumer is mounted
+  useEffect(() => {
+    if (shouldLoadRef.current && canViewAnalytics) {
+      loadAnalyticsData();
+    }
+  }, [canViewAnalytics]);
 
   // Track page view
   const trackPageView = useCallback(async (page: string, referrer?: string) => {
@@ -695,7 +681,8 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     calculateConversionRate,
     calculateProductivity,
     calculateResponseTime,
-  };
+    _ensureLoaded,
+  } as any;
 
   return (
     <AnalyticsContext.Provider value={value}>

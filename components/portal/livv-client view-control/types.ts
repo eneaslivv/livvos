@@ -34,6 +34,22 @@ export interface AssetItem {
   url?: string;
 }
 
+export interface TaskItem {
+  id: string;
+  title: string;
+  completed: boolean;
+  priority?: string;
+  dueDate?: string;
+}
+
+export interface MessageItem {
+  id: string;
+  message: string;
+  senderName: string;
+  senderType: 'user' | 'client';
+  timestamp: string;
+}
+
 export interface DashboardData {
   progress: number;
   startDate: string;
@@ -47,4 +63,6 @@ export interface DashboardData {
   logs: LogEntry[];
   credentials?: CredentialItem[];
   assets?: AssetItem[];
+  tasks?: TaskItem[];
+  messages?: MessageItem[];
 }

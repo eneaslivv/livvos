@@ -224,37 +224,26 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Load roles and permissions
   const loadRolesAndPermissions = useCallback(async () => {
     try {
-      // Load roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select(`
-          *,
-          role_permissions (
-            permissions (*)
-          )
-        `);
+      // Parallel fetch roles and permissions
+      const [rolesResult, permissionsResult] = await Promise.allSettled([
+        supabase.from('roles').select(`*, role_permissions ( permissions (*) )`),
+        supabase.from('permissions').select('*'),
+      ]);
 
-      if (rolesError) throw rolesError;
-
-      const formattedRoles: Role[] = (rolesData || []).map((role: any) => {
-        return {
+      if (rolesResult.status === 'fulfilled' && !rolesResult.value.error) {
+        const formattedRoles: Role[] = (rolesResult.value.data || []).map((role: any) => ({
           id: role.id,
           name: role.name,
           description: role.description || '',
           isSystem: role.is_system,
           permissions: (role.role_permissions || []).map((rp: any) => rp.permissions || [])
-        };
-      });
+        }));
+        setRoles(formattedRoles);
+      }
 
-      setRoles(formattedRoles);
-
-      // Load all permissions
-      const { data: permissionsData, error: permissionsError } = await supabase
-        .from('permissions')
-        .select('*');
-
-      if (permissionsError) throw permissionsError;
-      setPermissions(permissionsData || []);
+      if (permissionsResult.status === 'fulfilled' && !permissionsResult.value.error) {
+        setPermissions(permissionsResult.value.data || []);
+      }
     } catch (error) {
       errorLogger.error('Error loading roles and permissions', error);
     }

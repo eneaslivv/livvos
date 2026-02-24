@@ -22,6 +22,8 @@ import Onboarding from './components/Onboarding';
 import ChatSupport from './components/ChatSupport';
 import PreferencesPanel from './components/PreferencesPanel';
 import CreatorPanel from './components/CreatorPanel';
+import ClientTasks from './components/ClientTasks';
+import ClientMessages from './components/ClientMessages';
 
 const INITIAL_DATA: DashboardData = {
   progress: 74,
@@ -244,6 +246,19 @@ const App: React.FC<ClientPortalAppProps> = ({
               <div className="md:col-span-12 lg:col-span-4">
                 <LegalAssets assets={data.assets} />
               </div>
+              {(data.tasks && data.tasks.length > 0) && (
+                <div className="md:col-span-6">
+                  <ClientTasks tasks={data.tasks} />
+                </div>
+              )}
+              {(data.messages && data.messages.length > 0) && (
+                <div className="md:col-span-6">
+                  <ClientMessages messages={data.messages} />
+                </div>
+              )}
+              {(data.tasks && data.tasks.length > 0 && (!data.messages || data.messages.length === 0)) && (
+                <div className="md:col-span-6" />
+              )}
               <div className="md:col-span-12">
                 <SystemLogs logs={data.logs} />
               </div>
