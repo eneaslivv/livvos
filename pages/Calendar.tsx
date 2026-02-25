@@ -118,6 +118,8 @@ export const Calendar: React.FC = () => {
   // Click-to-create popover state
   const [slotPopover, setSlotPopover] = useState<{
     cellRect: { top: number; left: number; width: number; height: number };
+    clickX: number;
+    clickY: number;
     date: string;
     hour: number;
   } | null>(null);
@@ -760,6 +762,8 @@ export const Calendar: React.FC = () => {
       {slotPopover && (
         <TimeSlotPopover
           cellRect={slotPopover.cellRect}
+          clickX={slotPopover.clickX}
+          clickY={slotPopover.clickY}
           date={slotPopover.date}
           hour={slotPopover.hour}
           mode={calendarMode}
@@ -828,6 +832,8 @@ export const Calendar: React.FC = () => {
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         setSlotPopover({
                           cellRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+                          clickX: e.clientX,
+                          clickY: e.clientY,
                           date: dateStr,
                           hour: hour,
                         });
@@ -889,6 +895,8 @@ export const Calendar: React.FC = () => {
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setSlotPopover({
                       cellRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+                      clickX: e.clientX,
+                      clickY: e.clientY,
                       date: dateStr,
                       hour: 9, // Default to 9:00 for month view
                     });

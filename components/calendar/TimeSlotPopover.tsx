@@ -4,6 +4,9 @@ import { Icons } from '../ui/Icons';
 interface TimeSlotPopoverProps {
   /** Bounding rect of the clicked cell */
   cellRect: { top: number; left: number; width: number; height: number };
+  /** Click coordinates for precise positioning */
+  clickX: number;
+  clickY: number;
   date: string;
   hour: number;
   mode: 'schedule' | 'content';
@@ -12,7 +15,7 @@ interface TimeSlotPopoverProps {
 }
 
 export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
-  cellRect, date, hour, mode, onSelect, onClose
+  cellRect, clickX, clickY, date, hour, mode, onSelect, onClose
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -39,7 +42,7 @@ export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
     };
   }, [onClose]);
 
-  // Calculate position after first render so we know the popover's actual size
+  // Calculate position using click coordinates for precise placement
   useEffect(() => {
     if (!ref.current) return;
     const popover = ref.current;
@@ -47,19 +50,15 @@ export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
     const popoverH = popover.offsetHeight;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const pad = 6;
+    const pad = 8;
 
-    // Try to place the popover to the right of the cell, vertically centered
-    let left = cellRect.left + cellRect.width + pad;
-    let top = cellRect.top + cellRect.height / 2 - popoverH / 2;
+    // Place popover to the right of the click point
+    let left = clickX + pad;
+    let top = clickY - popoverH / 2;
 
-    // If it overflows right, place it to the left of the cell
+    // If it overflows right, place it to the left of the click
     if (left + popoverW > vw - 8) {
-      left = cellRect.left - popoverW - pad;
-    }
-    // If it still overflows left, center it horizontally over the cell
-    if (left < 8) {
-      left = cellRect.left + cellRect.width / 2 - popoverW / 2;
+      left = clickX - popoverW - pad;
     }
 
     // Clamp vertically
@@ -67,7 +66,7 @@ export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
     if (top + popoverH > vh - 8) top = vh - popoverH - 8;
 
     setPosition({ left, top });
-  }, [cellRect]);
+  }, [clickX, clickY]);
 
   const formattedTime = `${hour.toString().padStart(2, '0')}:00`;
   const endHour = `${(hour + 1).toString().padStart(2, '0')}:00`;
