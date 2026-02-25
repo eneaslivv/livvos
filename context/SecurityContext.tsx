@@ -185,43 +185,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
-  // Initialize security data
-  const initializeSecurityData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Get current user from auth
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      
-      if (!authUser) {
-        setUser(null);
-        setIsInitialized(true);
-        setLoading(false);
-        return;
-      }
-
-      // Create security user
-      const securityUser = await createSecurityUser(authUser.id);
-      
-      if (securityUser) {
-        securityUser.email = authUser.email || '';
-        setUser(securityUser);
-      }
-
-      // Load roles and permissions
-      await loadRolesAndPermissions();
-
-      setIsInitialized(true);
-    } catch (err: any) {
-      errorLogger.error('Error initializing security data', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [createSecurityUser]);
-
-  // Load roles and permissions
+  // Load roles and permissions (declared before initializeSecurityData to avoid TDZ)
   const loadRolesAndPermissions = useCallback(async () => {
     try {
       // Load roles
@@ -260,45 +224,48 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
-  // Credential management functions
-  const createCredential = useCallback(async (input: CredentialCreateInput): Promise<DecryptedCredential> => {
+  // Initialize security data
+  const initializeSecurityData = useCallback(async () => {
     try {
-      const result = await credentialManager.createCredential(input);
-      await getCredentials(); // Refresh credentials list
-      return result;
-    } catch (error) {
-      errorLogger.error('Error creating credential', error);
-      throw error;
-    }
-  }, []);
+      setLoading(true);
+      setError(null);
 
-  const updateCredential = useCallback(async (id: string, updates: CredentialUpdateInput): Promise<DecryptedCredential> => {
-    try {
-      const result = await credentialManager.updateCredential(id, updates);
-      await getCredentials(); // Refresh credentials list
-      return result;
-    } catch (error) {
-      errorLogger.error('Error updating credential', error);
-      throw error;
-    }
-  }, []);
+      // Get current user from auth
+      const { data: { user: authUser } } = await supabase.auth.getUser();
 
-  const deleteCredential = useCallback(async (id: string): Promise<void> => {
-    try {
-      await credentialManager.deleteCredential(id);
-      await getCredentials(); // Refresh credentials list
-    } catch (error) {
-      errorLogger.error('Error deleting credential', error);
-      throw error;
-    }
-  }, []);
+      if (!authUser) {
+        setUser(null);
+        setIsInitialized(true);
+        setLoading(false);
+        return;
+      }
 
+      // Create security user
+      const securityUser = await createSecurityUser(authUser.id);
+
+      if (securityUser) {
+        securityUser.email = authUser.email || '';
+        setUser(securityUser);
+      }
+
+      // Load roles and permissions
+      await loadRolesAndPermissions();
+
+      setIsInitialized(true);
+    } catch (err: any) {
+      errorLogger.error('Error initializing security data', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [createSecurityUser, loadRolesAndPermissions]);
+
+  // Credential management — getCredentials declared first to avoid TDZ
   const getCredentials = useCallback(async (projectId?: string): Promise<void> => {
     try {
       setCredentialsLoading(true);
-      
+
       if (!projectId) {
-        // If no project specified, get all credentials the user has access to
         const { data: userProjects } = await supabase
           .from('projects')
           .select('id')
@@ -328,6 +295,38 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setCredentialsLoading(false);
     }
   }, [user?.id]);
+
+  const createCredential = useCallback(async (input: CredentialCreateInput): Promise<DecryptedCredential> => {
+    try {
+      const result = await credentialManager.createCredential(input);
+      await getCredentials();
+      return result;
+    } catch (error) {
+      errorLogger.error('Error creating credential', error);
+      throw error;
+    }
+  }, [getCredentials]);
+
+  const updateCredential = useCallback(async (id: string, updates: CredentialUpdateInput): Promise<DecryptedCredential> => {
+    try {
+      const result = await credentialManager.updateCredential(id, updates);
+      await getCredentials();
+      return result;
+    } catch (error) {
+      errorLogger.error('Error updating credential', error);
+      throw error;
+    }
+  }, [getCredentials]);
+
+  const deleteCredential = useCallback(async (id: string): Promise<void> => {
+    try {
+      await credentialManager.deleteCredential(id);
+      await getCredentials();
+    } catch (error) {
+      errorLogger.error('Error deleting credential', error);
+      throw error;
+    }
+  }, [getCredentials]);
 
   const getCredential = useCallback(async (id: string): Promise<DecryptedCredential> => {
     try {

@@ -268,7 +268,20 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     }
   }, [authUser, authLoading, currentTenant?.id]);
 
-  // Permission checking
+  // Utility: refresh RBAC data (declared early so CRUD functions below can reference it)
+  const refreshRBAC = useCallback(async () => {
+    await loadRBACData();
+  }, [loadRBACData]);
+
+  // Permission checking — hasRole must be declared before hasPermission (TDZ)
+  const hasRole = useCallback((roleName: string): boolean => {
+    if (!user || !isInitialized) return false;
+
+    return roles.some(role =>
+      role.name.toLowerCase() === roleName.toLowerCase()
+    );
+  }, [user, roles, isInitialized]);
+
   const hasPermission = useCallback((module: ModuleType, action: ActionType): boolean => {
     if (!user || !isInitialized) return false;
 
@@ -277,15 +290,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
     // Check if user has explicit permission
     return permissions.some(p => p.module === module && p.action === action);
-  }, [user, permissions, isInitialized]);
-
-  const hasRole = useCallback((roleName: string): boolean => {
-    if (!user || !isInitialized) return false;
-
-    return roles.some(role =>
-      role.name.toLowerCase() === roleName.toLowerCase()
-    );
-  }, [user, roles, isInitialized]);
+  }, [user, permissions, isInitialized, hasRole]);
 
   const hasAnyRole = useCallback((roleNames: string[]): boolean => {
     if (!user || !isInitialized) return false;
@@ -326,7 +331,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error creating role:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to create role');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const updateRole = useCallback(async (roleId: string, updates: Partial<Role>): Promise<Role> => {
     if (!hasPermission('security', 'manage')) {
@@ -352,7 +357,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error updating role:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to update role');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const deleteRole = useCallback(async (roleId: string) => {
     if (!hasPermission('security', 'manage')) {
@@ -373,7 +378,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error deleting role:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to delete role');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const getRole = useCallback(async (roleId: string): Promise<Role | null> => {
     try {
@@ -433,7 +438,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error creating permission:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to create permission');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const updatePermission = useCallback(async (permissionId: string, updates: Partial<Permission>): Promise<Permission> => {
     if (!hasPermission('security', 'manage')) {
@@ -456,7 +461,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error updating permission:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to update permission');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const deletePermission = useCallback(async (permissionId: string) => {
     if (!hasPermission('security', 'manage')) {
@@ -476,7 +481,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error deleting permission:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to delete permission');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const getAllPermissions = useCallback(async (): Promise<Permission[]> => {
     try {
@@ -514,7 +519,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error assigning permission to role:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to assign permission');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const removePermissionFromRole = useCallback(async (roleId: string, permissionId: string) => {
     if (!hasPermission('security', 'manage')) {
@@ -535,7 +540,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error removing permission from role:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to remove permission');
     }
-  }, [hasPermission]);
+  }, [hasPermission, refreshRBAC]);
 
   const getRolePermissions = useCallback(async (roleId: string): Promise<Permission[]> => {
     try {
@@ -577,7 +582,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error assigning role to user:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to assign role');
     }
-  }, [hasPermission, authUser?.id]);
+  }, [hasPermission, authUser?.id, refreshRBAC]);
 
   const removeRoleFromUser = useCallback(async (userId: string, roleId: string) => {
     if (!hasPermission('security', 'assign')) {
@@ -601,7 +606,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error removing role from user:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to remove role');
     }
-  }, [hasPermission, authUser?.id]);
+  }, [hasPermission, authUser?.id, refreshRBAC]);
 
   const getUserRoles = useCallback(async (userId: string): Promise<UserRole[]> => {
     try {
@@ -650,11 +655,6 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Utility functions
-  const refreshRBAC = useCallback(async () => {
-    await loadRBACData();
-  }, [loadRBACData]);
-
   const checkAccess = useCallback((module: ModuleType, action: ActionType) => {
     const allowed = hasPermission(module, action);
     let reason: string | undefined;
@@ -670,7 +670,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     }
 
     return { allowed, reason };
-  }, [hasPermission, user, isInitialized]);
+  }, [hasPermission, user, isInitialized, hasRole]);
 
   const getUserRoleHierarchy = useCallback((): number => {
     if (hasRole('owner')) return 0;

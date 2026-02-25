@@ -77,7 +77,7 @@ export const Activity: React.FC = () => {
   const { user: authUser } = useAuth();
   const { user: profileUser, isLoading: profileLoading } = useRBAC();
   const { currentTenant, isLoading: tenantLoading } = useTenant();
-  const { data: rawActivities, loading, refresh } = useSupabase<any>('activity_logs');
+  const { data: rawActivities, loading, error: fetchError, refresh } = useSupabase<any>('activity_logs');
 
   const [activeTab, setActiveTab] = useState<TabType>('All Activity');
   const [newPost, setNewPost] = useState('');
@@ -562,8 +562,23 @@ export const Activity: React.FC = () => {
         </div>
       </Card>
 
+      {/* Fetch error */}
+      {fetchError && !loading && allActivities.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Icons.AlertCircle size={32} className="text-red-400 mb-3" />
+          <p className="text-red-500 text-sm font-medium mb-2">Error loading activity feed</p>
+          <p className="text-zinc-400 text-xs max-w-md text-center mb-4">{fetchError}</p>
+          <button
+            onClick={() => refresh()}
+            className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Loading state */}
-      {loading && allActivities.length === 0 && (
+      {loading && allActivities.length === 0 && !fetchError && (
         <div className="flex flex-col items-center justify-center py-20">
           <Icons.Loader size={32} className="text-zinc-300 animate-spin mb-4" />
           <p className="text-zinc-500 text-sm">Loading activity feed...</p>

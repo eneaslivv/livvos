@@ -973,6 +973,39 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     }
   }, [canManageSystem, clusterNodes]);
 
+  // Helper function to transform cluster data (declared before getClusterInfo to avoid TDZ)
+  const transformClusterData = (clusterData: any): ClusterInfo => {
+    return {
+      id: clusterData.id,
+      clusterId: clusterData.cluster_id,
+      name: clusterData.name,
+      description: clusterData.description,
+      region: clusterData.region,
+      version: clusterData.version,
+      status: clusterData.status,
+      config: clusterData.config,
+      metadata: clusterData.metadata,
+      maxNodes: clusterData.max_nodes,
+      maxTenants: clusterData.max_tenants,
+      maxStorageGb: clusterData.max_storage_gb,
+      healthScore: clusterData.health_score,
+      lastHealthCheck: clusterData.last_health_check,
+      createdAt: clusterData.created_at,
+      updatedAt: clusterData.updated_at,
+      activatedAt: clusterData.activated_at,
+      decommissionedAt: clusterData.decommissioned_at,
+      tags: clusterData.tags || [],
+      labels: clusterData.labels || {},
+      nodeCount: clusterData.node_count || 0,
+      onlineNodes: clusterData.online_nodes || 0,
+      healthyNodes: clusterData.healthy_nodes || 0,
+      coordinationStatus: clusterData.coordination_status || {
+        status: 'healthy',
+        issues: []
+      }
+    };
+  };
+
   // Additional cluster management functions
   const getClusterInfo = useCallback(async (clusterId?: string): Promise<ClusterInfo[]> => {
     if (!canViewSystem) return [];
@@ -1155,39 +1188,6 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
       errorLogger.error('Error decommissioning cluster:', err);
     }
   }, [canManageSystem]);
-
-  // Helper function to transform cluster data
-  const transformClusterData = (clusterData: any): ClusterInfo => {
-    return {
-      id: clusterData.id,
-      clusterId: clusterData.cluster_id,
-      name: clusterData.name,
-      description: clusterData.description,
-      region: clusterData.region,
-      version: clusterData.version,
-      status: clusterData.status,
-      config: clusterData.config,
-      metadata: clusterData.metadata,
-      maxNodes: clusterData.max_nodes,
-      maxTenants: clusterData.max_tenants,
-      maxStorageGb: clusterData.max_storage_gb,
-      healthScore: clusterData.health_score,
-      lastHealthCheck: clusterData.last_health_check,
-      createdAt: clusterData.created_at,
-      updatedAt: clusterData.updated_at,
-      activatedAt: clusterData.activated_at,
-      decommissionedAt: clusterData.decommissioned_at,
-      tags: clusterData.tags || [],
-      labels: clusterData.labels || {},
-      nodeCount: clusterData.node_count || 0,
-      onlineNodes: clusterData.online_nodes || 0,
-      healthyNodes: clusterData.healthy_nodes || 0,
-      coordinationStatus: clusterData.coordination_status || {
-        status: 'healthy',
-        issues: []
-      }
-    };
-  };
 
   // Orchestration
   const orchestrateAgents = useCallback(async (workflow: AgentWorkflow): Promise<SkillExecution[]> => {
