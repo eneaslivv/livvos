@@ -47,7 +47,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch team members
+    // Fetch team members — queries run in parallel to avoid one slow query blocking the rest
     const fetchTeamMembers = useCallback(async () => {
         if (!user) {
             setMembers([]);
@@ -59,72 +59,66 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
 
         try {
-            // 1. Fetch profiles
-            const { data: profiles, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('name');
+            // Run all queries in parallel so one slow/hanging query doesn't block the rest
+            const [profilesResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.allSettled([
+                supabase.from('profiles').select('*').order('name'),
+                supabase.from('user_roles').select('user_id, roles(id, name)'),
+                supabase.from('tasks').select('assignee_id, completed'),
+                supabase.from('project_members').select('member_id'),
+            ]);
 
-            if (profileError) {
-                // Table might not exist yet
-                console.warn('Could not fetch profiles:', profileError.message);
+            // 1. Profiles (required)
+            const profiles = profilesResult.status === 'fulfilled' && !profilesResult.value.error
+                ? profilesResult.value.data : null;
+
+            if (!profiles) {
+                const msg = profilesResult.status === 'rejected'
+                    ? (profilesResult.reason as Error).message
+                    : (profilesResult as PromiseFulfilledResult<any>).value?.error?.message || 'Unknown error';
+                console.warn('Could not fetch profiles:', msg);
                 setMembers([]);
                 setIsLoading(false);
                 return;
             }
 
-            // 2. Fetch user roles
-            const { data: userRoles } = await supabase
-                .from('user_roles')
-                .select('user_id, roles(id, name)');
+            // 2. User roles (optional)
+            const userRoles = userRolesResult.status === 'fulfilled' && !userRolesResult.value.error
+                ? userRolesResult.value.data : null;
 
-            // 3. Fetch task counts per user (from tasks table if exists)
+            // 3. Task counts (optional)
             let taskCounts: Record<string, { open: number; completed: number }> = {};
-            try {
-                const { data: tasks } = await supabase
-                    .from('tasks')
-                    .select('assignee_id, completed');
-
-                if (tasks) {
-                    tasks.forEach((task: any) => {
-                        if (task.assignee_id) {
-                            if (!taskCounts[task.assignee_id]) {
-                                taskCounts[task.assignee_id] = { open: 0, completed: 0 };
-                            }
-                            if (task.completed) {
-                                taskCounts[task.assignee_id].completed++;
-                            } else {
-                                taskCounts[task.assignee_id].open++;
-                            }
+            const tasks = tasksResult.status === 'fulfilled' && !tasksResult.value.error
+                ? tasksResult.value.data : null;
+            if (tasks) {
+                tasks.forEach((task: any) => {
+                    if (task.assignee_id) {
+                        if (!taskCounts[task.assignee_id]) {
+                            taskCounts[task.assignee_id] = { open: 0, completed: 0 };
                         }
-                    });
-                }
-            } catch (e) {
-                // Tasks table might not have assignee_id
+                        if (task.completed) {
+                            taskCounts[task.assignee_id].completed++;
+                        } else {
+                            taskCounts[task.assignee_id].open++;
+                        }
+                    }
+                });
             }
 
-            // 4. Fetch project member counts
+            // 4. Project counts (optional)
             let projectCounts: Record<string, number> = {};
-            try {
-                const { data: projectMembers } = await supabase
-                    .from('project_members')
-                    .select('member_id');
-
-                if (projectMembers) {
-                    projectMembers.forEach((pm: any) => {
-                        projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
-                    });
-                }
-            } catch (e) {
-                // Table might not exist
+            const projectMembers = projectMembersResult.status === 'fulfilled' && !projectMembersResult.value.error
+                ? projectMembersResult.value.data : null;
+            if (projectMembers) {
+                projectMembers.forEach((pm: any) => {
+                    projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
+                });
             }
 
             // 5. Merge data
-            const enrichedMembers: TeamMember[] = (profiles || []).map((profile: any) => {
+            const enrichedMembers: TeamMember[] = profiles.map((profile: any) => {
                 const roleEntry = userRoles?.find((ur: any) => ur.user_id === profile.id);
-                const tasks = taskCounts[profile.id] || { open: 0, completed: 0 };
+                const tc = taskCounts[profile.id] || { open: 0, completed: 0 };
 
-                // Handle roles which could be an object or null
                 const roleData: any = roleEntry?.roles;
                 const roleName: string = roleData ? (Array.isArray(roleData) ? roleData[0]?.name : roleData.name) : 'No Role';
                 const roleId: string | null = roleData ? (Array.isArray(roleData) ? roleData[0]?.id : roleData.id) : null;
@@ -138,8 +132,8 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     role: roleName || 'No Role',
                     role_id: roleId || null,
                     assignedProjects: projectCounts[profile.id] || 0,
-                    openTasks: tasks.open,
-                    completedTasks: tasks.completed,
+                    openTasks: tc.open,
+                    completedTasks: tc.completed,
                 };
             });
 
@@ -150,7 +144,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } finally {
             setIsLoading(false);
         }
-    }, [user]);
+    }, [user?.id]);
 
     // Initial fetch
     useEffect(() => {
@@ -158,7 +152,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [fetchTeamMembers]);
 
     // Get tasks for a specific member
-    const getMemberTasks = async (memberId: string): Promise<TeamTask[]> => {
+    const getMemberTasks = useCallback(async (memberId: string): Promise<TeamTask[]> => {
         try {
             const { data, error } = await supabase
                 .from('tasks')
@@ -177,7 +171,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error fetching member tasks:', err);
             return [];
         }
-    };
+    }, []);
 
     // Assign task to member
     const assignTaskToMember = async (taskId: string, memberId: string): Promise<void> => {
