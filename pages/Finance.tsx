@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { Card } from '../components/ui/Card';
+import { SlidePanel } from '../components/ui/SlidePanel';
 import {
   DollarSign,
   TrendingUp,
@@ -584,145 +584,133 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {isEntryOpen &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4" onClick={closeNewEntry}>
-            <div
-              className="w-full max-w-lg bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-xl p-5 animate-in zoom-in-95 duration-200"
-              onClick={(event) => event.stopPropagation()}
+      <SlidePanel
+        isOpen={isEntryOpen}
+        onClose={closeNewEntry}
+        title="New Financial Record"
+        subtitle="Finance Entry"
+        width="md"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeNewEntry}
+              className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
             >
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-0.5">Finance Entry</p>
-                  <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">New Financial Record</h3>
-                </div>
-                <button
-                  onClick={closeNewEntry}
-                  className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
-                >
-                  <Icons.X size={16} />
-                </button>
-              </div>
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                const form = document.getElementById('finance-entry-form') as HTMLFormElement;
+                form?.requestSubmit();
+              }}
+              disabled={isSubmitting}
+              className="px-4 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Entry'}
+            </button>
+          </div>
+        }
+      >
+        <form id="finance-entry-form" className="p-5 space-y-4" onSubmit={handleSubmitEntry}>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Project</label>
+            <select
+              value={entryData.projectId}
+              onChange={(event) => handleEntryChange('projectId', event.target.value)}
+              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+            >
+              {projects.length === 0 && <option value="">No projects available</option>}
+              {projects.map(project => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <form className="space-y-4" onSubmit={handleSubmitEntry}>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Project</label>
-                  <select
-                    value={entryData.projectId}
-                    onChange={(event) => handleEntryChange('projectId', event.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                  >
-                    {projects.length === 0 && <option value="">No projects available</option>}
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Agreed</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={entryData.totalAgreed}
-                      onChange={(event) => handleEntryChange('totalAgreed', event.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Collected</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={entryData.totalCollected}
-                      onChange={(event) => handleEntryChange('totalCollected', event.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Direct Expenses</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={entryData.directExpenses}
-                      onChange={(event) => handleEntryChange('directExpenses', event.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Imputed Expenses</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={entryData.imputedExpenses}
-                      onChange={(event) => handleEntryChange('imputedExpenses', event.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Hours Worked</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={entryData.hoursWorked}
-                      onChange={(event) => handleEntryChange('hoursWorked', event.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Business Model</label>
-                    <select
-                      value={entryData.businessModel}
-                      onChange={(event) => handleEntryChange('businessModel', event.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="fixed">Fixed</option>
-                      <option value="hourly">Hourly</option>
-                      <option value="retainer">Retainer</option>
-                    </select>
-                  </div>
-                </div>
-
-                {entryError && (
-                  <div className="text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg px-3 py-2">
-                    {entryError}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={closeNewEntry}
-                    className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="px-4 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
-                  >
-                    {isSubmitting ? 'Saving...' : 'Save Entry'}
-                  </button>
-                </div>
-              </form>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Agreed</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entryData.totalAgreed}
+                onChange={(event) => handleEntryChange('totalAgreed', event.target.value)}
+                placeholder="0"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              />
             </div>
-          </div>,
-          document.body
-        )}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Total Collected</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entryData.totalCollected}
+                onChange={(event) => handleEntryChange('totalCollected', event.target.value)}
+                placeholder="0"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Direct Expenses</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entryData.directExpenses}
+                onChange={(event) => handleEntryChange('directExpenses', event.target.value)}
+                placeholder="0"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Imputed Expenses</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entryData.imputedExpenses}
+                onChange={(event) => handleEntryChange('imputedExpenses', event.target.value)}
+                placeholder="0"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Hours Worked</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={entryData.hoursWorked}
+                onChange={(event) => handleEntryChange('hoursWorked', event.target.value)}
+                placeholder="0"
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Business Model</label>
+              <select
+                value={entryData.businessModel}
+                onChange={(event) => handleEntryChange('businessModel', event.target.value)}
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="fixed">Fixed</option>
+                <option value="hourly">Hourly</option>
+                <option value="retainer">Retainer</option>
+              </select>
+            </div>
+          </div>
+
+          {entryError && (
+            <div className="text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg px-3 py-2">
+              {entryError}
+            </div>
+          )}
+        </form>
+      </SlidePanel>
     </div>
   );
 };

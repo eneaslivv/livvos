@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
+import { SlidePanel } from '../components/ui/SlidePanel';
 import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -490,266 +491,249 @@ export const Calendar: React.FC = () => {
         </div>
       </div>
 
-      {/* Formularios de creación (MODAL) */}
-      {(showNewEventForm || showNewTaskForm) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[90vh] overflow-y-auto">
-                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
-                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                        {showNewEventForm ? <Icons.Calendar size={20}/> : <Icons.Check size={20}/>}
-                        {showNewEventForm
-                          ? (calendarMode === 'content' ? 'Nuevo Contenido' : 'Nuevo Evento')
-                          : 'Nueva Tarea'}
-                    </h3>
-                    <button 
-                        onClick={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+      {/* Side panel de creación */}
+      <SlidePanel
+        isOpen={showNewEventForm || showNewTaskForm}
+        onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
+        title={showNewEventForm ? (calendarMode === 'content' ? 'Nuevo Contenido' : 'Nuevo Evento') : 'Nueva Tarea'}
+        width="md"
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
+              className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={showNewEventForm ? (calendarMode === 'content' ? handleCreateContent : handleCreateEvent) : handleCreateTask}
+              disabled={showNewEventForm ? (calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()) : !newTaskData.title.trim()}
+              className="px-5 py-2 bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {showNewEventForm ? <Icons.Calendar size={16}/> : <Icons.Check size={16}/>}
+              {showNewEventForm ? (calendarMode === 'content' ? 'Crear' : 'Crear Evento') : 'Crear Tarea'}
+            </button>
+          </div>
+        }
+      >
+        <div className="p-5 space-y-4">
+          {showNewEventForm ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
+                <input
+                  type="text"
+                  placeholder={calendarMode === 'content' ? 'Ej: Reel lanzamiento' : 'Ej: Reunión con Cliente'}
+                  value={calendarMode === 'content' ? newContentData.title : newEventData.title}
+                  onChange={(e) => calendarMode === 'content'
+                    ? setNewContentData({ ...newContentData, title: e.target.value })
+                    : setNewEventData({ ...newEventData, title: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
+                  autoFocus
+                />
+              </div>
+              {calendarMode === 'content' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Plataforma</label>
+                      <select
+                        value={newContentData.platform}
+                        onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
+                        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      >
+                        {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
+                          <option key={key} value={key}>{value.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Canal</label>
+                      <select
+                        value={newContentData.channel}
+                        onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
+                        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="feed">Feed</option>
+                        <option value="stories">Stories</option>
+                        <option value="reels">Reels</option>
+                        <option value="shorts">Shorts</option>
+                        <option value="post">Post</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Asset</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Carousel / Video / Copy"
+                      value={newContentData.asset_type}
+                      onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
+                      className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Estado</label>
+                    <select
+                      value={newContentData.status}
+                      onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
                     >
-                        <Icons.Close size={20}/>
-                    </button>
-                </div>
-          
-                <div className="p-6 space-y-4">
-                    {showNewEventForm ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
-                            <input
-                                type="text"
-                                placeholder={calendarMode === 'content' ? 'Ej: Reel lanzamiento' : 'Ej: Reunión con Cliente'}
-                                value={calendarMode === 'content' ? newContentData.title : newEventData.title}
-                                onChange={(e) => calendarMode === 'content'
-                                  ? setNewContentData({ ...newContentData, title: e.target.value })
-                                  : setNewEventData({ ...newEventData, title: e.target.value })
-                                }
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                                required
-                                autoFocus
-                            />
-                        </div>
-                        {calendarMode === 'content' ? (
-                          <>
-                            <div>
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Plataforma</label>
-                              <select
-                                value={newContentData.platform}
-                                onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
-                              >
-                                {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
-                                  <option key={key} value={key}>{value.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Canal</label>
-                              <select
-                                value={newContentData.channel}
-                                onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
-                              >
-                                <option value="feed">Feed</option>
-                                <option value="stories">Stories</option>
-                                <option value="reels">Reels</option>
-                                <option value="shorts">Shorts</option>
-                                <option value="post">Post</option>
-                              </select>
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Asset</label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Carousel / Video / Copy"
-                                value={newContentData.asset_type}
-                                onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Estado</label>
-                              <select
-                                value={newContentData.status}
-                                onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
-                              >
-                                {CONTENT_STATUSES.map((status) => (
-                                  <option key={status.id} value={status.id}>{status.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div>
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Tipo</label>
-                              <select
-                                value={newEventData.type}
-                                onChange={(e) => setNewEventData({ ...newEventData, type: e.target.value as any })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all appearance-none"
-                              >
-                                <option value="meeting">Reunión</option>
-                                <option value="call">Llamada</option>
-                                <option value="deadline">Deadline</option>
-                                <option value="work-block">Bloque de trabajo</option>
-                                <option value="note">Nota</option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block text-xs font-medium text-zinc-500 mb-1">Ubicación / Link</label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Zoom / Oficina"
-                                value={newEventData.location}
-                                onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                              />
-                            </div>
-                          </>
-                        )}
-
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha</label>
-                            <input
-                                type="date"
-                                value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
-                                onChange={(e) => calendarMode === 'content'
-                                  ? setNewContentData({ ...newContentData, start_date: e.target.value })
-                                  : setNewEventData({ ...newEventData, start_date: e.target.value })
-                                }
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Hora</label>
-                            <input
-                                type="time"
-                                value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
-                                onChange={(e) => calendarMode === 'content'
-                                  ? setNewContentData({ ...newContentData, start_time: e.target.value })
-                                  : setNewEventData({ ...newEventData, start_time: e.target.value })
-                                }
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Duración (min)</label>
-                            <input
-                                type="number"
-                                value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
-                                onChange={(e) => calendarMode === 'content'
-                                  ? setNewContentData({ ...newContentData, duration: parseInt(e.target.value) })
-                                  : setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })
-                                }
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                                min="15"
-                                step="15"
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
-                            <textarea
-                                placeholder="Detalles adicionales..."
-                                value={calendarMode === 'content' ? newContentData.description : newEventData.description}
-                                onChange={(e) => calendarMode === 'content'
-                                  ? setNewContentData({ ...newContentData, description: e.target.value })
-                                  : setNewEventData({ ...newEventData, description: e.target.value })
-                                }
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
-                                rows={3}
-                            />
-                        </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
-                            <input
-                                type="text"
-                                placeholder="Ej: Finalizar reporte"
-                                value={newTaskData.title}
-                                onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                                required
-                                autoFocus
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Prioridad</label>
-                            <select
-                                value={newTaskData.priority}
-                                onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            >
-                                <option value="low">Baja</option>
-                                <option value="medium">Media</option>
-                                <option value="high">Alta</option>
-                                <option value="urgent">Urgente</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha Límite</label>
-                            <input
-                                type="date"
-                                value={newTaskData.start_date}
-                                onChange={(e) => setNewTaskData({ ...newTaskData, start_date: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Proyecto</label>
-                            <select
-                                value={newTaskData.project_id}
-                                onChange={(e) => setNewTaskData({ ...newTaskData, project_id: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all"
-                            >
-                                <option value="">Sin proyecto</option>
-                                {projectOptions.map((project) => (
-                                    <option key={project.id} value={project.id}>{project.title}</option>
-                                ))}
-                            </select>
-                        </div>
-                        
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
-                            <textarea
-                                placeholder="Detalles..."
-                                value={newTaskData.description}
-                                onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
-                                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
-                                rows={3}
-                            />
-                        </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-                    <button
-                        onClick={() => {
-                            setShowNewEventForm(false);
-                            setShowNewTaskForm(false);
-                        }}
-                        className="px-5 py-2.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
+                      {CONTENT_STATUSES.map((status) => (
+                        <option key={status.id} value={status.id}>{status.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Tipo</label>
+                    <select
+                      value={newEventData.type}
+                      onChange={(e) => setNewEventData({ ...newEventData, type: e.target.value as any })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
                     >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={showNewEventForm ? (calendarMode === 'content' ? handleCreateContent : handleCreateEvent) : handleCreateTask}
-                        disabled={showNewEventForm ? (calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()) : !newTaskData.title.trim()}
-                        className="px-6 py-2.5 bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-sm font-bold shadow-lg shadow-zinc-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                    >
-                        {showNewEventForm ? <Icons.Calendar size={16}/> : <Icons.Check size={16}/>}
-                        {showNewEventForm ? (calendarMode === 'content' ? 'Crear Contenido' : 'Crear Evento') : 'Crear Tarea'}
-                    </button>
+                      <option value="meeting">Reunión</option>
+                      <option value="call">Llamada</option>
+                      <option value="deadline">Deadline</option>
+                      <option value="work-block">Bloque de trabajo</option>
+                      <option value="note">Nota</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Ubicación / Link</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Zoom / Oficina"
+                      value={newEventData.location}
+                      onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
+                    onChange={(e) => calendarMode === 'content'
+                      ? setNewContentData({ ...newContentData, start_date: e.target.value })
+                      : setNewEventData({ ...newEventData, start_date: e.target.value })
+                    }
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
+                    onChange={(e) => calendarMode === 'content'
+                      ? setNewContentData({ ...newContentData, start_time: e.target.value })
+                      : setNewEventData({ ...newEventData, start_time: e.target.value })
+                    }
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Duración</label>
+                  <input
+                    type="number"
+                    value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
+                    onChange={(e) => calendarMode === 'content'
+                      ? setNewContentData({ ...newContentData, duration: parseInt(e.target.value) })
+                      : setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })
+                    }
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    min="15"
+                    step="15"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
+                <textarea
+                  placeholder="Detalles adicionales..."
+                  value={calendarMode === 'content' ? newContentData.description : newEventData.description}
+                  onChange={(e) => calendarMode === 'content'
+                    ? setNewContentData({ ...newContentData, description: e.target.value })
+                    : setNewEventData({ ...newEventData, description: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
+                  rows={3}
+                />
+              </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Finalizar reporte"
+                  value={newTaskData.title}
+                  onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Prioridad</label>
+                  <select
+                    value={newTaskData.priority}
+                    onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="low">Baja</option>
+                    <option value="medium">Media</option>
+                    <option value="high">Alta</option>
+                    <option value="urgent">Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha Límite</label>
+                  <input
+                    type="date"
+                    value={newTaskData.start_date}
+                    onChange={(e) => setNewTaskData({ ...newTaskData, start_date: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Proyecto</label>
+                <select
+                  value={newTaskData.project_id}
+                  onChange={(e) => setNewTaskData({ ...newTaskData, project_id: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">Sin proyecto</option>
+                  {projectOptions.map((project) => (
+                    <option key={project.id} value={project.id}>{project.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
+                <textarea
+                  placeholder="Detalles..."
+                  value={newTaskData.description}
+                  onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
+                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </SlidePanel>
 
       {/* Google Calendar Settings Panel */}
       {showGoogleSettings && (

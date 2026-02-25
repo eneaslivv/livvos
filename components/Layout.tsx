@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from './ui/Icons';
+import { SlidePanel } from './ui/SlidePanel';
 import { PageView, AppMode, Priority } from '../types';
 import { TopNavbar } from './TopNavbar';
 import { useRBAC } from '../context/RBACContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
-import { supabase } from '../lib/supabase';
 import { useSupabase } from '../hooks/useSupabase';
 import { generateTaskFromAI } from '../lib/ai';
 
@@ -186,154 +186,149 @@ const CreateTaskModal = ({
       .finally(() => setIsThinking(false));
   };
 
-  if (!isOpen) return null;
+  const footer = mode !== 'ai' ? (
+    <div className="flex justify-between items-center">
+      <span className="text-xs text-zinc-400">Press <b>Enter</b> to create</span>
+      <div className="flex gap-2">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">Cancel</button>
+        <button
+          onClick={handleSubmit}
+          disabled={!title.trim()}
+          className="px-6 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+        >
+          Create Task
+        </button>
+      </div>
+    </div>
+  ) : undefined;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-        {/* Header / Tabs */}
-        <div className="flex border-b border-zinc-100 dark:border-zinc-800">
-          {[
-            { id: 'quick', label: 'Quick', icon: <Icons.Zap size={14} /> },
-            { id: 'detailed', label: 'Detailed', icon: <Icons.List size={14} /> },
-            { id: 'ai', label: 'AI Magic', icon: <Icons.Sparkles size={14} /> },
-          ].map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMode(m.id as any)}
-              className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${mode === m.id
-                ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100'
-                : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                }`}
-            >
-              {m.icon} {m.label}
-            </button>
-          ))}
-        </div>
+    <SlidePanel isOpen={isOpen} onClose={onClose} title="New Task" subtitle="Create a task quickly" width="md" footer={footer}>
+      {/* Mode Tabs */}
+      <div className="flex border-b border-zinc-100 dark:border-zinc-800">
+        {[
+          { id: 'quick', label: 'Quick', icon: <Icons.Zap size={14} /> },
+          { id: 'detailed', label: 'Detailed', icon: <Icons.List size={14} /> },
+          { id: 'ai', label: 'AI Magic', icon: <Icons.Sparkles size={14} /> },
+        ].map(m => (
+          <button
+            key={m.id}
+            onClick={() => setMode(m.id as any)}
+            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${mode === m.id
+              ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100'
+              : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+              }`}
+          >
+            {m.icon} {m.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Body */}
-        <div className="p-6">
-          {mode === 'ai' ? (
-            <div className="space-y-4">
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">Describe your task</label>
-              <textarea
+      {/* Body */}
+      <div className="p-5">
+        {mode === 'ai' ? (
+          <div className="space-y-4">
+            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">Describe your task</label>
+            <textarea
+              autoFocus
+              value={aiInput}
+              onChange={e => setAiInput(e.target.value)}
+              placeholder="e.g. 'Remind me to call Sofia tomorrow regarding the UI kit urgently'"
+              className="w-full h-32 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 dark:text-zinc-100"
+            />
+            {aiError && (
+              <div className="text-xs text-red-600 dark:text-red-400">{aiError}</div>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={handleAiGenerate}
+                disabled={isThinking || !aiInput.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-lg shadow-indigo-500/20"
+              >
+                {isThinking ? <Icons.Clock size={16} className="animate-spin" /> : <Icons.Sparkles size={16} />}
+                {isThinking ? 'Processing...' : 'Generate Task'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1">Task Title</label>
+              <input
                 autoFocus
-                value={aiInput}
-                onChange={e => setAiInput(e.target.value)}
-                placeholder="e.g. 'Remind me to call Sofia tomorrow regarding the UI kit urgently'"
-                className="w-full h-32 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 dark:text-zinc-100"
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="What needs to be done?"
+                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
               />
-              {aiError && (
-                <div className="text-xs text-red-600 dark:text-red-400">{aiError}</div>
-              )}
-              <div className="flex justify-end">
-                <button
-                  onClick={handleAiGenerate}
-                  disabled={isThinking || !aiInput.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-lg shadow-indigo-500/20"
-                >
-                  {isThinking ? <Icons.Clock size={16} className="animate-spin" /> : <Icons.Sparkles size={16} />}
-                  {isThinking ? 'Processing...' : 'Generate Task'}
-                </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
+              <div className="flex gap-2">
+                {[Priority.Low, Priority.Medium, Priority.High].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPriority(p)}
+                    className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all ${priority === p
+                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100'
+                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                      }`}
+                  >
+                    {p}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
+
+            {mode === 'detailed' && (
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Task Title</label>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Tag / Category</label>
                 <input
-                  autoFocus
                   type="text"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="What needs to be done?"
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"
-                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                  value={tag}
+                  onChange={e => setTag(e.target.value)}
+                  placeholder="e.g. Design"
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
                 />
               </div>
+            )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
-                  <div className="flex gap-2">
-                    {[Priority.Low, Priority.Medium, Priority.High].map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setPriority(p)}
-                        className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all ${priority === p
-                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100'
-                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
-                          }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {mode === 'detailed' && (
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Tag / Category</label>
-                    <input
-                      type="text"
-                      value={tag}
-                      onChange={e => setTag(e.target.value)}
-                      placeholder="e.g. Design"
-                      className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                    />
-                  </div>
-                )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Due date</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Due date</label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Project</label>
-                  <select
-                    value={projectId}
-                    onChange={e => setProjectId(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="">No project</option>
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id}>{project.title}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Project</label>
+                <select
+                  value={projectId}
+                  onChange={e => setProjectId(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">No project</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>{project.title}</option>
+                  ))}
+                </select>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        {mode !== 'ai' && (
-          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-            <span className="text-xs text-zinc-400">Press <b>Enter</b> to create</span>
-            <div className="flex gap-2">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">Cancel</button>
-              <button
-                onClick={handleSubmit}
-                disabled={!title.trim()}
-                className="px-6 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
-              >
-                Create Task
-              </button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </SlidePanel>
   );
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, onNavigate, onSwitchMode }) => {
-  const { user, hasPermission, isInitialized } = useRBAC();
+  const { hasPermission, isInitialized } = useRBAC();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -531,37 +526,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               {isDarkMode ? <Icons.Sun size={20} /> : <Icons.Moon size={20} />}
             </div>
             <span className={`ml-3 text-sm font-medium whitespace-nowrap transition-all duration-300 ${isSidebarExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Theme</span>
-          </button>
-
-          {/* Profile */}
-          <div className={`relative w-[calc(100%-24px)] mx-3 mt-2 flex items-center transition-all duration-300 mb-2 shrink-0 h-10 cursor-pointer ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-            <div className="relative shrink-0 transition-all duration-300">
-              <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                <img
-                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name || 'User'}&backgroundColor=E6E2D8&textColor=433E36`}
-                  alt="User"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </div>
-            <div className={`transition-opacity duration-300 absolute left-12 whitespace-nowrap pl-2 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="font-bold text-xs text-zinc-900 dark:text-zinc-100">{user?.name || 'User'}</div>
-            </div>
-          </div>
-
-          {/* Logout Button */}
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              window.location.href = '/auth/login';
-            }}
-            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors group/btn shrink-0"
-            title={!isSidebarExpanded ? "Logout" : undefined}
-          >
-            <div className="flex items-center justify-center w-6 h-6 shrink-0">
-              <Icons.LogOut size={20} />
-            </div>
-            <span className={`ml-3 text-sm font-medium whitespace-nowrap transition-all duration-300 ${isSidebarExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Logout</span>
           </button>
 
           {/* Sidebar Toggle Button */}
