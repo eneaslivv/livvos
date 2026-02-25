@@ -235,7 +235,6 @@ export const Activity: React.FC = () => {
     try {
       const { error: insertError } = await supabase.from('activity_logs').insert({
         user_id: effectiveUser.id,
-        owner_id: effectiveUser.id,
         tenant_id: currentTenant.id,
         user_name: userName,
         user_avatar: getInitials(userName),
@@ -368,7 +367,6 @@ export const Activity: React.FC = () => {
     try {
       const { error: insertError } = await supabase.from('activity_logs').insert({
         user_id: effectiveUser.id,
-        owner_id: effectiveUser.id,
         tenant_id: currentTenant.id,
         parent_id: selectedActivityId,
         user_name: userName,
