@@ -151,14 +151,16 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return cachedTenantIdRef.current
   }, [])
 
+  const hasLoadedCalendarRef = useRef(false)
+
   const loadCalendarData = useCallback(async (force = false) => {
-    if (isInitialized && !force) {
+    if (hasLoadedCalendarRef.current && !force) {
       setLoading(false)
       return
     }
 
-    // Only show loading on initial load, not on force-refreshes
-    if (!isInitialized) {
+    // Only show loading on first load, not on background re-fetches
+    if (!hasLoadedCalendarRef.current) {
       setLoading(true)
     }
     setError(null)
@@ -183,15 +185,17 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setEvents(eventsResult as CalendarEvent[])
       setTasks((tasksResult as any[]).map(normalizeTask))
       setLabels(labelsResult as CalendarLabel[])
+      hasLoadedCalendarRef.current = true
       setIsInitialized(true)
 
     } catch (err: any) {
       errorLogger.error('Error cargando datos del calendario', err)
+      hasLoadedCalendarRef.current = true
       setIsInitialized(true)
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, []) // stable — no dependencies, uses ref instead of state
 
   // Resolve tenant_id in background on mount
   useEffect(() => {

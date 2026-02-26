@@ -239,6 +239,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   }, [loadFinances])
 
   // ─── Load Incomes ───────────────────────────────────────────
+  const hasLoadedIncomesRef = useRef(false)
 
   const loadIncomes = useCallback(async () => {
     if (!user || !currentTenant) {
@@ -247,7 +248,9 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       return
     }
     try {
-      setIncomesLoading(true)
+      if (!hasLoadedIncomesRef.current) {
+        setIncomesLoading(true)
+      }
 
       // Timeout to prevent infinite loading if query hangs
       const timeout = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
@@ -277,6 +280,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         ),
       }))
       setIncomes(sorted)
+      hasLoadedIncomesRef.current = true
     } catch (err) {
       console.error('Error loading incomes:', err)
       setIncomes([])
@@ -290,6 +294,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   }, [loadIncomes])
 
   // ─── Load Expenses ──────────────────────────────────────────
+  const hasLoadedExpensesRef = useRef(false)
 
   const loadExpenses = useCallback(async () => {
     if (!user || !currentTenant) {
@@ -298,7 +303,9 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       return
     }
     try {
-      setExpensesLoading(true)
+      if (!hasLoadedExpensesRef.current) {
+        setExpensesLoading(true)
+      }
 
       const timeout = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timed out' } }), 8000)
@@ -318,6 +325,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         return
       }
       setExpenses(data || [])
+      hasLoadedExpensesRef.current = true
     } catch (err) {
       console.error('Error loading expenses:', err)
       setExpenses([])

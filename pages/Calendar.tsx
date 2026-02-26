@@ -1535,17 +1535,45 @@ export const Calendar: React.FC = () => {
             {/* Blocked banner */}
             {isTaskBlocked(selectedTask) && (() => {
               const blocker = getBlockerTask(selectedTask);
+              const blockerOwner = blocker?.assignee_id ? getMemberName(blocker.assignee_id) : null;
+              const blockerAvatar = blocker?.assignee_id ? getMemberAvatar(blocker.assignee_id) : null;
               return (
-                <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30">
-                  <Icons.Lock size={13} className="text-amber-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Bloqueada</span>
-                    {blocker && (
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400/70 truncate">
-                        Esperando: {blocker.title}
-                      </p>
-                    )}
+                <div className="px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
+                      <Icons.Lock size={14} className="text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Bloqueada</span>
+                      {blocker && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400/80 truncate mt-0.5">
+                          Esperando: <span className="font-semibold">{blocker.title}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  {blocker && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-amber-200 dark:border-amber-500/20">
+                      {blockerOwner ? (
+                        <>
+                          {blockerAvatar ? (
+                            <img src={blockerAvatar} alt="" className="w-5 h-5 rounded-full" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-amber-200 dark:bg-amber-500/20 flex items-center justify-center text-[9px] font-bold text-amber-700 dark:text-amber-300">
+                              {(blockerOwner || '?')[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                            <span className="font-semibold">{blockerOwner}</span> necesita completar esta tarea primero
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-amber-600/80 dark:text-amber-400/60 italic">
+                          La tarea bloqueante no tiene asignado — asignala para destrabar el flujo
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1811,8 +1839,8 @@ export const Calendar: React.FC = () => {
             </div>
 
             {/* Dependency selector */}
-            <div>
-              <label className="text-[10px] font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
+            <div className="space-y-2">
+              <label className="text-[10px] font-medium text-zinc-400 mb-1 flex items-center gap-1">
                 <Icons.Link size={10} />
                 Dependencia
               </label>
@@ -1829,29 +1857,130 @@ export const Calendar: React.FC = () => {
                 {tasks
                   .filter(t => t.id !== selectedTask.id && !t.parent_task_id)
                   .sort((a, b) => a.title.localeCompare(b.title))
-                  .map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.completed ? '\u2713 ' : ''}{t.title}
-                    </option>
-                  ))}
+                  .map(t => {
+                    const owner = t.assignee_id ? getMemberName(t.assignee_id) : null;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {t.completed ? '\u2713 ' : '\u25CB '}{t.title}{owner ? ` — ${owner}` : ''}
+                      </option>
+                    );
+                  })}
               </select>
+
+              {/* Active dependency detail card */}
+              {editingTask.blocked_by && (() => {
+                const blocker = tasks.find(t => t.id === editingTask.blocked_by);
+                if (!blocker) return null;
+                const blockerOwner = blocker.assignee_id ? getMemberName(blocker.assignee_id) : null;
+                const blockerAvatar = blocker.assignee_id ? getMemberAvatar(blocker.assignee_id) : null;
+                const isResolved = blocker.completed;
+                return (
+                  <div className={`p-2.5 rounded-lg border ${
+                    isResolved
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
+                      : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'
+                  }`}>
+                    <div className="flex items-start gap-2">
+                      <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        isResolved ? 'bg-emerald-500' : 'bg-amber-400'
+                      }`}>
+                        {isResolved
+                          ? <Icons.Check size={11} className="text-white" />
+                          : <Icons.Lock size={10} className="text-white" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${
+                          isResolved ? 'text-emerald-700 dark:text-emerald-400 line-through' : 'text-amber-700 dark:text-amber-400'
+                        }`}>
+                          {blocker.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {blockerOwner && (
+                            <div className="flex items-center gap-1">
+                              {blockerAvatar ? (
+                                <img src={blockerAvatar} alt="" className="w-3.5 h-3.5 rounded-full" />
+                              ) : (
+                                <div className="w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[7px] font-bold text-violet-700 dark:text-violet-300">
+                                  {(blockerOwner || '?')[0]?.toUpperCase()}
+                                </div>
+                              )}
+                              <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-400">
+                                {blockerOwner}
+                              </span>
+                            </div>
+                          )}
+                          {!blockerOwner && (
+                            <span className="text-[10px] text-zinc-400 italic">Sin asignar</span>
+                          )}
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                            isResolved
+                              ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                              : blocker.status === 'in-progress'
+                                ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                                : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
+                          }`}>
+                            {isResolved ? 'Completada' : blocker.status === 'in-progress' ? 'En progreso' : 'Pendiente'}
+                          </span>
+                        </div>
+                        {!isResolved && (
+                          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-1">
+                            {blockerOwner
+                              ? `${blockerOwner} necesita completar esta tarea primero`
+                              : 'Esta tarea debe completarse antes de avanzar'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Dependent tasks (reverse: tasks blocked by this one) */}
               {(() => {
                 const dependents = getDependentTasks(selectedTask.id);
                 if (dependents.length === 0) return null;
                 return (
-                  <div className="mt-1.5 px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                    <span className="text-[10px] font-medium text-zinc-400">Bloquea a:</span>
-                    <div className="mt-1 space-y-0.5">
-                      {dependents.map(d => (
-                        <div key={d.id} className="flex items-center gap-1.5 text-[11px]">
-                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${d.completed ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                          <span className={`truncate ${d.completed ? 'text-zinc-400 line-through' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                            {d.title}
-                          </span>
-                        </div>
-                      ))}
+                  <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Icons.ChevronRight size={10} className="text-zinc-400" />
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Bloquea a {dependents.length} tarea{dependents.length > 1 ? 's' : ''}</span>
                     </div>
+                    <div className="space-y-1.5">
+                      {dependents.map(d => {
+                        const depOwner = d.assignee_id ? getMemberName(d.assignee_id) : null;
+                        const depAvatar = d.assignee_id ? getMemberAvatar(d.assignee_id) : null;
+                        return (
+                          <div key={d.id} className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700/40 transition-colors cursor-pointer"
+                            onClick={() => handleOpenTaskDetail(d)}>
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${d.completed ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
+                            <span className={`text-[11px] flex-1 truncate ${d.completed ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                              {d.title}
+                            </span>
+                            {depOwner && (
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {depAvatar ? (
+                                  <img src={depAvatar} alt="" className="w-3.5 h-3.5 rounded-full" />
+                                ) : (
+                                  <div className="w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[7px] font-bold text-violet-700 dark:text-violet-300">
+                                    {(depOwner || '?')[0]?.toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{depOwner}</span>
+                              </div>
+                            )}
+                            {!depOwner && !d.completed && (
+                              <span className="text-[9px] text-zinc-400 italic flex-shrink-0">sin asignar</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {!selectedTask.completed && dependents.some(d => !d.completed) && (
+                      <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-2 pt-1.5 border-t border-zinc-200 dark:border-zinc-700">
+                        {dependents.filter(d => !d.completed).length} persona{dependents.filter(d => !d.completed).length > 1 ? 's esperan' : ' espera'} que completes esta tarea para avanzar
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -1963,11 +2092,15 @@ export const Calendar: React.FC = () => {
                         className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border ${tc.bg} ${tc.border} ${
                           task.completed ? 'line-through opacity-50' : ''
                         } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                        title={`${task.title} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
+                        title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOQUEADA' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
                         onClick={() => handleOpenTaskDetail(task)}
                       >
                         <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                          <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                          {isTaskBlocked(task) ? (
+                            <Icons.Lock size={8} className="text-amber-500 shrink-0" />
+                          ) : (
+                            <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                          )}
                           <span className="truncate">{task.title}</span>
                           {overdue > 0 && (
                             <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
@@ -2047,15 +2180,19 @@ export const Calendar: React.FC = () => {
                       ))}
                       {hourTasks.map((task) => {
                         const tc = getTaskColor(task);
+                        const overdue = getOverdueDays(task);
                         return (
                           <div
                             key={task.id}
-                            className={`text-xs p-1.5 rounded mb-1 cursor-pointer hover:opacity-80 transition-opacity border ${tc.bg} ${tc.border} ${
+                            draggable
+                            onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                            onDragEnd={() => setDraggingTaskId(null)}
+                            className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border ${tc.bg} ${tc.border} ${
                               task.completed || task.status === 'done' ? 'line-through opacity-60' : ''
                             } ${task.status === 'cancelled' ? 'line-through opacity-50' : ''} ${
                               task.status === 'in-progress' ? 'border-l-[3px]' : ''
                             }`}
-                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''} [${task.priority}/${task.status}]`}
+                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOQUEADA — esperando: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
                             onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                           >
                             <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
@@ -2065,6 +2202,11 @@ export const Calendar: React.FC = () => {
                                 <span className={`w-1.5 h-1.5 rounded-full ${tc.dot} shrink-0`} />
                               )}
                               {task.title}
+                              {overdue > 0 && (
+                                <span className="text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                                  +{overdue}d
+                                </span>
+                              )}
                               {task.assignee_id && (
                                 getMemberAvatar(task.assignee_id) ? (
                                   <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-3.5 h-3.5 rounded-full shrink-0 ml-auto" />
@@ -2075,6 +2217,25 @@ export const Calendar: React.FC = () => {
                               )
                             )}
                           </div>
+                          {/* Blocked line + client tag */}
+                          {(isTaskBlocked(task) || getClientLabel(task)) && (
+                            <div className="flex items-center gap-1 mt-0.5 truncate">
+                              {isTaskBlocked(task) && (() => {
+                                const bl = getBlockerTask(task);
+                                const blOwner = bl?.assignee_id ? getMemberName(bl.assignee_id) : null;
+                                return (
+                                  <span className="text-[8px] text-amber-600 dark:text-amber-400 font-medium truncate">
+                                    {blOwner ? `Esp. ${blOwner}` : `Esp: ${bl?.title?.slice(0, 20) || '?'}`}
+                                  </span>
+                                );
+                              })()}
+                              {getClientLabel(task) && (
+                                <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto truncate">
+                                  {getClientLabel(task)}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         );
                       })}
@@ -2119,11 +2280,13 @@ export const Calendar: React.FC = () => {
                       hour: 9,
                     });
                   }}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleTaskDrop(e, dateStr)}
                   className={`min-h-[120px] p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
                     isSelected
                       ? 'bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
                       : isCurrentMonth ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/40'
-                  }`}
+                  } ${draggingTaskId ? 'hover:bg-blue-50/40 dark:hover:bg-blue-900/10' : ''}`}
                 >
                   <div className={`text-xs font-semibold flex items-center gap-1 ${
                     isToday
@@ -2158,16 +2321,23 @@ export const Calendar: React.FC = () => {
                     ))}
                     {dayTasks.slice(0, Math.max(0, maxVisible - dayEvents.length)).map((task) => {
                       const tc = getTaskColor(task);
+                      const overdue = getOverdueDays(task);
                       return (
                         <div
                           key={task.id}
-                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border ${tc.bg} ${tc.border} ${
+                          draggable
+                          onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                          onDragEnd={() => setDraggingTaskId(null)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing ${tc.bg} ${tc.border} ${
                             task.completed ? 'line-through opacity-50' : ''
                           }`}
                           onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                         >
                           <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
-                          <span className={tc.text}>{task.title}</span>
+                          <span className={`${tc.text} truncate`}>{task.title}</span>
+                          {overdue > 0 && (
+                            <span className="ml-auto text-[8px] font-bold text-red-500 shrink-0">+{overdue}d</span>
+                          )}
                         </div>
                       );
                     })}

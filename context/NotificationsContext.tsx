@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
@@ -173,6 +173,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
+  const hasLoadedNotificationsRef = useRef(false);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -183,7 +184,10 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     }
 
     try {
-      setIsLoading(true);
+      // Only show loading on first fetch, not background re-fetches
+      if (!hasLoadedNotificationsRef.current) {
+        setIsLoading(true);
+      }
       setError(null);
 
       const { data, error } = await supabase
@@ -200,6 +204,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
       } else {
         setNotifications(data || []);
       }
+      hasLoadedNotificationsRef.current = true;
     } catch (err) {
       errorLogger.error('Error fetching notifications:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch notifications');

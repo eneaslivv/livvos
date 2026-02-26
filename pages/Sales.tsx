@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Lead, WebAnalytics } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
@@ -30,17 +30,6 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     subscribe: false,
   });
   const { convertLeadToProject, isConverting } = useLeadToProject();
-
-  // Loading timeout: don't show skeleton forever — after 5s, show CRMBoard even if still loading
-  const [leadsTimedOut, setLeadsTimedOut] = useState(false);
-  const leadsTimerStart = useRef(Date.now());
-  useEffect(() => {
-    if (!leadsLoading) { setLeadsTimedOut(false); leadsTimerStart.current = Date.now(); return; }
-    const elapsed = Date.now() - leadsTimerStart.current;
-    const remaining = Math.max(0, 5000 - elapsed);
-    const timer = setTimeout(() => setLeadsTimedOut(true), remaining);
-    return () => clearTimeout(timer);
-  }, [leadsLoading]);
 
   const [filter, setFilter] = useState<LeadStatus | 'all'>('all');
   const [category, setCategory] = useState<LeadCategory | 'all'>('all');
@@ -442,21 +431,19 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                 </button>
               </div>
             )}
-            {leadsLoading && !leadsTimedOut ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 h-full animate-pulse">
-                {Array.from({ length: 4 }).map((_, idx) => (
-                  <div key={idx} className="w-full h-full min-h-[360px] rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40" />
-                ))}
+            {leadsLoading && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+                <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300 rounded-full animate-spin" />
+                Loading leads...
               </div>
-            ) : (
-              <CRMBoard
-                leads={filtered}
-                onStatusChange={handleStatusChange}
-                onConvert={lead => setShowConvertModal(lead)}
-                onLeadClick={(lead) => setSelectedLeadId(lead.id)}
-                convertingId={convertingLeadId}
-              />
             )}
+            <CRMBoard
+              leads={filtered}
+              onStatusChange={handleStatusChange}
+              onConvert={lead => setShowConvertModal(lead)}
+              onLeadClick={(lead) => setSelectedLeadId(lead.id)}
+              convertingId={convertingLeadId}
+            />
           </div>
         </div>
       </>

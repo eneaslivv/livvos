@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 
@@ -81,28 +81,29 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const hasLoadedRef = useRef(false)
 
   const fetchClients = useCallback(async (force = false) => {
     // Si ya está inicializado y no forzamos, no hacemos nada (cache hit)
-    if (isInitialized && !force) {
+    if (hasLoadedRef.current && !force) {
       setLoading(false)
       return
     }
 
-    setLoading(true)
+    // Only show loading on first load, not on background re-fetches
+    if (!hasLoadedRef.current) {
+      setLoading(true)
+    }
     setError(null)
-    
+
     try {
       errorLogger.log('Fetching clients from Supabase...')
       const { data, error: err } = await supabase
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false })
-      
+
       if (err) {
-        // Ignorar error si la tabla no existe aún (primera carga)
-        // 42P01: relation does not exist
-        // PGRST116: result contains 0 rows (no es error, pero a veces supabase lo tira así en single())
         if (err.code === 'PGRST116' || err.code === '42P01') {
           errorLogger.warn('Clients table not found or empty, initializing empty')
           setClients([])
@@ -114,6 +115,7 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setClients(data || [])
         errorLogger.log(`Clientes cargados: ${data?.length || 0}`)
       }
+      hasLoadedRef.current = true
       setIsInitialized(true)
     } catch (err: any) {
       errorLogger.error('Error en fetchClients', err)
@@ -121,7 +123,7 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, []) // stable — uses ref instead of state
 
   // Cargar clientes al montar el Provider (una sola vez por sesión de app)
   useEffect(() => {

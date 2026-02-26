@@ -114,7 +114,7 @@ export const Clients: React.FC = () => {
   const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [taskProjectFilter, setTaskProjectFilter] = useState<string>('all');
-  const [projectTasks, setProjectTasks] = useState<{ id: string; title: string; completed: boolean; priority: string; due_date?: string; project_id?: string; client_id?: string; start_date?: string; start_time?: string; status?: string; assignee_id?: string; parent_task_id?: string; description?: string; project_name?: string }[]>([]);
+  const [projectTasks, setProjectTasks] = useState<{ id: string; title: string; completed: boolean; priority: string; due_date?: string; project_id?: string; client_id?: string; start_date?: string; start_time?: string; status?: string; assignee_id?: string; parent_task_id?: string; description?: string; blocked_by?: string; project_name?: string }[]>([]);
 
   const [showNewIncomeForm, setShowNewIncomeForm] = useState(false);
   const [newIncomeData, setNewIncomeData] = useState({
@@ -217,7 +217,7 @@ export const Clients: React.FC = () => {
       const projectIds = linkedProjects.map(p => p.id);
 
       // Fetch tasks by client_id (direct link) and by project_id (indirect via project)
-      const taskFields = 'id, title, completed, priority, due_date, project_id, client_id, start_date, start_time, status, assignee_id, parent_task_id, description';
+      const taskFields = 'id, title, completed, priority, due_date, project_id, client_id, start_date, start_time, status, assignee_id, parent_task_id, description, blocked_by';
       const clientTasksQuery = supabase
         .from('tasks')
         .select(taskFields)
@@ -1432,34 +1432,49 @@ export const Clients: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Unified task list: client_tasks (general) + project tasks */}
+                      {/* Unified task list from tasks table */}
                       {(() => {
-                        // Build unified task list
-                        type UnifiedTask = { id: string; title: string; completed: boolean; priority: string; due_date?: string; source: 'client' | 'project' | 'calendar'; project_name?: string; project_id?: string };
-                        const generalTasks: UnifiedTask[] = tasks.map(t => ({
-                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
-                          due_date: t.due_date, source: 'client' as const
-                        }));
-                        // Split unified tasks into project-linked and direct (calendar-created with client_id only)
-                        const projTasks: UnifiedTask[] = projectTasks.filter(t => t.project_id).map(t => ({
-                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
-                          due_date: t.due_date || t.start_date, source: 'project' as const, project_name: t.project_name, project_id: t.project_id
-                        }));
-                        const calendarTasks: UnifiedTask[] = projectTasks.filter(t => !t.project_id).map(t => ({
-                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
-                          due_date: t.due_date || t.start_date, source: 'calendar' as const
-                        }));
+                        // Only use unified tasks (from tasks table) — filter out subtasks for main list
+                        const mainTasks = projectTasks.filter(t => !t.parent_task_id);
+                        const subtasksByParent = projectTasks.filter(t => t.parent_task_id).reduce<Record<string, typeof projectTasks>>((acc, t) => {
+                          const pid = t.parent_task_id!;
+                          if (!acc[pid]) acc[pid] = [];
+                          acc[pid].push(t);
+                          return acc;
+                        }, {});
 
                         // Apply filter
-                        let filtered: UnifiedTask[];
-                        if (taskProjectFilter === 'all') filtered = [...generalTasks, ...calendarTasks, ...projTasks];
-                        else if (taskProjectFilter === 'general') filtered = [...generalTasks, ...calendarTasks];
-                        else filtered = projTasks.filter(t => t.project_id === taskProjectFilter);
+                        let filtered = mainTasks;
+                        if (taskProjectFilter === 'general') filtered = mainTasks.filter(t => !t.project_id);
+                        else if (taskProjectFilter !== 'all') filtered = mainTasks.filter(t => t.project_id === taskProjectFilter);
 
-                        const pending = filtered.filter(t => !t.completed);
-                        const completed = filtered.filter(t => t.completed);
-                        const totalCount = filtered.length;
+                        // Also include legacy client_tasks in "all" and "general"
+                        type UnifiedTask = typeof projectTasks[number] & { _legacy?: boolean };
+                        const legacyTasks: UnifiedTask[] = (taskProjectFilter === 'all' || taskProjectFilter === 'general')
+                          ? tasks.map(t => ({ id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium', due_date: t.due_date, _legacy: true } as any))
+                          : [];
+                        const allFiltered: UnifiedTask[] = [...legacyTasks, ...filtered];
+
+                        const pending = allFiltered.filter(t => !t.completed);
+                        const completed = allFiltered.filter(t => t.completed);
+                        const totalCount = allFiltered.length;
                         const completedCount = completed.length;
+
+                        // Helper to get member name
+                        const getMemberName = (id?: string) => {
+                          if (!id) return null;
+                          if (id === user?.id) return 'Yo';
+                          const m = teamMembers.find(m => m.id === id);
+                          return m?.name || m?.email || null;
+                        };
+
+                        // Status labels
+                        const statusLabels: Record<string, { label: string; color: string }> = {
+                          'todo': { label: 'Por hacer', color: 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800' },
+                          'in-progress': { label: 'En progreso', color: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400' },
+                          'done': { label: 'Hecho', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400' },
+                          'cancelled': { label: 'Cancelada', color: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' },
+                        };
 
                         if (totalCount === 0) {
                           return (
@@ -1477,8 +1492,168 @@ export const Clients: React.FC = () => {
                           );
                         }
 
+                        const renderTask = (task: UnifiedTask, isCompleted: boolean) => {
+                          const pcfg = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.medium;
+                          const isLegacy = (task as any)._legacy;
+                          const isExpanded = expandedTaskId === task.id;
+                          const taskSubtasks = subtasksByParent[task.id] || [];
+                          const subtasksDone = taskSubtasks.filter(s => s.completed).length;
+                          const stLabel = !isLegacy && task.status ? statusLabels[task.status] || null : null;
+
+                          // Dependency check
+                          const blockerTask = task.blocked_by ? allFiltered.find(t => t.id === task.blocked_by) || projectTasks.find(t => t.id === task.blocked_by) : null;
+                          const isBlocked = blockerTask ? !blockerTask.completed : false;
+                          const blockerOwner = blockerTask?.assignee_id ? getMemberName(blockerTask.assignee_id) : null;
+
+                          return (
+                            <div key={task.id} className={`rounded-xl transition-colors ${isCompleted ? 'opacity-60' : ''}`}>
+                              <div className={`flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group ${isExpanded && !isCompleted ? 'bg-zinc-50 dark:bg-zinc-800/40' : ''} ${isBlocked && !isCompleted ? 'ring-1 ring-amber-300 dark:ring-amber-500/30 bg-amber-50/30 dark:bg-amber-500/5' : ''}`}>
+                                {/* Checkbox or lock icon */}
+                                {isBlocked && !isCompleted ? (
+                                  <div className="w-5 h-5 rounded-md border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title="Bloqueada por dependencia">
+                                    <Icons.Lock size={10} className="text-amber-500" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => isLegacy ? handleToggleTask(task.id, !isCompleted) : handleToggleUnifiedTask(task.id, !isCompleted)}
+                                    className={isCompleted
+                                      ? 'w-5 h-5 rounded-md bg-emerald-500 border-2 border-emerald-500 flex items-center justify-center shrink-0'
+                                      : 'w-5 h-5 rounded-md border-2 border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 flex items-center justify-center shrink-0 transition-all group-hover:text-emerald-400'
+                                    }
+                                  >
+                                    {isCompleted
+                                      ? <Icons.Check size={12} className="text-white" />
+                                      : <Icons.Check size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    }
+                                  </button>
+                                )}
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !isLegacy && setExpandedTaskId(isExpanded ? null : task.id)}>
+                                  <p className={`text-sm ${isCompleted ? 'line-through text-zinc-400' : isBlocked ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-900 dark:text-zinc-100'}`}>{task.title}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {isBlocked && !isCompleted && (
+                                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-0.5">
+                                        <Icons.Lock size={8} />
+                                        {blockerOwner ? `Esperando a ${blockerOwner}` : `Esperando: ${blockerTask?.title}`}
+                                      </span>
+                                    )}
+                                    {task.project_name && taskProjectFilter === 'all' && (
+                                      <span className="text-[10px] text-blue-500 dark:text-blue-400 font-medium">{task.project_name}</span>
+                                    )}
+                                    {task.assignee_id && (
+                                      <span className="text-[10px] text-violet-500 dark:text-violet-400 font-medium flex items-center gap-0.5">
+                                        <Icons.User size={8} />
+                                        {getMemberName(task.assignee_id)}
+                                      </span>
+                                    )}
+                                    {(task.due_date || task.start_date) && (
+                                      <span className="text-[10px] text-zinc-400 flex items-center gap-0.5">
+                                        <Icons.Clock size={9} />
+                                        {fmtShortDate(task.due_date || task.start_date)}
+                                      </span>
+                                    )}
+                                    {!isLegacy && taskSubtasks.length > 0 && (
+                                      <span className="text-[10px] text-zinc-400 font-medium">{subtasksDone}/{taskSubtasks.length} sub</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {isBlocked && !isCompleted && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400">Bloqueada</span>
+                                  )}
+                                  {stLabel && !isCompleted && !isBlocked && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${stLabel.color}`}>{stLabel.label}</span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${pcfg.bg} ${pcfg.text}`}>
+                                    {pcfg.label}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Blocked detail card when expanded */}
+                              {isExpanded && isBlocked && !isCompleted && blockerTask && (
+                                <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded bg-amber-400 flex items-center justify-center flex-shrink-0">
+                                      <Icons.Lock size={10} className="text-white" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 truncate">
+                                        Depende de: {blockerTask.title}
+                                      </p>
+                                      <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60">
+                                        {blockerOwner
+                                          ? `${blockerOwner} necesita completar esta tarea`
+                                          : 'Esta tarea no tiene asignado — necesita ser completada primero'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Expanded: subtasks + add subtask */}
+                              {isExpanded && !isLegacy && !isCompleted && (
+                                <div className="ml-8 pl-3 border-l-2 border-zinc-200 dark:border-zinc-700 pb-2 space-y-1">
+                                  {taskSubtasks.map(sub => {
+                                    const subBlocker = sub.blocked_by ? projectTasks.find(t => t.id === sub.blocked_by) : null;
+                                    const subBlocked = subBlocker ? !subBlocker.completed : false;
+                                    const subBlockerOwner = subBlocker?.assignee_id ? getMemberName(subBlocker.assignee_id) : null;
+                                    return (
+                                    <div key={sub.id} className={`flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors group/sub ${subBlocked ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''}`}>
+                                      {subBlocked ? (
+                                        <div className="w-4 h-4 rounded border border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title={subBlockerOwner ? `Esperando a ${subBlockerOwner}` : 'Bloqueada'}>
+                                          <Icons.Lock size={8} className="text-amber-500" />
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleToggleSubtask(sub.id, !sub.completed)}
+                                          className={sub.completed
+                                            ? 'w-4 h-4 rounded bg-emerald-500 border border-emerald-500 flex items-center justify-center shrink-0'
+                                            : 'w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 flex items-center justify-center shrink-0 transition-all'
+                                          }
+                                        >
+                                          {sub.completed && <Icons.Check size={9} className="text-white" />}
+                                        </button>
+                                      )}
+                                      <span className={`text-xs flex-1 ${subBlocked ? 'text-amber-600 dark:text-amber-400/70' : sub.completed ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                        {sub.title}
+                                      </span>
+                                      {subBlocked && (
+                                        <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">
+                                          {subBlockerOwner ? `esp. ${subBlockerOwner}` : 'bloqueada'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    );
+                                  })}
+                                  {/* Add subtask input */}
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <div className="w-4 h-4 rounded border border-dashed border-zinc-300 dark:border-zinc-600 shrink-0" />
+                                    <input
+                                      type="text"
+                                      placeholder="Agregar subtarea..."
+                                      value={newSubtaskTitle}
+                                      onChange={e => setNewSubtaskTitle(e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && handleAddSubtask(task.id)}
+                                      className="flex-1 text-xs bg-transparent outline-none text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
+                                    />
+                                    {newSubtaskTitle.trim() && (
+                                      <button
+                                        onClick={() => handleAddSubtask(task.id)}
+                                        disabled={addingSubtask}
+                                        className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 disabled:opacity-40"
+                                      >
+                                        {addingSubtask ? '...' : 'Agregar'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        };
+
                         return (
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             {/* Progress summary */}
                             <div className="flex items-center gap-3 px-3 pb-2">
                               <div className="flex-1 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
@@ -1488,57 +1663,13 @@ export const Clients: React.FC = () => {
                             </div>
 
                             {/* Pending tasks */}
-                            {pending.map(task => {
-                              const pcfg = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.medium;
-                              return (
-                                <div key={`${task.source}-${task.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group">
-                                  <button
-                                    onClick={() => task.source === 'client' ? handleToggleTask(task.id, true) : (async () => { await supabase.from('tasks').update({ completed: true }).eq('id', task.id); if (selectedClient) await loadClientData(selectedClient.id); })()}
-                                    className="w-5 h-5 rounded-md border-2 border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 flex items-center justify-center shrink-0 transition-all group-hover:text-emerald-400"
-                                  >
-                                    <Icons.Check size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </button>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-zinc-900 dark:text-zinc-100">{task.title}</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      {task.project_name && taskProjectFilter === 'all' && (
-                                        <span className="text-[10px] text-blue-500 dark:text-blue-400 font-medium">{task.project_name}</span>
-                                      )}
-                                      {task.due_date && (
-                                        <span className="text-[10px] text-zinc-400 flex items-center gap-0.5">
-                                          <Icons.Clock size={9} />
-                                          {fmtShortDate(task.due_date)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${pcfg.bg} ${pcfg.text}`}>
-                                    {pcfg.label}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {pending.map(task => renderTask(task, false))}
 
                             {/* Completed tasks */}
                             {completed.length > 0 && (
                               <>
                                 <p className="text-[10px] font-semibold text-zinc-300 dark:text-zinc-600 uppercase tracking-wider pt-3 pb-1 px-3">Completadas</p>
-                                {completed.map(task => (
-                                  <div key={`${task.source}-${task.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors opacity-60 group">
-                                    <button
-                                      onClick={() => task.source === 'client' ? handleToggleTask(task.id, false) : (async () => { await supabase.from('tasks').update({ completed: false }).eq('id', task.id); if (selectedClient) await loadClientData(selectedClient.id); })()}
-                                      className="w-5 h-5 rounded-md bg-emerald-500 border-2 border-emerald-500 flex items-center justify-center shrink-0"
-                                    >
-                                      <Icons.Check size={12} className="text-white" />
-                                    </button>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm line-through text-zinc-400 truncate">{task.title}</p>
-                                      {task.project_name && taskProjectFilter === 'all' && (
-                                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600">{task.project_name}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
+                                {completed.map(task => renderTask(task, true))}
                               </>
                             )}
                           </div>

@@ -160,7 +160,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return
     }
 
-    if (isInitialized && !force) {
+    if (hasLoadedRef.current && !force) {
       setLoading(false)
       return
     }
@@ -206,7 +206,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setLoading(false)
     }
-  }, [isInitialized, user, currentTenant?.id, resolveTenantId])
+  }, [user, resolveTenantId]) // removed isInitialized — uses ref instead
 
   useEffect(() => {
     fetchProjects()

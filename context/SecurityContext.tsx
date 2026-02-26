@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
 import { 
@@ -224,10 +224,15 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
+  const hasLoadedSecurityRef = useRef(false);
+
   // Initialize security data
   const initializeSecurityData = useCallback(async () => {
     try {
-      setLoading(true);
+      // Only show loading on first init, not on background re-fetches
+      if (!hasLoadedSecurityRef.current) {
+        setLoading(true);
+      }
       setError(null);
 
       // Get current user from auth
@@ -251,6 +256,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Load roles and permissions
       await loadRolesAndPermissions();
 
+      hasLoadedSecurityRef.current = true;
       setIsInitialized(true);
     } catch (err: any) {
       errorLogger.error('Error initializing security data', err);
@@ -488,16 +494,18 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     initializeSecurityData();
 
-    // Listen for auth changes
+    // Listen for auth changes — ignore TOKEN_REFRESHED to avoid full reload flicker
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_IN') {
           await initializeSecurityData();
         } else if (event === 'SIGNED_OUT') {
+          hasLoadedSecurityRef.current = false;
           setUser(null);
           setCredentials([]);
           setIsInitialized(false);
         }
+        // TOKEN_REFRESHED is ignored — session is still valid, no need to re-fetch
       }
     );
 
