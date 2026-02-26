@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRBAC } from '../../context/RBACContext';
 import { useTenant } from '../../context/TenantContext';
 import { Icons } from '../ui/Icons';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseAdmin } from '../../lib/supabase';
 import { Role } from '../../types/rbac';
 import { SCREEN_PERMISSIONS, OS_SCREENS, SALES_SCREENS, ALL_SCREEN_IDS } from '../../lib/screenPermissions';
 
@@ -209,14 +209,13 @@ export const UserManagement: React.FC = () => {
         if (!adminRole) throw new Error('Admin role not found');
         roleIdToUse = adminRole.id;
       } else {
-        // Create custom role with selected permissions
-        const { data: newRole, error: roleError } = await supabase
+        // Create custom role with selected permissions (admin client bypasses RLS)
+        const { data: newRole, error: roleError } = await supabaseAdmin
           .from('roles')
           .insert({
             name: `custom_${Date.now()}`,
             description: `Custom access for ${inviteEmail}`,
             is_system: false,
-            tenant_id: currentTenant.id,
           })
           .select()
           .single();
@@ -233,7 +232,7 @@ export const UserManagement: React.FC = () => {
           .filter(Boolean) as { role_id: string; permission_id: string }[];
 
         if (permInserts.length > 0) {
-          const { error: rpError } = await supabase.from('role_permissions').insert(permInserts);
+          const { error: rpError } = await supabaseAdmin.from('role_permissions').insert(permInserts);
           if (rpError) throw rpError;
         }
 
@@ -269,7 +268,7 @@ export const UserManagement: React.FC = () => {
   const cancelInvitation = async (inviteId: string) => {
     if (!confirm('Cancel this invitation?')) return;
     try {
-      await supabase.from('invitations').update({ status: 'expired' }).eq('id', inviteId);
+      await supabaseAdmin.from('invitations').update({ status: 'expired' }).eq('id', inviteId);
       setInvitations(prev => prev.filter(i => i.id !== inviteId));
     } catch (err) {
       console.error('Error cancelling invitation:', err);
@@ -296,8 +295,8 @@ export const UserManagement: React.FC = () => {
   const openEditPermissions = async (member: MemberRow) => {
     if (!member.role_id) return;
 
-    // Load the member's current screen permissions
-    const { data: rolePerms } = await supabase
+    // Load the member's current screen permissions (admin client for reliable read)
+    const { data: rolePerms } = await supabaseAdmin
       .from('role_permissions')
       .select('permissions(module, action)')
       .eq('role_id', member.role_id);
@@ -332,20 +331,19 @@ export const UserManagement: React.FC = () => {
     try {
       let roleId: string;
 
-      // If user has a custom (non-system) role, update in place
+      // If user has a custom (non-system) role, update in place (admin client bypasses RLS)
       if (!editingUser.is_system_role && editingUser.role_name.startsWith('custom_') && editingUser.role_id) {
         roleId = editingUser.role_id;
         // Clear existing permissions for this role
-        await supabase.from('role_permissions').delete().eq('role_id', roleId);
+        await supabaseAdmin.from('role_permissions').delete().eq('role_id', roleId);
       } else {
         // Create new custom role & reassign
-        const { data: newRole, error: roleError } = await supabase
+        const { data: newRole, error: roleError } = await supabaseAdmin
           .from('roles')
           .insert({
             name: `custom_${Date.now()}`,
             description: `Custom access for ${editingUser.email}`,
             is_system: false,
-            tenant_id: currentTenant.id,
           })
           .select()
           .single();
@@ -355,9 +353,9 @@ export const UserManagement: React.FC = () => {
 
         // Remove old role assignment, add new
         if (editingUser.role_id) {
-          await supabase.from('user_roles').delete().eq('user_id', editingUser.id).eq('role_id', editingUser.role_id);
+          await supabaseAdmin.from('user_roles').delete().eq('user_id', editingUser.id).eq('role_id', editingUser.role_id);
         }
-        await supabase.from('user_roles').insert({ user_id: editingUser.id, role_id: roleId });
+        await supabaseAdmin.from('user_roles').insert({ user_id: editingUser.id, role_id: roleId });
       }
 
       // Insert selected permissions
@@ -370,7 +368,7 @@ export const UserManagement: React.FC = () => {
         .filter(Boolean) as { role_id: string; permission_id: string }[];
 
       if (permInserts.length > 0) {
-        await supabase.from('role_permissions').insert(permInserts);
+        await supabaseAdmin.from('role_permissions').insert(permInserts);
       }
 
       setEditingUser(null);

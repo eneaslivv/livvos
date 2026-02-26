@@ -11,6 +11,7 @@ export const AcceptInvite: React.FC = () => {
   const [isValidToken, setIsValidToken] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteType, setInviteType] = useState<string>('team');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const queryParams = new URLSearchParams(window.location.search);
   const token = queryParams.get('token');
@@ -73,9 +74,29 @@ export const AcceptInvite: React.FC = () => {
       if (authError) throw authError;
 
       if (authData.session) {
+        // Session created immediately — wait briefly for the trigger to complete
+        // (handle_new_user creates profile, assigns role, links client)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Verify the profile was created
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, tenant_id')
+          .eq('id', authData.session.user.id)
+          .single();
+
+        if (!profile) {
+          console.warn('Profile not found after signup — trigger may still be running');
+        }
+
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/';
+      } else if (authData.user && !authData.session) {
+        // Email confirmation required
+        setSuccessMessage(
+          'Cuenta creada. Revisá tu email para confirmar tu cuenta antes de iniciar sesión.'
+        );
+        setIsSubmitting(false);
       } else {
-        setError(null);
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/auth';
       }
     } catch (err: any) {
@@ -91,6 +112,28 @@ export const AcceptInvite: React.FC = () => {
         <div className="flex items-center gap-3 text-zinc-500">
           <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
           <span className="text-sm">Verificando invitación...</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Success (email confirmation needed) ─── */
+  if (successMessage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
+        <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
+          <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icons.Mail size={24} className="text-emerald-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Verificá tu email</h2>
+          <p className="text-sm text-zinc-500 mb-6">{successMessage}</p>
+          <a
+            href={isClientInvite ? '/?portal=client' : '/auth'}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+          >
+            Ir a iniciar sesión
+            <Icons.ChevronRight size={14} />
+          </a>
         </div>
       </div>
     );

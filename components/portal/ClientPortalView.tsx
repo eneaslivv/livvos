@@ -116,20 +116,22 @@ export const ClientPortalView: React.FC = () => {
         }
 
         if (!client) {
-          const { data: clientData } = await supabase
+          const { data: clientData, error: authUserErr } = await supabase
             .from('clients')
             .select('id,name,email,company,avatar_url')
             .eq('auth_user_id', user.id)
             .single();
+          if (authUserErr) console.warn('Portal: clients lookup by auth_user_id failed:', authUserErr.message);
           client = clientData as ClientRecord | null;
         }
 
         if (!client) {
-          const { data: clientData } = await supabase
+          const { data: clientData, error: emailErr } = await supabase
             .from('clients')
             .select('id,name,email,company,avatar_url')
             .eq('email', user.email)
             .single();
+          if (emailErr) console.warn('Portal: clients lookup by email failed:', emailErr.message);
           client = clientData as ClientRecord | null;
         }
 
@@ -145,7 +147,7 @@ export const ClientPortalView: React.FC = () => {
         }
 
         if (!client) {
-          setError('No client record found for this user.');
+          setError('No se encontró tu registro de cliente. Es posible que tu cuenta aún se esté configurando. Intentá de nuevo en unos segundos.');
           setLoading(false);
           return;
         }
@@ -333,7 +335,31 @@ export const ClientPortalView: React.FC = () => {
   }
 
   if (error || !data) {
-    return <div className="min-h-screen flex items-center justify-center text-zinc-500">{error || 'No data available'}</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
+        <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
+          <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">!</span>
+          </div>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Portal no disponible</h2>
+          <p className="text-sm text-zinc-500 mb-6">{error || 'No se encontraron datos del portal.'}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

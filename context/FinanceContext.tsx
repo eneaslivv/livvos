@@ -97,6 +97,7 @@ export interface CreateIncomeData {
   currency?: string
   due_date?: string | null
   num_installments?: number
+  installment_dates?: string[]
 }
 
 export interface CreateExpenseData {
@@ -279,6 +280,29 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           (a: Installment, b: Installment) => a.number - b.number
         ),
       }))
+
+      // Auto-detect overdue installments (pending + due_date < today)
+      const today = new Date().toISOString().split('T')[0]
+      const overdueIds: string[] = []
+      for (const inc of sorted) {
+        for (const inst of (inc.installments || [])) {
+          if (inst.status === 'pending' && inst.due_date && inst.due_date < today) {
+            overdueIds.push(inst.id)
+            inst.status = 'overdue' // Update local state immediately
+          }
+        }
+      }
+      // Batch-update overdue installments in DB (fire-and-forget)
+      if (overdueIds.length > 0) {
+        supabase
+          .from('installments')
+          .update({ status: 'overdue' })
+          .in('id', overdueIds)
+          .then(({ error: oErr }) => {
+            if (oErr) console.warn('[FinanceContext] Overdue update error:', oErr.message)
+          })
+      }
+
       setIncomes(sorted)
       hasLoadedIncomesRef.current = true
     } catch (err) {
@@ -477,23 +501,29 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         throw new Error(incErr.message || 'Error al crear ingreso en la base de datos.')
       }
 
-      // 2. Create installments
+      // 2. Create installments (installments table has NO tenant_id column)
       const numInstallments = data.num_installments || 1
       const installmentAmount = Math.round((data.total_amount / numInstallments) * 100) / 100
       const baseDate = data.due_date ? new Date(data.due_date + 'T12:00:00') : new Date()
+      const customDates = data.installment_dates
 
       const installmentRows = Array.from({ length: numInstallments }, (_, i) => {
-        const dueDate = new Date(baseDate)
-        dueDate.setMonth(dueDate.getMonth() + i)
+        let dueDateStr: string
+        if (customDates && customDates[i]) {
+          dueDateStr = customDates[i]
+        } else {
+          const dueDate = new Date(baseDate)
+          dueDate.setMonth(dueDate.getMonth() + i)
+          dueDateStr = dueDate.toISOString().split('T')[0]
+        }
         const amt = i === numInstallments - 1
           ? data.total_amount - installmentAmount * (numInstallments - 1)
           : installmentAmount
         return {
           income_id: income.id,
-          tenant_id: currentTenant.id,
           number: i + 1,
           amount: Math.round(amt * 100) / 100,
-          due_date: dueDate.toISOString().split('T')[0],
+          due_date: dueDateStr,
           status: 'pending',
         }
       })
@@ -504,14 +534,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       if (instErr) {
         console.error('[FinanceContext] Installments insert error:', instErr)
-        // Try without tenant_id in case column doesn't exist
-        const rowsNoTenant = installmentRows.map(({ tenant_id: _, ...rest }) => rest)
-        const { error: instErr2 } = await supabase
-          .from('installments')
-          .insert(rowsNoTenant)
-        if (instErr2) {
-          console.error('[FinanceContext] Installments retry error:', instErr2)
-        }
+        throw new Error(instErr.message || 'Error al crear cuotas.')
       }
 
       // 3. Reload incomes to get full data with installments

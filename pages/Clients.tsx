@@ -119,7 +119,8 @@ export const Clients: React.FC = () => {
 
   const [showNewIncomeForm, setShowNewIncomeForm] = useState(false);
   const [newIncomeData, setNewIncomeData] = useState({
-    concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD'
+    concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD',
+    installment_dates: [] as string[],
   });
   const [creatingIncome, setCreatingIncome] = useState(false);
   const [deletingIncomeId, setDeletingIncomeId] = useState<string | null>(null);
@@ -401,7 +402,27 @@ export const Clients: React.FC = () => {
         setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
       }
 
-      // 4. Log to history
+      // 4. Auto-share all linked projects with this client
+      try {
+        const { data: clientProjects } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('client_id', selectedClient.id);
+        if (clientProjects?.length) {
+          const shares = clientProjects.map(p => ({
+            project_id: p.id,
+            tenant_id: currentTenant.id,
+            email: selectedClient.email!.toLowerCase(),
+            role: 'collaborator' as const,
+            invited_by: user?.id,
+          }));
+          await supabase.from('project_shares').upsert(shares, { onConflict: 'project_id,email', ignoreDuplicates: true });
+        }
+      } catch (shareErr) {
+        console.warn('[handleInvitePortal] Auto-share error (non-critical):', shareErr);
+      }
+
+      // 5. Log to history
       if (selectedClient) {
         await addHistoryEntry({
           client_id: selectedClient.id,
@@ -575,6 +596,7 @@ export const Clients: React.FC = () => {
     try {
       const amount = parseFloat(newIncomeData.total_amount);
       if (isNaN(amount) || amount <= 0) throw new Error('Monto inválido');
+      const numInst = parseInt(newIncomeData.num_installments) || 1;
       await createIncome({
         client_id: selectedClient.id,
         client_name: selectedClient.name,
@@ -586,7 +608,10 @@ export const Clients: React.FC = () => {
         total_amount: amount,
         currency: newIncomeData.currency || 'USD',
         due_date: newIncomeData.due_date || null,
-        num_installments: parseInt(newIncomeData.num_installments) || 1,
+        num_installments: numInst,
+        installment_dates: newIncomeData.installment_dates.length === numInst
+          ? newIncomeData.installment_dates
+          : undefined,
       });
       await addHistoryEntry({
         client_id: selectedClient.id,
@@ -596,7 +621,7 @@ export const Clients: React.FC = () => {
         action_description: `Ingreso creado: ${newIncomeData.concept} — ${fmtMoney(amount)}`,
         action_date: new Date().toISOString(),
       });
-      setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD' });
+      setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD', installment_dates: [] });
       setShowNewIncomeForm(false);
     } catch (err: any) {
       errorLogger.error('Error creando ingreso', err);
@@ -1068,7 +1093,16 @@ export const Clients: React.FC = () => {
                                 min="1"
                                 max="24"
                                 value={newIncomeData.num_installments}
-                                onChange={e => setNewIncomeData({ ...newIncomeData, num_installments: e.target.value })}
+                                onChange={e => {
+                                  const n = parseInt(e.target.value) || 1;
+                                  const base = newIncomeData.due_date ? new Date(newIncomeData.due_date + 'T12:00:00') : new Date();
+                                  const dates = Array.from({ length: n }, (_, i) => {
+                                    const d = new Date(base);
+                                    d.setMonth(d.getMonth() + i);
+                                    return d.toISOString().split('T')[0];
+                                  });
+                                  setNewIncomeData({ ...newIncomeData, num_installments: e.target.value, installment_dates: dates });
+                                }}
                                 className={inputClass}
                               />
                             </div>
@@ -1077,11 +1111,50 @@ export const Clients: React.FC = () => {
                               <input
                                 type="date"
                                 value={newIncomeData.due_date}
-                                onChange={e => setNewIncomeData({ ...newIncomeData, due_date: e.target.value })}
+                                onChange={e => {
+                                  const n = parseInt(newIncomeData.num_installments) || 1;
+                                  const base = e.target.value ? new Date(e.target.value + 'T12:00:00') : new Date();
+                                  const dates = Array.from({ length: n }, (_, i) => {
+                                    const d = new Date(base);
+                                    d.setMonth(d.getMonth() + i);
+                                    return d.toISOString().split('T')[0];
+                                  });
+                                  setNewIncomeData({ ...newIncomeData, due_date: e.target.value, installment_dates: dates });
+                                }}
                                 className={inputClass}
                               />
                             </div>
                           </div>
+                          {/* Per-installment date editors */}
+                          {parseInt(newIncomeData.num_installments) > 1 && newIncomeData.installment_dates.length > 0 && (
+                            <div className="space-y-1.5 p-3 bg-zinc-100/60 dark:bg-zinc-700/20 rounded-lg">
+                              <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Fechas por cuota</p>
+                              {newIncomeData.installment_dates.map((date, idx) => {
+                                const totalAmt = parseFloat(newIncomeData.total_amount) || 0;
+                                const n = parseInt(newIncomeData.num_installments) || 1;
+                                const perInst = Math.round((totalAmt / n) * 100) / 100;
+                                const amt = idx === n - 1 ? Math.round((totalAmt - perInst * (n - 1)) * 100) / 100 : perInst;
+                                return (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-[10px] font-medium text-zinc-500 w-14 shrink-0">Cuota {idx + 1}</span>
+                                    <input
+                                      type="date"
+                                      value={date}
+                                      onChange={e => {
+                                        const updated = [...newIncomeData.installment_dates];
+                                        updated[idx] = e.target.value;
+                                        setNewIncomeData({ ...newIncomeData, installment_dates: updated });
+                                      }}
+                                      className={inputClass + ' flex-1'}
+                                    />
+                                    {totalAmt > 0 && (
+                                      <span className="text-[10px] text-zinc-400 w-20 text-right shrink-0">${amt.toLocaleString()}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                           {/* Optional project link */}
                           {availableProjects.filter(p => p.client_id === selectedClient?.id || !p.client_id).length > 0 && (
                             <div>
@@ -1113,7 +1186,7 @@ export const Clients: React.FC = () => {
                               {creatingIncome ? 'Creando...' : 'Crear Ingreso'}
                             </button>
                             <button
-                              onClick={() => { setShowNewIncomeForm(false); setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD' }); }}
+                              onClick={() => { setShowNewIncomeForm(false); setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD', installment_dates: [] }); }}
                               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             >
                               Cancelar

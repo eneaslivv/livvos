@@ -133,6 +133,7 @@ export const Finance: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
   const [incomeSearch, setIncomeSearch] = useState('');
+  const [incomeStatusFilter, setIncomeStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
   const [expenseSearch, setExpenseSearch] = useState('');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
   const [expandedIncome, setExpandedIncome] = useState<string | null>(null);
@@ -166,6 +167,16 @@ export const Finance: React.FC = () => {
   const totalPendingIncome = useMemo(() =>
     incomes.reduce((sum: number, inc: IncomeEntry) =>
       sum + (inc.installments || []).filter((i: Installment) => i.status !== 'paid').reduce((s: number, i: Installment) => s + i.amount, 0), 0
+    ), [incomes]);
+
+  const totalOverdueIncome = useMemo(() =>
+    incomes.reduce((sum: number, inc: IncomeEntry) =>
+      sum + (inc.installments || []).filter((i: Installment) => i.status === 'overdue').reduce((s: number, i: Installment) => s + i.amount, 0), 0
+    ), [incomes]);
+
+  const overdueInstallmentCount = useMemo(() =>
+    incomes.reduce((count: number, inc: IncomeEntry) =>
+      count + (inc.installments || []).filter((i: Installment) => i.status === 'overdue').length, 0
     ), [incomes]);
 
   const totalExpensesPaid = useMemo(() =>
@@ -266,14 +277,22 @@ export const Finance: React.FC = () => {
 
   // Filtered lists
   const filteredIncomes = useMemo(() => {
-    if (!incomeSearch) return incomes;
-    const q = incomeSearch.toLowerCase();
-    return incomes.filter((inc: IncomeEntry) =>
-      inc.client_name.toLowerCase().includes(q) ||
-      inc.project_name.toLowerCase().includes(q) ||
-      inc.concept.toLowerCase().includes(q)
-    );
-  }, [incomeSearch, incomes]);
+    let result = incomes;
+    if (incomeStatusFilter === 'pending') {
+      result = result.filter((inc: IncomeEntry) => inc.status === 'pending' || inc.status === 'partial');
+    } else if (incomeStatusFilter !== 'all') {
+      result = result.filter((inc: IncomeEntry) => inc.status === incomeStatusFilter);
+    }
+    if (incomeSearch) {
+      const q = incomeSearch.toLowerCase();
+      result = result.filter((inc: IncomeEntry) =>
+        inc.client_name.toLowerCase().includes(q) ||
+        inc.project_name.toLowerCase().includes(q) ||
+        inc.concept.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [incomeSearch, incomeStatusFilter, incomes]);
 
   const filteredExpenses = useMemo(() => {
     let result = expenses;
@@ -730,9 +749,35 @@ export const Finance: React.FC = () => {
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(totalPendingIncome)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Clientes Activos</div>
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{new Set(incomes.map((i: IncomeEntry) => i.client_name)).size}</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Vencido</div>
+              <div className={`text-sm font-semibold ${totalOverdueIncome > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                {fmtCurrency(totalOverdueIncome)}
+                {overdueInstallmentCount > 0 && <span className="text-[10px] font-normal text-rose-400 ml-1">({overdueInstallmentCount} cuotas)</span>}
+              </div>
             </div>
+          </div>
+
+          {/* Status filter tabs */}
+          <div className="flex gap-1 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-1">
+            {([
+              { key: 'all' as const, label: 'Todos', count: incomes.length },
+              { key: 'pending' as const, label: 'Por cobrar', count: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length },
+              { key: 'paid' as const, label: 'Cobrado', count: incomes.filter(i => i.status === 'paid').length },
+              { key: 'overdue' as const, label: 'Vencido', count: incomes.filter(i => i.status === 'overdue').length },
+            ]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setIncomeStatusFilter(tab.key)}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  incomeStatusFilter === tab.key
+                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 && <span className={`ml-1.5 text-[10px] ${incomeStatusFilter === tab.key ? 'opacity-60' : 'opacity-40'}`}>{tab.count}</span>}
+              </button>
+            ))}
           </div>
 
           {/* Income breakdown chart + search */}

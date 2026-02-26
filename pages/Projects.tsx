@@ -235,6 +235,12 @@ export const Projects: React.FC = () => {
   const [clientInviteLink, setClientInviteLink] = useState<string | null>(null);
   const [clientInviteError, setClientInviteError] = useState<string | null>(null);
   const [isInvitingClient, setIsInvitingClient] = useState(false);
+  const [externalShareEmail, setExternalShareEmail] = useState('');
+  const [externalShareRole, setExternalShareRole] = useState<'viewer' | 'collaborator' | 'editor'>('viewer');
+  const [externalShareLink, setExternalShareLink] = useState<string | null>(null);
+  const [externalShareError, setExternalShareError] = useState<string | null>(null);
+  const [isCreatingShare, setIsCreatingShare] = useState(false);
+  const [existingShares, setExistingShares] = useState<any[]>([]);
   const [sidebarFilter, setSidebarFilter] = useState<'all' | 'client' | 'personal'>('all');
   const [quickTaskTitle, setQuickTaskTitle] = useState('');
   const [timelineNewStart, setTimelineNewStart] = useState('');
@@ -645,6 +651,70 @@ export const Projects: React.FC = () => {
     await logActivity({ action: 'invited', target: inviteEmail.trim(), project_title: selectedProject.title, type: 'project_update', details: 'Member added to project' });
   };
 
+  // Load existing shares when modal opens
+  const loadExistingShares = async () => {
+    if (!selectedProject) return;
+    const { data } = await supabase
+      .from('project_shares')
+      .select('id, email, role, status, created_at')
+      .eq('project_id', selectedProject.id)
+      .neq('status', 'revoked')
+      .order('created_at', { ascending: false });
+    setExistingShares(data || []);
+  };
+
+  useEffect(() => {
+    if (isShareModalOpen && selectedProject) {
+      loadExistingShares();
+    }
+  }, [isShareModalOpen, selectedProject?.id]);
+
+  const handleCreateExternalShare = async () => {
+    if (!selectedProject || !externalShareEmail.trim() || !currentTenant?.id) return;
+    setIsCreatingShare(true);
+    setExternalShareError(null);
+    setExternalShareLink(null);
+    try {
+      const { data, error } = await supabase
+        .from('project_shares')
+        .insert({
+          project_id: selectedProject.id,
+          tenant_id: currentTenant.id,
+          email: externalShareEmail.trim().toLowerCase(),
+          role: externalShareRole,
+          invited_by: currentUser?.id,
+        })
+        .select('token')
+        .single();
+      if (error) {
+        if (error.code === '23505') {
+          setExternalShareError('Esta persona ya tiene acceso a este proyecto.');
+        } else {
+          throw error;
+        }
+        return;
+      }
+      const link = `${window.location.origin}/?shared_project=${data.token}`;
+      setExternalShareLink(link);
+      setExternalShareEmail('');
+      await loadExistingShares();
+      await logActivity({ action: 'shared externally', target: externalShareEmail.trim(), project_title: selectedProject.title, type: 'project_update', details: `Shared with role: ${externalShareRole}` });
+    } catch (err: any) {
+      setExternalShareError(err.message || 'Error creating share');
+    } finally {
+      setIsCreatingShare(false);
+    }
+  };
+
+  const handleRevokeShare = async (shareId: string) => {
+    const { error } = await supabase
+      .from('project_shares')
+      .update({ status: 'revoked' })
+      .eq('id', shareId);
+    if (error) { alert('Error revoking: ' + error.message); return; }
+    await loadExistingShares();
+  };
+
   const handleAddPhaseWithDates = async () => {
     if (!selectedProject || !newGroupName.trim()) return;
     const newGroup = { name: newGroupName.trim(), startDate: timelineNewStart || undefined, endDate: timelineNewEnd || undefined, tasks: [] };
@@ -1018,6 +1088,72 @@ export const Projects: React.FC = () => {
                         <div className="p-3 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-lg">
                           <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">No client linked</p>
                           <p className="text-[10px] text-amber-600 dark:text-amber-500">Asigná un cliente desde Settings para habilitar el portal.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── External Sharing ── */}
+                    <div className="border-t border-zinc-100 dark:border-zinc-800 my-4" />
+                    <div>
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Share with External People</div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          value={externalShareEmail}
+                          onChange={e => { setExternalShareEmail(e.target.value); setExternalShareError(null); }}
+                          placeholder="person@email.com"
+                          className="flex-1 px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm"
+                        />
+                        <select
+                          value={externalShareRole}
+                          onChange={e => setExternalShareRole(e.target.value as any)}
+                          className="px-2 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs"
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="collaborator">Collaborator</option>
+                          <option value="editor">Editor</option>
+                        </select>
+                        <button
+                          onClick={handleCreateExternalShare}
+                          disabled={isCreatingShare || !externalShareEmail.trim()}
+                          className="px-3 py-2 text-sm bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium disabled:opacity-50"
+                        >
+                          {isCreatingShare ? '...' : 'Share'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mb-2">La persona recibirá un link para crear cuenta y ver el proyecto.</p>
+                      {externalShareError && <p className="text-xs text-rose-600 mb-2">{externalShareError}</p>}
+                      {externalShareLink && (
+                        <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg mb-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Share Link</span>
+                            <button onClick={() => { navigator.clipboard.writeText(externalShareLink); }} className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Copy</button>
+                          </div>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-300 break-all font-mono">{externalShareLink}</p>
+                        </div>
+                      )}
+                      {/* Existing shares list */}
+                      {existingShares.length > 0 && (
+                        <div className="space-y-1.5 mt-3">
+                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Active Shares</div>
+                          {existingShares.map(share => (
+                            <div key={share.id} className="flex items-center justify-between p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-500 dark:text-zinc-400 shrink-0">
+                                  {share.email?.[0]?.toUpperCase() || '?'}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs text-zinc-700 dark:text-zinc-300 truncate">{share.email}</p>
+                                  <p className="text-[10px] text-zinc-400">{share.role} · {share.status}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleRevokeShare(share.id)}
+                                className="text-[10px] text-rose-500 hover:text-rose-600 font-medium shrink-0 ml-2"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

@@ -36,6 +36,8 @@ const loadTenantSettings = () => import('./pages/TenantSettings').then(module =>
 const loadProposalPublic = () => import('./pages/ProposalPublic').then(module => ({ default: module.ProposalPublic }));
 const loadClientPortal = () => import('./pages/ClientPortal').then(module => ({ default: module.ClientPortal }));
 const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module => ({ default: module.GoogleCallback }));
+const loadAcceptProjectShare = () => import('./pages/AcceptProjectShare').then(module => ({ default: module.AcceptProjectShare }));
+const loadSharedProjectView = () => import('./pages/SharedProjectView').then(module => ({ default: module.SharedProjectView }));
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -53,6 +55,8 @@ const TenantSettings = React.lazy(loadTenantSettings);
 const ProposalPublic = React.lazy(loadProposalPublic);
 const ClientPortal = React.lazy(loadClientPortal);
 const GoogleCallback = React.lazy(loadGoogleCallback);
+const AcceptProjectShare = React.lazy(loadAcceptProjectShare);
+const SharedProjectView = React.lazy(loadSharedProjectView);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -644,6 +648,8 @@ const App: React.FC = () => {
   const isInvite = window.location.pathname === '/accept-invite';
   const proposalToken = new URLSearchParams(window.location.search).get('proposal');
   const portalFlag = new URLSearchParams(window.location.search).get('portal');
+  const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
+  const viewSharedProjectId = new URLSearchParams(window.location.search).get('view_shared_project');
   // Google OAuth callback detection
   const urlParams = new URLSearchParams(window.location.search);
   const googleCode = urlParams.get('code');
@@ -758,6 +764,20 @@ const App: React.FC = () => {
     );
   }
 
+  if (sharedProjectToken) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AcceptProjectShare
+          token={sharedProjectToken}
+          onAccepted={(projectId: string) => {
+            window.history.replaceState({}, '', `?view_shared_project=${projectId}`);
+            window.location.reload();
+          }}
+        />
+      </Suspense>
+    );
+  }
+
   if (isGoogleCallback && googleCode) {
     return (
       <Suspense fallback={<PageFallback />}>
@@ -776,6 +796,20 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <Auth onAuthenticated={() => setIsAuthenticated(true)} isClientPortal={portalFlag === 'client'} />
+      </Suspense>
+    );
+  }
+
+  if (viewSharedProjectId) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <SharedProjectView
+          projectId={viewSharedProjectId}
+          onClose={() => {
+            window.history.replaceState({}, '', window.location.pathname);
+            window.location.reload();
+          }}
+        />
       </Suspense>
     );
   }
