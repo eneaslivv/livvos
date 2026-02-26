@@ -448,6 +448,30 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
+// Keep-alive page slot: mounts once, stays mounted, hidden via CSS when inactive
+const KeepAlivePage: React.FC<{
+  page: PageView;
+  active: boolean;
+  children: React.ReactNode;
+}> = ({ page, active, children }) => (
+  <div style={active ? undefined : { display: 'none' }}>
+    <Suspense fallback={getSkeletonForPage(page)}>
+      {children}
+    </Suspense>
+  </div>
+);
+
+// Resolve the current sales view from a PageView
+const getSalesView = (page: PageView): 'crm' | 'inbox' | 'analytics' => {
+  if (page === 'sales_leads') return 'inbox';
+  if (page === 'sales_analytics') return 'analytics';
+  return 'crm';
+};
+
+// Resolve which TeamClients tab to show
+const getTeamClientsTab = (page: PageView): 'clients' | 'team' =>
+  page === 'clients' ? 'clients' : 'team';
+
 const AppContent: React.FC<{
   currentPage: PageView;
   appMode: AppMode;
@@ -460,6 +484,18 @@ const AppContent: React.FC<{
 
   // Wait for both RBAC + Tenant before rendering pages
   const isReady = isInitialized && !tenantLoading && !!currentTenant;
+
+  // Track which pages have been visited so we mount them lazily but keep them alive
+  const [visitedPages, setVisitedPages] = useState<Set<string>>(() => new Set([currentPage]));
+
+  useEffect(() => {
+    setVisitedPages(prev => {
+      if (prev.has(currentPage)) return prev;
+      const next = new Set(prev);
+      next.add(currentPage);
+      return next;
+    });
+  }, [currentPage]);
 
   useEffect(() => {
     if (isReady && hasRole('client') && currentPage !== 'client_portal') {
@@ -485,110 +521,24 @@ const AppContent: React.FC<{
     });
   }, []);
 
-  const renderPage = () => {
-    try {
-      console.log('🎨 Renderizando página:', currentPage);
-
-      switch (currentPage) {
-        // OS Pages
-        case 'home':
-          return <Home onNavigate={handleNavigate} />;
-        case 'projects':
-          return (
-            <ProtectedRoute permission={{ module: 'projects', action: 'view' }}>
-              <Projects />
-            </ProtectedRoute>
-          );
-        case 'clients':
-          return (
-            <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-              <TeamClients initialTab="clients" />
-            </ProtectedRoute>
-          );
-        case 'team':
-          return (
-            <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-              <TeamClients initialTab="team" />
-            </ProtectedRoute>
-          );
-        case 'team_clients':
-          return (
-            <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-              <TeamClients initialTab="team" />
-            </ProtectedRoute>
-          );
-        case 'calendar':
-          return (
-            <ProtectedRoute permission={{ module: 'calendar', action: 'view' }}>
-              <Calendar />
-            </ProtectedRoute>
-          );
-
-        case 'docs':
-          return (
-            <ProtectedRoute permission={{ module: 'documents', action: 'view' }}>
-              <Docs />
-            </ProtectedRoute>
-          );
-        case 'activity':
-          return (
-            <ProtectedRoute permission={{ module: 'activity', action: 'view' }}>
-              <Activity onNavigate={handleNavigate} />
-            </ProtectedRoute>
-          );
-        case 'finance':
-          return (
-            <ProtectedRoute permission={{ module: 'finance', action: 'view' }}>
-              <Finance />
-            </ProtectedRoute>
-          );
-
-        // Sales Pages - Passing specific views
-        case 'sales_dashboard':
-          return (
-            <ProtectedRoute permission={{ module: 'sales', action: 'view_dashboard' }}>
-              <Sales view="crm" onNavigate={handleNavigate} />
-            </ProtectedRoute>
-          );
-        case 'sales_leads':
-          return (
-            <ProtectedRoute permission={{ module: 'sales', action: 'view_leads' }}>
-              <Sales view="inbox" onNavigate={handleNavigate} />
-            </ProtectedRoute>
-          );
-        case 'sales_analytics':
-          return (
-            <ProtectedRoute permission={{ module: 'sales', action: 'view_analytics' }}>
-              <Sales view="analytics" onNavigate={handleNavigate} />
-            </ProtectedRoute>
-          );
-        case 'tenant_settings':
-          return (
-            <ProtectedRoute role="owner">
-              <TenantSettings />
-            </ProtectedRoute>
-          );
-        case 'client_portal':
-          return <ClientPortal />;
-
-        default:
-          console.warn('⚠️ Página no encontrada:', currentPage);
-          return <Home onNavigate={handleNavigate} />;
-      }
-    } catch (error) {
-      console.error('❌ Error en renderPage:', error);
-      throw error;
-    }
-  };
-
+  // For client_portal, no Layout wrapper
   if (currentPage === 'client_portal') {
     if (!isReady) return getSkeletonForPage(currentPage);
     return (
       <Suspense fallback={getSkeletonForPage(currentPage)}>
-        {renderPage()}
+        <ClientPortal />
       </Suspense>
     );
   }
+
+  // Determine which "group" pages have been visited.
+  // team/team_clients/clients share one TeamClients instance;
+  // sales_dashboard/sales_leads/sales_analytics share one Sales instance.
+  const hasVisitedTeamClients = visitedPages.has('clients') || visitedPages.has('team') || visitedPages.has('team_clients');
+  const isTeamClientsActive = currentPage === 'clients' || currentPage === 'team' || currentPage === 'team_clients';
+
+  const hasVisitedSales = visitedPages.has('sales_dashboard') || visitedPages.has('sales_leads') || visitedPages.has('sales_analytics');
+  const isSalesActive = currentPage === 'sales_dashboard' || currentPage === 'sales_leads' || currentPage === 'sales_analytics';
 
   return (
     <Layout
@@ -600,9 +550,86 @@ const AppContent: React.FC<{
       {!isReady ? (
         getSkeletonForPage(currentPage)
       ) : (
-        <Suspense fallback={getSkeletonForPage(currentPage)}>
-          {renderPage()}
-        </Suspense>
+        <>
+          {/* Home */}
+          {visitedPages.has('home') && (
+            <KeepAlivePage page="home" active={currentPage === 'home'}>
+              <Home onNavigate={handleNavigate} />
+            </KeepAlivePage>
+          )}
+
+          {/* Projects */}
+          {visitedPages.has('projects') && (
+            <KeepAlivePage page="projects" active={currentPage === 'projects'}>
+              <ProtectedRoute permission={{ module: 'projects', action: 'view' }}>
+                <Projects />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Team / Clients (shared TeamClients component) */}
+          {hasVisitedTeamClients && (
+            <KeepAlivePage page="clients" active={isTeamClientsActive}>
+              <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
+                <TeamClients initialTab={getTeamClientsTab(currentPage)} />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Calendar */}
+          {visitedPages.has('calendar') && (
+            <KeepAlivePage page="calendar" active={currentPage === 'calendar'}>
+              <ProtectedRoute permission={{ module: 'calendar', action: 'view' }}>
+                <Calendar />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Docs */}
+          {visitedPages.has('docs') && (
+            <KeepAlivePage page="docs" active={currentPage === 'docs'}>
+              <ProtectedRoute permission={{ module: 'documents', action: 'view' }}>
+                <Docs />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Activity */}
+          {visitedPages.has('activity') && (
+            <KeepAlivePage page="activity" active={currentPage === 'activity'}>
+              <ProtectedRoute permission={{ module: 'activity', action: 'view' }}>
+                <Activity onNavigate={handleNavigate} />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Finance */}
+          {visitedPages.has('finance') && (
+            <KeepAlivePage page="finance" active={currentPage === 'finance'}>
+              <ProtectedRoute permission={{ module: 'finance', action: 'view' }}>
+                <Finance />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Sales (shared Sales component with dynamic view) */}
+          {hasVisitedSales && (
+            <KeepAlivePage page="sales_dashboard" active={isSalesActive}>
+              <ProtectedRoute permission={{ module: 'sales', action: 'view_dashboard' }}>
+                <Sales view={getSalesView(currentPage)} onNavigate={handleNavigate} />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Tenant Settings */}
+          {visitedPages.has('tenant_settings') && (
+            <KeepAlivePage page="tenant_settings" active={currentPage === 'tenant_settings'}>
+              <ProtectedRoute role="owner">
+                <TenantSettings />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+        </>
       )}
     </Layout>
   );
@@ -658,7 +685,13 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setIsAuthenticated(!!session);
+        // Only react to definitive auth events to avoid flash-unmounting
+        // the entire app during background token refreshes
+        if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+          setIsAuthenticated(true);
+        } else if (_event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+        }
 
         // Log auth state changes for security monitoring
         if (_event === 'SIGNED_IN') {

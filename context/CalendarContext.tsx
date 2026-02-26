@@ -332,8 +332,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTasks(prev => [...prev, optimistic])
 
     try {
-      // Use cached tenant_id (resolved once at startup — zero extra queries)
-      const tenantId = cachedTenantIdRef.current
+      // Ensure tenant_id is resolved before inserting (awaits once, then cached)
+      const tenantId = await resolveTenantId()
 
       const payload: any = {
         title: taskData.title,

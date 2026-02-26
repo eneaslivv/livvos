@@ -77,7 +77,12 @@ export const Activity: React.FC = () => {
   const { user: authUser } = useAuth();
   const { user: profileUser, isLoading: profileLoading } = useRBAC();
   const { currentTenant, isLoading: tenantLoading } = useTenant();
-  const { data: rawActivities, loading, error: fetchError, refresh } = useSupabase<any>('activity_logs');
+  // Only fetch after tenant is ready to avoid empty results from RLS policies
+  const tenantReady = !tenantLoading && !!currentTenant;
+  const { data: rawActivities, loading, error: fetchError, refresh } = useSupabase<any>('activity_logs', {
+    enabled: tenantReady,
+    subscribe: true,
+  });
 
   const [activeTab, setActiveTab] = useState<TabType>('All Activity');
   const [newPost, setNewPost] = useState('');
@@ -419,27 +424,27 @@ export const Activity: React.FC = () => {
 
   const isReady = !tenantLoading && !profileLoading && !!effectiveUser;
 
-  // Timeout: if loading for more than 4s, stop showing spinner and show empty state
+  // Timeout: if loading for more than 8s, stop showing spinner and show empty state
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const loadingStartRef = useRef(Date.now());
   useEffect(() => {
-    if (!loading) {
+    if (!loading && tenantReady) {
       setLoadingTimedOut(false);
       loadingStartRef.current = Date.now();
       return;
     }
     // Use elapsed time since first mount to avoid resetting on loading flicker
     const elapsed = Date.now() - loadingStartRef.current;
-    const remaining = Math.max(0, 4000 - elapsed);
+    const remaining = Math.max(0, 8000 - elapsed);
     const timer = setTimeout(() => setLoadingTimedOut(true), remaining);
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [loading, tenantReady]);
 
   // Also timeout for context loading so textarea doesn't stay disabled forever
   const [contextTimedOut, setContextTimedOut] = useState(false);
   useEffect(() => {
     if (isReady) { setContextTimedOut(false); return; }
-    const timer = setTimeout(() => setContextTimedOut(true), 3000);
+    const timer = setTimeout(() => setContextTimedOut(true), 5000);
     return () => clearTimeout(timer);
   }, [isReady]);
 
@@ -603,10 +608,10 @@ export const Activity: React.FC = () => {
       )}
 
       {/* Loading state */}
-      {loading && !loadingTimedOut && allActivities.length === 0 && !fetchError && (
+      {(loading || !tenantReady) && !loadingTimedOut && allActivities.length === 0 && !fetchError && (
         <div className="flex flex-col items-center justify-center py-20">
           <Icons.Loader size={32} className="text-zinc-300 animate-spin mb-4" />
-          <p className="text-zinc-500 text-sm">Loading activity feed...</p>
+          <p className="text-zinc-500 text-sm">{!tenantReady ? 'Connecting...' : 'Loading activity feed...'}</p>
         </div>
       )}
 

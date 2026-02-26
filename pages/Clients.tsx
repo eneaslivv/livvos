@@ -99,6 +99,7 @@ export const Clients: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [showNewTaskInline, setShowNewTaskInline] = useState(false);
+  const [creatingTask, setCreatingTask] = useState(false);
   const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: '', assignee_id: '', status: 'todo' as const });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -217,10 +218,10 @@ export const Clients: React.FC = () => {
       const projectIds = linkedProjects.map(p => p.id);
 
       // Fetch tasks by client_id (direct link) and by project_id (indirect via project)
-      const taskFields = 'id, title, completed, priority, due_date, project_id, client_id, start_date, start_time, status, assignee_id, parent_task_id, description, blocked_by';
+      // Use select('*') to avoid failures from missing columns in the schema
       const clientTasksQuery = supabase
         .from('tasks')
-        .select(taskFields)
+        .select('*')
         .eq('client_id', clientId)
         .order('completed', { ascending: true })
         .order('created_at', { ascending: false });
@@ -228,7 +229,7 @@ export const Clients: React.FC = () => {
       const projectTasksQuery = projectIds.length > 0
         ? supabase
             .from('tasks')
-            .select(taskFields)
+            .select('*')
             .in('project_id', projectIds)
             .order('completed', { ascending: true })
             .order('created_at', { ascending: false })
@@ -238,6 +239,8 @@ export const Clients: React.FC = () => {
         clientTasksQuery,
         projectTasksQuery,
       ]);
+      if (clientResult?.error) errorLogger.error('Error cargando tareas del cliente', clientResult.error);
+      if (projectResult && 'error' in projectResult && projectResult.error) errorLogger.error('Error cargando tareas de proyectos', projectResult.error);
       const clientDirectTasks = clientResult?.data || [];
       const projectLinkedTasks = projectResult?.data || [];
 
@@ -251,6 +254,8 @@ export const Clients: React.FC = () => {
 
       const enriched = allTasks.map(t => ({
         ...t,
+        start_date: t.start_date || t.due_date || undefined,
+        due_date: t.due_date || t.start_date || undefined,
         project_name: linkedProjects.find(p => p.id === t.project_id)?.title || ''
       }));
       setProjectTasks(enriched);
@@ -433,7 +438,8 @@ export const Clients: React.FC = () => {
   };
 
   const handleCreateTask = async () => {
-    if (!selectedClient || !newTaskData.title.trim()) return;
+    if (!selectedClient || !newTaskData.title.trim() || creatingTask) return;
+    setCreatingTask(true);
     try {
       await createCalendarTask({
         client_id: selectedClient.id,
@@ -449,17 +455,22 @@ export const Clients: React.FC = () => {
       } as any);
       // Reload unified tasks for this client
       if (selectedClient) await loadClientData(selectedClient.id);
-      await addHistoryEntry({
-        client_id: selectedClient.id,
-        user_id: user?.id || '',
-        user_name: user?.email?.split('@')[0] || 'User',
-        action_type: 'task_created',
-        action_description: `Tarea creada: ${newTaskData.title}`
-      });
+      try {
+        await addHistoryEntry({
+          client_id: selectedClient.id,
+          user_id: user?.id || '',
+          user_name: user?.email?.split('@')[0] || 'User',
+          action_type: 'task_created',
+          action_description: `Tarea creada: ${newTaskData.title}`
+        });
+      } catch { /* history entry is non-critical */ }
       setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' });
       setShowNewTaskInline(false);
-    } catch (err) {
+    } catch (err: any) {
       errorLogger.error('Error creando tarea', err);
+      alert('No se pudo crear la tarea: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -1409,10 +1420,10 @@ export const Clients: React.FC = () => {
                           <div className="flex gap-2">
                             <button
                               onClick={handleCreateTask}
-                              disabled={!newTaskData.title.trim()}
+                              disabled={!newTaskData.title.trim() || creatingTask}
                               className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all"
                             >
-                              Crear Tarea
+                              {creatingTask ? 'Creando...' : 'Crear Tarea'}
                             </button>
                             <button
                               onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' }); }}
