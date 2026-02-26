@@ -12,6 +12,11 @@ export interface TeamMember {
     status: 'active' | 'invited' | 'suspended';
     role: string;
     role_id: string | null;
+    // Agent fields
+    is_agent: boolean;
+    agent_type: string | null;
+    agent_description: string | null;
+    agent_connected: boolean;
     // Computed fields
     assignedProjects: number;
     openTasks: number;
@@ -37,6 +42,7 @@ interface TeamContextType {
     getMemberTasks: (memberId: string) => Promise<TeamTask[]>;
     assignTaskToMember: (taskId: string, memberId: string) => Promise<void>;
     getWorkloadSummary: () => { memberId: string; name: string; load: number }[];
+    updateMemberAgent: (memberId: string, agentData: { is_agent: boolean; agent_type?: string | null; agent_description?: string | null; agent_connected?: boolean }) => Promise<void>;
 }
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
@@ -59,13 +65,21 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
 
         try {
+            // 10s timeout to prevent hanging forever if Supabase connection stalls
+            const timeout = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Team data request timed out')), 10000)
+            );
+
             // Run all queries in parallel so one slow/hanging query doesn't block the rest
-            const [profilesResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.allSettled([
-                supabase.from('profiles').select('*').order('name'),
-                supabase.from('user_roles').select('user_id, roles(id, name)'),
-                supabase.from('tasks').select('assignee_id, completed'),
-                supabase.from('project_members').select('member_id'),
-            ]);
+            const [profilesResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.race([
+                Promise.allSettled([
+                    supabase.from('profiles').select('*').order('name'),
+                    supabase.from('user_roles').select('user_id, roles(id, name)'),
+                    supabase.from('tasks').select('assignee_id, completed'),
+                    supabase.from('project_members').select('member_id'),
+                ]),
+                timeout,
+            ]) as [PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>];
 
             // 1. Profiles (required)
             const profiles = profilesResult.status === 'fulfilled' && !profilesResult.value.error
@@ -131,6 +145,10 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     status: profile.status || 'active',
                     role: roleName || 'No Role',
                     role_id: roleId || null,
+                    is_agent: profile.is_agent ?? false,
+                    agent_type: profile.agent_type ?? null,
+                    agent_description: profile.agent_description ?? null,
+                    agent_connected: profile.agent_connected ?? false,
                     assignedProjects: projectCounts[profile.id] || 0,
                     openTasks: tc.open,
                     completedTasks: tc.completed,
@@ -191,6 +209,33 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // Update agent designation for a member
+    const updateMemberAgent = async (memberId: string, agentData: { is_agent: boolean; agent_type?: string | null; agent_description?: string | null; agent_connected?: boolean }) => {
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    is_agent: agentData.is_agent,
+                    agent_type: agentData.agent_type ?? null,
+                    agent_description: agentData.agent_description ?? null,
+                    agent_connected: agentData.agent_connected ?? false,
+                })
+                .eq('id', memberId);
+
+            if (error) throw error;
+
+            // Update local state immediately
+            setMembers(prev => prev.map(m =>
+                m.id === memberId
+                    ? { ...m, ...agentData }
+                    : m
+            ));
+        } catch (err) {
+            console.error('Error updating agent status:', err);
+            throw err;
+        }
+    };
+
     // Get workload summary for all members
     const getWorkloadSummary = () => {
         return members.map((m) => ({
@@ -210,6 +255,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 getMemberTasks,
                 assignTaskToMember,
                 getWorkloadSummary,
+                updateMemberAgent,
             }}
         >
             {children}

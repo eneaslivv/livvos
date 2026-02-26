@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PortalApp from './livv-client view-control/App';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { DashboardData, Milestone, LogEntry } from './livv-client view-control/types';
+import { DashboardData, Milestone, LogEntry, PaymentEntry } from './livv-client view-control/types';
 
 type ClientRecord = {
   id: string;
@@ -157,7 +157,7 @@ export const ClientPortalView: React.FC = () => {
 
         const projectId = project?.id || null;
 
-        const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }] = await Promise.all([
+        const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }, { data: incomesData }] = await Promise.all([
           projectId
             ? supabase.from('tasks').select('id,title,completed,start_date,due_date,created_at,client_id').eq('project_id', projectId)
             : client?.id
@@ -180,6 +180,11 @@ export const ClientPortalView: React.FC = () => {
             : Promise.resolve({ data: [] }),
           projectId
             ? supabase.from('files').select('id,name,type,size,url').eq('project_id', projectId).order('created_at', { ascending: false })
+            : Promise.resolve({ data: [] }),
+          projectId
+            ? supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', projectId).order('due_date', { ascending: true })
+            : client?.id
+            ? supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('client_id', client.id).order('due_date', { ascending: true })
             : Promise.resolve({ data: [] })
         ]);
 
@@ -244,14 +249,60 @@ export const ClientPortalView: React.FC = () => {
           pass: cred.secret || undefined
         }));
 
+        // Build payment schedule from incomes + installments
+        const payments: PaymentEntry[] = [];
+        let totalFromIncomes = 0;
+        let paidFromInstallments = 0;
+        for (const inc of (incomesData || []) as any[]) {
+          const installments = (inc.installments || []) as any[];
+          if (installments.length > 0) {
+            for (const inst of installments) {
+              const isPaid = inst.status === 'paid';
+              if (isPaid) paidFromInstallments += Number(inst.amount || 0);
+              payments.push({
+                id: inst.id,
+                concept: `${inc.concept || 'Pago'} — Cuota ${inst.number || 1}`,
+                amount: Number(inst.amount || 0),
+                dueDate: inst.due_date || inc.due_date || '',
+                paidDate: inst.paid_date || undefined,
+                status: inst.status || 'pending',
+                number: inst.number || 1,
+              });
+            }
+          } else {
+            const isPaid = inc.status === 'paid';
+            if (isPaid) paidFromInstallments += Number(inc.total_amount || 0);
+            payments.push({
+              id: inc.id,
+              concept: inc.concept || 'Pago',
+              amount: Number(inc.total_amount || 0),
+              dueDate: inc.due_date || '',
+              status: inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending',
+            });
+          }
+          totalFromIncomes += Number(inc.total_amount || 0);
+        }
+        payments.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+
+        const budgetTotal = Number(finances?.total_agreed || 0) || totalFromIncomes;
+        const budgetPaid = Number(finances?.total_collected || 0) || paidFromInstallments;
+
+        // Determine next payment
+        const nextPending = payments.find(p => p.status !== 'paid');
+        const nextPayment = nextPending
+          ? { amount: nextPending.amount, dueDate: nextPending.dueDate, concept: nextPending.concept }
+          : undefined;
+
         const dashboard: DashboardData = {
           progress,
           startDate,
           etaDate,
           onTrack: true,
           budget: {
-            total: Number(finances?.total_agreed || 0),
-            paid: Number(finances?.total_collected || 0)
+            total: budgetTotal,
+            paid: budgetPaid,
+            nextPayment,
+            payments,
           },
           milestones: milestones.length ? milestones : [
             { id: 'm1', title: 'Project kickoff', description: 'Initial project setup.', status: 'current' }

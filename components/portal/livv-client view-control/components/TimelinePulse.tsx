@@ -1,91 +1,88 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis } from 'recharts';
-import { Zap, Activity, Calendar } from 'lucide-react';
+import { CheckCircle2, Clock, CalendarDays, AlertCircle, CreditCard } from 'lucide-react';
 import { DashboardData } from '../types';
 
-const sparklineData = [
-  { val: 45 }, { val: 42 }, { val: 68 }, { val: 55 }, { val: 78 }, { val: 74 }, { val: 92 }
-];
-
 const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
+  const eta = new Date(data.etaDate);
+  const now = new Date();
+  const daysLeft = Math.max(0, Math.ceil((eta.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const nextPay = data.budget.nextPayment;
+
   return (
-    <motion.div 
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0 }
-      }}
-      className="glass-card gradient-border-light p-8 h-full flex flex-col justify-between"
+    <motion.div
+      variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
+      className="bg-white rounded-2xl border border-zinc-200/60 p-6 md:p-8 h-full flex flex-col"
     >
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <h3 className="text-xs font-black text-brand-dark/30 uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
-            <Activity size={14} className="text-brand-accent" />
-            Project Velocity
-          </h3>
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-brand-accent shadow-[0_0_8px_rgba(130,43,46,0.3)] animate-pulse" />
-            <span className="mono text-xs font-bold uppercase tracking-widest text-brand-dark/70">
-              Operational Intensity: High
-            </span>
-          </div>
-        </div>
-        <div className="text-right">
-          <span className="mono text-5xl font-black text-brand-dark tracking-tighter leading-none">{data.progress}%</span>
-          <p className="text-[10px] text-brand-dark/40 uppercase tracking-[0.2em] mt-2 font-bold">Aggregate Completion</p>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Progreso del Proyecto</h3>
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${data.onTrack ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${data.onTrack ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          {data.onTrack ? 'En tiempo' : 'Con retraso'}
         </div>
       </div>
 
-      <div className="relative h-2 bg-brand-dark/5 rounded-full mb-10 overflow-hidden">
-        <motion.div 
+      {/* Progress number + days */}
+      <div className="flex items-end justify-between mb-4">
+        <div>
+          <p className="text-5xl font-black text-zinc-900 tracking-tight leading-none">{data.progress}<span className="text-2xl text-zinc-300">%</span></p>
+          <p className="text-[11px] text-zinc-400 mt-1.5">completado</p>
+        </div>
+        {data.progress >= 100 ? (
+          <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+            <CheckCircle2 size={16} />
+            <span className="text-xs font-semibold">Finalizado</span>
+          </div>
+        ) : (
+          <div className="text-right">
+            <p className="text-3xl font-black text-zinc-800 leading-none">{daysLeft}</p>
+            <p className="text-[10px] text-zinc-400 mt-1">días restantes</p>
+          </div>
+        )}
+      </div>
+
+      {/* Progress Bar */}
+      <div className="relative h-2 bg-zinc-100 rounded-full overflow-hidden mb-6">
+        <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${data.progress}%` }}
-          transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute top-0 left-0 h-full bg-brand-accent rounded-full shadow-[0_2px_10px_rgba(130,43,46,0.2)]"
+          animate={{ width: `${Math.min(data.progress, 100)}%` }}
+          transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+          className={`absolute top-0 left-0 h-full rounded-full ${data.progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
         />
       </div>
 
-      <div className="flex-1 min-h-[140px] mb-8 relative">
-        <div className="absolute top-0 left-0 flex items-center gap-2 z-10 opacity-40">
-          <Zap size={10} className="text-brand-dark" />
-          <span className="text-[9px] uppercase text-brand-dark tracking-widest mono font-black">Performance Telemetry</span>
+      {/* Dates Row */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="p-3.5 bg-zinc-50 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <CalendarDays size={12} className="text-zinc-300" />
+            <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">Inicio</p>
+          </div>
+          <p className="text-sm font-semibold text-zinc-700">{data.startDate}</p>
         </div>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={sparklineData}>
-            <defs>
-              <linearGradient id="brandGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#822b2e" stopOpacity={0.15}/>
-                <stop offset="95%" stopColor="#822b2e" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <Area 
-              type="monotone" 
-              dataKey="val" 
-              stroke="#822b2e" 
-              fillOpacity={1} 
-              fill="url(#brandGradient)" 
-              strokeWidth={3}
-              animationDuration={3000}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <div className="p-3.5 bg-zinc-50 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Clock size={12} className="text-zinc-300" />
+            <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">Entrega estimada</p>
+          </div>
+          <p className="text-sm font-semibold text-indigo-600">{data.etaDate}</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-8 pt-8 border-t border-brand-dark/5">
-        <div>
-          <p className="text-[9px] text-brand-dark/30 uppercase mono font-black tracking-widest mb-1">Contract Started</p>
-          <p className="text-sm font-bold text-brand-dark/80">{data.startDate}</p>
+      {/* Next Payment Alert */}
+      {nextPay && (
+        <div className="mt-auto p-3.5 bg-amber-50/80 border border-amber-200/50 rounded-xl flex items-center gap-3">
+          <div className="p-2 bg-amber-100 rounded-lg shrink-0">
+            <CreditCard size={15} className="text-amber-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-amber-800">Próximo pago: ${nextPay.amount.toLocaleString()}</p>
+            <p className="text-[10px] text-amber-600/70 mt-0.5">{nextPay.concept} · Vence {nextPay.dueDate}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-[9px] text-brand-dark/30 uppercase mono font-black tracking-widest mb-1">Estimated ETA</p>
-          <p className="text-sm font-bold text-brand-dark/80">{data.etaDate}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-[9px] text-brand-dark/30 uppercase mono font-black tracking-widest mb-1">T-Minus</p>
-          <p className="text-sm font-black text-brand-accent mono">24 Days</p>
-        </div>
-      </div>
+      )}
     </motion.div>
   );
 };

@@ -8,7 +8,7 @@ import { supabase } from './lib/supabase';
 
 // Updated Context Providers with security and enhanced features
 import { RBACProvider, useRBAC } from './context/RBACContext';
-import { TenantProvider } from './context/TenantContext';
+import { TenantProvider, useTenant } from './context/TenantContext';
 import { SecurityProvider } from './context/SecurityContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { TeamProvider } from './context/TeamContext';
@@ -456,12 +456,16 @@ const AppContent: React.FC<{
   showDebug: boolean;
 }> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug }) => {
   const { isInitialized, hasRole } = useRBAC();
+  const { isLoading: tenantLoading, currentTenant } = useTenant();
+
+  // Wait for both RBAC + Tenant before rendering pages
+  const isReady = isInitialized && !tenantLoading && !!currentTenant;
 
   useEffect(() => {
-    if (isInitialized && hasRole('client') && currentPage !== 'client_portal') {
+    if (isReady && hasRole('client') && currentPage !== 'client_portal') {
       handleNavigate('client_portal');
     }
-  }, [isInitialized, hasRole, currentPage, handleNavigate]);
+  }, [isReady, hasRole, currentPage, handleNavigate]);
 
   useEffect(() => {
     scheduleIdle(() => {
@@ -578,6 +582,7 @@ const AppContent: React.FC<{
   };
 
   if (currentPage === 'client_portal') {
+    if (!isReady) return getSkeletonForPage(currentPage);
     return (
       <Suspense fallback={getSkeletonForPage(currentPage)}>
         {renderPage()}
@@ -592,7 +597,7 @@ const AppContent: React.FC<{
       onNavigate={handleNavigate}
       onSwitchMode={handleSwitchMode}
     >
-      {!isInitialized ? (
+      {!isReady ? (
         getSkeletonForPage(currentPage)
       ) : (
         <Suspense fallback={getSkeletonForPage(currentPage)}>

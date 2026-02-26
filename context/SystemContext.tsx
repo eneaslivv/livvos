@@ -234,7 +234,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [skillExecutions, setSkillExecutions] = useState<SkillExecution[]>([]);
   const [clusterNodes, setClusterNodes] = useState<ClusterNode[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canManageSystem, setCanManageSystem] = useState(false);
   const [canViewSystem, setCanViewSystem] = useState(false);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { useDocuments, File as DocFile } from '../hooks/useDocuments';
@@ -6,6 +6,7 @@ import { useClients } from '../hooks/useClients';
 import { useProjects } from '../context/ProjectsContext';
 import { ProposalsPanel } from '../components/docs/ProposalsPanel';
 import { BlogPanel } from '../components/docs/BlogPanel';
+import { PasswordsPanel } from '../components/docs/PasswordsPanel';
 
 export const Docs: React.FC = () => {
   const {
@@ -24,8 +25,22 @@ export const Docs: React.FC = () => {
   const { clients } = useClients();
   const { projects } = useProjects();
 
+  // Loading timeout
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingStartRef = useRef(Date.now());
+  useEffect(() => {
+    if (loading) {
+      const elapsed = Date.now() - loadingStartRef.current;
+      const remaining = Math.max(0, 5000 - elapsed);
+      const timer = setTimeout(() => setLoadingTimedOut(true), remaining);
+      return () => clearTimeout(timer);
+    }
+    loadingStartRef.current = Date.now();
+    setLoadingTimedOut(false);
+  }, [loading]);
+
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [activeTab, setActiveTab] = useState<'documents' | 'proposals' | 'blog'>('documents');
+  const [activeTab, setActiveTab] = useState<'documents' | 'proposals' | 'blog' | 'passwords'>('documents');
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -84,9 +99,10 @@ export const Docs: React.FC = () => {
     { id: 'documents' as const, label: 'Documentos', icon: Icons.Folder },
     { id: 'proposals' as const, label: 'Propuestas', icon: Icons.File },
     { id: 'blog' as const, label: 'Blog', icon: Icons.Docs },
+    { id: 'passwords' as const, label: 'Contraseñas', icon: Icons.Lock },
   ];
 
-  if (loading && !folders.length && !files.length && activeTab === 'documents') {
+  if (loading && !loadingTimedOut && !folders.length && !files.length && activeTab === 'documents') {
     return (
       <div className="max-w-7xl mx-auto p-4 sm:p-6 flex justify-center items-center h-64">
         <div className="text-center">
@@ -98,7 +114,7 @@ export const Docs: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="max-w-[1600px] mx-auto pt-4 pb-6">
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
@@ -159,11 +175,10 @@ export const Docs: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === tab.id
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
                     ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-                }`}
+                  }`}
               >
                 <tab.icon size={14} />
                 {tab.label}
@@ -220,21 +235,19 @@ export const Docs: React.FC = () => {
               <div className="flex bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg p-0.5">
                 <button
                   onClick={() => setView('grid')}
-                  className={`p-1.5 rounded-md transition-all ${
-                    view === 'grid'
+                  className={`p-1.5 rounded-md transition-all ${view === 'grid'
                       ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                       : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
-                  }`}
+                    }`}
                 >
                   <Icons.Grid size={15} />
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`p-1.5 rounded-md transition-all ${
-                    view === 'list'
+                  className={`p-1.5 rounded-md transition-all ${view === 'list'
                       ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                       : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
-                  }`}
+                    }`}
                 >
                   <Icons.List size={15} />
                 </button>
@@ -281,6 +294,8 @@ export const Docs: React.FC = () => {
         <ProposalsPanel />
       ) : activeTab === 'blog' ? (
         <BlogPanel />
+      ) : activeTab === 'passwords' ? (
+        <PasswordsPanel />
       ) : folders.length === 0 && files.length === 0 ? (
         /* Empty state */
         <div className="text-center py-16">

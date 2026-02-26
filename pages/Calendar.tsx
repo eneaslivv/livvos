@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { SlidePanel } from '../components/ui/SlidePanel';
@@ -9,6 +10,57 @@ import { useSupabase } from '../hooks/useSupabase';
 import { TimeSlotPopover } from '../components/calendar/TimeSlotPopover';
 import { GoogleCalendarSettings } from '../components/calendar/GoogleCalendarSettings';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import { useTeam } from '../context/TeamContext';
+import { generateWeeklySummaryFromAI } from '../lib/ai';
+
+/* ─── Animated Toggle Group ─── */
+const ToggleGroup = <T extends string>({ options, value, onChange }: {
+  options: { id: T; label: string; icon?: React.ElementType }[];
+  value: T;
+  onChange: (v: T) => void;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const activeBtn = container.querySelector(`[data-toggle="${value}"]`) as HTMLButtonElement;
+    if (activeBtn) {
+      setIndicator({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth });
+    }
+  }, [value]);
+
+  return (
+    <div ref={containerRef} className="relative flex items-center gap-0.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+      <motion.div
+        className="absolute top-1 bottom-1 bg-white dark:bg-zinc-700 rounded-lg shadow-sm"
+        initial={false}
+        animate={{ left: indicator.left, width: indicator.width }}
+        transition={{ type: 'tween', duration: 0.15, ease: 'easeOut' }}
+      />
+      {options.map(opt => {
+        const Icon = opt.icon;
+        const isActive = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            data-toggle={opt.id}
+            onClick={() => onChange(opt.id)}
+            className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 ${
+              isActive
+                ? 'text-zinc-900 dark:text-zinc-100'
+                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+            }`}
+          >
+            {Icon && <Icon size={13} />}
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 export const Calendar: React.FC = () => {
   const { user } = useAuth();
@@ -27,6 +79,42 @@ export const Calendar: React.FC = () => {
     getTasksByDate,
     getCalendarStats
   } = useCalendar();
+
+  const { members: teamMembers } = useTeam();
+
+  // Loading timeout
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingStartRef2 = useRef(Date.now());
+  useEffect(() => {
+    if (loading) {
+      const elapsed = Date.now() - loadingStartRef2.current;
+      const remaining = Math.max(0, 5000 - elapsed);
+      const timer = setTimeout(() => setLoadingTimedOut(true), remaining);
+      return () => clearTimeout(timer);
+    }
+    loadingStartRef2.current = Date.now();
+    setLoadingTimedOut(false);
+  }, [loading]);
+
+  // 'all' = ver todo, 'me' = solo mis tareas, uuid = miembro específico
+  const [taskFilter, setTaskFilter] = useState<'all' | 'me' | string>('all');
+
+  // Mapa rápido de miembros para resolver nombres/avatars
+  const memberMap = teamMembers.reduce<Record<string, { name: string | null; avatar_url: string | null }>>((acc, m) => {
+    acc[m.id] = { name: m.name, avatar_url: m.avatar_url };
+    return acc;
+  }, {});
+
+  const getMemberName = (id?: string) => {
+    if (!id) return null;
+    if (id === user?.id) return 'Yo';
+    return memberMap[id]?.name || 'Miembro';
+  };
+
+  const getMemberAvatar = (id?: string) => {
+    if (!id) return null;
+    return memberMap[id]?.avatar_url || null;
+  };
 
   const { data: projectOptions } = useSupabase<{ id: string; title: string }>('projects', {
     enabled: true,
@@ -62,6 +150,15 @@ export const Calendar: React.FC = () => {
   }, [googleConnected, googleAutoSynced, syncGoogle]);
 
   const [showGoogleSettings, setShowGoogleSettings] = useState(false);
+
+  // AI Weekly Summary state
+  const [aiSummary, setAiSummary] = useState<{ objectives: string[]; focus_tasks: string[]; recommendations: string[] } | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
+  const [aiSummaryExpanded, setAiSummaryExpanded] = useState(false);
+  const [aiCustomPrompt, setAiCustomPrompt] = useState('');
+  const [showAiPromptInput, setShowAiPromptInput] = useState(false);
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -109,6 +206,8 @@ export const Calendar: React.FC = () => {
   ];
 
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(Object.keys(CONTENT_PLATFORMS));
+  const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
+  const platformDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (calendarMode === 'content') {
@@ -116,9 +215,20 @@ export const Calendar: React.FC = () => {
     }
   }, [calendarMode]);
 
+  // Close platform dropdown on outside click
+  useEffect(() => {
+    if (!platformDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (platformDropdownRef.current && !platformDropdownRef.current.contains(e.target as Node)) {
+        setPlatformDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [platformDropdownOpen]);
+
   // Click-to-create popover state
   const [slotPopover, setSlotPopover] = useState<{
-    cellRect: { top: number; left: number; width: number; height: number };
     clickX: number;
     clickY: number;
     date: string;
@@ -132,7 +242,8 @@ export const Calendar: React.FC = () => {
     priority: 'medium' as const,
     status: 'todo' as const,
     duration: 60,
-    project_id: ''
+    project_id: '',
+    assignee_id: ''
   });
 
   // Obtener semana actual
@@ -263,8 +374,10 @@ export const Calendar: React.FC = () => {
         owner_id: user?.id || '',
         start_date: newTaskData.start_date || selectedDate,
         project_id: newTaskData.project_id || undefined,
-        completed: false
-      });
+        assignee_id: newTaskData.assignee_id || undefined,
+        completed: false,
+        order_index: 0,
+      } as any);
 
       setNewTaskData({
         title: '',
@@ -273,13 +386,12 @@ export const Calendar: React.FC = () => {
         priority: 'medium',
         status: 'todo',
         duration: 60,
-        project_id: ''
+        project_id: '',
+        assignee_id: ''
       });
       setShowNewTaskForm(false);
     } catch (err) {
       errorLogger.error('Error creando tarea', err);
-      // Mostrar mensaje de error al usuario
-      alert('Error al crear tarea: ' + (err as Error).message);
     }
   };
 
@@ -338,6 +450,46 @@ export const Calendar: React.FC = () => {
   };
 
   // Obtener eventos y tareas para una fecha específica
+  // Generate AI weekly summary
+  const handleGenerateAiSummary = async (customExtra?: string) => {
+    setAiSummaryLoading(true);
+    setAiSummaryError(null);
+    try {
+      // Build context from current week events and tasks
+      const weekDaysList = getWeekDays();
+      const weekEvents: string[] = [];
+      const weekTasks: string[] = [];
+
+      weekDaysList.forEach(day => {
+        const dayEvents = events.filter(e => e.start_date === day.dateStr);
+        const dayTasks = getTasksByDate(day.dateStr);
+        dayEvents.forEach(e => weekEvents.push(`${day.dateStr}: ${e.title} (${e.type})`));
+        dayTasks.forEach(t => weekTasks.push(`${day.dateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completada)' : '(pendiente)'}`));
+      });
+
+      const contextParts = [
+        `Semana del ${weekDaysList[0]?.dateStr || ''} al ${weekDaysList[6]?.dateStr || ''}`,
+        weekEvents.length > 0 ? `Eventos de la semana:\n${weekEvents.join('\n')}` : 'No hay eventos programados esta semana.',
+        weekTasks.length > 0 ? `Tareas de la semana:\n${weekTasks.join('\n')}` : 'No hay tareas asignadas esta semana.',
+      ];
+
+      if (customExtra?.trim()) {
+        contextParts.push(`Instrucciones adicionales del usuario: ${customExtra.trim()}`);
+      }
+
+      const result = await generateWeeklySummaryFromAI(contextParts.join('\n\n'));
+      setAiSummary(result);
+      setAiSummaryExpanded(true);
+      setShowAiPromptInput(false);
+      setAiCustomPrompt('');
+    } catch (err: any) {
+      errorLogger.error('Error generating AI summary', err);
+      setAiSummaryError(err.message || 'Error al generar resumen');
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  };
+
   const filteredEvents = calendarMode === 'content'
     ? events.filter(event => event.type === 'content')
     : events.filter(event => event.type !== 'content');
@@ -356,7 +508,11 @@ export const Calendar: React.FC = () => {
   };
 
   const getDayTasks = (date: string) => {
-    return calendarMode === 'content' ? [] : getTasksByDate(date);
+    if (calendarMode === 'content') return [];
+    const allTasks = getTasksByDate(date);
+    if (taskFilter === 'all') return allTasks;
+    if (taskFilter === 'me') return allTasks.filter(t => t.assignee_id === user?.id || (!t.assignee_id && t.owner_id === user?.id));
+    return allTasks.filter(t => t.assignee_id === taskFilter);
   };
 
   // Estadísticas del calendario
@@ -364,13 +520,13 @@ export const Calendar: React.FC = () => {
 
   // Siempre mostramos el calendario con placeholders cuando no hay datos
 
-  if (loading) {
+  if (loading && !loadingTimedOut) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-[1600px] mx-auto pt-4 pb-6">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zinc-900 dark:border-zinc-100 mx-auto mb-4"></div>
-            <p className="text-zinc-600 dark:text-zinc-400">Cargando calendario...</p>
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-900 dark:border-t-zinc-100 mx-auto mb-4" />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando calendario...</p>
           </div>
         </div>
       </div>
@@ -383,88 +539,118 @@ export const Calendar: React.FC = () => {
   const hours = getHours();
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-[1600px] mx-auto pt-4 pb-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Calendario</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendario</h1>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
             {calendarMode === 'content'
               ? `${filteredEvents.length} contenidos programados`
-              : `${stats.totalEvents} eventos, ${stats.totalTasks} tareas (${stats.completedTasks} completadas)`}
+              : `${stats.totalEvents} eventos · ${stats.totalTasks} tareas · ${stats.completedTasks} completadas`}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-            {(['schedule', 'content'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setCalendarMode(mode)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  calendarMode === mode
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                }`}
-              >
-                {mode === 'schedule' ? 'Agenda' : 'Contenido'}
-              </button>
-            ))}
-          </div>
+          {/* Mode toggle: Agenda / Contenido */}
+          <ToggleGroup
+            options={[
+              { id: 'schedule' as const, label: 'Agenda', icon: Icons.Calendar },
+              { id: 'content' as const, label: 'Contenido', icon: Icons.Layers },
+            ]}
+            value={calendarMode}
+            onChange={setCalendarMode}
+          />
+
+          {/* Platform filter dropdown (content mode) */}
           {calendarMode === 'content' && (
-            <div className="flex flex-wrap items-center gap-2">
-              {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setSelectedPlatforms((prev) =>
-                      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
-                    )
-                  }}
-                  className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
-                    selectedPlatforms.includes(key)
-                      ? 'bg-white border-zinc-200 text-zinc-900'
-                      : 'bg-zinc-100 border-transparent text-zinc-400'
-                  }`}
-                  style={selectedPlatforms.includes(key) ? { borderColor: value.color } : undefined}
-                >
-                  {value.label}
-                </button>
-              ))}
+            <div ref={platformDropdownRef} className="relative">
+              <button
+                onClick={() => setPlatformDropdownOpen(prev => !prev)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <Icons.Filter size={13} />
+                Redes
+                {selectedPlatforms.length < Object.keys(CONTENT_PLATFORMS).length && (
+                  <span className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[9px] font-bold">
+                    {selectedPlatforms.length}
+                  </span>
+                )}
+              </button>
+              {platformDropdownOpen && (
+                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* Select all / none */}
+                  <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Plataformas</span>
+                    <button
+                      onClick={() => setSelectedPlatforms(prev =>
+                        prev.length === Object.keys(CONTENT_PLATFORMS).length ? [] : Object.keys(CONTENT_PLATFORMS)
+                      )}
+                      className="text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {selectedPlatforms.length === Object.keys(CONTENT_PLATFORMS).length ? 'Ninguna' : 'Todas'}
+                    </button>
+                  </div>
+                  {Object.entries(CONTENT_PLATFORMS).map(([key, plat]) => {
+                    const isSelected = selectedPlatforms.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setSelectedPlatforms(prev =>
+                          prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+                        )}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors ${
+                            isSelected
+                              ? 'border-transparent'
+                              : 'border-zinc-300 dark:border-zinc-600'
+                          }`}
+                          style={isSelected ? { backgroundColor: plat.color } : undefined}
+                        >
+                          {isSelected && (
+                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          )}
+                        </div>
+                        <span className={`font-medium ${isSelected ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'}`}>
+                          {plat.label}
+                        </span>
+                        <div className="ml-auto w-2 h-2 rounded-full" style={{ backgroundColor: plat.color }} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
-          {/* Vista */}
-          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-            {(['week', 'month'] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  view === v
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                }`}
-              >
-                {v === 'week' ? 'Semana' : 'Mes'}
-              </button>
-            ))}
-          </div>
-          
-          {/* Botones de acción */}
+
+          {/* View toggle: Semana / Mes */}
+          <ToggleGroup
+            options={[
+              { id: 'week' as const, label: 'Semana' },
+              { id: 'month' as const, label: 'Mes' },
+            ]}
+            value={view}
+            onChange={setView}
+          />
+
+          {/* Separator */}
+          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+
+          {/* Action buttons */}
           <button
             onClick={() => setShowNewEventForm(true)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              calendarMode === 'content' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
+            className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors active:scale-[0.97]"
           >
-            <Icons.Plus size={16} />
+            <Icons.Plus size={14} />
             {calendarMode === 'content' ? 'Contenido' : 'Evento'}
           </button>
           {calendarMode === 'schedule' && (
             <button
               onClick={() => setShowNewTaskForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-[0.97]"
             >
-              <Icons.Check size={16} />
+              <Icons.Check size={14} />
               Tarea
             </button>
           )}
@@ -474,16 +660,15 @@ export const Calendar: React.FC = () => {
             <button
               onClick={() => syncGoogle().catch(() => {})}
               disabled={googleSyncing}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
               title="Sincronizar Google Calendar"
             >
               <Icons.RefreshCw size={14} className={googleSyncing ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">Sync</span>
             </button>
           )}
           <button
             onClick={() => setShowGoogleSettings(prev => !prev)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
             title="Integraciones de calendario"
           >
             <Icons.Settings size={14} />
@@ -491,109 +676,300 @@ export const Calendar: React.FC = () => {
         </div>
       </div>
 
+      {/* AI Weekly Summary */}
+      <div className="mb-4">
+        {!aiSummary && !aiSummaryLoading && (
+          <button
+            onClick={() => handleGenerateAiSummary()}
+            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-indigo-300 dark:hover:border-indigo-600/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all duration-200"
+          >
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
+              <Icons.Sparkles size={12} className="text-white" />
+            </div>
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              Generar resumen semanal con IA
+            </span>
+          </button>
+        )}
+
+        {aiSummaryLoading && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center animate-pulse">
+              <Icons.Sparkles size={12} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-24 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
+                  <div className="h-full w-1/2 bg-indigo-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
+                </div>
+                <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400">Analizando tu semana...</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {aiSummaryError && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 mb-2">
+            <Icons.AlertCircle size={14} className="text-red-500 shrink-0" />
+            <span className="text-xs text-red-600 dark:text-red-400">{aiSummaryError}</span>
+            <button onClick={() => { setAiSummaryError(null); handleGenerateAiSummary(); }} className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors">
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {aiSummary && !aiSummaryLoading && (
+          <div className="rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 overflow-hidden">
+            {/* Summary header — always visible */}
+            <button
+              onClick={() => setAiSummaryExpanded(!aiSummaryExpanded)}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors"
+            >
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
+                <Icons.Sparkles size={12} className="text-white" />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Resumen semanal IA</span>
+                <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  {aiSummary.objectives.length} objetivos · {aiSummary.focus_tasks.length} tareas clave · {aiSummary.recommendations.length} recomendaciones
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAiPromptInput(!showAiPromptInput); }}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                  title="Agregar contexto personalizado"
+                >
+                  <Icons.Message size={13} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleGenerateAiSummary(); }}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                  title="Regenerar resumen"
+                >
+                  <Icons.RefreshCw size={13} />
+                </button>
+                <Icons.ChevronDown size={14} className={`text-zinc-400 transition-transform duration-200 ${aiSummaryExpanded ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+
+            {/* Custom prompt input */}
+            {showAiPromptInput && (
+              <div className="px-4 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                <div className="flex items-center gap-2 mt-3">
+                  <input
+                    type="text"
+                    value={aiCustomPrompt}
+                    onChange={(e) => setAiCustomPrompt(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && aiCustomPrompt.trim()) handleGenerateAiSummary(aiCustomPrompt); }}
+                    placeholder="Ej: Enfocarse en entregas del cliente X, priorizar diseño..."
+                    className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 dark:focus:border-indigo-600 placeholder-zinc-400"
+                  />
+                  <button
+                    onClick={() => handleGenerateAiSummary(aiCustomPrompt)}
+                    disabled={!aiCustomPrompt.trim()}
+                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Generar
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1.5">Agrega contexto extra para personalizar el resumen</p>
+              </div>
+            )}
+
+            {/* Expanded content */}
+            {aiSummaryExpanded && (
+              <div className="px-4 pb-4 border-t border-zinc-100 dark:border-zinc-800/60">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  {/* Objectives */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                        <Icons.Target size={10} className="text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Objetivos</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {aiSummary.objectives.map((obj, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                          <span className="w-4 h-4 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-500">{i + 1}</span>
+                          {obj}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Focus Tasks */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                        <Icons.Zap size={10} className="text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Tareas Clave</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {aiSummary.focus_tasks.map((task, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 dark:bg-amber-500 shrink-0 mt-1.5" />
+                          {task}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <div className="w-4 h-4 rounded bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                        <Icons.Lightbulb size={10} className="text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Recomendaciones</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {aiSummary.recommendations.map((rec, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 shrink-0 mt-1.5" />
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Filtro por miembro del equipo */}
+      {calendarMode === 'schedule' && teamMembers.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filtrar:</span>
+          {[
+            { id: 'all', label: 'Todos' },
+            { id: 'me', label: 'Mis tareas' },
+            ...teamMembers
+              .filter(m => m.status === 'active' && m.id !== user?.id)
+              .map(m => ({ id: m.id, label: m.name || m.email?.split('@')[0] || 'Miembro', avatar: m.avatar_url })),
+          ].map((item: any) => (
+            <button
+              key={item.id}
+              onClick={() => setTaskFilter(item.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-full transition-all duration-200 shrink-0 ${
+                taskFilter === item.id
+                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold shadow-sm'
+                  : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60'
+              }`}
+            >
+              {item.avatar && (
+                <img src={item.avatar} alt="" className="w-4 h-4 rounded-full" />
+              )}
+              {!item.avatar && item.id !== 'all' && item.id !== 'me' && (
+                <div className="w-4 h-4 rounded-full bg-zinc-300 dark:bg-zinc-600 flex items-center justify-center text-[7px] font-bold text-white">
+                  {item.label?.[0]?.toUpperCase()}
+                </div>
+              )}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Side panel de creación */}
       <SlidePanel
         isOpen={showNewEventForm || showNewTaskForm}
         onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
         title={showNewEventForm ? (calendarMode === 'content' ? 'Nuevo Contenido' : 'Nuevo Evento') : 'Nueva Tarea'}
-        width="md"
+        width="sm"
         footer={
-          <div className="flex justify-end gap-3">
+          <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
-              className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
+              className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={showNewEventForm ? (calendarMode === 'content' ? handleCreateContent : handleCreateEvent) : handleCreateTask}
               disabled={showNewEventForm ? (calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()) : !newTaskData.title.trim()}
-              className="px-5 py-2 bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.97] flex items-center gap-2"
             >
-              {showNewEventForm ? <Icons.Calendar size={16}/> : <Icons.Check size={16}/>}
+              {showNewEventForm ? <Icons.Calendar size={14}/> : <Icons.Check size={14}/>}
               {showNewEventForm ? (calendarMode === 'content' ? 'Crear' : 'Crear Evento') : 'Crear Tarea'}
             </button>
           </div>
         }
       >
-        <div className="p-5 space-y-4">
+        <div className="p-5">
           {showNewEventForm ? (
             <div className="space-y-4">
+              {/* Title */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
+                <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
+                  {calendarMode === 'content' ? 'Nombre del contenido' : 'Nombre del evento'}
+                </label>
                 <input
                   type="text"
-                  placeholder={calendarMode === 'content' ? 'Ej: Reel lanzamiento' : 'Ej: Reunión con Cliente'}
+                  placeholder={calendarMode === 'content' ? 'Nombre del contenido...' : 'Nombre del evento...'}
                   value={calendarMode === 'content' ? newContentData.title : newEventData.title}
                   onChange={(e) => calendarMode === 'content'
                     ? setNewContentData({ ...newContentData, title: e.target.value })
                     : setNewEventData({ ...newEventData, title: e.target.value })
                   }
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
                   autoFocus
                 />
               </div>
+
               {calendarMode === 'content' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Plataforma</label>
-                      <select
-                        value={newContentData.platform}
-                        onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
-                        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                      >
-                        {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
-                          <option key={key} value={key}>{value.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-500 mb-1">Canal</label>
-                      <select
-                        value={newContentData.channel}
-                        onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
-                        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                      >
-                        <option value="feed">Feed</option>
-                        <option value="stories">Stories</option>
-                        <option value="reels">Reels</option>
-                        <option value="shorts">Shorts</option>
-                        <option value="post">Post</option>
-                      </select>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Asset</label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Carousel / Video / Copy"
-                      value={newContentData.asset_type}
-                      onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
-                      className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Estado</label>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Plataforma</label>
                     <select
-                      value={newContentData.status}
-                      onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      value={newContentData.platform}
+                      onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                     >
-                      {CONTENT_STATUSES.map((status) => (
-                        <option key={status.id} value={status.id}>{status.label}</option>
+                      {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
+                        <option key={key} value={key}>{value.label}</option>
                       ))}
                     </select>
                   </div>
-                </>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Canal</label>
+                    <select
+                      value={newContentData.channel}
+                      onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="feed">Feed</option>
+                      <option value="stories">Stories</option>
+                      <option value="reels">Reels</option>
+                      <option value="shorts">Shorts</option>
+                      <option value="post">Post</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Estado</label>
+                    <select
+                      value={newContentData.status}
+                      onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                    >
+                      {CONTENT_STATUSES.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Tipo</label>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Tipo</label>
                     <select
                       value={newEventData.type}
                       onChange={(e) => setNewEventData({ ...newEventData, type: e.target.value as any })}
-                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                     >
                       <option value="meeting">Reunión</option>
                       <option value="call">Llamada</option>
@@ -603,21 +979,34 @@ export const Calendar: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">Ubicación / Link</label>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Ubicación</label>
                     <input
                       type="text"
-                      placeholder="Ej: Zoom / Oficina"
+                      placeholder="Zoom / Oficina"
                       value={newEventData.location}
                       onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                      className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                 </div>
               )}
 
+              {calendarMode === 'content' && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Asset</label>
+                  <input
+                    type="text"
+                    placeholder="Carousel / Video / Copy"
+                    value={newContentData.asset_type}
+                    onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha</label>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Fecha</label>
                   <input
                     type="date"
                     value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
@@ -625,11 +1014,11 @@ export const Calendar: React.FC = () => {
                       ? setNewContentData({ ...newContentData, start_date: e.target.value })
                       : setNewEventData({ ...newEventData, start_date: e.target.value })
                     }
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Hora</label>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Hora</label>
                   <input
                     type="time"
                     value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
@@ -637,11 +1026,11 @@ export const Calendar: React.FC = () => {
                       ? setNewContentData({ ...newContentData, start_time: e.target.value })
                       : setNewEventData({ ...newEventData, start_time: e.target.value })
                     }
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Duración</label>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Min</label>
                   <input
                     type="number"
                     value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
@@ -649,7 +1038,7 @@ export const Calendar: React.FC = () => {
                       ? setNewContentData({ ...newContentData, duration: parseInt(e.target.value) })
                       : setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })
                     }
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                     min="15"
                     step="15"
                   />
@@ -657,7 +1046,7 @@ export const Calendar: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
+                <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Descripción</label>
                 <textarea
                   placeholder="Detalles adicionales..."
                   value={calendarMode === 'content' ? newContentData.description : newEventData.description}
@@ -665,31 +1054,34 @@ export const Calendar: React.FC = () => {
                     ? setNewContentData({ ...newContentData, description: e.target.value })
                     : setNewEventData({ ...newEventData, description: e.target.value })
                   }
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
-                  rows={3}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
+                  rows={2}
                 />
               </div>
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Title */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Título</label>
+                <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Título</label>
                 <input
                   type="text"
-                  placeholder="Ej: Finalizar reporte"
+                  placeholder="¿Qué hay que hacer?"
                   value={newTaskData.title}
                   onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all"
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
                   autoFocus
                 />
               </div>
+
+              {/* Priority + Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Prioridad</label>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Prioridad</label>
                   <select
                     value={newTaskData.priority}
                     onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                   >
                     <option value="low">Baja</option>
                     <option value="medium">Media</option>
@@ -698,36 +1090,57 @@ export const Calendar: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Fecha Límite</label>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Fecha límite</label>
                   <input
                     type="date"
                     value={newTaskData.start_date}
                     onChange={(e) => setNewTaskData({ ...newTaskData, start_date: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Proyecto</label>
-                <select
-                  value={newTaskData.project_id}
-                  onChange={(e) => setNewTaskData({ ...newTaskData, project_id: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                >
-                  <option value="">Sin proyecto</option>
-                  {projectOptions.map((project) => (
-                    <option key={project.id} value={project.id}>{project.title}</option>
-                  ))}
-                </select>
+
+              {/* Project + Assignee */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Proyecto</label>
+                  <select
+                    value={newTaskData.project_id}
+                    onChange={(e) => setNewTaskData({ ...newTaskData, project_id: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="">Sin proyecto</option>
+                    {projectOptions.map((project) => (
+                      <option key={project.id} value={project.id}>{project.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Asignar a</label>
+                  <select
+                    value={newTaskData.assignee_id}
+                    onChange={(e) => setNewTaskData({ ...newTaskData, assignee_id: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="">Sin asignar</option>
+                    {teamMembers.filter(m => m.status === 'active').map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.id === user?.id ? `${member.name || member.email} (Yo)` : (member.name || member.email)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {/* Description */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Descripción</label>
+                <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">Descripción</label>
                 <textarea
-                  placeholder="Detalles..."
+                  placeholder="Detalles opcionales..."
                   value={newTaskData.description}
                   onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100 transition-all resize-none"
-                  rows={3}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
+                  rows={2}
                 />
               </div>
             </div>
@@ -745,7 +1158,6 @@ export const Calendar: React.FC = () => {
       {/* Popover de click-to-create */}
       {slotPopover && (
         <TimeSlotPopover
-          cellRect={slotPopover.cellRect}
           clickX={slotPopover.clickX}
           clickY={slotPopover.clickY}
           date={slotPopover.date}
@@ -787,6 +1199,11 @@ export const Calendar: React.FC = () => {
                   }`}>
                     {day.getDate()}
                   </div>
+                  {getDayTasks(dateStr).length > 0 && (
+                    <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium mt-0.5">
+                      {getDayTasks(dateStr).length} tarea{getDayTasks(dateStr).length > 1 ? 's' : ''}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -806,16 +1223,23 @@ export const Calendar: React.FC = () => {
                     const eventHour = parseInt(e.start_time.split(':')[0]);
                     return eventHour === hour;
                   });
-                  
+                  const hourTasks = getDayTasks(dateStr).filter(t => {
+                    if (!t.start_time) return false;
+                    const taskHour = parseInt(t.start_time.split(':')[0]);
+                    return taskHour === hour;
+                  });
+
+                  const isSelected = slotPopover?.date === dateStr && slotPopover?.hour === hour;
+
                   return (
                     <div
                       key={dayIndex}
-                      className="p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer"
+                      className={`p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer ${
+                        isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-500/10' : ''
+                      }`}
                       onClick={(e) => {
                         if (e.target !== e.currentTarget) return;
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         setSlotPopover({
-                          cellRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
                           clickX: e.clientX,
                           clickY: e.clientY,
                           date: dateStr,
@@ -842,6 +1266,32 @@ export const Calendar: React.FC = () => {
                               {CONTENT_PLATFORMS[event.location]?.label || event.location}
                             </div>
                           )}
+                        </div>
+                      ))}
+                      {hourTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`text-xs p-1.5 rounded mb-1 cursor-pointer hover:opacity-80 transition-opacity border ${
+                            task.completed
+                              ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 line-through opacity-60'
+                              : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                          }`}
+                          title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="font-medium flex items-center gap-1 text-zinc-800 dark:text-zinc-200 truncate">
+                            <Icons.Check size={10} className="shrink-0" />
+                            {task.title}
+                            {task.assignee_id && (
+                              getMemberAvatar(task.assignee_id) ? (
+                                <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-3.5 h-3.5 rounded-full shrink-0 ml-auto" />
+                              ) : (
+                                <div className="w-3.5 h-3.5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[7px] font-bold text-blue-700 dark:text-blue-300 shrink-0 ml-auto">
+                                  {(getMemberName(task.assignee_id) || '?')[0]?.toUpperCase()}
+                                </div>
+                              )
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -876,9 +1326,7 @@ export const Calendar: React.FC = () => {
                     // Double-click to create (single click selects date)
                   }}
                   onDoubleClick={(e) => {
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setSlotPopover({
-                      cellRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
                       clickX: e.clientX,
                       clickY: e.clientY,
                       date: dateStr,
@@ -1079,6 +1527,20 @@ export const Calendar: React.FC = () => {
                             )}
                           </div>
                           <div className="flex items-center gap-2">
+                            {task.assignee_id && (
+                              <div className="flex items-center gap-1" title={getMemberName(task.assignee_id) || ''}>
+                                {getMemberAvatar(task.assignee_id) ? (
+                                  <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-5 h-5 rounded-full" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[9px] font-bold text-blue-700 dark:text-blue-300">
+                                    {(getMemberName(task.assignee_id) || '?')[0]?.toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden sm:inline">
+                                  {getMemberName(task.assignee_id)}
+                                </span>
+                              </div>
+                            )}
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
                               task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :

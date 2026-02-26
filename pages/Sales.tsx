@@ -1,4 +1,4 @@
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Lead, WebAnalytics } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
@@ -21,17 +21,26 @@ interface SalesProps {
 export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
   const leadsEnabled = view !== 'analytics';
   const analyticsEnabled = view === 'analytics';
-  const leadsSelect = 'id,name,email,company,message,status,created_at,last_interaction,ai_analysis,history,origin,source,category,temperature';
   const { data: leads, loading: leadsLoading, error: leadsError, add: addLead, update: updateLead, refresh: refreshLeads } = useSupabase<Lead>('leads', {
     enabled: leadsEnabled,
     subscribe: leadsEnabled,
-    select: leadsSelect,
   });
   const { data: analytics } = useSupabase<WebAnalytics>('web_analytics', {
     enabled: analyticsEnabled,
     subscribe: false,
   });
   const { convertLeadToProject, isConverting } = useLeadToProject();
+
+  // Loading timeout: don't show skeleton forever — after 5s, show CRMBoard even if still loading
+  const [leadsTimedOut, setLeadsTimedOut] = useState(false);
+  const leadsTimerStart = useRef(Date.now());
+  useEffect(() => {
+    if (!leadsLoading) { setLeadsTimedOut(false); leadsTimerStart.current = Date.now(); return; }
+    const elapsed = Date.now() - leadsTimerStart.current;
+    const remaining = Math.max(0, 5000 - elapsed);
+    const timer = setTimeout(() => setLeadsTimedOut(true), remaining);
+    return () => clearTimeout(timer);
+  }, [leadsLoading]);
 
   const [filter, setFilter] = useState<LeadStatus | 'all'>('all');
   const [category, setCategory] = useState<LeadCategory | 'all'>('all');
@@ -156,31 +165,29 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
         return;
       }
 
-      const leadId = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
       await addLead({
-        id: leadId,
         name: newLeadData.name,
         email: newLeadData.email,
-        company: newLeadData.company,
+        company: newLeadData.company || '',
         message: newLeadData.message || 'Manual entry',
         status: 'new',
         origin: 'Manual',
+        source: '',
         created_at: new Date().toISOString(),
+        last_interaction: new Date().toISOString(),
         ai_analysis: {
           category: 'other',
           temperature: 'warm',
           summary: 'Added manually',
           recommendation: 'Check details'
-        }
+        },
+        history: [],
       } as any);
 
       setShowNewLeadModal(false);
       setNewLeadData({ name: '', email: '', message: '', company: '' });
     } catch (e) {
-      console.error(e);
+      console.error('[Sales] Lead creation error:', e);
       const message = e instanceof Error ? e.message : 'Error creating lead';
       alert(message);
     } finally {
@@ -204,12 +211,12 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
 
   const renderNewLeadModal = () => (
     <NewLeadModal
-        isOpen={showNewLeadModal}
-        onClose={() => setShowNewLeadModal(false)}
-        onSubmit={handleCreateLead}
-        isCreating={isCreating}
-        newLeadData={newLeadData}
-        setNewLeadData={setNewLeadData}
+      isOpen={showNewLeadModal}
+      onClose={() => setShowNewLeadModal(false)}
+      onSubmit={handleCreateLead}
+      isCreating={isCreating}
+      newLeadData={newLeadData}
+      setNewLeadData={setNewLeadData}
     />
   );
 
@@ -255,7 +262,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     const data = analytics?.[0] || defaultAnalytics;
 
     return (
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-[1600px] mx-auto pt-4 pb-6">
         {renderNewLeadModal()}
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-6">Sales Analytics</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -303,74 +310,74 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
           {/* Convert to Project Modal */}
           {showConvertModal && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-serif">Convert Lead to Project</h3>
-                <p className="text-sm text-zinc-500 mt-1">Create a new project from this lead</p>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Lead Details</div>
-                  <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-500 text-sm">Name</span>
-                      <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.name}</span>
-                    </div>
-                    {showConvertModal.company && (
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
+                  <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-serif">Convert Lead to Project</h3>
+                  <p className="text-sm text-zinc-500 mt-1">Create a new project from this lead</p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Lead Details</div>
+                    <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-zinc-500 text-sm">Company</span>
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.company}</span>
+                        <span className="text-zinc-500 text-sm">Name</span>
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.name}</span>
                       </div>
+                      {showConvertModal.company && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500 text-sm">Company</span>
+                          <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.company}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-500 text-sm">Email</span>
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.email}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
+                        <Icons.Briefcase size={16} className="text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
+                          Project will be created
+                        </div>
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
+                          A new project titled "{showConvertModal.company || showConvertModal.name}" will be created.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowConvertModal(null)}
+                    className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleConvertToProject(showConvertModal)}
+                    disabled={isConverting}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isConverting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Converting...
+                      </>
+                    ) : (
+                      <>
+                        <Icons.Briefcase size={16} />
+                        Convert to Project
+                      </>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-500 text-sm">Email</span>
-                      <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.email}</span>
-                    </div>
-                  </div>
+                  </button>
                 </div>
-                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
-                      <Icons.Briefcase size={16} className="text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
-                        Project will be created
-                      </div>
-                      <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
-                        A new project titled "{showConvertModal.company || showConvertModal.name}" will be created.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
-                <button
-                  onClick={() => setShowConvertModal(null)}
-                  className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleConvertToProject(showConvertModal)}
-                  disabled={isConverting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isConverting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Converting...
-                    </>
-                  ) : (
-                    <>
-                      <Icons.Briefcase size={16} />
-                      Convert to Project
-                    </>
-                  )}
-                </button>
               </div>
             </div>
-          </div>
           )}
 
           {/* Header & Filters */}
@@ -435,7 +442,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                 </button>
               </div>
             )}
-            {leadsLoading ? (
+            {leadsLoading && !leadsTimedOut ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 h-full animate-pulse">
                 {Array.from({ length: 4 }).map((_, idx) => (
                   <div key={idx} className="w-full h-full min-h-[360px] rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40" />
@@ -460,9 +467,9 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     const newLeads = normalizedLeads.filter((l: any) => l.status === 'new');
     return (
       <>
-      {renderNewLeadModal()}
-      {renderLeadPanel()}
-        <div className="max-w-6xl mx-auto p-6">
+        {renderNewLeadModal()}
+        {renderLeadPanel()}
+        <div className="max-w-[1600px] mx-auto pt-4 pb-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Inbox</h1>
@@ -503,8 +510,8 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                     <td className="px-6 py-4">
                       {lead.aiAnalysis?.temperature && (
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${lead.aiAnalysis.temperature === 'hot' ? 'bg-red-100 text-red-700' :
-                            lead.aiAnalysis.temperature === 'warm' ? 'bg-amber-100 text-amber-700' :
-                              'bg-blue-100 text-blue-700'
+                          lead.aiAnalysis.temperature === 'warm' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
                           }`}>
                           {lead.aiAnalysis.temperature}
                         </span>

@@ -170,7 +170,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
   const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
   const [batches, setBatches] = useState<NotificationBatch[]>([]);
   const [analytics, setAnalytics] = useState<NotificationAnalytics[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
 

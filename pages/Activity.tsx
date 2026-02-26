@@ -206,9 +206,8 @@ export const Activity: React.FC = () => {
     e?.preventDefault();
     setPostError(null);
     if (!newPost.trim()) return;
-    if (tenantLoading || profileLoading) { setPostError('Loading your profile...'); return; }
     if (!effectiveUser) { setPostError('You must be logged in to post.'); return; }
-    if (!currentTenant) { setPostError('System is initializing...'); return; }
+    if (!currentTenant && !contextTimedOut) { setPostError('System is initializing, please wait...'); return; }
 
     const content = newPost.trim();
     const userName = effectiveUser.name || effectiveUser.email;
@@ -233,9 +232,11 @@ export const Activity: React.FC = () => {
     setPosting(true);
 
     try {
+      const tenantId = currentTenant?.id;
+      if (!tenantId) { throw new Error('No active tenant. Try refreshing the page.'); }
       const { error: insertError } = await supabase.from('activity_logs').insert({
         user_id: effectiveUser.id,
-        tenant_id: currentTenant.id,
+        tenant_id: tenantId,
         user_name: userName,
         user_avatar: getInitials(userName),
         action: 'posted update',
@@ -418,8 +419,34 @@ export const Activity: React.FC = () => {
 
   const isReady = !tenantLoading && !profileLoading && !!effectiveUser;
 
+  // Timeout: if loading for more than 4s, stop showing spinner and show empty state
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingStartRef = useRef(Date.now());
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false);
+      loadingStartRef.current = Date.now();
+      return;
+    }
+    // Use elapsed time since first mount to avoid resetting on loading flicker
+    const elapsed = Date.now() - loadingStartRef.current;
+    const remaining = Math.max(0, 4000 - elapsed);
+    const timer = setTimeout(() => setLoadingTimedOut(true), remaining);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  // Also timeout for context loading so textarea doesn't stay disabled forever
+  const [contextTimedOut, setContextTimedOut] = useState(false);
+  useEffect(() => {
+    if (isReady) { setContextTimedOut(false); return; }
+    const timer = setTimeout(() => setContextTimedOut(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isReady]);
+
+  const canPost = isReady || contextTimedOut;
+
   return (
-    <div className="max-w-5xl mx-auto p-8 space-y-8 font-sans">
+    <div className="max-w-5xl mx-auto pt-4 pb-8 space-y-8 font-sans">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -523,8 +550,8 @@ export const Activity: React.FC = () => {
               value={newPost}
               onChange={handleTextareaChange}
               onKeyDown={handleTextareaKeyDown}
-              placeholder={isReady ? "What's on your mind? Share an update..." : "Loading..."}
-              disabled={!isReady}
+              placeholder={canPost ? "What's on your mind? Share an update..." : "Loading..."}
+              disabled={!canPost}
               className="w-full bg-transparent border-none focus:ring-0 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none text-base p-0 min-h-[60px] disabled:opacity-50 outline-none"
               rows={2}
             />
@@ -540,7 +567,7 @@ export const Activity: React.FC = () => {
                 )}
                 <button
                   onClick={handlePost}
-                  disabled={posting || !newPost.trim() || !isReady}
+                  disabled={posting || !newPost.trim() || !canPost}
                   className="bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                 >
                   {posting ? (
@@ -576,7 +603,7 @@ export const Activity: React.FC = () => {
       )}
 
       {/* Loading state */}
-      {loading && allActivities.length === 0 && !fetchError && (
+      {loading && !loadingTimedOut && allActivities.length === 0 && !fetchError && (
         <div className="flex flex-col items-center justify-center py-20">
           <Icons.Loader size={32} className="text-zinc-300 animate-spin mb-4" />
           <p className="text-zinc-500 text-sm">Loading activity feed...</p>
@@ -678,7 +705,7 @@ export const Activity: React.FC = () => {
           </div>
         ))}
 
-        {!loading && Object.keys(groupedActivities).length === 0 && (
+        {(!loading || loadingTimedOut) && Object.keys(groupedActivities).length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 opacity-60">
             <Icons.Activity size={48} className="text-zinc-300 dark:text-zinc-600 mb-4" />
             <p className="text-zinc-500 dark:text-zinc-400 font-medium">
@@ -799,7 +826,7 @@ export const Activity: React.FC = () => {
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     placeholder="Write a reply..."
-                    disabled={!isReady}
+                    disabled={!canPost}
                     className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-full pl-4 pr-12 py-2.5 text-sm focus:ring-0 focus:border-zinc-400 dark:focus:border-zinc-500 transition-all outline-none disabled:opacity-50"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -810,7 +837,7 @@ export const Activity: React.FC = () => {
                   />
                   <button
                     type="submit"
-                    disabled={isReplying || !replyText.trim() || !isReady}
+                    disabled={isReplying || !replyText.trim() || !canPost}
                     className="absolute right-1.5 top-1 p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
                     {isReplying ? <Icons.Loader size={18} className="animate-spin" /> : <Icons.Send size={18} />}

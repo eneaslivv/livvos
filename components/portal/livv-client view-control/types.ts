@@ -4,6 +4,12 @@ export interface Milestone {
   title: string;
   description: string;
   status: 'completed' | 'current' | 'future';
+  /** Who owns this phase: 'team' | 'client' | 'review' */
+  owner?: 'team' | 'client' | 'review';
+  /** What the client needs to do (if owner='client') */
+  clientAction?: string;
+  /** Estimated completion date */
+  eta?: string;
 }
 
 export interface Credential {
@@ -17,6 +23,8 @@ export interface LogEntry {
   id: string;
   timestamp: string;
   message: string;
+  /** 'update' | 'milestone' | 'payment' | 'review' | 'delivery' */
+  type?: string;
 }
 
 export interface CredentialItem {
@@ -34,6 +42,16 @@ export interface AssetItem {
   url?: string;
 }
 
+export interface PaymentEntry {
+  id: string;
+  concept: string;
+  amount: number;
+  dueDate: string;
+  paidDate?: string;
+  status: 'paid' | 'pending' | 'overdue';
+  number?: number;
+}
+
 export interface DashboardData {
   progress: number;
   startDate: string;
@@ -42,6 +60,10 @@ export interface DashboardData {
   budget: {
     total: number;
     paid: number;
+    /** Optional next payment info */
+    nextPayment?: { amount: number; dueDate: string; concept?: string };
+    /** Full payment schedule */
+    payments?: PaymentEntry[];
   };
   milestones: Milestone[];
   logs: LogEntry[];

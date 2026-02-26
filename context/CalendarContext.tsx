@@ -226,6 +226,22 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }
 
   const createTask = async (taskData: Omit<CalendarTask, 'id' | 'created_at' | 'updated_at'>) => {
+    // Resolve tenant_id from current user's profile
+    let tenantId: string | null = null
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single()
+        tenantId = profile?.tenant_id || null
+      }
+    } catch {
+      // Continue without tenant_id
+    }
+
     const payload: any = {
       title: taskData.title,
       description: taskData.description,
@@ -236,6 +252,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       assignee_id: taskData.assignee_id,
       due_date: taskData.start_date,
       owner_id: taskData.owner_id,
+      ...(tenantId && { tenant_id: tenantId }),
     }
 
     const { data, error: err } = await supabase.from('tasks').insert(payload).select().single()

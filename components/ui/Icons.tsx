@@ -16,6 +16,7 @@ import {
   Command,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Clock,
   Zap,
   MessageSquare,
@@ -84,7 +85,17 @@ import {
   Edit,
   Heart,
   ThumbsUp,
-  Eye
+  Eye,
+  EyeOff,
+  Brain,
+  Bot,
+  Cpu,
+  Plug,
+  Unplug,
+  Radio,
+  ToggleLeft,
+  ToggleRight,
+  Workflow
 } from 'lucide-react';
 
 export const Icons = {
@@ -106,6 +117,7 @@ export const Icons = {
   Command,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Clock,
   Zap,
   Message: MessageSquare,
@@ -176,5 +188,15 @@ export const Icons = {
   Edit,
   Heart,
   ThumbsUp,
-  Eye
+  Eye,
+  EyeOff,
+  Brain,
+  Bot,
+  Cpu,
+  Plug,
+  Unplug,
+  Radio,
+  ToggleLeft,
+  ToggleRight,
+  Workflow
 };

@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from '../ui/Icons';
 
 interface TimeSlotPopoverProps {
-  /** Bounding rect of the clicked cell */
-  cellRect: { top: number; left: number; width: number; height: number };
   /** Click coordinates for precise positioning */
   clickX: number;
   clickY: number;
@@ -15,7 +14,7 @@ interface TimeSlotPopoverProps {
 }
 
 export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
-  cellRect, clickX, clickY, date, hour, mode, onSelect, onClose
+  clickX, clickY, date, hour, mode, onSelect, onClose
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -89,49 +88,36 @@ export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
   const dayNum = dateObj.getDate();
   const monthName = dateObj.toLocaleDateString('es-ES', { month: 'short' });
 
-  return (
-    <>
-      {/* Highlight overlay on the clicked cell */}
-      <div
-        className="fixed z-[59] pointer-events-none rounded border-2 border-blue-500 bg-blue-500/10"
-        style={{
-          top: cellRect.top,
-          left: cellRect.left,
-          width: cellRect.width,
-          height: cellRect.height,
-        }}
-      />
-
-      {/* Popover */}
-      <div
-        ref={ref}
-        className="fixed z-[60] bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 py-1.5 w-48 animate-in fade-in zoom-in-95 duration-150"
-        style={{
-          left: position?.left ?? -9999,
-          top: position?.top ?? -9999,
-          opacity: position ? 1 : 0,
-        }}
-      >
-        {/* Time + date header */}
-        <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-700 mb-1">
-          <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-            {formattedTime} – {endHour}
-          </div>
-          <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-            {dayName} {dayNum} {monthName}
-          </div>
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed z-[60] bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 py-1.5 w-48 animate-in fade-in zoom-in-95 duration-150"
+      style={{
+        left: position?.left ?? -9999,
+        top: position?.top ?? -9999,
+        opacity: position ? 1 : 0,
+      }}
+    >
+      {/* Time + date header */}
+      <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-700 mb-1">
+        <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+          {formattedTime} – {endHour}
         </div>
-        {options.map((opt) => (
-          <button
-            key={opt.type}
-            onClick={() => onSelect(opt.type)}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-left"
-          >
-            <opt.icon size={15} className={opt.color} />
-            <span className="text-zinc-800 dark:text-zinc-200 text-[13px]">{opt.label}</span>
-          </button>
-        ))}
+        <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+          {dayName} {dayNum} {monthName}
+        </div>
       </div>
-    </>
+      {options.map((opt) => (
+        <button
+          key={opt.type}
+          onClick={() => onSelect(opt.type)}
+          className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-left"
+        >
+          <opt.icon size={15} className={opt.color} />
+          <span className="text-zinc-800 dark:text-zinc-200 text-[13px]">{opt.label}</span>
+        </button>
+      ))}
+    </div>,
+    document.body
   );
 };

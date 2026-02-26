@@ -83,7 +83,7 @@ export const TenantSettings: React.FC = () => {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6 space-y-8">
+        <div className="max-w-4xl mx-auto pt-4 pb-6 space-y-8">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTenant } from '../context/TenantContext'
 import { useAuth } from '../hooks/useAuth'
@@ -31,6 +31,12 @@ type UseSupabaseOptions = {
 
 const dataCache = new Map<string, any[]>()
 
+// Global tenant ID cache — shared across all useSupabase instances to avoid
+// redundant profile queries (previously each hook resolved independently)
+let _tenantIdCache: string | null = null
+let _tenantIdPromise: Promise<string | null> | null = null
+let _tenantIdUserId: string | null = null // track which user the cache belongs to
+
 const tenantScopedTables = new Set([
   'projects',
   'tasks',
@@ -40,42 +46,76 @@ const tenantScopedTables = new Set([
   'activity_logs',
   'calendar_events',
   'calendar_tasks',
-  'finances'
+  'finances',
+  'user_vision',
+  'user_thoughts',
+  'passwords'
 ])
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export function useSupabase<T = any>(table: string, options: UseSupabaseOptions = {}) {
-  const [data, setData] = useState<T[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [retryTick, setRetryTick] = useState(0)
   const { currentTenant } = useTenant()
   const { user, loading: authLoading } = useAuth()
   const { enabled = true, subscribe = true, select = '*', revalidate = true } = options
   const cacheKey = `${table}:${currentTenant?.id || user?.id || 'anon'}:${select}`
 
+  // Initialize from cache so we never flash a loading spinner when data exists
+  const initialCache = dataCache.get(cacheKey) as T[] | undefined
+  const [data, setData] = useState<T[]>(() => initialCache || [])
+  const [loading, setLoading] = useState(() => !initialCache)
+  const [error, setError] = useState<string | null>(null)
+  const [retryTick, setRetryTick] = useState(0)
+  const retryCountRef = useRef(0)
+  const MAX_TENANT_RETRIES = 3
+
   const resolveTenantId = async () => {
-    if (currentTenant?.id) return currentTenant.id
+    if (currentTenant?.id) {
+      // Update global cache when context provides tenant
+      _tenantIdCache = currentTenant.id
+      _tenantIdUserId = user?.id || null
+      return currentTenant.id
+    }
     if (!user?.id) return null
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!profileError && profile?.tenant_id) {
-        return profile.tenant_id as string
-      }
-
-      if (attempt < 3) {
-        await sleep(250 * (attempt + 1))
-      }
+    // If cache is for a different user, invalidate
+    if (_tenantIdUserId !== user.id) {
+      _tenantIdCache = null
+      _tenantIdPromise = null
+      _tenantIdUserId = null
     }
 
-    return null
+    // Return cached tenant ID immediately
+    if (_tenantIdCache) return _tenantIdCache
+
+    // Deduplicate: if another hook is already resolving, reuse the same promise
+    if (_tenantIdPromise) return _tenantIdPromise
+
+    _tenantIdPromise = (async () => {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single()
+
+        if (!profileError && profile?.tenant_id) {
+          _tenantIdCache = profile.tenant_id as string
+          _tenantIdUserId = user.id
+          _tenantIdPromise = null
+          return _tenantIdCache
+        }
+
+        if (attempt < 3) {
+          await sleep(100)
+        }
+      }
+
+      _tenantIdPromise = null
+      return null
+    })()
+
+    return _tenantIdPromise
   }
 
   useEffect(() => {
@@ -113,13 +153,21 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       const tenantId = requiresTenant ? await resolveTenantId() : currentTenant?.id || null
       if (requiresTenant && !tenantId) {
         if (!isMounted) return
-        setError('Tenant not ready yet. Please retry in a moment.')
-        setLoading(false)
-        retryTimeout = setTimeout(() => {
-          if (isMounted) setRetryTick((tick) => tick + 1)
-        }, 1200)
-        return
+        retryCountRef.current += 1
+        if (retryCountRef.current <= MAX_TENANT_RETRIES) {
+          errorLogger.warn(`Tenant not ready for ${table}, retry ${retryCountRef.current}/${MAX_TENANT_RETRIES}`)
+          // Only show loading if we have no cached data
+          if (!hasCache) setLoading(true)
+          retryTimeout = setTimeout(() => {
+            if (isMounted) setRetryTick((tick) => tick + 1)
+          }, 500)
+          return
+        }
+        errorLogger.warn(`Tenant resolution failed for ${table} after ${MAX_TENANT_RETRIES} retries, fetching without tenant filter`)
+        // Fall through to fetch without tenant filter rather than blocking forever
       }
+      // Reset retry count on success
+      retryCountRef.current = 0
 
       if (!hasCache) {
         setLoading(true)
@@ -142,9 +190,31 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
         if (!isMounted) return
 
         if (err) {
-          const missingColumn = getMissingColumn(err.message || '')
-            if (missingColumn && select !== '*') {
-              errorLogger.warn(`Missing column ${missingColumn} on ${table}; retrying fetch with *.`)
+          const errMsg = err.message || ''
+          const missingColumn = getMissingColumn(errMsg)
+
+          // Handle case where tenant_id column doesn't exist on this table
+          if (missingColumn === 'tenant_id' && tenantId) {
+            errorLogger.warn(`Column tenant_id missing on ${table}; retrying without tenant filter.`)
+            const noTenantQuery = supabase.from(table).select(select)
+            const { data: noTenantData, error: noTenantError } = await withTimeout(
+              Promise.resolve(noTenantQuery),
+              15000,
+              `${table} fetch (no tenant)`
+            )
+            if (!isMounted) return
+            if (!noTenantError) {
+              setData(noTenantData as T[])
+              dataCache.set(cacheKey, (noTenantData as T[]) || [])
+            } else {
+              errorLogger.supabase.error(table, 'fetch (no tenant)', noTenantError)
+              setError(noTenantError.message)
+            }
+            return
+          }
+
+          if (missingColumn && select !== '*') {
+            errorLogger.warn(`Missing column ${missingColumn} on ${table}; retrying fetch with *.`)
             const fallbackQuery = supabase.from(table).select('*')
             if (tenantId) {
               fallbackQuery.eq('tenant_id', tenantId)
@@ -154,7 +224,24 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
               15000,
               `${table} fetch fallback`
             )
+            if (!isMounted) return
             if (fallbackError) {
+              // If fallback also fails due to missing tenant_id, retry without tenant
+              const fb2Missing = getMissingColumn(fallbackError.message || '')
+              if (fb2Missing === 'tenant_id' && tenantId) {
+                const fb2Query = supabase.from(table).select('*')
+                const { data: fb2Data, error: fb2Error } = await withTimeout(
+                  Promise.resolve(fb2Query), 15000, `${table} fetch fallback (no tenant)`
+                )
+                if (!isMounted) return
+                if (!fb2Error) {
+                  setData(fb2Data as T[])
+                  dataCache.set(cacheKey, (fb2Data as T[]) || [])
+                } else {
+                  setError(fb2Error.message)
+                }
+                return
+              }
               errorLogger.supabase.error(table, 'fetch inicial fallback', fallbackError)
               setError(fallbackError.message)
             } else {
@@ -166,7 +253,7 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
           }
 
           errorLogger.supabase.error(table, 'fetch inicial', err)
-          setError(err.message)
+          setError(errMsg)
         } else {
           errorLogger.supabase.query(table, 'fetch exitoso', initial?.length)
           setData(initial as T[])
@@ -271,7 +358,7 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       const requiresTenant = tenantScopedTables.has(table)
       const tenantId = requiresTenant ? await resolveTenantId() : currentTenant?.id || null
       if (requiresTenant && !tenantId) {
-        throw new Error('Tenant is not ready yet. Please retry in a moment.')
+        errorLogger.warn(`Tenant not resolved for ${table} insert — will attempt without tenant_id`)
       }
       const basePayload = { ...(record as any) }
       const metaPayload = {
@@ -280,8 +367,10 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       }
 
       const payload = { ...basePayload, ...metaPayload }
+      // Use the same select columns as the initial fetch so we get a full row back
+      const selectCols = select || '*'
       const insertResult = await withTimeout(
-        Promise.resolve(supabase.from(table).insert(payload).select('id')),
+        Promise.resolve(supabase.from(table).insert(payload).select(selectCols)),
         15000,
         `${table} insert`
       )
@@ -295,7 +384,7 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
           const { [missingColumn]: _omitted, ...retryPayload } = payload as any
           errorLogger.warn(`Missing column ${missingColumn} on ${table}; retrying without it.`)
           const retryResult = await withTimeout(
-            Promise.resolve(supabase.from(table).insert(retryPayload).select('id')),
+            Promise.resolve(supabase.from(table).insert(retryPayload).select(selectCols)),
             15000,
             `${table} insert retry`
           )
@@ -304,13 +393,10 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
             errorLogger.supabase.error(table, 'add retry (missing column)', retryError)
             throw retryError
           }
-          const fallbackRetryInserted = (retryPayload as any).id ? [(retryPayload as T)] : []
-          const retryInsertedIsIdOnly = !!retryInserted?.length && Object.keys(retryInserted[0] as any).length <= 1
-          const nextRetryInserted = retryInserted?.length && !retryInsertedIsIdOnly ? retryInserted : fallbackRetryInserted
-          if (nextRetryInserted.length) {
+          if (retryInserted?.length) {
             setData((prev) => {
               const next = [...prev]
-              nextRetryInserted.forEach((row: any) => {
+              retryInserted.forEach((row: any) => {
                 const exists = next.some((item: any) => item.id === row.id)
                 if (exists) {
                   for (let i = 0; i < next.length; i += 1) {
@@ -336,7 +422,7 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
             throw new Error(`Missing required columns on ${table}. Run the tenant/owner migration before creating data.`)
           }
 
-          const { data: retryData, error: retryError } = await supabase.from(table).insert(basePayload).select('id')
+          const { data: retryData, error: retryError } = await supabase.from(table).insert(basePayload).select(selectCols)
           if (retryError) {
             errorLogger.supabase.error(table, 'add retry', retryError)
             throw retryError
@@ -362,9 +448,8 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
 
         throw err
       }
-      const fallbackInserted = (payload as any).id ? [(payload as T)] : []
-      const insertedIsIdOnly = !!inserted?.length && Object.keys(inserted[0] as any).length <= 1
-      const nextInserted = inserted?.length && !insertedIsIdOnly ? inserted : fallbackInserted
+      // Use inserted data directly (now contains full row), fallback to payload with generated id
+      const nextInserted = inserted?.length ? inserted : ((payload as any).id ? [(payload as T)] : [])
       if (nextInserted.length) {
         setData((prev) => {
           const next = [...prev]
@@ -463,13 +548,12 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
   }
 
   const refresh = async () => {
-    setLoading(true)
+    // Only show loading spinner if we have no data yet (stale-while-revalidate)
+    const hasData = data.length > 0 || dataCache.has(cacheKey)
+    if (!hasData) setLoading(true)
     try {
       const requiresTenant = tenantScopedTables.has(table)
       const tenantId = requiresTenant ? await resolveTenantId() : currentTenant?.id || null
-      if (requiresTenant && !tenantId) {
-        throw new Error('Tenant not ready yet. Please retry in a moment.')
-      }
 
       const refreshQuery = supabase.from(table).select(select)
       if (tenantId) {
@@ -478,13 +562,32 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       const { data: refreshed, error: err } = await refreshQuery
       if (err) {
         const missingColumn = getMissingColumn(err.message || '')
+        // Handle missing tenant_id column
+        if (missingColumn === 'tenant_id' && tenantId) {
+          const noTenantQuery = supabase.from(table).select(select)
+          const { data: noTenantData, error: noTenantError } = await noTenantQuery
+          if (noTenantError) throw noTenantError
+          setData(noTenantData as T[])
+          dataCache.set(cacheKey, (noTenantData as T[]) || [])
+          return
+        }
         if (missingColumn && select !== '*') {
           const fallbackQuery = supabase.from(table).select('*')
           if (tenantId) {
             fallbackQuery.eq('tenant_id', tenantId)
           }
           const { data: fallback, error: fallbackError } = await fallbackQuery
-          if (fallbackError) throw fallbackError
+          if (fallbackError) {
+            // If fallback also fails due to tenant_id, retry without
+            if (getMissingColumn(fallbackError.message || '') === 'tenant_id') {
+              const { data: fb2, error: fb2Err } = await supabase.from(table).select('*')
+              if (fb2Err) throw fb2Err
+              setData(fb2 as T[])
+              dataCache.set(cacheKey, (fb2 as T[]) || [])
+              return
+            }
+            throw fallbackError
+          }
           setData(fallback as T[])
           dataCache.set(cacheKey, (fallback as T[]) || [])
           return
@@ -497,7 +600,7 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       errorLogger.supabase.error(table, 'refresh', err)
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!hasData) setLoading(false)
     }
   }
 

@@ -7,6 +7,9 @@ import { useRBAC } from '../context/RBACContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { useSupabase } from '../hooks/useSupabase';
 import { generateTaskFromAI } from '../lib/ai';
+import { useTeam } from '../context/TeamContext';
+import { useAuth } from '../hooks/useAuth';
+import { AiAdvisor } from './AiAdvisor';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -88,6 +91,12 @@ const NavItem: React.FC<{
 };
 
 // --- GLOBAL TASK MODAL ---
+const PRIORITY_CONFIG = {
+  [Priority.Low]: { label: 'Baja', color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
+  [Priority.Medium]: { label: 'Media', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
+  [Priority.High]: { label: 'Alta', color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800', dot: 'bg-red-500' },
+};
+
 const CreateTaskModal = ({
   isOpen,
   onClose,
@@ -99,14 +108,20 @@ const CreateTaskModal = ({
   onAdd: (task: any) => Promise<void> | void,
   projects: { id: string; title: string }[]
 }) => {
+  const { user } = useAuth();
+  const { members: teamMembers } = useTeam();
   const [mode, setMode] = useState<'quick' | 'detailed' | 'ai'>('quick');
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [tag, setTag] = useState('');
   const [priority, setPriority] = useState<Priority>(Priority.Medium);
+  const [status, setStatus] = useState<'todo' | 'in-progress'>('todo');
   const [aiInput, setAiInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [projectId, setProjectId] = useState('');
+  const [assigneeId, setAssigneeId] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState<{ title: string; priority?: Priority; tag?: string } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -118,29 +133,33 @@ const CreateTaskModal = ({
     return Priority.Medium;
   };
 
-  // Reset when opening
   useEffect(() => {
     if (isOpen) {
       setTitle('');
+      setDescription('');
       setTag('');
       setPriority(Priority.Medium);
+      setStatus('todo');
       setAiInput('');
       setMode('quick');
       setProjectId('');
+      setAssigneeId('');
       setDueDate('');
       setAiResult(null);
       setAiError(null);
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
   const handleSubmit = async () => {
     if ((mode !== 'ai' && !title.trim()) || (mode === 'ai' && !aiInput.trim())) return;
+    if (isSubmitting) return;
 
+    setIsSubmitting(true);
     let finalTitle = title;
     let finalTag = tag || 'General';
     let finalPriority = priority;
 
-    // Simple mock AI parser
     if (mode === 'ai') {
       if (aiResult?.title) {
         finalTitle = aiResult.title;
@@ -153,15 +172,22 @@ const CreateTaskModal = ({
       }
     }
 
-    await onAdd({
-      title: finalTitle,
-      completed: false,
-      priority: finalPriority,
-      project_id: projectId || undefined,
-      due_date: dueDate || undefined,
-      status: 'todo'
-    });
-    onClose();
+    try {
+      await onAdd({
+        title: finalTitle,
+        description: description || undefined,
+        completed: false,
+        priority: finalPriority,
+        project_id: projectId || undefined,
+        assignee_id: assigneeId || undefined,
+        due_date: dueDate || undefined,
+        group_name: finalTag !== 'General' ? finalTag : undefined,
+        status,
+      });
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAiGenerate = () => {
@@ -181,42 +207,49 @@ const CreateTaskModal = ({
         setMode('detailed');
       })
       .catch((err) => {
-        setAiError(err?.message || 'AI error');
+        setAiError(err?.message || 'Error de IA');
       })
       .finally(() => setIsThinking(false));
   };
 
+  const canSubmit = mode === 'ai' ? aiInput.trim().length > 0 : title.trim().length > 0;
+
   const footer = mode !== 'ai' ? (
     <div className="flex justify-between items-center">
-      <span className="text-xs text-zinc-400">Press <b>Enter</b> to create</span>
+      <span className="text-xs text-zinc-400"><b>Enter</b> para crear</span>
       <div className="flex gap-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">Cancel</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors rounded-lg">
+          Cancelar
+        </button>
         <button
           onClick={handleSubmit}
-          disabled={!title.trim()}
-          className="px-6 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+          disabled={!canSubmit || isSubmitting}
+          className="px-5 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 flex items-center gap-2"
         >
-          Create Task
+          {isSubmitting ? <Icons.Clock size={14} className="animate-spin" /> : <Icons.Plus size={14} />}
+          Crear tarea
         </button>
       </div>
     </div>
   ) : undefined;
 
+  const activeMembers = teamMembers.filter(m => m.status === 'active');
+
   return (
-    <SlidePanel isOpen={isOpen} onClose={onClose} title="New Task" subtitle="Create a task quickly" width="md" footer={footer}>
+    <SlidePanel isOpen={isOpen} onClose={onClose} title="Nueva tarea" subtitle="Crea y asigna tareas al equipo" width="md" footer={footer}>
       {/* Mode Tabs */}
       <div className="flex border-b border-zinc-100 dark:border-zinc-800">
         {[
-          { id: 'quick', label: 'Quick', icon: <Icons.Zap size={14} /> },
-          { id: 'detailed', label: 'Detailed', icon: <Icons.List size={14} /> },
-          { id: 'ai', label: 'AI Magic', icon: <Icons.Sparkles size={14} /> },
+          { id: 'quick', label: 'Rápida', icon: <Icons.Zap size={14} /> },
+          { id: 'detailed', label: 'Detallada', icon: <Icons.List size={14} /> },
+          { id: 'ai', label: 'IA', icon: <Icons.Sparkles size={14} /> },
         ].map(m => (
           <button
             key={m.id}
             onClick={() => setMode(m.id as any)}
-            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${mode === m.id
-              ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100'
-              : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+            className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${mode === m.id
+              ? 'text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100'
+              : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
               }`}
           >
             {m.icon} {m.label}
@@ -225,102 +258,180 @@ const CreateTaskModal = ({
       </div>
 
       {/* Body */}
-      <div className="p-5">
+      <div className="p-5 space-y-5">
         {mode === 'ai' ? (
           <div className="space-y-4">
-            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">Describe your task</label>
-            <textarea
-              autoFocus
-              value={aiInput}
-              onChange={e => setAiInput(e.target.value)}
-              placeholder="e.g. 'Remind me to call Sofia tomorrow regarding the UI kit urgently'"
-              className="w-full h-32 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 dark:text-zinc-100"
-            />
-            {aiError && (
-              <div className="text-xs text-red-600 dark:text-red-400">{aiError}</div>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={handleAiGenerate}
-                disabled={isThinking || !aiInput.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-lg shadow-indigo-500/20"
-              >
-                {isThinking ? <Icons.Clock size={16} className="animate-spin" /> : <Icons.Sparkles size={16} />}
-                {isThinking ? 'Processing...' : 'Generate Task'}
-              </button>
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Describe la tarea en lenguaje natural</label>
+              <textarea
+                autoFocus
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+                placeholder="Ej: 'Recordarme llamar a Sofia mañana por el UI kit, es urgente'"
+                className="w-full h-28 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 dark:focus:border-violet-600 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiGenerate(); } }}
+              />
             </div>
+            {aiError && (
+              <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">{aiError}</div>
+            )}
+            <button
+              onClick={handleAiGenerate}
+              disabled={isThinking || !aiInput.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-sm transition-all disabled:opacity-50"
+            >
+              {isThinking ? <Icons.Clock size={16} className="animate-spin" /> : <Icons.Sparkles size={16} />}
+              {isThinking ? 'Procesando...' : 'Generar tarea con IA'}
+            </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <>
+            {/* Title */}
             <div>
-              <label className="block text-xs font-medium text-zinc-500 mb-1">Task Title</label>
               <input
                 autoFocus
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder="What needs to be done?"
-                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="¿Qué hay que hacer?"
+                className="w-full px-0 py-2 bg-transparent border-0 border-b-2 border-zinc-200 dark:border-zinc-700 outline-none focus:border-zinc-900 dark:focus:border-zinc-100 text-lg font-semibold text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors"
+                onKeyDown={e => { if (e.key === 'Enter' && mode === 'quick') handleSubmit(); }}
               />
             </div>
 
+            {/* Priority */}
             <div>
-              <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Prioridad</label>
               <div className="flex gap-2">
-                {[Priority.Low, Priority.Medium, Priority.High].map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPriority(p)}
-                    className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all ${priority === p
-                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100'
-                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                {([Priority.Low, Priority.Medium, Priority.High] as const).map(p => {
+                  const config = PRIORITY_CONFIG[p];
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPriority(p)}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1.5 ${
+                        priority === p ? config.color : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
                       }`}
-                  >
-                    {p}
-                  </button>
-                ))}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${priority === p ? config.dot : 'bg-zinc-300 dark:bg-zinc-600'}`} />
+                      {config.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {mode === 'detailed' && (
+            {/* Assignee - always visible */}
+            {activeMembers.length > 0 && (
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Tag / Category</label>
-                <input
-                  type="text"
-                  value={tag}
-                  onChange={e => setTag(e.target.value)}
-                  placeholder="e.g. Design"
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
-                />
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Asignar a</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setAssigneeId('')}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                      !assigneeId
+                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100 font-semibold'
+                        : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                    }`}
+                  >
+                    Sin asignar
+                  </button>
+                  {activeMembers.map(member => (
+                    <button
+                      key={member.id}
+                      onClick={() => setAssigneeId(member.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                        assigneeId === member.id
+                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 font-semibold'
+                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                      }`}
+                    >
+                      {member.avatar_url ? (
+                        <img src={member.avatar_url} alt="" className="w-4 h-4 rounded-full" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[8px] font-bold">
+                          {(member.name || member.email)?.[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      {member.id === user?.id ? 'Yo' : (member.name || member.email?.split('@')[0])}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Quick mode: date + project row */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Due date</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Fecha límite</label>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={e => setDueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Project</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Proyecto</label>
                 <select
                   value={projectId}
                   onChange={e => setProjectId(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none text-sm text-zinc-900 dark:text-zinc-100"
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                 >
-                  <option value="">No project</option>
+                  <option value="">Sin proyecto</option>
                   {projects.map(project => (
                     <option key={project.id} value={project.id}>{project.title}</option>
                   ))}
                 </select>
               </div>
             </div>
-          </div>
+
+            {/* Detailed mode extras */}
+            {mode === 'detailed' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Estado</label>
+                    <div className="flex gap-2">
+                      {([{ id: 'todo', label: 'Por hacer' }, { id: 'in-progress', label: 'En progreso' }] as const).map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => setStatus(s.id)}
+                          className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all ${
+                            status === s.id
+                              ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100'
+                              : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Categoría</label>
+                    <input
+                      type="text"
+                      value={tag}
+                      onChange={e => setTag(e.target.value)}
+                      placeholder="Ej: Diseño"
+                      className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Descripción</label>
+                  <textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Agrega detalles o contexto..."
+                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100 resize-none placeholder:text-zinc-400"
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
     </SlidePanel>
@@ -589,6 +700,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         </div>
       )}
       <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
+      <AiAdvisor />
     </div>
   );
 };

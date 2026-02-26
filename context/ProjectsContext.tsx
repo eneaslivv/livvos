@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { useAuth } from '../hooks/useAuth'
+import { useTenant } from './TenantContext'
 
 export enum ProjectStatus {
   Active = 'Active',
@@ -22,6 +24,8 @@ export interface ProjectTask {
 
 export interface ProjectTaskGroup {
   name: string
+  startDate?: string
+  endDate?: string
   tasks: ProjectTask[]
 }
 
@@ -45,6 +49,7 @@ export interface Project {
   progress: number
   status: ProjectStatus
   client: string
+  client_id?: string | null
   clientName: string
   clientAvatar: string
   deadline: string
@@ -56,6 +61,8 @@ export interface Project {
   files: ProjectFile[]
   activity: ProjectActivity[]
   color: string
+  budget: number
+  currency: string
 }
 
 interface ProjectsContextType {
@@ -72,10 +79,28 @@ interface ProjectsContextType {
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined)
 
 export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth()
+  const { currentTenant } = useTenant()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+
+  // Resolve tenant_id with profile fallback (same approach as useSupabase)
+  const resolveTenantId = useCallback(async (): Promise<string | null> => {
+    if (currentTenant?.id) return currentTenant.id
+    if (!user?.id) return null
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single()
+      return profile?.tenant_id || null
+    } catch {
+      return null
+    }
+  }, [currentTenant?.id, user?.id])
 
   // Función para normalizar datos de la DB al formato de la UI
   const normalizeProject = (p: any): Project => ({
@@ -85,6 +110,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     progress: typeof p.progress === 'number' ? p.progress : 0,
     status: p.status ?? ProjectStatus.Active,
     client: p.client ?? p.client_name ?? 'Client',
+    client_id: p.client_id ?? null,
     clientName: p.client_name ?? p.clientName ?? p.client ?? 'Client',
     clientAvatar: p.client_avatar ?? p.clientAvatar ?? 'CL',
     deadline: p.deadline ?? new Date().toISOString().slice(0, 10),
@@ -96,6 +122,8 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     files: Array.isArray(p.files) ? p.files : [],
     activity: Array.isArray(p.activity) ? p.activity : [],
     color: p.color ?? '#3b82f6',
+    budget: typeof p.budget === 'number' ? p.budget : 0,
+    currency: p.currency ?? 'USD',
   });
 
   // Función inversa para guardar en DB
@@ -106,6 +134,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.progress !== undefined) payload.progress = p.progress;
     if (p.status !== undefined) payload.status = p.status;
     if (p.client !== undefined) payload.client = p.client;
+    if ((p as any).client_id !== undefined) payload.client_id = (p as any).client_id;
     if (p.clientName !== undefined) payload.client_name = p.clientName;
     if (p.clientAvatar !== undefined) payload.client_avatar = p.clientAvatar;
     if (p.deadline !== undefined) payload.deadline = p.deadline;
@@ -115,6 +144,8 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.tasksGroups !== undefined) payload.tasks_groups = p.tasksGroups;
     if (p.files !== undefined) payload.files = p.files;
     if (p.activity !== undefined) payload.activity = p.activity;
+    if (p.budget !== undefined) payload.budget = p.budget;
+    if (p.currency !== undefined) payload.currency = p.currency;
     if (p.color !== undefined) payload.color = p.color;
     // updatedAt se maneja automáticamente o por trigger, pero podemos mandarlo
     payload.updated_at = new Date().toISOString();
@@ -122,6 +153,12 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const fetchProjects = useCallback(async (force = false) => {
+    if (!user) {
+      setProjects([])
+      setLoading(false)
+      return
+    }
+
     if (isInitialized && !force) {
       setLoading(false)
       return
@@ -129,14 +166,24 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setLoading(true)
     setError(null)
-    
+
     try {
+      // Resolve tenant with fallback to profile lookup
+      const tenantId = await resolveTenantId()
+      if (!tenantId) {
+        errorLogger.warn('[ProjectsContext] Could not resolve tenant_id, skipping fetch')
+        setProjects([])
+        setLoading(false)
+        return
+      }
+
       errorLogger.log('Fetching projects from Supabase...')
       const { data, error: err } = await supabase
         .from('projects')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
-      
+
       if (err) {
         if (err.code === 'PGRST116') {
           setProjects([])
@@ -154,7 +201,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setLoading(false)
     }
-  }, [isInitialized])
+  }, [isInitialized, user, currentTenant?.id, resolveTenantId])
 
   useEffect(() => {
     fetchProjects()
@@ -173,18 +220,33 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [fetchProjects])
 
   const createProject = async (projectData: Partial<Project>) => {
+    if (!user) {
+      throw new Error('No hay sesión de usuario. Recargá la página.')
+    }
+
+    const tenantId = await resolveTenantId()
+    if (!tenantId) {
+      throw new Error('No se pudo determinar el tenant. Recargá la página.')
+    }
+
     try {
       const payload = toDbPayload(projectData)
-      // Asegurar campos obligatorios si faltan
+      payload.tenant_id = tenantId
+      payload.owner_id = user.id
       if (!payload.title) payload.title = 'New Project'
-      
+
+      errorLogger.log('[ProjectsContext] Inserting project:', payload)
+
       const { data, error: err } = await supabase
         .from('projects')
         .insert(payload)
         .select()
         .single()
-      
-      if (err) throw err
+
+      if (err) {
+        errorLogger.error('[ProjectsContext] Insert error:', err)
+        throw new Error(err.message || 'Error al crear proyecto en la base de datos.')
+      }
       const newProject = normalizeProject(data)
       setProjects(prev => [newProject, ...prev])
       return newProject

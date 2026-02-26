@@ -114,7 +114,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
   const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
   const [kpis, setKpis] = useState<KPIData[]>([]);
   const [insights, setInsights] = useState<AnalyticsInsight[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canViewAnalytics, setCanViewAnalytics] = useState(false);
   const [canManageAnalytics, setCanManageAnalytics] = useState(false);
@@ -221,9 +221,9 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     }
   }, [user, tenantId, canViewAnalytics]);
 
-  useEffect(() => {
-    loadAnalyticsData();
-  }, [loadAnalyticsData]);
+  // Lazy-load: don't fetch analytics on mount — only when explicitly requested
+  // This avoids 4+ sequential DB queries that slow down the initial dashboard load
+  const _hasLoadedRef = React.useRef(false);
 
   // Track page view
   const trackPageView = useCallback(async (page: string, referrer?: string) => {
@@ -652,8 +652,9 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     throw new Error('Unsupported export format');
   }, [webAnalytics, metrics, kpis, insights]);
 
-  // Refresh analytics
+  // Refresh analytics — also serves as the initial load trigger (lazy)
   const refreshAnalytics = useCallback(async () => {
+    _hasLoadedRef.current = true;
     await loadAnalyticsData();
   }, [loadAnalyticsData]);
 

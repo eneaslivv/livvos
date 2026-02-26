@@ -1,12 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../components/ui/Icons';
+import { SlidePanel } from '../components/ui/SlidePanel';
 import { Status, PageView, Priority, Task } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
-import { supabase } from '../lib/supabase';
+import { supabaseAdmin } from '../lib/supabase';
 import { useRBAC } from '../context/RBACContext';
+import { useFinance } from '../context/FinanceContext';
+import { useTenant } from '../context/TenantContext';
 
-// --- REAL DATA ---
 type DbProject = {
     id: string
     title: string
@@ -17,11 +18,10 @@ type DbProject = {
     next_steps?: string
 }
 
-// Updated Focus Modes to Earth/Warm Tones
 const FOCUS_MODES = [
-    { label: 'Deep Work', icon: <Icons.Zap size={14} />, color: 'text-stone-700 bg-stone-100 border-stone-200' },
-    { label: 'Meeting Mode', icon: <Icons.Users size={14} />, color: 'text-orange-800 bg-orange-50 border-orange-100' },
-    { label: 'Light Work', icon: <Icons.Smile size={14} />, color: 'text-emerald-800 bg-emerald-50 border-emerald-100' },
+    { label: 'Deep Work', icon: <Icons.Zap size={13} /> },
+    { label: 'Meetings', icon: <Icons.Users size={13} /> },
+    { label: 'Light Work', icon: <Icons.Smile size={13} /> },
 ];
 
 interface HomeProps {
@@ -29,13 +29,43 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
-    // State
-    const { user, roles, hasPermission } = useRBAC();
+    const { user, roles } = useRBAC();
+    const { incomes, expenses } = useFinance();
+    const { currentTenant, updateTenant } = useTenant();
+    const [showFinancials, setShowFinancials] = useState(false);
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+    const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    const monthlyEarnings = incomes.reduce((acc, inc) => {
+        const paidThisMonth = (inc.installments || [])
+            .filter(inst => inst.status === 'paid' && inst.paid_date)
+            .reduce((sum, inst) => {
+                const pDate = new Date(inst.paid_date + 'T12:00:00');
+                if (pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) return sum + inst.amount;
+                return sum;
+            }, 0);
+        return acc + paidThisMonth;
+    }, 0);
+
+    const monthlyExpenses = expenses.reduce((acc, exp) => {
+        if (exp.status === 'paid' && exp.date) {
+            const expDate = new Date(exp.date + 'T12:00:00');
+            if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) return acc + exp.amount;
+        }
+        return acc;
+    }, 0);
+
+    const monthlyProfit = monthlyEarnings - monthlyExpenses;
     const userName = user?.name || 'there';
     const userRole = roles[0]?.name || 'Guest';
 
-    const { data: tasks, update: updateTask } = useSupabase<Task>('tasks');
-    const { data: projectsRaw } = useSupabase<DbProject>('projects');
+    const { data: tasks, update: updateTask } = useSupabase<Task>('tasks', { subscribe: false });
+    const { data: projectsRaw } = useSupabase<DbProject>('projects', { subscribe: false });
+
     const projects = projectsRaw.slice(0, 4).map(p => ({
         id: p.id,
         title: p.title,
@@ -44,17 +74,40 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         status: (p.status ?? Status.Active) as Status,
         nextSteps: p.next_steps ?? ''
     }));
+
     const projectLookup = projectsRaw.reduce<Record<string, string>>((acc, project) => {
         acc[project.id] = project.title || 'Project';
         return acc;
     }, {});
-    // const [userName, setUserName] = useState<string>('there'); // REMOVED
-    // const [ideaInput, setIdeaInput] = useState(''); // REMOVED
-    // const [ideaSaved, setIdeaSaved] = useState(false); // REMOVED
+
     const [currentFocusMode, setCurrentFocusMode] = useState(0);
     const [greeting, setGreeting] = useState('');
+    const [isVisionOpen, setIsVisionOpen] = useState(false);
+    const [isThoughtsOpen, setIsThoughtsOpen] = useState(false);
 
-    // Effects
+    const { data: visionData, add: addVision, update: updateVision } = useSupabase('user_vision', { subscribe: false });
+    const userVision = visionData[0]?.content || '';
+    const [visionContent, setVisionContent] = useState(userVision);
+
+    const { data: thoughtsData, add: addThoughts, update: updateThoughts } = useSupabase('user_thoughts', { subscribe: false });
+    const userThoughts = thoughtsData[0]?.content || '';
+    const [thoughtsContent, setThoughtsContent] = useState(userThoughts);
+
+    useEffect(() => { setVisionContent(userVision); }, [userVision]);
+    useEffect(() => { setThoughtsContent(userThoughts); }, [userThoughts]);
+
+    const handleSaveVision = async () => {
+        if (visionData.length > 0) await updateVision(visionData[0].id, { content: visionContent });
+        else await addVision({ content: visionContent });
+        setIsVisionOpen(false);
+    };
+
+    const handleSaveThoughts = async () => {
+        if (thoughtsData.length > 0) await updateThoughts(thoughtsData[0].id, { content: thoughtsContent });
+        else await addThoughts({ content: thoughtsContent });
+        setIsThoughtsOpen(false);
+    };
+
     useEffect(() => {
         const hour = new Date().getHours();
         if (hour < 12) setGreeting('Good morning');
@@ -62,322 +115,401 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         else setGreeting('Good evening');
     }, []);
 
-    // Removed manual user fetching, using useRBAC instead
-
-    // Handlers
     const toggleTask = (id: string) => {
-        const t = tasks.find(t => t.id === id)
-        if (!t) return
-        updateTask(id, { completed: !t.completed })
+        const t = tasks.find(t => t.id === id);
+        if (!t) return;
+        updateTask(id, { completed: !t.completed });
     };
-
-    // const saveIdea = ... // REMOVED
 
     const handleQuickAction = (label: string) => {
         switch (label) {
-            // Note: "New Task" is now handled via the global navbar, but we keep this as a secondary trigger if needed,
-            // though for this prototype we are just removing the local modal logic.
             case 'New Task': alert("Please use the 'New Task' button in the top navigation."); break;
-            case 'Schedule Meeting': onNavigate('calendar'); break;
-            case 'Create Document': onNavigate('docs'); break;
-            case 'Email Client': onNavigate('sales_leads'); break;
-            default: break;
+            case 'Schedule': onNavigate('calendar'); break;
+            case 'Docs': onNavigate('docs'); break;
+            case 'CRM': onNavigate('sales_leads'); break;
         }
     };
 
-    // Derived State
     const completedCount = tasks.filter(t => t.completed).length;
     const progressPercent = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+
+    const aiInsights = React.useMemo(() => {
+        const badges: { label: string; color: string }[] = [];
+        const tips: string[] = [];
+
+        const pendingIncome = incomes.reduce((sum, inc) =>
+            sum + (inc.installments || []).filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0), 0);
+        if (pendingIncome > 0) {
+            badges.push({ label: 'Pending payments', color: 'text-amber-600 dark:text-amber-400' });
+            tips.push(`You have $${pendingIncome.toLocaleString()} in pending payments. Prioritize payment follow-ups.`);
+        }
+        if (monthlyProfit > 0) {
+            badges.push({ label: 'Positive month', color: 'text-emerald-600 dark:text-emerald-400' });
+        } else if (monthlyExpenses > monthlyEarnings && monthlyExpenses > 0) {
+            badges.push({ label: 'Expenses > Income', color: 'text-rose-600 dark:text-rose-400' });
+            tips.push('Expenses exceed income this month. Review subscriptions and recurring expenses.');
+        }
+
+        const pendingTasks = tasks.filter(t => !t.completed);
+        const highPriority = pendingTasks.filter(t => t.priority === Priority.High);
+        if (highPriority.length > 0) {
+            badges.push({ label: `${highPriority.length} urgent`, color: 'text-rose-600 dark:text-rose-400' });
+            tips.push(`You have ${highPriority.length} high priority task${highPriority.length > 1 ? 's' : ''}. Focus there first.`);
+        } else if (pendingTasks.length > 0 && progressPercent < 50) {
+            badges.push({ label: 'Advance tasks', color: 'text-blue-600 dark:text-blue-400' });
+            tips.push(`You completed ${progressPercent}% of your tasks. Dedicate a deep work block to advance.`);
+        }
+
+        if (userVision) {
+            const visionShort = userVision.length > 60 ? userVision.substring(0, 60) + '…' : userVision;
+            badges.push({ label: 'Active goal', color: 'text-violet-600 dark:text-violet-400' });
+            if (tips.length === 0) tips.push(`Remember your vision: "${visionShort}"`);
+        }
+        if (userThoughts && tips.length < 2) {
+            tips.push('Review your recent thoughts and turn ideas into concrete actions.');
+        }
+
+        if (badges.length === 0) badges.push({ label: 'All good', color: 'text-zinc-500' });
+        if (tips.length === 0) tips.push('No alerts for now. Continue with your current workflow.');
+
+        return { badges: badges.slice(0, 3), tip: tips[0] };
+    }, [tasks, incomes, monthlyProfit, monthlyEarnings, monthlyExpenses, progressPercent, userVision, userThoughts]);
 
     const getStatusColor = (status: Status) => {
         switch (status) {
             case Status.Active: return 'bg-emerald-500';
-            case Status.Pending: return 'bg-orange-400';
-            case Status.Review: return 'bg-stone-500';
+            case Status.Pending: return 'bg-amber-400';
+            case Status.Review: return 'bg-zinc-500';
             default: return 'bg-zinc-300';
         }
     };
 
-    const getPriorityColor = (p?: Priority) => {
-        switch (p) {
-            case Priority.High: return 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900';
-            case Priority.Medium: return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900';
-            default: return 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700';
-        }
-    };
-
     return (
-        <div className="space-y-8 pb-10 max-w-[1600px] mx-auto relative pt-4">
+        <div className="space-y-6 pb-10 max-w-[1600px] mx-auto relative pt-6">
 
-            {/* --- HEADER --- */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                        <span className="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-600"></span>
-                        <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+            {/* Banner */}
+            <div className="w-full h-40 md:h-48 rounded-2xl overflow-hidden relative group border border-zinc-200/60 dark:border-zinc-800">
+                <img
+                    src={currentTenant?.banner_url || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=2000"}
+                    alt=""
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
+                <label className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all cursor-pointer">
+                    <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 dark:bg-zinc-900/90 text-xs font-medium text-zinc-700 dark:text-zinc-300 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all">
+                        {isUploadingBanner ? <div className="w-3 h-3 border-2 border-zinc-400 border-t-zinc-900 rounded-full animate-spin" /> : <Icons.Upload size={12} />}
+                        {isUploadingBanner ? 'Uploading...' : 'Change banner'}
+                    </span>
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={isUploadingBanner}
+                        onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !currentTenant) return;
+                            if (file.size > 5 * 1024 * 1024) { setUploadError('Max 5MB'); setTimeout(() => setUploadError(null), 4000); e.target.value = ''; return; }
+                            setIsUploadingBanner(true); setUploadError(null);
+                            try {
+                                const ext = file.name.split('.').pop();
+                                const path = `banners/${currentTenant.id}.${ext}`;
+                                console.log('[Banner] uploading to', path, 'tenant:', currentTenant.id);
+                                const { error: rmErr } = await supabaseAdmin.storage.from('documents').remove([path]);
+                                if (rmErr) console.warn('[Banner] remove error (non-fatal):', rmErr.message);
+                                const { error: upErr } = await supabaseAdmin.storage.from('documents').upload(path, file, { upsert: true });
+                                if (upErr) { console.error('[Banner] upload error:', upErr); throw upErr; }
+                                const { data: urlData } = supabaseAdmin.storage.from('documents').getPublicUrl(path);
+                                console.log('[Banner] public URL:', urlData.publicUrl);
+                                await updateTenant({ banner_url: `${urlData.publicUrl}?v=${Date.now()}` });
+                                console.log('[Banner] tenant updated OK');
+                            } catch (err: any) {
+                                console.error('[Banner] full error:', err);
+                                setUploadError(err?.message || 'Error al subir imagen');
+                                setTimeout(() => setUploadError(null), 6000);
+                            } finally { setIsUploadingBanner(false); e.target.value = ''; }
+                        }}
+                    />
+                </label>
+                {uploadError && (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-red-50/95 border border-red-200 text-xs font-medium text-red-700">
+                        {uploadError}
                     </div>
-                    <h2 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
-                </div>
-
-                {/* Focus Mode Toggle */}
-                <button
-                    onClick={() => setCurrentFocusMode((prev) => (prev + 1) % FOCUS_MODES.length)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all shadow-sm hover:shadow-md ${FOCUS_MODES[currentFocusMode].color} bg-opacity-70 dark:bg-opacity-20`}
-                >
-                    {FOCUS_MODES[currentFocusMode].icon}
-                    <span className="text-sm font-semibold">{FOCUS_MODES[currentFocusMode].label}</span>
-                    <Icons.ChevronRight size={14} className="opacity-50" />
-                </button>
+                )}
             </div>
 
-            {/* --- ASYMMETRIC GRID LAYOUT (Main vs Side) --- */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                    <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-0.5">
+                        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </p>
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
+                </div>
 
-                {/* --- LEFT COLUMN (WORK STREAM) - 8 COLS --- */}
-                <div className="xl:col-span-8 space-y-8">
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setIsThoughtsOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                    >
+                        <Icons.Brain size={12} /> Thoughts
+                    </button>
+                    <button
+                        onClick={() => setIsVisionOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 text-[11px] font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                        <Icons.Lightbulb size={12} /> Vision
+                    </button>
+                    <button
+                        onClick={() => setCurrentFocusMode((prev) => (prev + 1) % FOCUS_MODES.length)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 text-[11px] font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                        {FOCUS_MODES[currentFocusMode].icon}
+                        {FOCUS_MODES[currentFocusMode].label}
+                        <Icons.ChevronRight size={11} className="opacity-30" />
+                    </button>
+                </div>
+            </div>
 
-                    {/* 1. Main Priority Card */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] pointer-events-none group-hover:opacity-[0.08] transition-opacity">
-                            <Icons.Target size={120} className="text-zinc-900 dark:text-zinc-100" />
-                        </div>
+            {/* Vision Panel */}
+            <SlidePanel isOpen={isVisionOpen} onClose={() => setIsVisionOpen(false)} title="Your Vision" description="Your goals and direction."
+                footer={<div className="flex justify-end gap-3 w-full">
+                    <button onClick={() => setIsVisionOpen(false)} className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Cancel</button>
+                    <button onClick={handleSaveVision} className="px-5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">Save</button>
+                </div>}
+            >
+                <div className="space-y-4">
+                    <p className="text-xs text-zinc-400 leading-relaxed">Define your main goals and the direction you want to take. Keep it in mind to focus your daily actions.</p>
+                    <textarea value={visionContent} onChange={(e) => setVisionContent(e.target.value)} placeholder="Write your goals..." className="w-full h-[500px] p-5 bg-zinc-50/50 dark:bg-zinc-800/30 border border-zinc-100 dark:border-zinc-800 rounded-xl focus:outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors resize-none text-zinc-800 dark:text-zinc-200 text-sm leading-relaxed placeholder:text-zinc-400" />
+                </div>
+            </SlidePanel>
 
-                        <div className="flex justify-between items-end mb-6 relative z-10">
-                            <div>
-                                <div className="flex items-center gap-3">
-                                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                                        <Icons.Check size={20} className="text-emerald-500 dark:text-emerald-400" /> Today's Focus
-                                    </h3>
-                                </div>
-                                <p className="text-sm text-zinc-500">Keep focus on what moves the needle.</p>
-                            </div>
-                            <div className="text-right">
-                                <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{completedCount}/{tasks.length}</span>
-                                <div className="w-24 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mt-1 overflow-hidden">
-                                    <div className="h-full bg-zinc-800 dark:bg-zinc-200 transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
-                                </div>
-                            </div>
-                        </div>
+            {/* Thoughts Panel */}
+            <SlidePanel isOpen={isThoughtsOpen} onClose={() => setIsThoughtsOpen(false)} title="Thoughts" description="System metacognition."
+                footer={<div className="flex justify-end gap-3 w-full">
+                    <button onClick={() => setIsThoughtsOpen(false)} className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Cancel</button>
+                    <button onClick={handleSaveThoughts} className="px-5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">Save</button>
+                </div>}
+            >
+                <div className="space-y-4">
+                    <p className="text-xs text-zinc-400 leading-relaxed">Log bugs, customization ideas, or how you want the AI to help you.</p>
+                    <textarea value={thoughtsContent} onChange={(e) => setThoughtsContent(e.target.value)} placeholder="Ideas, bugs, improvements..." className="w-full h-[500px] p-5 bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 transition-colors resize-none text-zinc-800 dark:text-zinc-200 text-sm leading-relaxed font-mono placeholder:text-zinc-400" />
+                </div>
+            </SlidePanel>
 
-                        <div className="space-y-1 relative z-10">
-                            {tasks.length === 0 && (
-                                <div className="text-xs text-zinc-500">No hay tareas aún</div>
-                            )}
-                            {tasks.map((task) => (
-                                <div
-                                    key={task.id}
-                                    onClick={() => toggleTask(task.id)}
-                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer group/item ${task.completed
-                                        ? 'bg-zinc-50 dark:bg-zinc-900/50 border-transparent opacity-60'
-                                        : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50/50 hover:shadow-sm'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${task.completed ? 'bg-zinc-500 border-zinc-500 text-white' : 'border-zinc-300 dark:border-zinc-600 text-transparent'
-                                            }`}>
-                                            <Icons.Check size={12} strokeWidth={4} />
+            {/* Main Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
+                {/* Left Column */}
+                <div className="xl:col-span-8 space-y-6">
+
+                    {/* Today's Focus */}
+                    {(() => {
+                        const pendingTasks = tasks.filter(t => !t.completed);
+                        const completedTasks = tasks.filter(t => t.completed);
+                        const allDone = tasks.length > 0 && pendingTasks.length === 0;
+
+                        return (
+                            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Today's Focus</h3>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs text-zinc-400 font-mono">{completedCount}/{tasks.length}</span>
+                                        <div className="w-20 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                            <div className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-emerald-500' : 'bg-zinc-900 dark:bg-zinc-200'}`} style={{ width: `${progressPercent}%` }} />
                                         </div>
-                                        <div>
-                                            <div className={`text-sm font-medium transition-all ${task.completed ? 'text-zinc-500 line-through' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                                                {task.title}
+                                    </div>
+                                </div>
+
+                                {tasks.length === 0 && <p className="text-xs text-zinc-400 py-4 text-center">No tasks yet</p>}
+
+                                {allDone && (
+                                    <div className="flex items-center gap-2.5 px-3 py-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-500/5 mb-1">
+                                        <Icons.Check size={14} className="text-emerald-500 shrink-0" />
+                                        <span className="text-[13px] font-medium text-emerald-700 dark:text-emerald-400">All set for today</span>
+                                    </div>
+                                )}
+
+                                {/* Pending tasks first */}
+                                <div className="space-y-0.5">
+                                    {pendingTasks.map((task) => {
+                                        const projectId = (task as any).projectId || (task as any).project_id;
+                                        return (
+                                            <div
+                                                key={task.id}
+                                                onClick={() => toggleTask(task.id)}
+                                                className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 text-transparent flex items-center justify-center shrink-0">
+                                                        <Icons.Check size={9} strokeWidth={3} />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{task.title}</span>
+                                                        {projectId && <span className="text-[10px] text-zinc-400 ml-2">{projectLookup[projectId] || ''}</span>}
+                                                    </div>
+                                                </div>
+                                                {task.priority && (
+                                                    <span className={`text-[9px] font-semibold uppercase tracking-wider ${task.priority === Priority.High ? 'text-rose-500' : task.priority === Priority.Medium ? 'text-amber-500' : 'text-zinc-400'}`}>
+                                                        {task.priority}
+                                                    </span>
+                                                )}
                                             </div>
-                                            {(() => {
-                                                const projectId = (task as any).projectId || (task as any).project_id;
-                                                if (!projectId) {
-                                                    return <div className="text-[10px] text-zinc-400">No project</div>;
-                                                }
-                                                return <div className="text-[10px] text-zinc-400">{projectLookup[projectId] || 'Project'}</div>;
-                                            })()}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {task.priority && !task.completed && (
-                                            <div className={`w-2 h-2 rounded-full ${task.priority === Priority.High ? 'bg-rose-500' : task.priority === Priority.Medium ? 'bg-amber-500' : 'bg-zinc-300'}`}></div>
-                                        )}
-                                        <span className={`text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded border ${getPriorityColor(task.priority)}`}>
-                                            {task.priority ?? 'low'}
-                                        </span>
-                                    </div>
+                                        );
+                                    })}
                                 </div>
-                            ))}
-                        </div>
 
-                        {/* Micro Tasks Integrated */}
-                        <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 relative z-10">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Icons.List size={14} className="text-zinc-400" />
-                                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quick Hits</span>
+                                {/* Completed tasks — collapsed summary */}
+                                {completedTasks.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                                        <p className="px-3 text-[11px] text-zinc-400 font-medium">
+                                            {completedTasks.length} completed
+                                        </p>
+                                    </div>
+                                )}
                             </div>
-                            <div className="text-xs text-zinc-500">Sin items rápidos aún</div>
-                        </div>
-                    </div>
+                        );
+                    })()}
 
-                    {/* 2. Active Projects Grid */}
+                    {/* Active Projects */}
                     <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                                <Icons.Briefcase size={20} className="text-zinc-400" /> Active Projects
-                            </h3>
-                            <button
-                                onClick={() => onNavigate('projects')}
-                                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-full transition-colors"
-                            >
-                                View All Projects
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Active Projects</h3>
+                            <button onClick={() => onNavigate('projects')} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
+                                View All
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {projects.length === 0 && (
-                                <div className="text-xs text-zinc-500">No hay proyectos activos</div>
-                            )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {projects.map(project => (
-                                <div
-                                    key={project.id}
-                                    onClick={() => onNavigate('projects')}
-                                    className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between h-full"
-                                >
-                                    <div>
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-700">
-                                                    {project.client?.substring(0, 2).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 leading-tight">{project.title}</h4>
-                                                    <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wide">{project.client}</span>
-                                                </div>
+                                <div key={project.id} onClick={() => onNavigate('projects')} className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-4 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all cursor-pointer">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                                                {project.client?.substring(0, 2).toUpperCase()}
                                             </div>
-                                            <div className={`w-2 h-2 rounded-full ${getStatusColor(project.status)}`}></div>
-                                        </div>
-
-                                        <div className="space-y-2 mb-4">
-                                            <div className="flex justify-between items-center text-xs text-zinc-500">
-                                                <span>Progress</span>
-                                                <span className="font-mono">{project.progress}%</span>
-                                            </div>
-                                            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-zinc-800 dark:bg-zinc-200 h-full rounded-full" style={{ width: `${project.progress}%` }}></div>
+                                            <div>
+                                                <h4 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">{project.title}</h4>
+                                                <span className="text-[10px] text-zinc-400">{project.client}</span>
                                             </div>
                                         </div>
+                                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${getStatusColor(project.status)}`} />
                                     </div>
-
-                                    <div className="pt-4 border-t border-zinc-50 dark:border-zinc-800/50 flex items-center justify-between">
-                                        <span className="text-[10px] text-zinc-400 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800 px-2 py-1 rounded">
-                                            <Icons.Activity size={10} /> {project.nextSteps}
-                                        </span>
-                                        <div className="flex -space-x-2">
-                                            <div className="w-6 h-6 rounded-full border-2 border-white dark:border-zinc-900 bg-zinc-200 dark:bg-zinc-700"></div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                                            <div className="bg-zinc-800 dark:bg-zinc-200 h-full rounded-full transition-all" style={{ width: `${project.progress}%` }} />
                                         </div>
+                                        <span className="text-[10px] text-zinc-400 font-mono w-7 text-right">{project.progress}%</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-
-
                 </div>
 
-                {/* --- RIGHT COLUMN (CONTEXT & TOOLS) - 4 COLS - STICKY --- */}
-                <div className="xl:col-span-4 space-y-6 sticky top-24">
+                {/* Right Column */}
+                <div className="xl:col-span-4 space-y-4 sticky top-24">
 
-                    {/* KPI Grid */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div
-                            onClick={() => onNavigate('activity')}
-                            className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between h-32 group hover:border-amber-200 dark:hover:border-amber-800/30 transition-colors cursor-pointer"
-                        >
-                            <div className="p-2 w-fit rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500">
-                                <Icons.Zap size={18} />
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{tasks.length}</div>
-                                <div className="text-xs text-zinc-500">Total Tasks</div>
-                            </div>
+                    {/* Metrics Row */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Tasks</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{tasks.length}</div>
+                            <div className="text-[10px] text-zinc-400 mt-0.5">total</div>
                         </div>
-                        <div
-                            onClick={() => onNavigate('calendar')}
-                            className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between h-32 group hover:border-emerald-200 dark:hover:border-emerald-800/30 transition-colors cursor-pointer"
-                        >
-                            <div className="p-2 w-fit rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-500">
-                                <Icons.Check size={18} />
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{completedCount}</div>
-                                <div className="text-xs text-zinc-500">Tasks Done</div>
-                            </div>
+                        <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Done</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{completedCount}</div>
+                            <div className="text-[10px] text-emerald-500 mt-0.5">{progressPercent}% complete</div>
                         </div>
                     </div>
 
-                    {/* Quick Actions Menu */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 flex justify-between items-center">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quick Access</h3>
-                            <Icons.Command size={12} className="text-zinc-400" />
+                    {/* Profit */}
+                    <div className="bg-zinc-900 dark:bg-zinc-100 px-4 py-3.5 rounded-xl relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-2">
+                            <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Monthly Profit</span>
+                            <button onClick={() => setShowFinancials(!showFinancials)} className="text-zinc-500 hover:text-zinc-300 dark:hover:text-zinc-600 transition-colors">
+                                {showFinancials ? <Icons.EyeOff size={13} /> : <Icons.Eye size={13} />}
+                            </button>
                         </div>
-                        <div className="p-2">
-                            {[
-                                { icon: <Icons.Plus className="text-emerald-500" />, label: 'New Task', bg: 'hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-700' },
-                                { icon: <Icons.Calendar className="text-orange-500" />, label: 'Schedule Meeting', bg: 'hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-700' },
-                                { icon: <Icons.Docs className="text-blue-500" />, label: 'Create Document', bg: 'hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700' },
-                                { icon: <Icons.Mail className="text-purple-500" />, label: 'Email Client', bg: 'hover:bg-purple-50 dark:hover:bg-purple-500/10 hover:text-purple-700' }
-                            ].map((action, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => handleQuickAction(action.label)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors ${action.bg}`}
-                                >
-                                    {React.cloneElement(action.icon as React.ReactElement, { size: 16 })}
-                                    {action.label}
-                                    <Icons.ChevronRight size={14} className="ml-auto text-zinc-300 opacity-50" />
-                                </button>
+                        <div className="text-xl font-bold text-white dark:text-zinc-900 tracking-tight leading-none mb-1.5">
+                            {showFinancials ? `$${monthlyProfit.toLocaleString()}` : '•••••'}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px]">
+                            <span className="text-emerald-400 dark:text-emerald-600 font-medium">+${showFinancials ? monthlyEarnings.toLocaleString() : '••'}</span>
+                            <span className="text-rose-400 dark:text-rose-500 font-medium">-${showFinancials ? monthlyExpenses.toLocaleString() : '••'}</span>
+                        </div>
+                        <button onClick={() => onNavigate('finance' as PageView)} className="mt-2 text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-300 dark:hover:text-zinc-600 transition-colors font-medium">
+                            View finances →
+                        </button>
+                    </div>
+
+                    {/* AI Insights */}
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-4">
+                        <div className="flex items-center gap-1.5 mb-2.5">
+                            <Icons.Sparkles size={11} className="text-zinc-400" />
+                            <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-400">Insights</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                            {aiInsights.badges.map((badge, i) => (
+                                <span key={i} className={`text-[10px] font-semibold ${badge.color}`}>
+                                    {badge.label}{i < aiInsights.badges.length - 1 && <span className="text-zinc-300 dark:text-zinc-700 mx-1">·</span>}
+                                </span>
                             ))}
                         </div>
+                        <p className="text-[12px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{aiInsights.tip}</p>
                     </div>
 
-                    {/* Account summary (Dynamic) */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-                                <Icons.Users size={14} /> Account
-                            </h3>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="relative">
-                                    <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                                        {userName.substring(0, 2).toUpperCase()}
-                                    </div>
-                                    <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-zinc-900 bg-emerald-500"></div>
-                                </div>
-                                <div>
-                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 leading-none">{userName}</div>
-                                    <div className="text-[10px] text-zinc-500 mt-1 capitalize">{userRole}</div>
-                                </div>
-                            </div>
-                        </div>
+                    {/* Quick Actions */}
+                    <div className="grid grid-cols-4 gap-2">
+                        {[
+                            { icon: <Icons.Plus size={15} />, label: 'New Task', key: 'New Task' },
+                            { icon: <Icons.Calendar size={15} />, label: 'Calendar', key: 'Schedule' },
+                            { icon: <Icons.Docs size={15} />, label: 'Docs', key: 'Docs' },
+                            { icon: <Icons.Mail size={15} />, label: 'CRM', key: 'CRM' },
+                        ].map((a) => (
+                            <button key={a.key} onClick={() => handleQuickAction(a.key)}
+                                className="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all">
+                                {a.icon}
+                                <span className="text-[9px] font-medium">{a.label}</span>
+                            </button>
+                        ))}
                     </div>
 
-                    {/* AI Insight Pill */}
-                    <div className="p-5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl text-zinc-900 dark:text-zinc-100 shadow-sm cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-500 transition-colors" onClick={() => onNavigate('activity')}>
-                        <div className="flex items-start gap-3">
-                            <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-600 shadow-sm">
-                                <Icons.Sparkles className="shrink-0 text-amber-600 dark:text-amber-500" size={14} />
-                            </div>
-                            <div>
-                                <h4 className="text-sm font-bold mb-1.5 flex items-center gap-2">
-                                    Weekly Insight
-                                </h4>
-                                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                                    {tasks.length > 0
-                                        ? `You've completed ${completedCount} of ${tasks.length} tasks (${progressPercent}%). ${projects.length > 0 ? `${projects.length} active project${projects.length > 1 ? 's' : ''} in progress.` : 'No active projects yet.'}`
-                                        : 'Start adding tasks to see your weekly insight here.'
-                                    }
-                                </p>
-                            </div>
+                    {/* Account */}
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
+                        <div className="relative group">
+                            {currentTenant?.logo_url ? (
+                                <img src={currentTenant.logo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-white dark:text-zinc-900 text-xs font-bold">
+                                    {userName.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                                <Icons.Upload size={10} className="text-white" />
+                                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={isUploadingLogo}
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file || !currentTenant) return;
+                                        if (file.size > 2 * 1024 * 1024) { setUploadError('Max 2MB'); setTimeout(() => setUploadError(null), 4000); e.target.value = ''; return; }
+                                        setIsUploadingLogo(true); setUploadError(null);
+                                        try {
+                                            const ext = file.name.split('.').pop();
+                                            const path = `logos/${currentTenant.id}.${ext}`;
+                                            await supabaseAdmin.storage.from('documents').remove([path]);
+                                            const { error: upErr } = await supabaseAdmin.storage.from('documents').upload(path, file, { upsert: true });
+                                            if (upErr) throw upErr;
+                                            const { data: urlData } = supabaseAdmin.storage.from('documents').getPublicUrl(path);
+                                            await updateTenant({ logo_url: `${urlData.publicUrl}?v=${Date.now()}` });
+                                        } catch (err: any) {
+                                            setUploadError(err?.message || 'Error'); setTimeout(() => setUploadError(null), 4000);
+                                        } finally { setIsUploadingLogo(false); e.target.value = ''; }
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        <div className="min-w-0">
+                            <div className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{userName}</div>
+                            <div className="text-[10px] text-zinc-400 truncate">{userRole}</div>
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
     );

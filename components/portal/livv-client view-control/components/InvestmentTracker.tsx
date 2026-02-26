@@ -1,71 +1,81 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Landmark, TrendingUp } from 'lucide-react';
+import { Eye, EyeOff, CalendarClock } from 'lucide-react';
 
-const InvestmentTracker: React.FC<{ budget: { total: number, paid: number } }> = ({ budget }) => {
-  const [showValues, setShowValues] = useState(true);
+const fmtDate = (d: string) => {
+  if (!d) return '—';
+  const date = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+};
+
+const InvestmentTracker: React.FC<{ budget: { total: number, paid: number, nextPayment?: { amount: number; dueDate: string; concept?: string } } }> = ({ budget }) => {
+  const [show, setShow] = useState(true);
   const remaining = budget.total - budget.paid;
-  const percent = (budget.paid / budget.total) * 100;
+  const pct = budget.total > 0 ? Math.round((budget.paid / budget.total) * 100) : 0;
 
-  const formatCurrency = (val: number) => {
-    if (!showValues) return 'PRIVATE_ENC';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-  };
+  const fmt = (v: number) => show ? `$${v.toLocaleString()}` : '••••••';
 
   return (
-    <motion.div 
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0 }
-      }}
-      className="glass-card gradient-border-light p-8 h-full flex flex-col"
+    <motion.div
+      variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
+      className="bg-white rounded-2xl border border-zinc-200/60 p-6 md:p-8 h-full flex flex-col"
     >
-      <div className="flex justify-between items-center mb-10">
-        <h3 className="text-xs font-black text-brand-dark/30 uppercase tracking-[0.3em] flex items-center gap-2">
-          <Landmark size={14} className="text-brand-accent" />
-          Financial Ledger
-        </h3>
-        <button 
-          onClick={() => setShowValues(!showValues)}
-          className="p-2.5 bg-white hover:bg-brand-grey border border-brand-dark/5 rounded-xl transition-all shadow-sm active:scale-95"
-        >
-          {showValues ? <EyeOff size={16} className="text-brand-dark/40" /> : <Eye size={16} className="text-brand-accent" />}
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Resumen Financiero</h3>
+        <button onClick={() => setShow(!show)} className="p-1.5 hover:bg-zinc-50 rounded-lg transition-colors">
+          {show ? <EyeOff size={14} className="text-zinc-300" /> : <Eye size={14} className="text-zinc-400" />}
         </button>
       </div>
 
-      <div className="space-y-10 flex-1 flex flex-col justify-center">
-        <div>
-          <p className="text-[10px] text-brand-dark/30 uppercase tracking-[0.3em] mono font-black mb-3 italic">Capital Commitment</p>
-          <p className="mono text-4xl font-black text-brand-dark tracking-tight leading-none">
-            {formatCurrency(budget.total)}
-          </p>
-        </div>
+      {/* Total */}
+      <div className="mb-5">
+        <p className="text-[10px] text-zinc-400 font-medium mb-1">Valor total</p>
+        <p className="text-3xl font-black text-zinc-900 tracking-tight">{fmt(budget.total)}</p>
+      </div>
 
-        <div>
-          <div className="flex justify-between text-[10px] text-brand-dark/40 uppercase tracking-[0.3em] mono mb-4 font-bold">
-            <span>Funding Maturation</span>
-            <span className="text-brand-accent">{showValues ? `${Math.round(percent)}%` : 'ENCRYPTED'}</span>
+      {/* Bar */}
+      <div className="mb-5">
+        <div className="flex justify-between text-[10px] mb-1.5">
+          <span className="text-zinc-400">Progreso de pago</span>
+          <span className="font-semibold text-zinc-500">{show ? `${pct}%` : '••'}</span>
+        </div>
+        <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 1.5, ease: 'circOut' }}
+            className="h-full bg-emerald-500 rounded-full"
+          />
+        </div>
+      </div>
+
+      {/* Next Payment */}
+      {budget.nextPayment && (
+        <div className="p-3 bg-amber-50/80 border border-amber-200/40 rounded-xl mb-4">
+          <div className="flex items-center gap-1.5 mb-1">
+            <CalendarClock size={11} className="text-amber-600" />
+            <p className="text-[9px] font-semibold text-amber-600 uppercase tracking-wider">Pr{'\u00f3'}ximo pago</p>
           </div>
-          <div className="h-2 bg-brand-dark/5 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${percent}%` }}
-              transition={{ duration: 1.8, ease: "circOut" }}
-              className="h-full bg-brand-accent shadow-[0_4px_10px_rgba(130,43,46,0.15)]"
-            />
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-[9px] text-amber-500 mb-0.5">{budget.nextPayment.concept || 'Cuota pendiente'}</p>
+              <p className="text-base font-bold text-amber-800">{fmt(budget.nextPayment.amount)}</p>
+            </div>
+            <p className="text-[10px] font-semibold text-amber-600">{fmtDate(budget.nextPayment.dueDate)}</p>
           </div>
         </div>
+      )}
 
-        <div className="grid grid-cols-2 gap-6">
-          <div className="p-5 bg-white border border-brand-dark/5 rounded-2xl">
-            <p className="text-[9px] text-brand-dark/20 uppercase tracking-[0.3em] mono font-black mb-2">Settled</p>
-            <p className="text-base font-black text-brand-accent mono">{formatCurrency(budget.paid)}</p>
-          </div>
-          <div className="p-5 bg-white border border-brand-dark/5 rounded-2xl">
-            <p className="text-[9px] text-brand-dark/20 uppercase tracking-[0.3em] mono font-black mb-2">Floating</p>
-            <p className="text-base font-black text-brand-dark/80 mono">{formatCurrency(remaining)}</p>
-          </div>
+      {/* Cards */}
+      <div className="grid grid-cols-2 gap-2.5 mt-auto">
+        <div className="p-3.5 bg-emerald-50/70 rounded-xl">
+          <p className="text-[10px] text-emerald-600/60 font-medium mb-1">Pagado</p>
+          <p className="text-[15px] font-bold text-emerald-700">{fmt(budget.paid)}</p>
+        </div>
+        <div className="p-3.5 bg-zinc-50 rounded-xl">
+          <p className="text-[10px] text-zinc-400 font-medium mb-1">Pendiente</p>
+          <p className="text-[15px] font-bold text-zinc-600">{fmt(remaining)}</p>
         </div>
       </div>
     </motion.div>

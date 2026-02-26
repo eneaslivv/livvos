@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { useClients, Client, ClientMessage, ClientTask, ClientHistory } from '../hooks/useClients';
@@ -25,6 +25,20 @@ export const Clients: React.FC = () => {
     getClientHistory,
     addHistoryEntry
   } = useClients();
+
+  // Loading timeout
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingStartRef = useRef(Date.now());
+  useEffect(() => {
+    if (loading) {
+      const elapsed = Date.now() - loadingStartRef.current;
+      const remaining = Math.max(0, 5000 - elapsed);
+      const timer = setTimeout(() => setLoadingTimedOut(true), remaining);
+      return () => clearTimeout(timer);
+    }
+    loadingStartRef.current = Date.now();
+    setLoadingTimedOut(false);
+  }, [loading]);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [messages, setMessages] = useState<ClientMessage[]>([]);
@@ -338,9 +352,9 @@ export const Clients: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !loadingTimedOut) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-[1600px] mx-auto pt-4 pb-6">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zinc-900 dark:border-zinc-100 mx-auto mb-4"></div>
@@ -355,7 +369,7 @@ export const Clients: React.FC = () => {
     // Si es error de tabla no encontrada, permitimos que se renderice la UI vacía
     if (!error.includes('Could not find the table') && !error.includes('relation "public.clients" does not exist')) {
       return (
-        <div className="max-w-7xl mx-auto p-6">
+        <div className="max-w-[1600px] mx-auto pt-4 pb-6">
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Error al cargar clientes</h2>
             <p className="text-red-700 dark:text-red-400 mb-4">{error}</p>
@@ -372,7 +386,7 @@ export const Clients: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-[1600px] mx-auto pt-4 pb-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Clientes</h1>
         <button

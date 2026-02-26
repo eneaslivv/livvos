@@ -15,6 +15,8 @@ export interface Tenant {
     name: string;
     slug: string;
     owner_id: string;
+    logo_url?: string;
+    banner_url?: string;
     status: 'active' | 'suspended' | 'trial' | 'setup';
     created_at: string;
     updated_at: string;
@@ -243,67 +245,49 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                 .eq('id', user.id)
                 .single();
 
-            if (profileError) {
-                console.warn('Profile not found, attempting auto-provision:', profileError.message);
-                await ensureTenantAssignment(null);
-            } else if (!profile?.tenant_id) {
-                console.warn('User does not have a tenant assigned. Auto-provisioning tenant.');
-                await ensureTenantAssignment(profile);
+            let tenantId = profile?.tenant_id;
+
+            if (profileError || !tenantId) {
+                console.warn('Profile/tenant not found, auto-provisioning...');
+                await ensureTenantAssignment(profile || null);
+                // Only re-fetch if we had to provision
+                const { data: updatedProfile } = await supabase
+                    .from('profiles')
+                    .select('tenant_id')
+                    .eq('id', user.id)
+                    .single();
+                tenantId = updatedProfile?.tenant_id;
             }
 
-            const { data: updatedProfile, error: updatedProfileError } = await supabase
-                .from('profiles')
-                .select('tenant_id')
-                .eq('id', user.id)
-                .single();
-
-            if (updatedProfileError) {
-                throw new Error(`Failed to reload profile: ${updatedProfileError.message}`);
-            }
-
-            if (!updatedProfile?.tenant_id) {
+            if (!tenantId) {
                 throw new Error('User does not have a tenant assigned');
             }
 
-            // Fetch tenant details
-            const { data: tenant, error: tenantError } = await supabase
-                .from('tenants')
-                .select('*')
-                .eq('id', updatedProfile.tenant_id)
-                .single();
+            // Fetch tenant + config in PARALLEL (not sequential)
+            const [tenantResult, configResult] = await Promise.all([
+                supabase.from('tenants').select('*').eq('id', tenantId).single(),
+                supabase.from('tenant_config').select('*').eq('tenant_id', tenantId).single()
+            ]);
 
-            if (tenantError) {
-                throw new Error(`Failed to fetch tenant: ${tenantError.message}`);
+            if (tenantResult.error) {
+                throw new Error(`Failed to fetch tenant: ${tenantResult.error.message}`);
             }
 
-            setCurrentTenant(tenant);
-            console.log('[TenantContext] Tenant loaded:', tenant.id);
+            setCurrentTenant(tenantResult.data);
+            console.log('[TenantContext] Tenant loaded:', tenantResult.data.id);
 
-            // Fetch tenant configuration
-            const { data: config, error: configError } = await supabase
-                .from('tenant_config')
-                .select('*')
-                .eq('tenant_id', profile.tenant_id)
-                .single();
-
-            if (configError && configError.code !== 'PGRST116') {
-                throw new Error(`Failed to fetch tenant config: ${configError.message}`);
-            }
-
-            if (config) {
-                // Parse branding if it's stored as string
+            if (configResult.data && !configResult.error) {
                 const parsedConfig = {
-                    ...config,
-                    branding: typeof config.branding === 'string'
-                        ? JSON.parse(config.branding)
-                        : config.branding
+                    ...configResult.data,
+                    branding: typeof configResult.data.branding === 'string'
+                        ? JSON.parse(configResult.data.branding)
+                        : configResult.data.branding
                 };
                 setTenantConfig(parsedConfig);
             }
 
-            // Fetch tenant usage
-            await refreshUsage();
-
+            // DEFER usage refresh — don't block initial render
+            // It will run via the periodic interval or can be called manually
         } catch (err) {
             console.error('[TenantContext] Error loading tenant:', err);
             errorLogger.error('Error fetching tenant data:', err);
@@ -746,15 +730,18 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         applyBranding();
     }, [branding, applyBranding]);
 
-    // Setup periodic usage refresh
+    // Setup periodic usage refresh + initial deferred load
     useEffect(() => {
         if (!currentTenant) return;
+
+        // Deferred initial load — runs after UI is painted
+        const initial = setTimeout(() => refreshUsage(), 50);
 
         const interval = setInterval(() => {
             refreshUsage();
         }, 5 * 60 * 1000); // Every 5 minutes
 
-        return () => clearInterval(interval);
+        return () => { clearTimeout(initial); clearInterval(interval); };
     }, [currentTenant, refreshUsage]);
 
     const value: TenantContextType = {
