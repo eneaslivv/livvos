@@ -742,7 +742,7 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<PageFallback />}>
-        <Auth onAuthenticated={() => setIsAuthenticated(true)} />
+        <Auth onAuthenticated={() => setIsAuthenticated(true)} isClientPortal={portalFlag === 'client'} />
       </Suspense>
     );
   }

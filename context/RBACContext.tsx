@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -143,13 +143,17 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Load RBAC data
   const loadRBACData = useCallback(async () => {
     console.log('[RBACContext] loadRBACData triggered. User:', authUser?.id, 'AuthLoading:', authLoading);
     if (authLoading) return;
 
-    setIsLoading(true);
+    // Only show loading spinner on first load, not on background re-fetches
+    if (!hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     setError(null);
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -250,6 +254,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
       console.log('[RBACContext] Roles loaded:', allRoles.map(r => r.name));
 
+      hasLoadedRef.current = true;
       setIsInitialized(true);
 
     } catch (err) {
@@ -257,12 +262,15 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error loading RBAC data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load RBAC data');
 
-      // Clear potentially inconsistent state
-      setUser(null);
-      setRoles([]);
-      setPermissions([]);
-      setUserRoleAssignments([]);
-      setIsInitialized(false);
+      // Only clear state if this was the first load attempt;
+      // if already initialized, keep existing data to avoid UI flicker
+      if (!hasLoadedRef.current) {
+        setUser(null);
+        setRoles([]);
+        setPermissions([]);
+        setUserRoleAssignments([]);
+        setIsInitialized(false);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -736,16 +744,9 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     loadRBACData();
   }, [loadRBACData]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Clear sensitive data on unmount
-      setUser(null);
-      setRoles([]);
-      setPermissions([]);
-      setUserRoleAssignments([]);
-    };
-  }, []);
+  // Note: No cleanup on unmount — this provider stays mounted for the entire
+  // app lifecycle. Clearing state here would cause flicker on React strict-mode
+  // re-mounts and serve no real purpose since the provider never unmounts.
 
   const value: RBACContextType = {
     // User data

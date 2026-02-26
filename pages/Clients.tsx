@@ -6,6 +6,8 @@ import { useClients, Client, ClientMessage, ClientTask, ClientHistory } from '..
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useFinance, IncomeEntry, Installment } from '../context/FinanceContext';
+import { useCalendar, CalendarTask } from '../context/CalendarContext';
+import { useTeam } from '../context/TeamContext';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 
@@ -52,7 +54,7 @@ const historyIcons: Record<string, React.ElementType> = {
   call: Icons.Phone || Icons.Activity,
   meeting: Icons.Users,
   email: Icons.Mail || Icons.Message,
-  note: Icons.FileText || Icons.Activity,
+  note: Icons.Docs || Icons.Activity,
   status_change: Icons.Activity,
   task_created: Icons.CheckCircle,
   payment: Icons.DollarSign || Icons.Activity,
@@ -68,7 +70,9 @@ export const Clients: React.FC = () => {
     getClientTasks, createTask, updateTask,
     getClientHistory, addHistoryEntry
   } = useClients();
-  const { incomes, updateInstallment } = useFinance();
+  const { incomes, updateInstallment, createIncome, deleteIncome, refreshIncomes } = useFinance();
+  const { createTask: createCalendarTask, updateTask: updateCalendarTask, deleteTask: deleteCalendarTask, tasks: allCalendarTasks } = useCalendar();
+  const { members: teamMembers } = useTeam();
 
   /* ─── Loading timeout ─── */
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -95,7 +99,10 @@ export const Clients: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [showNewTaskInline, setShowNewTaskInline] = useState(false);
-  const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: '' });
+  const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: '', assignee_id: '', status: 'todo' as const });
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [addingSubtask, setAddingSubtask] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Record<string, string>>({});
@@ -103,9 +110,18 @@ export const Clients: React.FC = () => {
   const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
-  const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null }[]>([]);
-  const [assignedProject, setAssignedProject] = useState<{ id: string; title: string } | null>(null);
+  const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number }[]>([]);
+  const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [taskProjectFilter, setTaskProjectFilter] = useState<string>('all');
+  const [projectTasks, setProjectTasks] = useState<{ id: string; title: string; completed: boolean; priority: string; due_date?: string; project_id?: string; client_id?: string; start_date?: string; start_time?: string; status?: string; assignee_id?: string; parent_task_id?: string; description?: string; project_name?: string }[]>([]);
+
+  const [showNewIncomeForm, setShowNewIncomeForm] = useState(false);
+  const [newIncomeData, setNewIncomeData] = useState({
+    concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD'
+  });
+  const [creatingIncome, setCreatingIncome] = useState(false);
+  const [deletingIncomeId, setDeletingIncomeId] = useState<string | null>(null);
 
   const [newClientData, setNewClientData] = useState({
     name: '', email: '', company: '', phone: '',
@@ -159,7 +175,7 @@ export const Clients: React.FC = () => {
       try {
         const { data } = await supabase
           .from('projects')
-          .select('id, title, client_id')
+          .select('id, title, client_id, status, progress')
           .order('created_at', { ascending: false });
         setAvailableProjects(data || []);
       } catch (err) {
@@ -171,11 +187,12 @@ export const Clients: React.FC = () => {
 
   useEffect(() => {
     if (selectedClient && availableProjects.length > 0) {
-      const linked = availableProjects.find(p => p.client_id === selectedClient.id);
-      setAssignedProject(linked ? { id: linked.id, title: linked.title } : null);
+      const linked = availableProjects.filter(p => p.client_id === selectedClient.id);
+      setAssignedProjects(linked.map(p => ({ id: p.id, title: p.title, status: p.status, progress: p.progress })));
       setSelectedProjectId('');
+      setTaskProjectFilter('all');
     } else {
-      setAssignedProject(null);
+      setAssignedProjects([]);
     }
   }, [selectedClient?.id, availableProjects]);
 
@@ -193,6 +210,50 @@ export const Clients: React.FC = () => {
       setMessages(msgs);
       setTasks(tsks);
       setHistory(hist);
+
+      // Load ALL tasks linked to this client from the unified tasks table
+      // This includes: tasks with client_id directly set + tasks from linked projects
+      const linkedProjects = availableProjects.filter(p => p.client_id === clientId);
+      const projectIds = linkedProjects.map(p => p.id);
+
+      // Fetch tasks by client_id (direct link) and by project_id (indirect via project)
+      const taskFields = 'id, title, completed, priority, due_date, project_id, client_id, start_date, start_time, status, assignee_id, parent_task_id, description';
+      const clientTasksQuery = supabase
+        .from('tasks')
+        .select(taskFields)
+        .eq('client_id', clientId)
+        .order('completed', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      const projectTasksQuery = projectIds.length > 0
+        ? supabase
+            .from('tasks')
+            .select(taskFields)
+            .in('project_id', projectIds)
+            .order('completed', { ascending: true })
+            .order('created_at', { ascending: false })
+        : null;
+
+      const [clientResult, projectResult] = await Promise.all([
+        clientTasksQuery,
+        projectTasksQuery,
+      ]);
+      const clientDirectTasks = clientResult?.data || [];
+      const projectLinkedTasks = projectResult?.data || [];
+
+      // Merge and deduplicate (a task might have both client_id AND project_id)
+      const seen = new Set<string>();
+      const allTasks = [...clientDirectTasks, ...projectLinkedTasks].filter(t => {
+        if (seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+
+      const enriched = allTasks.map(t => ({
+        ...t,
+        project_name: linkedProjects.find(p => p.id === t.project_id)?.title || ''
+      }));
+      setProjectTasks(enriched);
     } catch (err) {
       errorLogger.error('Error cargando datos del cliente', err);
     }
@@ -236,48 +297,119 @@ export const Clients: React.FC = () => {
       const { error: err } = await supabase.from('projects').update({ client_id: selectedClient.id }).eq('id', selectedProjectId);
       if (err) throw err;
       setAvailableProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, client_id: selectedClient.id } : p));
-      const projectTitle = availableProjects.find(p => p.id === selectedProjectId)?.title || '';
-      setAssignedProject({ id: selectedProjectId, title: projectTitle });
+      const proj = availableProjects.find(p => p.id === selectedProjectId);
+      if (proj) setAssignedProjects(prev => [...prev, { id: proj.id, title: proj.title, status: proj.status, progress: proj.progress }]);
       setSelectedProjectId('');
       await addHistoryEntry({
         client_id: selectedClient.id,
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
-        action_description: `Proyecto asignado: ${projectTitle}`
+        action_description: `Proyecto asignado: ${proj?.title || ''}`
       });
+      // Reload project tasks
+      loadClientData(selectedClient.id);
     } catch (err) {
       errorLogger.error('Error assigning project', err);
     }
   };
 
-  const handleUnassignProject = async () => {
-    if (!assignedProject) return;
+  const handleUnassignProject = async (projectId: string) => {
     try {
-      await supabase.from('projects').update({ client_id: null }).eq('id', assignedProject.id);
-      setAvailableProjects(prev => prev.map(p => p.id === assignedProject.id ? { ...p, client_id: null } : p));
-      setAssignedProject(null);
+      await supabase.from('projects').update({ client_id: null }).eq('id', projectId);
+      setAvailableProjects(prev => prev.map(p => p.id === projectId ? { ...p, client_id: null } : p));
+      setAssignedProjects(prev => prev.filter(p => p.id !== projectId));
+      setProjectTasks(prev => prev.filter(t => t.project_id !== projectId));
     } catch (err) {
       errorLogger.error('Error unassigning project', err);
     }
   };
 
   const handleInvitePortal = async () => {
-    if (!selectedClient || !selectedClient.email) return;
-    if (!currentTenant?.id) return;
+    if (!selectedClient || !selectedClient.email) {
+      setPortalInviteError('El cliente necesita un email para ser invitado al portal.');
+      return;
+    }
+    if (!currentTenant?.id) {
+      setPortalInviteError('No se encontró el tenant activo.');
+      return;
+    }
     setIsInvitingPortal(true);
     setPortalInviteError(null);
     try {
-      const { data: roleData, error: roleError } = await supabase.from('roles').select('id').eq('name', 'client').single();
-      if (roleError || !roleData) throw roleError || new Error('Client role not found');
+      // 1. Find or create the 'client' role
+      let roleId: string;
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles').select('id').eq('name', 'client').maybeSingle();
+      if (roleError) throw new Error(`Error buscando rol: ${roleError.message}`);
+
+      if (roleData) {
+        roleId = roleData.id;
+      } else {
+        // Auto-create client role if it doesn't exist
+        const { data: newRole, error: newRoleErr } = await supabase
+          .from('roles')
+          .insert({ name: 'client', description: 'Portal client access', is_system: true })
+          .select('id').single();
+        if (newRoleErr) throw new Error(`Error creando rol de cliente: ${newRoleErr.message}`);
+        roleId = newRole.id;
+      }
+
+      // 2. Check if invitation already exists for this client
+      const { data: existing } = await supabase
+        .from('invitations')
+        .select('token')
+        .eq('email', selectedClient.email)
+        .eq('tenant_id', currentTenant.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (existing?.token) {
+        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${existing.token}&portal=client`);
+        return;
+      }
+
+      // 3. Create invitation — try with all fields, fallback if columns don't match
+      const invitePayload: Record<string, any> = {
+        email: selectedClient.email,
+        role_id: roleId,
+        tenant_id: currentTenant.id,
+        created_by: user?.id,
+        status: 'pending',
+      };
+
+      // Try with client_id and type (might not exist in all schemas)
       const { data: invite, error: inviteError } = await supabase
         .from('invitations')
-        .insert({ email: selectedClient.email, role_id: roleData.id, tenant_id: currentTenant.id, client_id: selectedClient.id, created_by: user?.id, type: 'client' })
+        .insert({ ...invitePayload, client_id: selectedClient.id, type: 'client' })
         .select('token').single();
-      if (inviteError) throw inviteError;
-      setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+
+      if (inviteError) {
+        // Retry without client_id/type in case those columns don't exist
+        const { data: invite2, error: inviteError2 } = await supabase
+          .from('invitations')
+          .insert(invitePayload)
+          .select('token').single();
+        if (inviteError2) throw new Error(`Error creando invitación: ${inviteError2.message}`);
+        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`);
+      } else {
+        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+      }
+
+      // 4. Log to history
+      if (selectedClient) {
+        await addHistoryEntry({
+          client_id: selectedClient.id,
+          user_id: user?.id || '',
+          user_name: user?.email?.split('@')[0] || 'User',
+          action_type: 'email',
+          action_description: `Invitación al portal enviada a ${selectedClient.email}`,
+          action_date: new Date().toISOString(),
+        });
+      }
     } catch (err: any) {
-      setPortalInviteError(err.message || 'Error creating invitation');
+      console.error('[handleInvitePortal]', err);
+      setPortalInviteError(err.message || 'Error al crear invitación');
     } finally {
       setIsInvitingPortal(false);
     }
@@ -303,17 +435,20 @@ export const Clients: React.FC = () => {
   const handleCreateTask = async () => {
     if (!selectedClient || !newTaskData.title.trim()) return;
     try {
-      await createTask({
+      await createCalendarTask({
         client_id: selectedClient.id,
         owner_id: user?.id || '',
         title: newTaskData.title,
-        description: newTaskData.description,
-        priority: newTaskData.priority,
-        due_date: newTaskData.due_date || undefined,
-        completed: false
-      });
-      const updatedTasks = await getClientTasks(selectedClient.id);
-      setTasks(updatedTasks);
+        description: newTaskData.description || undefined,
+        priority: newTaskData.priority as any,
+        start_date: newTaskData.due_date || undefined,
+        status: newTaskData.status || 'todo',
+        assignee_id: newTaskData.assignee_id || undefined,
+        completed: false,
+        order_index: 0,
+      } as any);
+      // Reload unified tasks for this client
+      if (selectedClient) await loadClientData(selectedClient.id);
       await addHistoryEntry({
         client_id: selectedClient.id,
         user_id: user?.id || '',
@@ -321,7 +456,7 @@ export const Clients: React.FC = () => {
         action_type: 'task_created',
         action_description: `Tarea creada: ${newTaskData.title}`
       });
-      setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '' });
+      setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' });
       setShowNewTaskInline(false);
     } catch (err) {
       errorLogger.error('Error creando tarea', err);
@@ -337,6 +472,49 @@ export const Clients: React.FC = () => {
       }
     } catch (err) {
       errorLogger.error('Error actualizando tarea', err);
+    }
+  };
+
+  const handleToggleUnifiedTask = async (taskId: string, completed: boolean) => {
+    try {
+      await updateCalendarTask(taskId, { completed, status: completed ? 'done' : 'todo' });
+      if (selectedClient) await loadClientData(selectedClient.id);
+    } catch (err) {
+      errorLogger.error('Error actualizando tarea', err);
+    }
+  };
+
+  const handleAddSubtask = async (parentTaskId: string) => {
+    if (!newSubtaskTitle.trim() || addingSubtask) return;
+    setAddingSubtask(true);
+    try {
+      const parentTask = projectTasks.find(t => t.id === parentTaskId);
+      await createCalendarTask({
+        title: newSubtaskTitle.trim(),
+        owner_id: user?.id || '',
+        completed: false,
+        priority: (parentTask?.priority as any) || 'medium',
+        status: 'todo',
+        order_index: 0,
+        parent_task_id: parentTaskId,
+        client_id: selectedClient?.id,
+        project_id: parentTask?.project_id || undefined,
+      } as any);
+      setNewSubtaskTitle('');
+      if (selectedClient) await loadClientData(selectedClient.id);
+    } catch (err) {
+      errorLogger.error('Error creando subtarea', err);
+    } finally {
+      setAddingSubtask(false);
+    }
+  };
+
+  const handleToggleSubtask = async (subtaskId: string, completed: boolean) => {
+    try {
+      await updateCalendarTask(subtaskId, { completed, status: completed ? 'done' : 'todo' });
+      if (selectedClient) await loadClientData(selectedClient.id);
+    } catch (err) {
+      errorLogger.error('Error actualizando subtarea', err);
     }
   };
 
@@ -380,6 +558,65 @@ export const Clients: React.FC = () => {
     }
   };
 
+  const handleCreateIncome = async () => {
+    if (!selectedClient || !newIncomeData.concept.trim() || !newIncomeData.total_amount || creatingIncome) return;
+    setCreatingIncome(true);
+    try {
+      const amount = parseFloat(newIncomeData.total_amount);
+      if (isNaN(amount) || amount <= 0) throw new Error('Monto inválido');
+      await createIncome({
+        client_id: selectedClient.id,
+        client_name: selectedClient.name,
+        project_id: newIncomeData.project_id || null,
+        project_name: newIncomeData.project_id
+          ? availableProjects.find(p => p.id === newIncomeData.project_id)?.title || 'General'
+          : 'General',
+        concept: newIncomeData.concept,
+        total_amount: amount,
+        currency: newIncomeData.currency || 'USD',
+        due_date: newIncomeData.due_date || null,
+        num_installments: parseInt(newIncomeData.num_installments) || 1,
+      });
+      await addHistoryEntry({
+        client_id: selectedClient.id,
+        user_id: user?.id || '',
+        user_name: user?.email?.split('@')[0] || 'User',
+        action_type: 'payment' as any,
+        action_description: `Ingreso creado: ${newIncomeData.concept} — ${fmtMoney(amount)}`,
+        action_date: new Date().toISOString(),
+      });
+      setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD' });
+      setShowNewIncomeForm(false);
+    } catch (err: any) {
+      errorLogger.error('Error creando ingreso', err);
+      alert(err.message || 'Error al crear ingreso');
+    } finally {
+      setCreatingIncome(false);
+    }
+  };
+
+  const handleDeleteIncome = async (incomeId: string) => {
+    if (!confirm('¿Eliminar este ingreso y todas sus cuotas?')) return;
+    setDeletingIncomeId(incomeId);
+    try {
+      await deleteIncome(incomeId);
+      if (selectedClient) {
+        await addHistoryEntry({
+          client_id: selectedClient.id,
+          user_id: user?.id || '',
+          user_name: user?.email?.split('@')[0] || 'User',
+          action_type: 'note',
+          action_description: 'Ingreso eliminado',
+          action_date: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      errorLogger.error('Error eliminando ingreso', err);
+    } finally {
+      setDeletingIncomeId(null);
+    }
+  };
+
   /* ─── Filtered clients ─── */
   const filteredClients = clients.filter(c => {
     const matchesSearch = !searchQuery ||
@@ -413,7 +650,7 @@ export const Clients: React.FC = () => {
     { id: 'info', label: 'Info', icon: Icons.Users },
     { id: 'finance', label: 'Finanzas', icon: Icons.DollarSign || Icons.Activity, badge: clientFinanceSummary.overdue },
     { id: 'messages', label: 'Chat', icon: Icons.Message, badge: messages.filter(m => m.sender_type === 'client' && !m.read_at).length },
-    { id: 'tasks', label: 'Tareas', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length },
+    { id: 'tasks', label: 'Tareas', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
     { id: 'history', label: 'Historial', icon: Icons.Clock },
   ];
 
@@ -640,8 +877,14 @@ export const Clients: React.FC = () => {
                 )}
                 {portalInviteLink && (
                   <div className="mt-3 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg px-3 py-2 flex items-center gap-2">
-                    <Icons.CheckCircle size={13} />
-                    <span className="truncate">Invitación: <a href={portalInviteLink} target="_blank" rel="noreferrer" className="underline">{portalInviteLink}</a></span>
+                    <Icons.CheckCircle size={13} className="shrink-0" />
+                    <span className="truncate flex-1">Invitación creada</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(portalInviteLink); }}
+                      className="px-2 py-1 bg-emerald-100 dark:bg-emerald-500/20 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 rounded-md text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 transition-colors shrink-0"
+                    >
+                      Copiar link
+                    </button>
                   </div>
                 )}
               </div>
@@ -699,56 +942,68 @@ export const Clients: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Project assignment */}
+                      {/* Projects assignment (multiple) */}
                       <div>
-                        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">Proyecto vinculado</p>
-                        {assignedProject ? (
-                          <div className="flex items-center justify-between p-3 bg-emerald-50/80 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-                                <Icons.Briefcase size={14} className="text-emerald-600 dark:text-emerald-400" />
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Proyectos vinculados</p>
+                          {assignedProjects.length > 0 && (
+                            <span className="text-[10px] font-semibold text-zinc-400">{assignedProjects.length}</span>
+                          )}
+                        </div>
+
+                        {/* Linked projects list */}
+                        {assignedProjects.length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            {assignedProjects.map(proj => (
+                              <div key={proj.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/60 dark:border-zinc-700/40 rounded-xl">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                                    <Icons.Briefcase size={14} className="text-emerald-600 dark:text-emerald-400" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{proj.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className={`text-[10px] font-medium ${proj.status === 'Active' ? 'text-emerald-500' : proj.status === 'Pending' ? 'text-amber-500' : 'text-zinc-400'}`}>
+                                        {proj.status || 'Active'}
+                                      </span>
+                                      {typeof proj.progress === 'number' && (
+                                        <span className="text-[10px] text-zinc-400">{proj.progress}%</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleUnassignProject(proj.id)}
+                                  className="p-1.5 text-zinc-400 hover:text-rose-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                                  title="Desvincular"
+                                >
+                                  <Icons.X size={12} />
+                                </button>
                               </div>
-                              <div>
-                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{assignedProject.title}</p>
-                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Vinculado</p>
-                              </div>
-                            </div>
-                            <div className="flex gap-1.5">
-                              <button
-                                onClick={() => window.open(`/?portal=client&projectId=${assignedProject.id}`, '_blank')}
-                                className="px-2.5 py-1.5 text-[10px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800"
-                              >
-                                Ver portal
-                              </button>
-                              <button
-                                onClick={handleUnassignProject}
-                                className="px-2.5 py-1.5 text-[10px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-500"
-                              >
-                                Desvincular
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <select
-                              value={selectedProjectId}
-                              onChange={(e) => setSelectedProjectId(e.target.value)}
-                              className={inputClass + ' flex-1'}
-                            >
-                              <option value="">Seleccionar proyecto...</option>
-                              {availableProjects.filter(p => !p.client_id).map(p => (
-                                <option key={p.id} value={p.id}>{p.title}</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={handleAssignProject}
-                              disabled={!selectedProjectId}
-                              className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 disabled:opacity-40 text-xs font-semibold transition-all"
-                            >
-                              Asignar
-                            </button>
+                            ))}
                           </div>
                         )}
+
+                        {/* Assign new project */}
+                        <div className="flex gap-2">
+                          <select
+                            value={selectedProjectId}
+                            onChange={(e) => setSelectedProjectId(e.target.value)}
+                            className={inputClass + ' flex-1'}
+                          >
+                            <option value="">Vincular proyecto...</option>
+                            {availableProjects.filter(p => !p.client_id).map(p => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handleAssignProject}
+                            disabled={!selectedProjectId}
+                            className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 disabled:opacity-40 text-xs font-semibold transition-all"
+                          >
+                            Asignar
+                          </button>
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -756,6 +1011,114 @@ export const Clients: React.FC = () => {
                   {/* ─── FINANCE TAB ─── */}
                   {detailTab === 'finance' && (
                     <motion.div key="finance" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                      {/* New income form / toggle */}
+                      {showNewIncomeForm ? (
+                        <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-4 space-y-3">
+                          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Nuevo ingreso</p>
+                          <input
+                            type="text"
+                            placeholder="Concepto (ej: Desarrollo web, Diseño UX...)"
+                            value={newIncomeData.concept}
+                            onChange={e => setNewIncomeData({ ...newIncomeData, concept: e.target.value })}
+                            className={inputClass}
+                            autoFocus
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className={labelClass}>Monto total *</label>
+                              <input
+                                type="number"
+                                placeholder="0.00"
+                                min="0"
+                                step="0.01"
+                                value={newIncomeData.total_amount}
+                                onChange={e => setNewIncomeData({ ...newIncomeData, total_amount: e.target.value })}
+                                className={inputClass}
+                              />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Moneda</label>
+                              <select
+                                value={newIncomeData.currency}
+                                onChange={e => setNewIncomeData({ ...newIncomeData, currency: e.target.value })}
+                                className={inputClass}
+                              >
+                                <option value="USD">USD</option>
+                                <option value="ARS">ARS</option>
+                                <option value="EUR">EUR</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className={labelClass}>Cuotas</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="24"
+                                value={newIncomeData.num_installments}
+                                onChange={e => setNewIncomeData({ ...newIncomeData, num_installments: e.target.value })}
+                                className={inputClass}
+                              />
+                            </div>
+                            <div>
+                              <label className={labelClass}>Fecha primer vencimiento</label>
+                              <input
+                                type="date"
+                                value={newIncomeData.due_date}
+                                onChange={e => setNewIncomeData({ ...newIncomeData, due_date: e.target.value })}
+                                className={inputClass}
+                              />
+                            </div>
+                          </div>
+                          {/* Optional project link */}
+                          {availableProjects.filter(p => p.client_id === selectedClient?.id || !p.client_id).length > 0 && (
+                            <div>
+                              <label className={labelClass}>Proyecto (opcional)</label>
+                              <select
+                                value={newIncomeData.project_id}
+                                onChange={e => setNewIncomeData({ ...newIncomeData, project_id: e.target.value })}
+                                className={inputClass}
+                              >
+                                <option value="">Sin proyecto</option>
+                                {availableProjects
+                                  .filter(p => p.client_id === selectedClient?.id || !p.client_id)
+                                  .map(p => <option key={p.id} value={p.id}>{p.title}</option>)
+                                }
+                              </select>
+                            </div>
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={handleCreateIncome}
+                              disabled={!newIncomeData.concept.trim() || !newIncomeData.total_amount || creatingIncome}
+                              className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all flex items-center gap-2"
+                            >
+                              {creatingIncome ? (
+                                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                <Icons.Plus size={13} />
+                              )}
+                              {creatingIncome ? 'Creando...' : 'Crear Ingreso'}
+                            </button>
+                            <button
+                              onClick={() => { setShowNewIncomeForm(false); setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD' }); }}
+                              className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowNewIncomeForm(true)}
+                          className="w-full p-3 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors mb-4 flex items-center justify-center gap-1.5"
+                        >
+                          <Icons.Plus size={13} />
+                          Agregar ingreso
+                        </button>
+                      )}
+
                       {clientIncomes.length > 0 ? (
                         <div className="space-y-4">
                           {/* Progress bar */}
@@ -783,10 +1146,11 @@ export const Clients: React.FC = () => {
                           {clientIncomes.map(income => {
                             const installments = income.installments || [];
                             const paidInst = installments.filter(i => i.status === 'paid');
+                            const isDeleting = deletingIncomeId === income.id;
                             return (
-                              <div key={income.id} className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl overflow-hidden">
+                              <div key={income.id} className={`bg-zinc-50 dark:bg-zinc-800/40 rounded-xl overflow-hidden transition-opacity ${isDeleting ? 'opacity-40' : ''}`}>
                                 {/* Income header */}
-                                <div className="p-4 flex items-center justify-between">
+                                <div className="p-4 flex items-center justify-between group">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{income.concept || 'Ingreso'}</p>
@@ -805,7 +1169,17 @@ export const Clients: React.FC = () => {
                                       {income.due_date ? ` · Vence ${fmtShortDate(income.due_date)}` : ''}
                                     </p>
                                   </div>
-                                  <p className="text-base font-bold text-zinc-900 dark:text-zinc-100 ml-4">{fmtMoney(income.total_amount)}</p>
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">{fmtMoney(income.total_amount)}</p>
+                                    <button
+                                      onClick={() => handleDeleteIncome(income.id)}
+                                      disabled={isDeleting}
+                                      className="p-1.5 text-zinc-300 hover:text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                      title="Eliminar ingreso"
+                                    >
+                                      <Icons.Trash size={13} />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {/* Installments */}
@@ -853,17 +1227,17 @@ export const Clients: React.FC = () => {
                             );
                           })}
                         </div>
-                      ) : (
-                        <div className="text-center py-12">
+                      ) : !showNewIncomeForm ? (
+                        <div className="text-center py-8">
                           <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
                             {Icons.DollarSign ? <Icons.DollarSign size={20} className="text-zinc-400" /> : <Icons.Activity size={20} className="text-zinc-400" />}
                           </div>
                           <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin registros financieros</p>
                           <p className="text-[10px] text-zinc-400 mt-1 max-w-xs mx-auto">
-                            Agrega ingresos vinculados a este cliente desde la sección de Finanzas para verlos aquí.
+                            Usa el botón de arriba para agregar el primer ingreso de este cliente.
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </motion.div>
                   )}
 
@@ -935,8 +1309,36 @@ export const Clients: React.FC = () => {
                   {/* ─── TASKS TAB ─── */}
                   {detailTab === 'tasks' && (
                     <motion.div key="tasks" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                      {/* Project filter bar */}
+                      {assignedProjects.length > 0 && (
+                        <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
+                          <button
+                            onClick={() => setTaskProjectFilter('all')}
+                            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors ${taskProjectFilter === 'all' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
+                          >
+                            Todas
+                          </button>
+                          <button
+                            onClick={() => setTaskProjectFilter('general')}
+                            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors ${taskProjectFilter === 'general' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
+                          >
+                            General
+                          </button>
+                          {assignedProjects.map(proj => (
+                            <button
+                              key={proj.id}
+                              onClick={() => setTaskProjectFilter(proj.id)}
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors ${taskProjectFilter === proj.id ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
+                            >
+                              {proj.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* New task form */}
                       {showNewTaskInline ? (
-                        <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-4 space-y-3">
+                        <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-4 space-y-3 border border-zinc-200/60 dark:border-zinc-700/60">
                           <input
                             type="text"
                             placeholder="Título de la tarea..."
@@ -944,24 +1346,65 @@ export const Clients: React.FC = () => {
                             onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
                             className={inputClass}
                             autoFocus
-                            onKeyDown={e => e.key === 'Enter' && handleCreateTask()}
+                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleCreateTask()}
+                          />
+                          <textarea
+                            placeholder="Descripción (opcional)..."
+                            value={newTaskData.description}
+                            onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
+                            className={`${inputClass} resize-none`}
+                            rows={2}
                           />
                           <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={newTaskData.priority}
-                              onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
-                              className={inputClass}
-                            >
-                              <option value="low">Baja</option>
-                              <option value="medium">Media</option>
-                              <option value="high">Alta</option>
-                            </select>
-                            <input
-                              type="date"
-                              value={newTaskData.due_date}
-                              onChange={(e) => setNewTaskData({ ...newTaskData, due_date: e.target.value })}
-                              className={inputClass}
-                            />
+                            <div>
+                              <label className={labelClass}>Prioridad</label>
+                              <select
+                                value={newTaskData.priority}
+                                onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
+                                className={inputClass}
+                              >
+                                <option value="low">Baja</option>
+                                <option value="medium">Media</option>
+                                <option value="high">Alta</option>
+                                <option value="urgent">Urgente</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={labelClass}>Fecha</label>
+                              <input
+                                type="date"
+                                value={newTaskData.due_date}
+                                onChange={(e) => setNewTaskData({ ...newTaskData, due_date: e.target.value })}
+                                className={inputClass}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className={labelClass}>Asignar a</label>
+                              <select
+                                value={newTaskData.assignee_id}
+                                onChange={(e) => setNewTaskData({ ...newTaskData, assignee_id: e.target.value })}
+                                className={inputClass}
+                              >
+                                <option value="">Sin asignar</option>
+                                {teamMembers.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name || m.email}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className={labelClass}>Estado</label>
+                              <select
+                                value={newTaskData.status}
+                                onChange={(e) => setNewTaskData({ ...newTaskData, status: e.target.value as any })}
+                                className={inputClass}
+                              >
+                                <option value="todo">Por hacer</option>
+                                <option value="in-progress">En progreso</option>
+                                <option value="done">Completada</option>
+                              </select>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -972,7 +1415,7 @@ export const Clients: React.FC = () => {
                               Crear Tarea
                             </button>
                             <button
-                              onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '' }); }}
+                              onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' }); }}
                               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             >
                               Cancelar
@@ -989,26 +1432,85 @@ export const Clients: React.FC = () => {
                         </button>
                       )}
 
-                      <div className="space-y-1">
-                        {tasks.length > 0 ? (
-                          <>
-                            {/* Pending tasks first */}
-                            {tasks.filter(t => !t.completed).map(task => {
-                              const pcfg = priorityConfig[task.priority] || priorityConfig.medium;
+                      {/* Unified task list: client_tasks (general) + project tasks */}
+                      {(() => {
+                        // Build unified task list
+                        type UnifiedTask = { id: string; title: string; completed: boolean; priority: string; due_date?: string; source: 'client' | 'project' | 'calendar'; project_name?: string; project_id?: string };
+                        const generalTasks: UnifiedTask[] = tasks.map(t => ({
+                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
+                          due_date: t.due_date, source: 'client' as const
+                        }));
+                        // Split unified tasks into project-linked and direct (calendar-created with client_id only)
+                        const projTasks: UnifiedTask[] = projectTasks.filter(t => t.project_id).map(t => ({
+                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
+                          due_date: t.due_date || t.start_date, source: 'project' as const, project_name: t.project_name, project_id: t.project_id
+                        }));
+                        const calendarTasks: UnifiedTask[] = projectTasks.filter(t => !t.project_id).map(t => ({
+                          id: t.id, title: t.title, completed: t.completed, priority: t.priority || 'medium',
+                          due_date: t.due_date || t.start_date, source: 'calendar' as const
+                        }));
+
+                        // Apply filter
+                        let filtered: UnifiedTask[];
+                        if (taskProjectFilter === 'all') filtered = [...generalTasks, ...calendarTasks, ...projTasks];
+                        else if (taskProjectFilter === 'general') filtered = [...generalTasks, ...calendarTasks];
+                        else filtered = projTasks.filter(t => t.project_id === taskProjectFilter);
+
+                        const pending = filtered.filter(t => !t.completed);
+                        const completed = filtered.filter(t => t.completed);
+                        const totalCount = filtered.length;
+                        const completedCount = completed.length;
+
+                        if (totalCount === 0) {
+                          return (
+                            <div className="text-center py-8">
+                              <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
+                                <Icons.CheckCircle size={18} className="text-zinc-400" />
+                              </div>
+                              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin tareas</p>
+                              {taskProjectFilter !== 'all' && (
+                                <button onClick={() => setTaskProjectFilter('all')} className="text-[10px] text-zinc-400 hover:text-zinc-600 mt-1">
+                                  Ver todas
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-1">
+                            {/* Progress summary */}
+                            <div className="flex items-center gap-3 px-3 pb-2">
+                              <div className="flex-1 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-500 ${completedCount === totalCount ? 'bg-emerald-500' : 'bg-zinc-900 dark:bg-zinc-200'}`} style={{ width: `${totalCount ? Math.round((completedCount / totalCount) * 100) : 0}%` }} />
+                              </div>
+                              <span className="text-[10px] text-zinc-400 font-mono shrink-0">{completedCount}/{totalCount}</span>
+                            </div>
+
+                            {/* Pending tasks */}
+                            {pending.map(task => {
+                              const pcfg = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.medium;
                               return (
-                                <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group">
+                                <div key={`${task.source}-${task.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group">
                                   <button
-                                    onClick={() => handleToggleTask(task.id, true)}
-                                    className="w-5 h-5 rounded-md border-2 border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 flex items-center justify-center shrink-0 transition-all"
-                                  />
+                                    onClick={() => task.source === 'client' ? handleToggleTask(task.id, true) : (async () => { await supabase.from('tasks').update({ completed: true }).eq('id', task.id); if (selectedClient) await loadClientData(selectedClient.id); })()}
+                                    className="w-5 h-5 rounded-md border-2 border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 flex items-center justify-center shrink-0 transition-all group-hover:text-emerald-400"
+                                  >
+                                    <Icons.Check size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-zinc-900 dark:text-zinc-100">{task.title}</p>
-                                    {task.due_date && (
-                                      <p className="text-[10px] text-zinc-400 mt-0.5 flex items-center gap-1">
-                                        <Icons.Clock size={10} />
-                                        {fmtShortDate(task.due_date)}
-                                      </p>
-                                    )}
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {task.project_name && taskProjectFilter === 'all' && (
+                                        <span className="text-[10px] text-blue-500 dark:text-blue-400 font-medium">{task.project_name}</span>
+                                      )}
+                                      {task.due_date && (
+                                        <span className="text-[10px] text-zinc-400 flex items-center gap-0.5">
+                                          <Icons.Clock size={9} />
+                                          {fmtShortDate(task.due_date)}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${pcfg.bg} ${pcfg.text}`}>
                                     {pcfg.label}
@@ -1016,33 +1518,32 @@ export const Clients: React.FC = () => {
                                 </div>
                               );
                             })}
+
                             {/* Completed tasks */}
-                            {tasks.filter(t => t.completed).length > 0 && (
+                            {completed.length > 0 && (
                               <>
                                 <p className="text-[10px] font-semibold text-zinc-300 dark:text-zinc-600 uppercase tracking-wider pt-3 pb-1 px-3">Completadas</p>
-                                {tasks.filter(t => t.completed).map(task => (
-                                  <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors opacity-60">
+                                {completed.map(task => (
+                                  <div key={`${task.source}-${task.id}`} className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors opacity-60 group">
                                     <button
-                                      onClick={() => handleToggleTask(task.id, false)}
+                                      onClick={() => task.source === 'client' ? handleToggleTask(task.id, false) : (async () => { await supabase.from('tasks').update({ completed: false }).eq('id', task.id); if (selectedClient) await loadClientData(selectedClient.id); })()}
                                       className="w-5 h-5 rounded-md bg-emerald-500 border-2 border-emerald-500 flex items-center justify-center shrink-0"
                                     >
                                       <Icons.Check size={12} className="text-white" />
                                     </button>
-                                    <p className="text-sm line-through text-zinc-400 flex-1 truncate">{task.title}</p>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm line-through text-zinc-400 truncate">{task.title}</p>
+                                      {task.project_name && taskProjectFilter === 'all' && (
+                                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600">{task.project_name}</span>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </>
                             )}
-                          </>
-                        ) : (
-                          <div className="text-center py-8">
-                            <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                              <Icons.CheckCircle size={18} className="text-zinc-400" />
-                            </div>
-                            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin tareas</p>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </motion.div>
                   )}
 

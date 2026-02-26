@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTenant } from '../context/TenantContext'
 import { useAuth } from '../hooks/useAuth'
@@ -55,7 +55,7 @@ const tenantScopedTables = new Set([
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export function useSupabase<T = any>(table: string, options: UseSupabaseOptions = {}) {
-  const { currentTenant } = useTenant()
+  const { currentTenant, isLoading: tenantLoading } = useTenant()
   const { user, loading: authLoading } = useAuth()
   const { enabled = true, subscribe = true, select = '*', revalidate = true } = options
   const cacheKey = `${table}:${currentTenant?.id || user?.id || 'anon'}:${select}`
@@ -65,9 +65,6 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
   const [data, setData] = useState<T[]>(() => initialCache || [])
   const [loading, setLoading] = useState(() => !initialCache)
   const [error, setError] = useState<string | null>(null)
-  const [retryTick, setRetryTick] = useState(0)
-  const retryCountRef = useRef(0)
-  const MAX_TENANT_RETRIES = 3
 
   const resolveTenantId = async () => {
     if (currentTenant?.id) {
@@ -133,6 +130,12 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       return
     }
 
+    // For tenant-scoped tables, wait for TenantContext to finish loading
+    // instead of doing redundant profile queries and retry loops
+    if (tenantScopedTables.has(table) && tenantLoading) {
+      return
+    }
+
     let isMounted = true
     let cleanup: (() => void) | undefined
 
@@ -146,28 +149,13 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
       }
     }
 
-    let retryTimeout: ReturnType<typeof setTimeout> | undefined
-
     const fetchAndSubscribe = async () => {
       const requiresTenant = tenantScopedTables.has(table)
-      const tenantId = requiresTenant ? await resolveTenantId() : currentTenant?.id || null
+      const tenantId = currentTenant?.id || null
+
       if (requiresTenant && !tenantId) {
-        if (!isMounted) return
-        retryCountRef.current += 1
-        if (retryCountRef.current <= MAX_TENANT_RETRIES) {
-          errorLogger.warn(`Tenant not ready for ${table}, retry ${retryCountRef.current}/${MAX_TENANT_RETRIES}`)
-          // Only show loading if we have no cached data
-          if (!hasCache) setLoading(true)
-          retryTimeout = setTimeout(() => {
-            if (isMounted) setRetryTick((tick) => tick + 1)
-          }, 500)
-          return
-        }
-        errorLogger.warn(`Tenant resolution failed for ${table} after ${MAX_TENANT_RETRIES} retries, fetching without tenant filter`)
-        // Fall through to fetch without tenant filter rather than blocking forever
+        errorLogger.warn(`No tenant available for ${table}, fetching without tenant filter`)
       }
-      // Reset retry count on success
-      retryCountRef.current = 0
 
       if (!hasCache) {
         setLoading(true)
@@ -347,10 +335,9 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
 
     return () => {
       isMounted = false
-      if (retryTimeout) clearTimeout(retryTimeout)
       cleanup?.()
     }
-  }, [table, user?.id, currentTenant?.id, authLoading, enabled, subscribe, select, revalidate, retryTick])
+  }, [table, user?.id, currentTenant?.id, authLoading, tenantLoading, enabled, subscribe, select, revalidate])
 
   const add = async (record: Omit<T, 'id'>) => {
     try {

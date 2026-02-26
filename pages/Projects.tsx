@@ -195,7 +195,7 @@ export const Projects: React.FC = () => {
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
-    select: 'id,title,completed,project_id,due_date,assignee_id,priority,group_name'
+    select: 'id,title,completed,project_id,due_date,assignee_id,priority,group_name,parent_task_id,status'
   });
 
   // Loading timeout — prevents infinite spinner
@@ -236,6 +236,7 @@ export const Projects: React.FC = () => {
   const [clientInviteError, setClientInviteError] = useState<string | null>(null);
   const [isInvitingClient, setIsInvitingClient] = useState(false);
   const [sidebarFilter, setSidebarFilter] = useState<'all' | 'client' | 'personal'>('all');
+  const [quickTaskTitle, setQuickTaskTitle] = useState('');
   const [timelineNewStart, setTimelineNewStart] = useState('');
   const [timelineNewEnd, setTimelineNewEnd] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
@@ -244,9 +245,17 @@ export const Projects: React.FC = () => {
   const [aiError, setAiError] = useState<string | null>(null);
 
   const selectedProject = projects.find(p => p.id === selectedId) || projects[0];
-  const projectTasks = selectedProject
+  const allProjectTasks = selectedProject
     ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
     : [];
+  // Separate parent tasks from subtasks
+  const projectTasks = allProjectTasks.filter((t: any) => !t.parent_task_id);
+  const projectSubtasks = allProjectTasks.filter((t: any) => !!t.parent_task_id);
+  const getSubtasksFor = (taskId: string) => projectSubtasks.filter((s: any) => s.parent_task_id === taskId);
+
+  // Subtask UI state
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   /* ─── Derive phase groups ─── */
   const derivedTasksGroups = useMemo(() => {
@@ -257,6 +266,7 @@ export const Projects: React.FC = () => {
       groupMap.get(gName)!.tasks.push({
         id: task.id, title: task.title, done: !!task.completed,
         assignee: task.assignee_id || '', dueDate: task.due_date || undefined,
+        priority: task.priority || 'medium', status: task.status || 'todo',
       });
     }
     if (selectedProject) {
@@ -452,6 +462,23 @@ export const Projects: React.FC = () => {
     await logActivity({ action: 'added phase', target: newGroupName.trim(), project_title: selectedProject.title, type: 'project_update' });
   };
 
+  const handleQuickTask = async () => {
+    if (!selectedProject) return;
+    const title = quickTaskTitle.trim();
+    if (!title) return;
+    setTaskError(null);
+    try {
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: 'General', due_date: new Date().toISOString().slice(0, 10) } as any);
+      setQuickTaskTitle('');
+      setTimeout(() => refreshTasks(), 1000);
+      await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
+    } catch (err: any) {
+      errorLogger.error('Error creando tarea rápida', err);
+      setTaskError(err?.message || 'Error al crear tarea');
+      setTimeout(() => setTaskError(null), 5000);
+    }
+  };
+
   const handleAddTask = async (groupIdx: number) => {
     if (!selectedProject) return;
     const title = newTaskTitle[groupIdx]?.trim();
@@ -459,7 +486,7 @@ export const Projects: React.FC = () => {
     const groupName = derivedTasksGroups[groupIdx]?.name || 'General';
     setTaskError(null);
     try {
-      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, assignee_id: currentUser?.id || null, priority: 'medium', group_name: groupName } as any);
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: groupName, due_date: new Date().toISOString().slice(0, 10) } as any);
       setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }));
       // Safety net: refresh tasks after a short delay in case realtime doesn't fire
       setTimeout(() => refreshTasks(), 1000);
@@ -494,6 +521,46 @@ export const Projects: React.FC = () => {
       await logActivity({ action: 'deleted task', target: taskTitle, project_title: selectedProject.title, type: 'project_update' });
     } catch (err: any) {
       errorLogger.error('Error eliminando tarea', err);
+    }
+  };
+
+  // ─── Subtask handlers ───
+  const handleAddSubtask = async (parentTaskId: string) => {
+    if (!selectedProject || !newSubtaskTitle.trim()) return;
+    try {
+      await addSyncedTask({
+        title: newSubtaskTitle.trim(),
+        completed: false,
+        project_id: selectedProject.id,
+        parent_task_id: parentTaskId,
+        priority: 'medium',
+        status: 'todo',
+        assignee_id: currentUser?.id || null,
+        group_name: null,
+        due_date: null,
+      } as any);
+      setNewSubtaskTitle('');
+      setTimeout(() => refreshTasks(), 800);
+    } catch (err: any) {
+      errorLogger.error('Error creando subtarea', err);
+    }
+  };
+
+  const handleToggleSubtask = async (subtaskId: string, currentCompleted: boolean) => {
+    try {
+      await updateSyncedTask(subtaskId, { completed: !currentCompleted, status: !currentCompleted ? 'done' : 'todo' } as any);
+      setTimeout(() => refreshTasks(), 800);
+    } catch (err: any) {
+      errorLogger.error('Error actualizando subtarea', err);
+    }
+  };
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    try {
+      await removeSyncedTask(subtaskId);
+      setTimeout(() => refreshTasks(), 500);
+    } catch (err: any) {
+      errorLogger.error('Error eliminando subtarea', err);
     }
   };
 
@@ -542,9 +609,11 @@ export const Projects: React.FC = () => {
           title: task.title,
           completed: false,
           project_id: selectedProject.id,
+          client_id: (selectedProject as any).client_id || null,
           assignee_id: currentUser?.id || null,
           priority: task.priority || 'medium',
           group_name: phase.name,
+          due_date: new Date().toISOString().slice(0, 10),
         } as any))
       );
       await Promise.all(taskInserts);
@@ -1151,61 +1220,106 @@ export const Projects: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Client info card (if linked) */}
-                      {selectedClient && (
-                        <div className="p-4 bg-blue-50/50 dark:bg-blue-500/5 rounded-xl border border-blue-100 dark:border-blue-500/10 flex items-center gap-4">
-                          {selectedClient.avatar_url ? (
-                            <img src={selectedClient.avatar_url} alt={selectedClient.name} className="w-10 h-10 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-sm font-bold text-white">
-                              {selectedClient.name.substring(0, 2).toUpperCase()}
+                      {/* Client assignment + info card */}
+                      <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Cliente</h3>
+                        {selectedClient ? (
+                          <div className="flex items-center gap-3 mb-3">
+                            {selectedClient.avatar_url ? (
+                              <img src={selectedClient.avatar_url} alt={selectedClient.name} className="w-9 h-9 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-xs font-bold text-white">
+                                {selectedClient.name.substring(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{selectedClient.name}</div>
+                              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+                                {[selectedClient.company, selectedClient.email].filter(Boolean).join(' · ')}
+                              </div>
                             </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{selectedClient.name}</div>
-                            <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                              {[selectedClient.company, selectedClient.email].filter(Boolean).join(' · ')}
-                            </div>
+                            <button
+                              onClick={() => handleUpdateProject({ client_id: null, client: 'TBD', clientName: 'TBD' } as any)}
+                              className="p-1 text-zinc-300 hover:text-red-400 transition-colors"
+                              title="Desvincular cliente"
+                            >
+                              <Icons.X size={14} />
+                            </button>
                           </div>
-                          <div className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                            selectedClient.status === 'active' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
-                              : selectedClient.status === 'prospect' ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
-                              : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                          }`}>
-                            {selectedClient.status}
-                          </div>
-                        </div>
-                      )}
+                        ) : (
+                          <p className="text-xs text-zinc-400 mb-2">Proyecto propio — sin cliente asignado.</p>
+                        )}
+                        <select
+                          value={selectedProject.client_id || ''}
+                          onChange={e => {
+                            const cid = e.target.value || null;
+                            const client = clients.find(c => c.id === cid);
+                            handleUpdateProject({
+                              client_id: cid,
+                              client: client?.name || 'TBD',
+                              clientName: client?.name || 'TBD',
+                            } as any);
+                          }}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600"
+                        >
+                          <option value="">Sin cliente (proyecto propio)</option>
+                          {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>)}
+                        </select>
+                      </div>
                     </div>
                     {/* Right column */}
                     <div className="col-span-1 space-y-6">
-                      {/* Team */}
+                      {/* Team (interactive) */}
                       <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                         <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-4">Team</h3>
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2.5">
                           {selectedProject.team.map(userId => {
                             const member = members.find(m => m.id === userId);
                             if (!member) return null;
                             return (
-                              <div key={member.id} className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+                              <div key={member.id} className="flex items-center gap-3 group">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0">
                                   {member.avatar_url ? (
                                     <img src={member.avatar_url} alt={member.name || ''} className="w-full h-full object-cover" />
                                   ) : (
                                     (member.name || member.email).substring(0, 2).toUpperCase()
                                   )}
                                 </div>
-                                <div className="overflow-hidden">
+                                <div className="flex-1 overflow-hidden">
                                   <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{member.name || member.email}</div>
                                   <div className="text-[10px] text-zinc-500 dark:text-zinc-400">{member.role}</div>
                                 </div>
+                                <button
+                                  onClick={() => handleUpdateProject({ team: selectedProject.team.filter(id => id !== userId) })}
+                                  className="p-1 rounded-md opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition-all shrink-0"
+                                  title="Quitar del equipo"
+                                >
+                                  <Icons.X size={12} />
+                                </button>
                               </div>
                             );
                           })}
                           {selectedProject.team.length === 0 && (
-                            <p className="text-xs text-zinc-400">No team members assigned yet.</p>
+                            <p className="text-xs text-zinc-400 mb-1">Sin miembros asignados.</p>
                           )}
                         </div>
+                        {/* Add member dropdown */}
+                        {members.filter(m => !selectedProject.team.includes(m.id)).length > 0 && (
+                          <select
+                            value=""
+                            onChange={e => {
+                              if (!e.target.value) return;
+                              if (selectedProject.team.includes(e.target.value)) return;
+                              handleUpdateProject({ team: [...selectedProject.team, e.target.value] });
+                            }}
+                            className="w-full mt-3 px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 transition-colors"
+                          >
+                            <option value="">+ Agregar miembro...</option>
+                            {members.filter(m => !selectedProject.team.includes(m.id)).map(m => (
+                              <option key={m.id} value={m.id}>{m.name || m.email} ({m.role})</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
 
                       {/* Tags */}
@@ -1374,6 +1488,26 @@ export const Projects: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* ── Quick task (pinned) ── */}
+                    <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                      <Icons.Plus size={16} className="text-zinc-400 shrink-0" />
+                      <input
+                        value={quickTaskTitle}
+                        onChange={e => setQuickTaskTitle(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleQuickTask()}
+                        placeholder="Tarea rápida... (Enter para crear)"
+                        className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none"
+                      />
+                      {quickTaskTitle.trim() && (
+                        <button
+                          onClick={handleQuickTask}
+                          className="px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity active:scale-95"
+                        >
+                          Crear
+                        </button>
+                      )}
+                    </div>
+
                     {/* ── Phase groups ── */}
                     {derivedTasksGroups.map((group: any, gIdx: number) => {
                       const doneCount = group.tasks.filter((t: any) => t.done).length;
@@ -1401,36 +1535,129 @@ export const Projects: React.FC = () => {
 
                           {/* Tasks */}
                           <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
-                            {group.tasks.map((task: any) => (
-                              <div key={task.id} className="group/task flex items-center gap-3 px-5 py-3 hover:bg-zinc-50/80 dark:hover:bg-zinc-800/20 transition-colors">
-                                <button
-                                  onClick={() => handleToggleTask(gIdx, task.id)}
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                                    task.done
-                                      ? 'bg-emerald-500 border-emerald-500 text-white'
-                                      : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 text-transparent'
-                                  }`}
-                                >
-                                  <Icons.Check size={11} strokeWidth={3} />
-                                </button>
-                                <span className={`flex-1 text-sm transition-colors ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200'}`}>
-                                  {task.title}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {task.dueDate && (
-                                    <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-mono">
-                                      {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                    </span>
-                                  )}
-                                  <button
-                                    onClick={() => handleDeleteTask(task.id, task.title)}
-                                    className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover/task:opacity-100"
-                                  >
-                                    <Icons.Trash size={13} />
-                                  </button>
+                            {group.tasks.map((task: any) => {
+                              const subs = getSubtasksFor(task.id);
+                              const subsCompleted = subs.filter((s: any) => s.completed).length;
+                              const isExpanded = expandedTaskId === task.id;
+                              const priorityColor = task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500';
+                              return (
+                                <div key={task.id}>
+                                  <div className="group/task flex items-center gap-3 px-5 py-3 hover:bg-zinc-50/80 dark:hover:bg-zinc-800/20 transition-colors">
+                                    <button
+                                      onClick={() => handleToggleTask(gIdx, task.id)}
+                                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                        task.done
+                                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                                          : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 text-transparent'
+                                      }`}
+                                    >
+                                      <Icons.Check size={11} strokeWidth={3} />
+                                    </button>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-sm transition-colors truncate ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                                          {task.title}
+                                        </span>
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
+                                      </div>
+                                      {subs.length > 0 && (
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <div className="w-12 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${subs.length ? Math.round(subsCompleted / subs.length * 100) : 0}%` }} />
+                                          </div>
+                                          <span className="text-[9px] text-zinc-400 tabular-nums">{subsCompleted}/{subs.length}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      {task.dueDate ? (
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                                          new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10)) && !task.done
+                                            ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
+                                            : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
+                                        }`}>
+                                          {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full font-medium italic">
+                                          Sin fecha
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                                        className={`p-1 rounded-md transition-all ${isExpanded ? 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500'}`}
+                                        title="Subtareas"
+                                      >
+                                        <Icons.ChevronDown size={13} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteTask(task.id, task.title)}
+                                        className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover/task:opacity-100"
+                                      >
+                                        <Icons.Trash size={13} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {/* Subtasks panel */}
+                                  <AnimatePresence initial={false}>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.15 }}
+                                        className="overflow-hidden"
+                                      >
+                                        <div className="pl-12 pr-5 pb-3 space-y-1">
+                                          {subs.map((sub: any) => (
+                                            <div key={sub.id} className="flex items-center gap-2 group/sub py-1">
+                                              <button
+                                                onClick={() => handleToggleSubtask(sub.id, sub.completed)}
+                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                                                  sub.completed
+                                                    ? 'bg-emerald-500 border-emerald-500'
+                                                    : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400'
+                                                }`}
+                                              >
+                                                {sub.completed && <Icons.Check size={9} className="text-white" strokeWidth={3} />}
+                                              </button>
+                                              <span className={`flex-1 text-xs ${sub.completed ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                                {sub.title}
+                                              </span>
+                                              <button
+                                                onClick={() => handleDeleteSubtask(sub.id)}
+                                                className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/sub:opacity-100 transition-all"
+                                              >
+                                                <Icons.X size={10} />
+                                              </button>
+                                            </div>
+                                          ))}
+                                          {/* Add subtask input */}
+                                          <div className="flex items-center gap-2 pt-1">
+                                            <div className="w-4 h-4 rounded border-2 border-dashed border-zinc-200 dark:border-zinc-700 shrink-0" />
+                                            <input
+                                              value={expandedTaskId === task.id ? newSubtaskTitle : ''}
+                                              onChange={e => setNewSubtaskTitle(e.target.value)}
+                                              onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(task.id); }}
+                                              placeholder="Agregar subtarea..."
+                                              className="flex-1 bg-transparent text-xs text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 focus:outline-none"
+                                            />
+                                            {newSubtaskTitle.trim() && (
+                                              <button
+                                                onClick={() => handleAddSubtask(task.id)}
+                                                className="px-2 py-0.5 text-[10px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity"
+                                              >
+                                                +
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
 
                             {/* Add task input */}
                             <div className="flex items-center gap-2 px-5 py-2.5">

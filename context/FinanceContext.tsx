@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from '../context/TenantContext'
@@ -173,6 +173,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [finances, setFinances] = useState<Finance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
   const [canViewFinances, setCanViewFinances] = useState(false)
   const [canEditFinances, setCanEditFinances] = useState(false)
 
@@ -212,7 +213,10 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       return
     }
     try {
-      setLoading(true)
+      // Only show loading on first load, not on background re-fetches
+      if (!hasLoadedRef.current) {
+        setLoading(true)
+      }
       setError(null)
       const { data, error: err } = await supabase
         .from('finances')
@@ -221,6 +225,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         .order('updated_at', { ascending: false })
       if (err) throw err
       setFinances(data || [])
+      hasLoadedRef.current = true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load financial data')
       setFinances([])

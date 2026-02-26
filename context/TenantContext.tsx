@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -142,6 +142,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     const [tenantUsage, setTenantUsage] = useState<TenantUsage | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const hasLoadedRef = useRef(false);
 
     const buildTenantSlug = useCallback((value: string) => {
         const slug = value
@@ -234,7 +235,10 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             return;
         }
 
-        setIsLoading(true);
+        // Only show loading spinner on first load, not on background re-fetches
+        if (!hasLoadedRef.current) {
+            setIsLoading(true);
+        }
         setError(null);
 
         try {
@@ -274,6 +278,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             }
 
             setCurrentTenant(tenantResult.data);
+            hasLoadedRef.current = true;
             console.log('[TenantContext] Tenant loaded:', tenantResult.data.id);
 
             if (configResult.data && !configResult.error) {

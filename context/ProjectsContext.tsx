@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { useAuth } from '../hooks/useAuth'
@@ -85,6 +85,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const hasLoadedRef = useRef(false)
 
   // Resolve tenant_id with profile fallback (same approach as useSupabase)
   const resolveTenantId = useCallback(async (): Promise<string | null> => {
@@ -164,7 +165,10 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return
     }
 
-    setLoading(true)
+    // Only show loading on first load, not on realtime-triggered refreshes
+    if (!hasLoadedRef.current) {
+      setLoading(true)
+    }
     setError(null)
 
     try {
@@ -194,6 +198,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const normalized = (data || []).map(normalizeProject)
         setProjects(normalized)
       }
+      hasLoadedRef.current = true
       setIsInitialized(true)
     } catch (err: any) {
       errorLogger.error('Error fetching projects', err)

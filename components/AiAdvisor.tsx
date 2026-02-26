@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './ui/Icons';
 import { generateAdvisorInsights, AdvisorInsight } from '../lib/ai';
@@ -11,7 +11,7 @@ const AREA_CONFIG: Record<string, { gradient: string; iconBg: string; border: st
   projects: { gradient: 'from-blue-500/8 to-transparent', iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', border: 'border-blue-500/10', accent: 'text-blue-600 dark:text-blue-400' },
   finance: { gradient: 'from-emerald-500/8 to-transparent', iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/10', accent: 'text-emerald-600 dark:text-emerald-400' },
   marketing: { gradient: 'from-fuchsia-500/8 to-transparent', iconBg: 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400', border: 'border-fuchsia-500/10', accent: 'text-fuchsia-600 dark:text-fuchsia-400' },
-  team: { gradient: 'from-violet-500/8 to-transparent', iconBg: 'bg-violet-500/10 text-violet-600 dark:text-violet-400', border: 'border-violet-500/10', accent: 'text-violet-600 dark:text-violet-400' },
+  team: { gradient: 'from-sky-500/8 to-transparent', iconBg: 'bg-sky-500/10 text-sky-600 dark:text-sky-400', border: 'border-sky-500/10', accent: 'text-sky-600 dark:text-sky-400' },
   planning: { gradient: 'from-amber-500/8 to-transparent', iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', border: 'border-amber-500/10', accent: 'text-amber-600 dark:text-amber-400' },
 };
 
@@ -37,6 +37,51 @@ const getIconComponent = (iconName: string) => {
   return map[iconName] || Icons.Sparkles;
 };
 
+const LOADING_STEPS = [
+  { text: 'Revisando proyectos activos...', icon: Icons.Briefcase },
+  { text: 'Analizando finanzas e ingresos...', icon: Icons.TrendingUp },
+  { text: 'Evaluando equipo y productividad...', icon: Icons.Users },
+  { text: 'Generando recomendaciones...', icon: Icons.Sparkles },
+];
+
+const ORB_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+
+const LoadingOrb: React.FC = () => (
+  <div className="relative w-16 h-16">
+    {/* Rotating gradient ring */}
+    <motion.div
+      className="absolute inset-0 rounded-2xl"
+      style={{
+        background: 'conic-gradient(from 0deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)',
+        padding: '2px',
+      }}
+      animate={{ rotate: 360 }}
+      transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+    >
+      <div className="w-full h-full rounded-2xl bg-white dark:bg-zinc-900" />
+    </motion.div>
+    {/* Inner glow */}
+    <div className="absolute inset-[6px] rounded-xl bg-gradient-to-br from-zinc-50 to-zinc-100/80 dark:from-zinc-800 dark:to-zinc-850 flex items-center justify-center">
+      <motion.div
+        animate={{ scale: [1, 1.1, 1] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <Icons.Sparkles size={20} className="text-zinc-900 dark:text-zinc-100" />
+      </motion.div>
+    </div>
+    {/* Outer pulse rings */}
+    {[0, 1].map(i => (
+      <motion.div
+        key={i}
+        className="absolute inset-0 rounded-2xl"
+        style={{ border: '1px solid', borderColor: ORB_COLORS[i] + '30' }}
+        animate={{ scale: [1, 1.25 + i * 0.1], opacity: [0.4, 0] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeOut', delay: i * 0.6 }}
+      />
+    ))}
+  </div>
+);
+
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
   const { projects } = useProjects();
@@ -49,7 +94,17 @@ export const AiAdvisor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Cycle loading steps
+  useEffect(() => {
+    if (!loading) { setLoadingStep(0); return; }
+    const interval = setInterval(() => {
+      setLoadingStep(prev => (prev + 1) % LOADING_STEPS.length);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // Close on Escape
   useEffect(() => {
@@ -136,6 +191,9 @@ export const AiAdvisor: React.FC = () => {
   const highPriority = insights.filter(i => i.priority === 'high').length;
   const medPriority = insights.filter(i => i.priority === 'medium').length;
 
+  const currentStep = LOADING_STEPS[loadingStep];
+  const StepIcon = currentStep.icon;
+
   return (
     <>
       {/* ─── Floating Pill Button ─── */}
@@ -143,10 +201,14 @@ export const AiAdvisor: React.FC = () => {
         onClick={handleOpen}
         whileHover={{ scale: 1.03, y: -1 }}
         whileTap={{ scale: 0.97 }}
-        className="fixed bottom-5 right-5 z-[55] flex items-center gap-2 pl-3 pr-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-full shadow-lg shadow-black/15 dark:shadow-black/30 hover:shadow-xl transition-shadow duration-300"
+        className="fixed bottom-5 right-5 z-[55] group flex items-center gap-2 pl-2.5 pr-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-full shadow-lg shadow-black/15 dark:shadow-black/30 hover:shadow-xl transition-shadow duration-300"
       >
-        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 flex items-center justify-center">
-          <Icons.Sparkles size={11} className="text-white" />
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center relative overflow-hidden"
+          style={{ background: 'conic-gradient(from 45deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}
+        >
+          <div className="absolute inset-[1.5px] rounded-full bg-zinc-900 dark:bg-zinc-100" />
+          <Icons.Sparkles size={11} className="relative z-10 text-white dark:text-zinc-900" />
         </div>
         <span className="text-[11px] font-semibold tracking-wide">AI</span>
         {hasLoaded && highPriority > 0 && (
@@ -181,8 +243,11 @@ export const AiAdvisor: React.FC = () => {
               <div className="px-6 pt-6 pb-5 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-sm shadow-violet-500/20">
-                      <Icons.Sparkles size={17} className="text-white" />
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center relative overflow-hidden shadow-sm"
+                      style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}
+                    >
+                      <Icons.Sparkles size={17} className="text-white relative z-10" />
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">AI Advisor</h2>
@@ -227,30 +292,33 @@ export const AiAdvisor: React.FC = () => {
               {/* ── Content ── */}
               <div className="flex-1 overflow-y-auto">
                 {loading ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
-                    <div className="relative">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 flex items-center justify-center">
-                        <Icons.Sparkles size={22} className="text-violet-500" />
-                      </div>
-                      <motion.div
-                        className="absolute inset-0 rounded-2xl border-2 border-violet-400/30"
-                        animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                      />
-                    </div>
+                  <div className="flex flex-col items-center justify-center h-full gap-5 px-6">
+                    <LoadingOrb />
                     <div className="text-center">
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Analizando tu negocio</p>
-                      <p className="text-[11px] text-zinc-400 mt-1">Revisando proyectos, finanzas y equipo...</p>
-                    </div>
-                    <div className="flex gap-1 mt-1">
-                      {[0, 1, 2].map(i => (
+                      <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Analizando tu negocio</p>
+                      <AnimatePresence mode="wait">
                         <motion.div
-                          key={i}
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                          className="w-1.5 h-1.5 rounded-full bg-violet-400"
-                        />
-                      ))}
+                          key={loadingStep}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.25 }}
+                          className="flex items-center justify-center gap-1.5 mt-2"
+                        >
+                          <StepIcon size={11} className="text-zinc-400" />
+                          <p className="text-[11px] text-zinc-400">{currentStep.text}</p>
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-40 h-1 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: 'linear-gradient(90deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4)' }}
+                        initial={{ width: '0%' }}
+                        animate={{ width: `${((loadingStep + 1) / LOADING_STEPS.length) * 100}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                      />
                     </div>
                   </div>
 
@@ -262,7 +330,7 @@ export const AiAdvisor: React.FC = () => {
                     <p className="text-xs text-zinc-500 text-center max-w-[260px]">{error}</p>
                     <button
                       onClick={loadInsights}
-                      className="mt-1 px-4 py-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 bg-violet-50 dark:bg-violet-500/10 dark:text-violet-400 rounded-lg transition-colors"
+                      className="mt-1 px-4 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100 rounded-lg transition-colors"
                     >
                       Reintentar
                     </button>
@@ -275,7 +343,7 @@ export const AiAdvisor: React.FC = () => {
                       <motion.div
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="p-4 rounded-xl bg-gradient-to-br from-violet-500/5 to-fuchsia-500/5 border border-violet-500/10"
+                        className="p-4 rounded-xl bg-gradient-to-br from-zinc-50 to-zinc-100/50 dark:from-zinc-800/50 dark:to-zinc-800/30 border border-zinc-200/60 dark:border-zinc-700/40"
                       >
                         <p className="text-[12px] leading-relaxed text-zinc-600 dark:text-zinc-400">{greeting}</p>
                       </motion.div>
@@ -361,7 +429,7 @@ export const AiAdvisor: React.FC = () => {
                     <button
                       onClick={loadInsights}
                       disabled={loading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-500/15 transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                     >
                       <Icons.RefreshCw size={10} />
                       Actualizar

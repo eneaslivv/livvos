@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
 import { Status, PageView, Priority, Task } from '../types';
@@ -7,6 +8,8 @@ import { supabaseAdmin } from '../lib/supabase';
 import { useRBAC } from '../context/RBACContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTenant } from '../context/TenantContext';
+import { useCalendar } from '../hooks/useCalendar';
+import type { CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 
 type DbProject = {
     id: string
@@ -32,6 +35,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const { user, roles } = useRBAC();
     const { incomes, expenses } = useFinance();
     const { currentTenant, updateTenant } = useTenant();
+    const { events: calendarEvents, tasks: calendarTasks } = useCalendar();
     const [showFinancials, setShowFinancials] = useState(false);
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
     const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -121,6 +125,59 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         updateTask(id, { completed: !t.completed });
     };
 
+    // Quick task creation
+    const { add: addTask } = useSupabase<Task>('tasks', { subscribe: false });
+    const [quickTaskTitle, setQuickTaskTitle] = useState('');
+    const [isAddingTask, setIsAddingTask] = useState(false);
+    const [showCompleted, setShowCompleted] = useState(false);
+    const quickInputRef = useRef<HTMLInputElement>(null);
+
+    const handleQuickAddTask = async () => {
+        const title = quickTaskTitle.trim();
+        if (!title || isAddingTask) return;
+        setIsAddingTask(true);
+        try {
+            await addTask({ title, completed: false, priority: Priority.Medium } as any);
+            setQuickTaskTitle('');
+            setTimeout(() => quickInputRef.current?.focus(), 50);
+        } catch (err) {
+            console.error('Quick add task error:', err);
+        } finally {
+            setIsAddingTask(false);
+        }
+    };
+
+    // Filter: today's tasks = incomplete (carry over) + completed today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayTasks = tasks.filter(t => {
+        if (!t.completed) return true; // all pending tasks always show
+        // completed tasks: only show if updated today (completed today)
+        const updated = (t as any).updated_at;
+        if (!updated) return true; // if no timestamp, show it
+        return new Date(updated) >= todayStart;
+    });
+
+    // ─── Calendar: today's events + overdue tasks ───
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayEvents = calendarEvents
+        .filter(e => e.start_date === todayStr)
+        .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+    const todayCalendarTasks = calendarTasks
+        .filter(t => t.start_date === todayStr && !t.completed)
+        .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+    const overdueTasks = calendarTasks
+        .filter(t => t.start_date && t.start_date < todayStr && !t.completed)
+        .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+
+    // Merge today's agenda: events + calendar tasks, sorted by time
+    const todayAgenda: { type: 'event' | 'task'; item: CalendarEvent | CalendarTask; time: string }[] = [
+        ...todayEvents.map(e => ({ type: 'event' as const, item: e, time: e.start_time || '99:99' })),
+        ...todayCalendarTasks.map(t => ({ type: 'task' as const, item: t, time: t.start_time || '99:99' })),
+    ].sort((a, b) => a.time.localeCompare(b.time));
+
     const handleQuickAction = (label: string) => {
         switch (label) {
             case 'New Task': alert("Please use the 'New Task' button in the top navigation."); break;
@@ -130,8 +187,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         }
     };
 
-    const completedCount = tasks.filter(t => t.completed).length;
-    const progressPercent = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+    const completedCount = todayTasks.filter(t => t.completed).length;
+    const pendingCount = todayTasks.filter(t => !t.completed).length;
+    const progressPercent = todayTasks.length ? Math.round((completedCount / todayTasks.length) * 100) : 0;
 
     const aiInsights = React.useMemo(() => {
         const badges: { label: string; color: string }[] = [];
@@ -300,43 +358,70 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
                     {/* Today's Focus */}
                     {(() => {
-                        const pendingTasks = tasks.filter(t => !t.completed);
-                        const completedTasks = tasks.filter(t => t.completed);
-                        const allDone = tasks.length > 0 && pendingTasks.length === 0;
+                        const todayPending = todayTasks.filter(t => !t.completed);
+                        const todayCompleted = todayTasks.filter(t => t.completed);
+                        const allDone = todayTasks.length > 0 && todayPending.length === 0;
 
                         return (
                             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Today's Focus</h3>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs text-zinc-400 font-mono">{completedCount}/{tasks.length}</span>
+                                        <span className="text-xs text-zinc-400 font-mono">{completedCount}/{todayTasks.length}</span>
                                         <div className="w-20 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                                             <div className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-emerald-500' : 'bg-zinc-900 dark:bg-zinc-200'}`} style={{ width: `${progressPercent}%` }} />
                                         </div>
                                     </div>
                                 </div>
 
-                                {tasks.length === 0 && <p className="text-xs text-zinc-400 py-4 text-center">No tasks yet</p>}
+                                {/* Quick add task input */}
+                                <form
+                                    onSubmit={(e) => { e.preventDefault(); handleQuickAddTask(); }}
+                                    className="flex items-center gap-2 mb-3"
+                                >
+                                    <div className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 focus-within:border-zinc-300 dark:focus-within:border-zinc-600 transition-colors">
+                                        <Icons.Plus size={13} className="text-zinc-400 shrink-0" />
+                                        <input
+                                            ref={quickInputRef}
+                                            type="text"
+                                            value={quickTaskTitle}
+                                            onChange={(e) => setQuickTaskTitle(e.target.value)}
+                                            placeholder="Add a quick task..."
+                                            className="flex-1 bg-transparent text-[13px] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none"
+                                        />
+                                    </div>
+                                    {quickTaskTitle.trim() && (
+                                        <button
+                                            type="submit"
+                                            disabled={isAddingTask}
+                                            className="px-3 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+                                        >
+                                            {isAddingTask ? '...' : 'Add'}
+                                        </button>
+                                    )}
+                                </form>
 
-                                {allDone && (
+                                {todayTasks.length === 0 && <p className="text-xs text-zinc-400 py-4 text-center">No tasks yet — add one above</p>}
+
+                                {allDone && todayTasks.length > 0 && (
                                     <div className="flex items-center gap-2.5 px-3 py-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-500/5 mb-1">
                                         <Icons.Check size={14} className="text-emerald-500 shrink-0" />
                                         <span className="text-[13px] font-medium text-emerald-700 dark:text-emerald-400">All set for today</span>
                                     </div>
                                 )}
 
-                                {/* Pending tasks first */}
+                                {/* Pending tasks */}
                                 <div className="space-y-0.5">
-                                    {pendingTasks.map((task) => {
+                                    {todayPending.map((task) => {
                                         const projectId = (task as any).projectId || (task as any).project_id;
                                         return (
                                             <div
                                                 key={task.id}
                                                 onClick={() => toggleTask(task.id)}
-                                                className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                                                className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group"
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 text-transparent flex items-center justify-center shrink-0">
+                                                    <div className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 group-hover:border-emerald-400 dark:group-hover:border-emerald-500 text-transparent group-hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors">
                                                         <Icons.Check size={9} strokeWidth={3} />
                                                     </div>
                                                     <div>
@@ -354,17 +439,204 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                     })}
                                 </div>
 
-                                {/* Completed tasks — collapsed summary */}
-                                {completedTasks.length > 0 && (
+                                {/* Completed tasks — collapsible dropdown */}
+                                {todayCompleted.length > 0 && (
                                     <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                                        <p className="px-3 text-[11px] text-zinc-400 font-medium">
-                                            {completedTasks.length} completed
-                                        </p>
+                                        <button
+                                            onClick={() => setShowCompleted(!showCompleted)}
+                                            className="flex items-center justify-between w-full px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Icons.Check size={12} className="text-emerald-500" />
+                                                <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                                                    {todayCompleted.length} completed today
+                                                </span>
+                                            </div>
+                                            <motion.div
+                                                animate={{ rotate: showCompleted ? 180 : 0 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <Icons.ChevronDown size={13} className="text-zinc-400" />
+                                            </motion.div>
+                                        </button>
+                                        <AnimatePresence>
+                                            {showCompleted && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="space-y-0.5 pt-1">
+                                                        {todayCompleted.map((task) => {
+                                                            const projectId = (task as any).projectId || (task as any).project_id;
+                                                            return (
+                                                                <div
+                                                                    key={task.id}
+                                                                    onClick={() => toggleTask(task.id)}
+                                                                    className="flex items-center justify-between px-3 py-2 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group"
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-4 h-4 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                                                                            <Icons.Check size={9} strokeWidth={3} className="text-emerald-500" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-[13px] font-medium text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-300 dark:decoration-zinc-700">{task.title}</span>
+                                                                            {projectId && <span className="text-[10px] text-zinc-300 dark:text-zinc-600 ml-2">{projectLookup[projectId] || ''}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className="text-[9px] text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">undo</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 )}
                             </div>
                         );
                     })()}
+
+                    {/* Today's Agenda — calendar events + tasks for today */}
+                    {(todayAgenda.length > 0 || overdueTasks.length > 0) && (
+                        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Icons.Calendar size={14} className="text-blue-500" />
+                                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Today's Agenda</h3>
+                                    {todayAgenda.length > 0 && (
+                                        <span className="text-[10px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-md">
+                                            {todayAgenda.length}
+                                        </span>
+                                    )}
+                                </div>
+                                <button onClick={() => onNavigate('calendar')} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
+                                    Ver calendario
+                                </button>
+                            </div>
+
+                            {/* Overdue tasks */}
+                            {overdueTasks.length > 0 && (
+                                <div className="mb-3">
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                        <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                                            {overdueTasks.length} atrasada{overdueTasks.length > 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        {overdueTasks.slice(0, 5).map((task) => {
+                                            const daysOverdue = Math.floor((new Date(todayStr).getTime() - new Date(task.start_date!).getTime()) / (1000 * 60 * 60 * 24));
+                                            return (
+                                                <div
+                                                    key={task.id}
+                                                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50/50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/10 group cursor-pointer hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                                    onClick={() => onNavigate('calendar')}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div className="w-4 h-4 rounded-full border-[1.5px] border-red-300 dark:border-red-500/40 flex items-center justify-center shrink-0">
+                                                            <Icons.AlertTriangle size={8} className="text-red-500" />
+                                                        </div>
+                                                        <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-200 truncate">{task.title}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <span className="text-[10px] text-red-500 dark:text-red-400 font-medium">
+                                                            {daysOverdue === 1 ? 'ayer' : `hace ${daysOverdue}d`}
+                                                        </span>
+                                                        {task.priority && (
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                                                task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500'
+                                                            }`} />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {overdueTasks.length > 5 && (
+                                            <p className="text-[10px] text-red-400 px-3 pt-1">+{overdueTasks.length - 5} más</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Today's timeline */}
+                            {todayAgenda.length > 0 ? (
+                                <div className="space-y-0.5">
+                                    {todayAgenda.map((entry) => {
+                                        const isEvent = entry.type === 'event';
+                                        const item = entry.item;
+                                        const timeLabel = entry.time !== '99:99' ? entry.time.slice(0, 5) : '';
+                                        const duration = (item as any).duration;
+                                        const eventType = isEvent ? (item as CalendarEvent).type : null;
+
+                                        const typeColors: Record<string, string> = {
+                                            'meeting': 'bg-blue-500',
+                                            'call': 'bg-emerald-500',
+                                            'deadline': 'bg-red-500',
+                                            'work-block': 'bg-purple-500',
+                                            'note': 'bg-amber-500',
+                                            'content': 'bg-pink-500',
+                                        };
+
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                                                onClick={() => onNavigate('calendar')}
+                                            >
+                                                {/* Time column */}
+                                                <div className="w-10 shrink-0 text-right">
+                                                    {timeLabel ? (
+                                                        <span className="text-[11px] font-mono font-medium text-zinc-500 dark:text-zinc-400">{timeLabel}</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600">--:--</span>
+                                                    )}
+                                                </div>
+
+                                                {/* Color indicator */}
+                                                <div className={`w-1 h-8 rounded-full shrink-0 ${
+                                                    isEvent ? (typeColors[eventType || ''] || 'bg-blue-500') : 'bg-zinc-400'
+                                                }`} />
+
+                                                {/* Content */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        {!isEvent && <Icons.Check size={10} className="text-zinc-400 shrink-0" />}
+                                                        <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                                            {item.title}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {isEvent && eventType && (
+                                                            <span className="text-[9px] font-medium text-zinc-400 capitalize">{eventType === 'work-block' ? 'bloque' : eventType}</span>
+                                                        )}
+                                                        {duration && (
+                                                            <span className="text-[9px] text-zinc-400">{duration >= 60 ? `${Math.floor(duration / 60)}h${duration % 60 ? duration % 60 + 'm' : ''}` : `${duration}m`}</span>
+                                                        )}
+                                                        {(item as CalendarEvent).location && (
+                                                            <span className="text-[9px] text-zinc-400 truncate">{(item as CalendarEvent).location}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Priority dot for tasks */}
+                                                {!isEvent && (item as CalendarTask).priority && (
+                                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                                        (item as CalendarTask).priority === 'urgent' ? 'bg-red-500' : (item as CalendarTask).priority === 'high' ? 'bg-amber-500' : (item as CalendarTask).priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500'
+                                                    }`} />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : overdueTasks.length === 0 ? (
+                                <p className="text-xs text-zinc-400 py-3 text-center">Sin eventos ni tareas para hoy</p>
+                            ) : null}
+                        </div>
+                    )}
 
                     {/* Active Projects */}
                     <div>

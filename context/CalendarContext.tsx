@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 
@@ -46,6 +46,7 @@ export interface CalendarTask {
   project_id?: string
   order_index: number
   parent_task_id?: string
+  blocked_by?: string
   created_at: string
   updated_at: string
 }
@@ -91,6 +92,29 @@ interface CalendarContextType {
 
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined)
 
+// Helper: normalize a raw DB task row into our CalendarTask shape
+const normalizeTask = (task: any): CalendarTask => ({
+  id: task.id,
+  owner_id: task.owner_id ?? task.user_id ?? '',
+  title: task.title ?? 'Untitled Task',
+  description: task.description ?? task.notes ?? '',
+  completed: !!task.completed,
+  priority: task.priority ?? 'medium',
+  start_date: task.start_date ?? task.due_date ?? undefined,
+  end_date: task.end_date ?? undefined,
+  start_time: task.start_time ?? undefined,
+  duration: task.duration ?? undefined,
+  status: task.status ?? 'todo',
+  assignee_id: task.assignee_id ?? undefined,
+  client_id: task.client_id ?? undefined,
+  project_id: task.project_id ?? undefined,
+  order_index: task.order_index ?? 0,
+  parent_task_id: task.parent_task_id ?? undefined,
+  blocked_by: task.blocked_by ?? undefined,
+  created_at: task.created_at ?? new Date().toISOString(),
+  updated_at: task.updated_at ?? new Date().toISOString(),
+})
+
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tasks, setTasks] = useState<CalendarTask[]>([])
@@ -99,75 +123,64 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
+  // Cache tenant_id so we never re-query it on every mutation
+  const cachedTenantIdRef = useRef<string | null>(null)
+  const tenantIdResolvedRef = useRef(false)
+
+  // Resolve tenant_id once at startup (non-blocking for UI)
+  const resolveTenantId = useCallback(async () => {
+    if (tenantIdResolvedRef.current) return cachedTenantIdRef.current
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single()
+        cachedTenantIdRef.current = profile?.tenant_id || null
+      }
+    } catch {
+      // Continue without tenant_id
+    }
+    tenantIdResolvedRef.current = true
+    return cachedTenantIdRef.current
+  }, [])
+
   const loadCalendarData = useCallback(async (force = false) => {
     if (isInitialized && !force) {
       setLoading(false)
       return
     }
 
-    setLoading(true)
+    // Only show loading on initial load, not on force-refreshes
+    if (!isInitialized) {
+      setLoading(true)
+    }
     setError(null)
-    
+
     try {
-      errorLogger.log('Cargando datos del calendario...')
-      
-      // Intentar cargar eventos
-      try {
-        const { data: eventsData } = await supabase
-          .from('calendar_events')
-          .select('*')
-          .order('start_date', { ascending: true })
-        setEvents(eventsData || [])
-      } catch (e: any) {
-        setEvents([])
+      // Load events, tasks, and labels in PARALLEL
+      const safeQuery = async (query: PromiseLike<{ data: any[] | null }>) => {
+        try {
+          const result = await query
+          return result.data || []
+        } catch {
+          return [] as any[]
+        }
       }
-      
-      // Intentar cargar tareas
-      try {
-        const { data: tasksData } = await supabase
-          .from('tasks')
-          .select('*')
-          .order('created_at', { ascending: false })
 
-        const normalizedTasks = (tasksData || []).map((task: any) => ({
-          id: task.id,
-          owner_id: task.owner_id ?? task.user_id ?? '',
-          title: task.title ?? 'Untitled Task',
-          description: task.description ?? task.notes ?? '',
-          completed: !!task.completed,
-          priority: task.priority ?? 'medium',
-          start_date: task.start_date ?? task.due_date ?? undefined,
-          end_date: task.end_date ?? undefined,
-          start_time: task.start_time ?? undefined,
-          duration: task.duration ?? undefined,
-          status: task.status ?? 'todo',
-          assignee_id: task.assignee_id ?? undefined,
-          client_id: task.client_id ?? undefined,
-          project_id: task.project_id ?? undefined,
-          order_index: task.order_index ?? 0,
-          parent_task_id: task.parent_task_id ?? undefined,
-          created_at: task.created_at ?? new Date().toISOString(),
-          updated_at: task.updated_at ?? new Date().toISOString(),
-        }))
+      const [eventsResult, tasksResult, labelsResult] = await Promise.all([
+        safeQuery(supabase.from('calendar_events').select('*').order('start_date', { ascending: true })),
+        safeQuery(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
+        safeQuery(supabase.from('calendar_labels').select('*').order('name', { ascending: true })),
+      ])
 
-        setTasks(normalizedTasks)
-      } catch (e: any) {
-        setTasks([])
-      }
-      
-      // Intentar cargar etiquetas
-      try {
-        const { data: labelsData } = await supabase
-          .from('calendar_labels')
-          .select('*')
-          .order('name', { ascending: true })
-        setLabels(labelsData || [])
-      } catch (e: any) {
-        setLabels([])
-      }
-      
+      setEvents(eventsResult as CalendarEvent[])
+      setTasks((tasksResult as any[]).map(normalizeTask))
+      setLabels(labelsResult as CalendarLabel[])
       setIsInitialized(true)
-      
+
     } catch (err: any) {
       errorLogger.error('Error cargando datos del calendario', err)
       setIsInitialized(true)
@@ -176,21 +189,50 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [isInitialized])
 
+  // Resolve tenant_id in background on mount
+  useEffect(() => {
+    resolveTenantId()
+  }, [resolveTenantId])
+
   useEffect(() => {
     loadCalendarData()
 
-    // Suscribirse a cambios en tiempo real
+    // ─── Realtime: targeted state updates instead of full reload ───
     const eventsChannel = supabase
-      .channel('calendar-events-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, () => {
-        loadCalendarData(true)
+      .channel('calendar-events-rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, (payload) => {
+        const newEvent = payload.new as CalendarEvent
+        setEvents(prev => {
+          if (prev.some(e => e.id === newEvent.id)) return prev
+          return [...prev, newEvent]
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, (payload) => {
+        const updated = payload.new as CalendarEvent
+        setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'calendar_events' }, (payload) => {
+        const deletedId = payload.old?.id
+        if (deletedId) setEvents(prev => prev.filter(e => e.id !== deletedId))
       })
       .subscribe()
 
     const tasksChannel = supabase
-      .channel('tasks-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        loadCalendarData(true)
+      .channel('tasks-rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload) => {
+        const newTask = normalizeTask(payload.new)
+        setTasks(prev => {
+          if (prev.some(t => t.id === newTask.id)) return prev
+          return [...prev, newTask]
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+        const updated = normalizeTask(payload.new)
+        setTasks(prev => prev.map(t => t.id === updated.id ? updated : t))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        const deletedId = payload.old?.id
+        if (deletedId) setTasks(prev => prev.filter(t => t.id !== deletedId))
       })
       .subscribe()
 
@@ -200,139 +242,181 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [loadCalendarData])
 
-  // ... (Funciones de mutación copiadas y adaptadas)
-  const createEvent = async (eventData: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) => {
-    const { data, error: err } = await supabase.from('calendar_events').insert(eventData).select().single()
-    if (err) throw err
-    // Realtime actualizará el estado, pero optimísticamente:
-    setEvents(prev => [...prev, data])
-    return data
-  }
-
-  const updateEvent = async (id: string, updates: Partial<CalendarEvent>) => {
-    const { data, error: err } = await supabase.from('calendar_events').update(updates).eq('id', id).select().single()
-    if (err) throw err
-    return data
-  }
-
-  const deleteEvent = async (id: string) => {
-    const { error: err } = await supabase.from('calendar_events').delete().eq('id', id)
-    if (err) throw err
-  }
-
   const getMissingColumn = (message: string) => {
     const match = message.match(/column\s+"([^"]+)"\s+does\s+not\s+exist/i)
     return match?.[1] || null
   }
 
-  const createTask = async (taskData: Omit<CalendarTask, 'id' | 'created_at' | 'updated_at'>) => {
-    // Resolve tenant_id from current user's profile
-    let tenantId: string | null = null
+  // ─── EVENTS: optimistic create / update / delete ───
+
+  const createEvent = async (eventData: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) => {
+    // Optimistic: show immediately with temp id
+    const tempId = `temp-${Date.now()}`
+    const now = new Date().toISOString()
+    const optimistic: CalendarEvent = {
+      ...eventData,
+      id: tempId,
+      created_at: now,
+      updated_at: now,
+    }
+    setEvents(prev => [...prev, optimistic])
+
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.id) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('tenant_id')
-          .eq('id', user.id)
-          .single()
-        tenantId = profile?.tenant_id || null
-      }
-    } catch {
-      // Continue without tenant_id
-    }
-
-    const payload: any = {
-      title: taskData.title,
-      description: taskData.description,
-      completed: taskData.completed,
-      priority: taskData.priority,
-      status: taskData.status,
-      project_id: taskData.project_id,
-      assignee_id: taskData.assignee_id,
-      due_date: taskData.start_date,
-      owner_id: taskData.owner_id,
-      ...(tenantId && { tenant_id: tenantId }),
-    }
-
-    const { data, error: err } = await supabase.from('tasks').insert(payload).select().single()
-    if (err) {
-      const missingColumn = getMissingColumn(err.message || '')
-      if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
-        const { [missingColumn]: _omitted, ...retryPayload } = payload
-        const { data: retryData, error: retryError } = await supabase.from('tasks').insert(retryPayload).select().single()
-        if (retryError) throw retryError
-        setTasks(prev => [...prev, {
-          id: retryData.id,
-          owner_id: retryData.owner_id ?? taskData.owner_id,
-          title: retryData.title ?? taskData.title,
-          description: retryData.description ?? taskData.description,
-          completed: !!retryData.completed,
-          priority: retryData.priority ?? taskData.priority,
-          start_date: retryData.start_date ?? retryData.due_date ?? taskData.start_date,
-          end_date: retryData.end_date,
-          start_time: retryData.start_time,
-          duration: retryData.duration,
-          status: retryData.status ?? taskData.status,
-          assignee_id: retryData.assignee_id ?? taskData.assignee_id,
-          client_id: retryData.client_id ?? taskData.client_id,
-          project_id: retryData.project_id ?? taskData.project_id,
-          order_index: retryData.order_index ?? 0,
-          parent_task_id: retryData.parent_task_id,
-          created_at: retryData.created_at ?? new Date().toISOString(),
-          updated_at: retryData.updated_at ?? new Date().toISOString(),
-        } as CalendarTask])
-        return retryData as CalendarTask
-      }
+      const { data, error: err } = await supabase.from('calendar_events').insert(eventData).select().single()
+      if (err) throw err
+      // Replace temp with real data
+      setEvents(prev => prev.map(e => e.id === tempId ? data : e))
+      return data
+    } catch (err) {
+      // Rollback optimistic
+      setEvents(prev => prev.filter(e => e.id !== tempId))
       throw err
     }
-    setTasks(prev => [...prev, {
-      id: data.id,
-      owner_id: data.owner_id ?? taskData.owner_id,
-      title: data.title ?? taskData.title,
-      description: data.description ?? taskData.description,
-      completed: !!data.completed,
-      priority: data.priority ?? taskData.priority,
-      start_date: data.start_date ?? data.due_date ?? taskData.start_date,
-      end_date: data.end_date,
-      start_time: data.start_time,
-      duration: data.duration,
-      status: data.status ?? taskData.status,
-      assignee_id: data.assignee_id ?? taskData.assignee_id,
-      client_id: data.client_id ?? taskData.client_id,
-      project_id: data.project_id ?? taskData.project_id,
-      order_index: data.order_index ?? 0,
-      parent_task_id: data.parent_task_id,
-      created_at: data.created_at ?? new Date().toISOString(),
-      updated_at: data.updated_at ?? new Date().toISOString(),
-    } as CalendarTask])
-    return data as CalendarTask
+  }
+
+  const updateEvent = async (id: string, updates: Partial<CalendarEvent>) => {
+    // Optimistic update
+    const backup = events.find(e => e.id === id)
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, ...updates, updated_at: new Date().toISOString() } : e))
+
+    try {
+      const { data, error: err } = await supabase.from('calendar_events').update(updates).eq('id', id).select().single()
+      if (err) throw err
+      setEvents(prev => prev.map(e => e.id === id ? data : e))
+      return data
+    } catch (err) {
+      // Rollback
+      if (backup) setEvents(prev => prev.map(e => e.id === id ? backup : e))
+      throw err
+    }
+  }
+
+  const deleteEvent = async (id: string) => {
+    // Optimistic remove
+    const backup = events.find(e => e.id === id)
+    setEvents(prev => prev.filter(e => e.id !== id))
+
+    try {
+      const { error: err } = await supabase.from('calendar_events').delete().eq('id', id)
+      if (err) throw err
+    } catch (err) {
+      if (backup) setEvents(prev => [...prev, backup])
+      throw err
+    }
+  }
+
+  // ─── TASKS: optimistic create / update / delete ───
+
+  const createTask = async (taskData: Omit<CalendarTask, 'id' | 'created_at' | 'updated_at'>) => {
+    // Optimistic: show the task IMMEDIATELY in the UI
+    const tempId = `temp-${Date.now()}`
+    const now = new Date().toISOString()
+    const optimistic: CalendarTask = {
+      ...taskData,
+      id: tempId,
+      start_date: taskData.start_date,
+      start_time: taskData.start_time,
+      duration: taskData.duration,
+      order_index: taskData.order_index ?? 0,
+      created_at: now,
+      updated_at: now,
+    }
+    setTasks(prev => [...prev, optimistic])
+
+    try {
+      // Use cached tenant_id (resolved once at startup — zero extra queries)
+      const tenantId = cachedTenantIdRef.current
+
+      const payload: any = {
+        title: taskData.title,
+        description: taskData.description,
+        completed: taskData.completed,
+        priority: taskData.priority,
+        status: taskData.status,
+        project_id: taskData.project_id || null,
+        client_id: taskData.client_id || null,
+        assignee_id: taskData.assignee_id,
+        due_date: taskData.start_date,
+        start_time: taskData.start_time || null,
+        duration: taskData.duration || null,
+        owner_id: taskData.owner_id,
+        ...(taskData.parent_task_id && { parent_task_id: taskData.parent_task_id }),
+        ...(taskData.blocked_by && { blocked_by: taskData.blocked_by }),
+        ...(tenantId && { tenant_id: tenantId }),
+      }
+
+      const { data, error: err } = await supabase.from('tasks').insert(payload).select().single()
+      if (err) {
+        const missingColumn = getMissingColumn(err.message || '')
+        if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+          const { [missingColumn]: _omitted, ...retryPayload } = payload
+          const { data: retryData, error: retryError } = await supabase.from('tasks').insert(retryPayload).select().single()
+          if (retryError) throw retryError
+          const normalized = normalizeTask(retryData)
+          setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
+          return normalized
+        }
+        throw err
+      }
+
+      const normalized = normalizeTask(data)
+      // Replace temp with real server data
+      setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
+      return normalized
+    } catch (err) {
+      // Rollback optimistic on error
+      setTasks(prev => prev.filter(t => t.id !== tempId))
+      throw err
+    }
   }
 
   const updateTask = async (id: string, updates: Partial<CalendarTask>) => {
+    // Optimistic update — UI changes INSTANTLY
+    const backup = tasks.find(t => t.id === id)
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t))
+
     const payload: any = { ...updates }
     if (payload.start_date) {
       payload.due_date = payload.start_date
       delete payload.start_date
     }
 
-    const { data, error: err } = await supabase.from('tasks').update(payload).eq('id', id).select().single()
-    if (err) {
-      const missingColumn = getMissingColumn(err.message || '')
-      if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
-        const { [missingColumn]: _omitted, ...retryPayload } = payload
-        const { data: retryData, error: retryError } = await supabase.from('tasks').update(retryPayload).eq('id', id).select().single()
-        if (retryError) throw retryError
-        return retryData as CalendarTask
+    try {
+      const { data, error: err } = await supabase.from('tasks').update(payload).eq('id', id).select().single()
+      if (err) {
+        const missingColumn = getMissingColumn(err.message || '')
+        if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+          const { [missingColumn]: _omitted, ...retryPayload } = payload
+          const { data: retryData, error: retryError } = await supabase.from('tasks').update(retryPayload).eq('id', id).select().single()
+          if (retryError) throw retryError
+          const normalized = normalizeTask(retryData)
+          setTasks(prev => prev.map(t => t.id === id ? normalized : t))
+          return normalized
+        }
+        throw err
       }
+      const normalized = normalizeTask(data)
+      setTasks(prev => prev.map(t => t.id === id ? normalized : t))
+      return normalized
+    } catch (err) {
+      // Rollback
+      if (backup) setTasks(prev => prev.map(t => t.id === id ? backup : t))
       throw err
     }
-    return data as CalendarTask
   }
 
   const deleteTask = async (id: string) => {
-    const { error: err } = await supabase.from('tasks').delete().eq('id', id)
-    if (err) throw err
+    // Optimistic remove — disappears INSTANTLY
+    const backup = tasks.find(t => t.id === id)
+    setTasks(prev => prev.filter(t => t.id !== id))
+
+    try {
+      const { error: err } = await supabase.from('tasks').delete().eq('id', id)
+      if (err) throw err
+    } catch (err) {
+      if (backup) setTasks(prev => [...prev, backup])
+      throw err
+    }
   }
 
   const moveTask = async (taskId: string, newDate: string, newTime?: string) => {
@@ -357,7 +441,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => task.start_date && task.start_date >= startDate && task.start_date <= endDate)
 
   const getCalendarStats = () => {
-    // Exclude synced Google events from local stats
     const localEvents = events.filter(e => e.source !== 'google')
     const totalEvents = localEvents.length
     const totalTasks = tasks.length

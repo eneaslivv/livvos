@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -52,6 +52,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const hasLoadedRef = useRef(false);
 
     // Fetch team members — queries run in parallel to avoid one slow query blocking the rest
     const fetchTeamMembers = useCallback(async () => {
@@ -61,7 +62,10 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        setIsLoading(true);
+        // Only show loading on first load, not on background re-fetches
+        if (!hasLoadedRef.current) {
+            setIsLoading(true);
+        }
         setError(null);
 
         try {
@@ -156,6 +160,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
 
             setMembers(enrichedMembers);
+            hasLoadedRef.current = true;
         } catch (err: any) {
             errorLogger.error('Error fetching team members:', err);
             setError(err.message);
