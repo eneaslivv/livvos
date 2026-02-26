@@ -76,6 +76,7 @@ export const Calendar: React.FC = () => {
     createTask,
     updateTask,
     deleteTask,
+    moveTask,
     getEventsByDate,
     getTasksByDate,
     getCalendarStats
@@ -133,6 +134,17 @@ export const Calendar: React.FC = () => {
     const projectId = (task as any).project_id || (task as any).projectId;
     if (!projectId) return 'No project';
     return projectMap[projectId] || 'Project';
+  };
+
+  // Client name map for showing client on tasks
+  const clientMap = clients.reduce<Record<string, string>>((acc, c) => {
+    acc[c.id] = c.name;
+    return acc;
+  }, {});
+
+  const getClientLabel = (task: CalendarTask) => {
+    if (!task.client_id) return null;
+    return clientMap[task.client_id] || null;
   };
 
   // Google Calendar sync
@@ -229,6 +241,33 @@ export const Calendar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [platformDropdownOpen]);
 
+  // Drag-and-drop state for tasks
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+
+  const handleTaskDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('taskId', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingTaskId(taskId);
+  };
+
+  const handleTaskDrop = async (e: React.DragEvent, date: string, hour?: number) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    if (!taskId) return;
+    const time = hour !== undefined ? `${hour.toString().padStart(2, '0')}:00` : undefined;
+    try {
+      await moveTask(taskId, date, time);
+    } catch (err) {
+      errorLogger.error('Error moviendo tarea', err);
+    }
+    setDraggingTaskId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
   // Click-to-create popover state
   const [slotPopover, setSlotPopover] = useState<{
     clickX: number;
@@ -306,6 +345,7 @@ export const Calendar: React.FC = () => {
       duration: task.duration || 60,
       project_id: task.project_id || '',
       assignee_id: task.assignee_id || '',
+      blocked_by: task.blocked_by || '',
     });
   };
 
@@ -318,6 +358,8 @@ export const Calendar: React.FC = () => {
       if (updates.status === 'done') updates.completed = true;
       else if (updates.status === 'cancelled') updates.completed = false;
       else if (updates.status) updates.completed = false;
+      // Normalize blocked_by: empty string → null for DB
+      if ('blocked_by' in updates && !updates.blocked_by) (updates as any).blocked_by = null;
       await updateTask(selectedTask.id, updates);
       setSelectedTask(null);
     } catch (err) {
@@ -603,7 +645,7 @@ export const Calendar: React.FC = () => {
       const weekTasks: string[] = [];
 
       weekDaysList.forEach(day => {
-        const dayEvents = events.filter(e => e.start_date === day.dateStr);
+        const dayEvents = events.filter(e => e.start_date?.slice(0, 10) === day.dateStr);
         const dayTasks = getTasksByDate(day.dateStr);
         dayEvents.forEach(e => weekEvents.push(`${day.dateStr}: ${e.title} (${e.type})`));
         dayTasks.forEach(t => weekTasks.push(`${day.dateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completada)' : '(pendiente)'}`));
@@ -646,16 +688,43 @@ export const Calendar: React.FC = () => {
   }));
 
   const getDayEvents = (date: string) => {
-    return contentEvents.filter(event => event.start_date === date);
+    return contentEvents.filter(event => event.start_date?.slice(0, 10) === date);
   };
+
+  const todayStr = new Date().toISOString().split('T')[0];
 
   const getDayTasks = (date: string) => {
     if (calendarMode === 'content') return [];
     // Exclude subtasks from calendar views (they show under their parent)
-    const allTasks = getTasksByDate(date).filter(t => !t.parent_task_id);
+    let allTasks = getTasksByDate(date).filter(t => !t.parent_task_id);
+
+    // On today: also include overdue tasks from past dates
+    if (date === todayStr) {
+      const overdue = tasks.filter(t =>
+        !t.parent_task_id &&
+        !t.completed &&
+        t.status !== 'done' &&
+        t.status !== 'cancelled' &&
+        t.start_date &&
+        t.start_date.slice(0, 10) < todayStr
+      );
+      // Merge without duplicates
+      const existingIds = new Set(allTasks.map(t => t.id));
+      allTasks = [...allTasks, ...overdue.filter(t => !existingIds.has(t.id))];
+    }
+
     if (taskFilter === 'all') return allTasks;
     if (taskFilter === 'me') return allTasks.filter(t => t.assignee_id === user?.id || (!t.assignee_id && t.owner_id === user?.id));
     return allTasks.filter(t => t.assignee_id === taskFilter);
+  };
+
+  // Helper: how many days overdue is a task
+  const getOverdueDays = (task: CalendarTask) => {
+    if (!task.start_date || task.completed || task.status === 'done' || task.status === 'cancelled') return 0;
+    const taskDate = task.start_date.slice(0, 10);
+    if (taskDate >= todayStr) return 0;
+    const diff = Math.ceil((new Date(todayStr).getTime() - new Date(taskDate).getTime()) / (1000 * 60 * 60 * 24));
+    return diff;
   };
 
   // Estadísticas del calendario
@@ -1463,6 +1532,24 @@ export const Calendar: React.FC = () => {
               className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium text-zinc-900 dark:text-zinc-100 transition-all"
             />
 
+            {/* Blocked banner */}
+            {isTaskBlocked(selectedTask) && (() => {
+              const blocker = getBlockerTask(selectedTask);
+              return (
+                <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30">
+                  <Icons.Lock size={13} className="text-amber-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Bloqueada</span>
+                    {blocker && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400/70 truncate">
+                        Esperando: {blocker.title}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Completed toggle */}
             <button
               onClick={() => toggleTaskComplete(selectedTask.id, !selectedTask.completed)}
@@ -1611,6 +1698,16 @@ export const Calendar: React.FC = () => {
               </div>
             </div>
 
+            {/* Client indicator */}
+            {selectedTask?.client_id && getClientLabel(selectedTask) && (
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg">
+                <Icons.User size={12} className="text-emerald-500" />
+                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Cliente: {getClientLabel(selectedTask)}
+                </span>
+              </div>
+            )}
+
             {/* Description */}
             <div>
               <label className="block text-[10px] font-medium text-zinc-400 mb-1">Descripción</label>
@@ -1633,14 +1730,23 @@ export const Calendar: React.FC = () => {
                   <AnimatePresence initial={false}>
                     {subtasksForSelected
                       .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
-                      .map((sub) => (
+                      .map((sub) => {
+                        const subBlocked = isTaskBlocked(sub);
+                        return (
                       <motion.div
                         key={sub.id}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 last:border-b-0 group"
+                        className={`flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 last:border-b-0 group ${
+                          subBlocked ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''
+                        }`}
                       >
+                        {subBlocked ? (
+                          <div className="w-4 h-4 rounded border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center flex-shrink-0" title="Bloqueada por dependencia">
+                            <Icons.Lock size={8} className="text-amber-500" />
+                          </div>
+                        ) : (
                         <button
                           onClick={() => handleToggleSubtask(sub.id, !sub.completed)}
                           className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
@@ -1651,11 +1757,16 @@ export const Calendar: React.FC = () => {
                         >
                           {sub.completed && <Icons.Check size={10} className="text-white" />}
                         </button>
+                        )}
                         <span className={`flex-1 text-xs truncate ${
+                          subBlocked ? 'text-amber-600 dark:text-amber-400/70' :
                           sub.completed ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'
                         }`}>
                           {sub.title}
                         </span>
+                        {subBlocked && (
+                          <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">bloqueada</span>
+                        )}
                         <button
                           onClick={() => handleDeleteSubtask(sub.id)}
                           className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition-all p-0.5"
@@ -1663,7 +1774,8 @@ export const Calendar: React.FC = () => {
                           <Icons.X size={10} />
                         </button>
                       </motion.div>
-                    ))}
+                        );
+                    })}
                   </AnimatePresence>
                 </div>
               )}
@@ -1696,6 +1808,53 @@ export const Calendar: React.FC = () => {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Dependency selector */}
+            <div>
+              <label className="text-[10px] font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
+                <Icons.Link size={10} />
+                Dependencia
+              </label>
+              <select
+                value={editingTask.blocked_by || ''}
+                onChange={e => setEditingTask({ ...editingTask, blocked_by: e.target.value || undefined })}
+                className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
+                  editingTask.blocked_by
+                    ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400'
+                    : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
+                }`}
+              >
+                <option value="">Sin dependencia</option>
+                {tasks
+                  .filter(t => t.id !== selectedTask.id && !t.parent_task_id)
+                  .sort((a, b) => a.title.localeCompare(b.title))
+                  .map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.completed ? '\u2713 ' : ''}{t.title}
+                    </option>
+                  ))}
+              </select>
+              {/* Dependent tasks (reverse: tasks blocked by this one) */}
+              {(() => {
+                const dependents = getDependentTasks(selectedTask.id);
+                if (dependents.length === 0) return null;
+                return (
+                  <div className="mt-1.5 px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                    <span className="text-[10px] font-medium text-zinc-400">Bloquea a:</span>
+                    <div className="mt-1 space-y-0.5">
+                      {dependents.map(d => (
+                        <div key={d.id} className="flex items-center gap-1.5 text-[11px]">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${d.completed ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                          <span className={`truncate ${d.completed ? 'text-zinc-400 line-through' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                            {d.title}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Meta info */}
@@ -1775,8 +1934,57 @@ export const Calendar: React.FC = () => {
             })}
           </div>
 
-          {/* Cuerpo del calendario */}
-          <div className="max-h-96 overflow-y-auto">
+          {/* All-day / unscheduled tasks row */}
+          <div className="grid grid-cols-8 border-b-2 border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/30">
+            <div className="p-2 text-[10px] text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800 flex items-start justify-end pt-3">
+              Tareas
+            </div>
+            {weekDays.map((day, dayIndex) => {
+              const dateStr = day.toISOString().split('T')[0];
+              const unscheduledTasks = getDayTasks(dateStr).filter(t => !t.start_time);
+              return (
+                <div
+                  key={dayIndex}
+                  className={`p-1.5 min-h-[44px] border-r border-zinc-100 dark:border-zinc-700 transition-colors ${
+                    draggingTaskId ? 'bg-blue-50/30 dark:bg-blue-900/5' : ''
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleTaskDrop(e, dateStr)}
+                >
+                  {unscheduledTasks.map(task => {
+                    const tc = getTaskColor(task);
+                    const overdue = getOverdueDays(task);
+                    return (
+                      <div
+                        key={task.id}
+                        draggable
+                        onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                        onDragEnd={() => setDraggingTaskId(null)}
+                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border ${tc.bg} ${tc.border} ${
+                          task.completed ? 'line-through opacity-50' : ''
+                        } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                        title={`${task.title} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
+                        onClick={() => handleOpenTaskDetail(task)}
+                      >
+                        <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
+                          <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                          <span className="truncate">{task.title}</span>
+                          {overdue > 0 && (
+                            <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                              +{overdue}d
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Cuerpo del calendario (horas) */}
+          <div className="max-h-[420px] overflow-y-auto">
             {hours.map((hour) => (
               <div key={hour} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800">
                 <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800">
@@ -1796,13 +2004,16 @@ export const Calendar: React.FC = () => {
                   });
 
                   const isSelected = slotPopover?.date === dateStr && slotPopover?.hour === hour;
+                  const isDragTarget = draggingTaskId !== null;
 
                   return (
                     <div
                       key={dayIndex}
                       className={`p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer ${
                         isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-500/10' : ''
-                      }`}
+                      } ${isDragTarget ? 'hover:bg-blue-50/50 dark:hover:bg-blue-900/10' : ''}`}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleTaskDrop(e, dateStr, hour)}
                       onClick={(e) => {
                         if (e.target !== e.currentTarget) return;
                         setSlotPopover({
@@ -1844,11 +2055,15 @@ export const Calendar: React.FC = () => {
                             } ${task.status === 'cancelled' ? 'line-through opacity-50' : ''} ${
                               task.status === 'in-progress' ? 'border-l-[3px]' : ''
                             }`}
-                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''} [${task.priority}/${task.status}]`}
+                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''} [${task.priority}/${task.status}]`}
                             onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                           >
                             <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${tc.dot} shrink-0`} />
+                              {isTaskBlocked(task) ? (
+                                <Icons.Lock size={9} className="text-amber-500 shrink-0" />
+                              ) : (
+                                <span className={`w-1.5 h-1.5 rounded-full ${tc.dot} shrink-0`} />
+                              )}
                               {task.title}
                               {task.assignee_id && (
                                 getMemberAvatar(task.assignee_id) ? (
@@ -2158,6 +2373,11 @@ export const Calendar: React.FC = () => {
                             <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
                               {getProjectLabel(task)}
                             </span>
+                            {getClientLabel(task) && (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5">
+                                {getClientLabel(task)}
+                              </span>
+                            )}
                             <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
                               {task.status}
                             </span>
@@ -2264,6 +2484,11 @@ export const Calendar: React.FC = () => {
                       <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
                         {getProjectLabel(task)}
                       </span>
+                      {getClientLabel(task) && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5">
+                          {getClientLabel(task)}
+                        </span>
+                      )}
                     </div>
                   ))}
                 {tasks.filter(task => !task.completed && task.start_date).length === 0 && (

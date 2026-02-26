@@ -92,6 +92,10 @@ interface CalendarContextType {
 
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined)
 
+// Helper: extract just the YYYY-MM-DD portion from a TIMESTAMPTZ string
+const toDateOnly = (v: any): string | undefined =>
+  v ? String(v).slice(0, 10) : undefined
+
 // Helper: normalize a raw DB task row into our CalendarTask shape
 const normalizeTask = (task: any): CalendarTask => ({
   id: task.id,
@@ -100,8 +104,8 @@ const normalizeTask = (task: any): CalendarTask => ({
   description: task.description ?? task.notes ?? '',
   completed: !!task.completed,
   priority: task.priority ?? 'medium',
-  start_date: task.start_date ?? task.due_date ?? undefined,
-  end_date: task.end_date ?? undefined,
+  start_date: toDateOnly(task.start_date ?? task.due_date),
+  end_date: toDateOnly(task.end_date),
   start_time: task.start_time ?? undefined,
   duration: task.duration ?? undefined,
   status: task.status ?? 'todo',
@@ -434,11 +438,17 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return data
   }
 
-  // Getters
-  const getEventsByDate = (date: string) => events.filter(event => event.start_date === date)
-  const getTasksByDate = (date: string) => tasks.filter(task => task.start_date === date)
-  const getEventsByDateRange = (startDate: string, endDate: string) => events.filter(event => event.start_date >= startDate && event.start_date <= endDate)
-  const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => task.start_date && task.start_date >= startDate && task.start_date <= endDate)
+  // Getters — always compare date-only portion (TIMESTAMPTZ can include time)
+  const getEventsByDate = (date: string) => events.filter(event => event.start_date?.slice(0, 10) === date)
+  const getTasksByDate = (date: string) => tasks.filter(task => task.start_date?.slice(0, 10) === date)
+  const getEventsByDateRange = (startDate: string, endDate: string) => events.filter(event => {
+    const d = event.start_date?.slice(0, 10)
+    return d && d >= startDate && d <= endDate
+  })
+  const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => {
+    const d = task.start_date?.slice(0, 10)
+    return d && d >= startDate && d <= endDate
+  })
 
   const getCalendarStats = () => {
     const localEvents = events.filter(e => e.source !== 'google')
