@@ -78,3 +78,36 @@ CREATE POLICY "client_history_insert" ON client_history
 FOR INSERT WITH CHECK (TRUE);
 
 GRANT ALL ON client_history TO authenticated;
+
+-- =============================================
+-- Fix RLS for PROJECTS table
+-- =============================================
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "projects_select_policy" ON projects;
+DROP POLICY IF EXISTS "projects_select_own" ON projects;
+CREATE POLICY "projects_select_policy" ON projects
+FOR SELECT USING (
+  can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
+);
+
+DROP POLICY IF EXISTS "projects_insert_policy" ON projects;
+DROP POLICY IF EXISTS "projects_insert_own" ON projects;
+CREATE POLICY "projects_insert_policy" ON projects
+FOR INSERT WITH CHECK (TRUE);
+
+DROP POLICY IF EXISTS "projects_update_policy" ON projects;
+DROP POLICY IF EXISTS "projects_update_own" ON projects;
+CREATE POLICY "projects_update_policy" ON projects
+FOR UPDATE USING (
+  can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
+);
+
+DROP POLICY IF EXISTS "projects_delete_policy" ON projects;
+DROP POLICY IF EXISTS "projects_delete_own" ON projects;
+CREATE POLICY "projects_delete_policy" ON projects
+FOR DELETE USING (
+  can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
+);
+
+GRANT ALL ON projects TO authenticated;

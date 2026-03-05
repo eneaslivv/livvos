@@ -2368,7 +2368,7 @@ export const Projects: React.FC = () => {
                             try {
                               await deleteProject(selectedProject.id);
                               setSelectedId(null);
-                            } catch (err) { alert('Error deleting project.'); }
+                            } catch (err: any) { alert('Error eliminando proyecto: ' + (err?.message || 'Error desconocido')); }
                           }}
                           className="px-4 py-2 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                         >
