@@ -195,7 +195,7 @@ export const Projects: React.FC = () => {
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
-    select: 'id,title,completed,project_id,due_date,assignee_id,priority,group_name,parent_task_id,status'
+    select: 'id,title,completed,completed_at,project_id,due_date,assignee_id,priority,group_name,parent_task_id,status'
   });
 
   // Loading timeout — prevents infinite spinner
@@ -273,6 +273,7 @@ export const Projects: React.FC = () => {
         id: task.id, title: task.title, done: !!task.completed,
         assignee: task.assignee_id || '', dueDate: task.due_date || undefined,
         priority: task.priority || 'medium', status: task.status || 'todo',
+        completedAt: task.completed_at || undefined,
       });
     }
     if (selectedProject) {
@@ -510,7 +511,11 @@ export const Projects: React.FC = () => {
     if (!task) return;
     const newDone = !task.done;
     try {
-      await updateSyncedTask(taskId, { completed: newDone } as any);
+      await updateSyncedTask(taskId, {
+        completed: newDone,
+        completed_at: newDone ? new Date().toISOString() : null,
+        status: newDone ? 'done' : 'todo',
+      } as any);
       setTimeout(() => refreshTasks(), 800);
       await logActivity({ action: newDone ? 'completed task' : 'reopened task', target: task.title, project_title: selectedProject.title, type: 'task_completed' });
     } catch (err: any) {
@@ -1266,31 +1271,47 @@ export const Projects: React.FC = () => {
                           g.tasks.map((t: any) => ({ ...t, groupName: g.name, groupIdx: gIdx }))
                         );
                         const openTasks = allTasks.filter((t: any) => !t.done);
-                        const displayTasks = openTasks.slice(0, 8);
+                        const doneTasks = allTasks.filter((t: any) => t.done);
+                        // Show open tasks first, then recently completed
+                        const displayTasks = [...openTasks.slice(0, 8), ...doneTasks.slice(0, Math.max(0, 10 - Math.min(openTasks.length, 8)))];
                         const totalOpen = openTasks.length;
+                        const totalDone = doneTasks.length;
                         const totalAll = allTasks.length;
                         return (
                           <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <div className="flex items-center justify-between mb-3">
                               <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Tasks</h3>
                               {totalAll > 0 && (
-                                <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full tabular-nums">
-                                  {totalOpen} abiertas / {totalAll} total
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full tabular-nums">
+                                    {totalDone}/{totalAll} completadas
+                                  </span>
+                                </div>
                               )}
                             </div>
+                            {/* Progress bar */}
+                            {totalAll > 0 && (
+                              <div className="mb-3">
+                                <div className="w-full bg-zinc-200/60 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                                    style={{ width: `${Math.round((totalDone / totalAll) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
                             {displayTasks.length > 0 ? (
                               <div className="space-y-0.5">
                                 {displayTasks.map((task: any) => {
                                   const priorityColor = task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500';
                                   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10)) && !task.done;
                                   return (
-                                    <div key={task.id} className="group/otask flex items-center gap-2.5 py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-100/60 dark:hover:bg-zinc-800/30 transition-colors">
+                                    <div key={task.id} className={`group/otask flex items-center gap-2.5 py-2 px-2 -mx-2 rounded-lg transition-all duration-300 ${task.done ? 'opacity-60' : ''} hover:bg-zinc-100/60 dark:hover:bg-zinc-800/30`}>
                                       <button
                                         onClick={() => handleToggleTask(task.groupIdx, task.id)}
-                                        className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                        className={`rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300 ${
                                           task.done
-                                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                                            ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
                                             : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 text-transparent'
                                         }`}
                                         style={{ width: 18, height: 18 }}
@@ -1301,35 +1322,41 @@ export const Projects: React.FC = () => {
                                         onClick={() => { setActiveTab('tasks'); setExpandedTaskId(task.id); }}
                                         className="flex-1 min-w-0 text-left"
                                       >
-                                        <span className={`text-sm transition-colors truncate block ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'}`}>
+                                        <span className={`text-sm transition-all duration-300 truncate block ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'}`}>
                                           {task.title}
                                         </span>
+                                        {task.done && task.completedAt && (
+                                          <span className="text-[10px] text-emerald-500/70 dark:text-emerald-400/60">
+                                            Completada {new Date(task.completedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                          </span>
+                                        )}
                                       </button>
                                       <div className="flex items-center gap-1.5 shrink-0">
-                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
-                                        {task.dueDate && (
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-                                            isOverdue
-                                              ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
-                                              : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
-                                          }`}>
-                                            {new Date(task.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
-                                          </span>
+                                        {task.done ? (
+                                          <Icons.CheckCircle size={13} className="text-emerald-500" />
+                                        ) : (
+                                          <>
+                                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
+                                            {task.dueDate && (
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                                                isOverdue
+                                                  ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
+                                                  : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
+                                              }`}>
+                                                {new Date(task.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
+                                              </span>
+                                            )}
+                                          </>
                                         )}
                                       </div>
                                     </div>
                                   );
                                 })}
                               </div>
-                            ) : totalAll > 0 ? (
-                              <div className="flex items-center gap-2 py-3">
-                                <Icons.CheckCircle size={16} className="text-emerald-500" />
-                                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Todas las tareas completadas</span>
-                              </div>
                             ) : (
                               <p className="text-xs text-zinc-400 py-2">No hay tareas todavía.</p>
                             )}
-                            {(totalOpen > 8 || totalAll > 0) && (
+                            {totalAll > 0 && (
                               <button
                                 onClick={() => setActiveTab('tasks')}
                                 className="mt-3 w-full py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-lg hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"

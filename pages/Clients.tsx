@@ -372,13 +372,25 @@ export const Clients: React.FC = () => {
       setPortalInviteError('El cliente necesita un email para ser invitado al portal.');
       return;
     }
-    if (!currentTenant?.id) {
-      setPortalInviteError('No se encontró el tenant activo.');
-      return;
-    }
     setIsInvitingPortal(true);
     setPortalInviteError(null);
     setEmailSent(null);
+    setPortalInviteLink(null);
+
+    // Resolve tenant - try context first, then query DB
+    let tenantId = currentTenant?.id;
+    if (!tenantId) {
+      try {
+        const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user?.id).single();
+        tenantId = profile?.tenant_id;
+      } catch {}
+    }
+    if (!tenantId) {
+      setPortalInviteError('No se encontró el tenant activo. Intentá recargar la página.');
+      setIsInvitingPortal(false);
+      return;
+    }
+
     try {
       // 1. Find or create the 'client' role
       let roleId: string;
@@ -403,7 +415,7 @@ export const Clients: React.FC = () => {
         .from('invitations')
         .select('token')
         .eq('email', selectedClient.email)
-        .eq('tenant_id', currentTenant.id)
+        .eq('tenant_id', tenantId)
         .eq('status', 'pending')
         .maybeSingle();
 
@@ -411,7 +423,7 @@ export const Clients: React.FC = () => {
         const existingLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
         setPortalInviteLink(existingLink);
         try {
-          await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: existingLink, tenantName: currentTenant?.name });
+          await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: existingLink, tenantName: currentTenant?.name || 'Portal' });
           setEmailSent(true);
         } catch (emailErr) {
           console.warn('[handleInvitePortal] Email re-send failed:', emailErr);
@@ -424,7 +436,7 @@ export const Clients: React.FC = () => {
       const invitePayload: Record<string, any> = {
         email: selectedClient.email,
         role_id: roleId,
-        tenant_id: currentTenant.id,
+        tenant_id: tenantId,
         created_by: user?.id,
         status: 'pending',
       };
@@ -451,7 +463,7 @@ export const Clients: React.FC = () => {
 
       // Send invitation email
       try {
-        await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: finalLink, tenantName: currentTenant?.name });
+        await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: finalLink, tenantName: currentTenant?.name || 'Portal' });
         setEmailSent(true);
       } catch (emailErr) {
         console.warn('[handleInvitePortal] Email send failed:', emailErr);
@@ -467,7 +479,7 @@ export const Clients: React.FC = () => {
         if (clientProjects?.length) {
           const shares = clientProjects.map(p => ({
             project_id: p.id,
-            tenant_id: currentTenant.id,
+            tenant_id: tenantId,
             email: selectedClient.email!.toLowerCase(),
             role: 'collaborator' as const,
             invited_by: user?.id,
@@ -1002,7 +1014,7 @@ export const Clients: React.FC = () => {
                 )}
                 {portalInviteLink && (
                   <div className={`mt-3 text-[11px] rounded-lg px-3 py-2 flex items-center gap-2 ${emailSent === false ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10' : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'}`}>
-                    {emailSent === false ? <Icons.AlertTriangle size={13} className="shrink-0" /> : <Icons.CheckCircle size={13} className="shrink-0" />}
+                    {emailSent === false ? <Icons.AlertCircle size={13} className="shrink-0" /> : <Icons.CheckCircle size={13} className="shrink-0" />}
                     <span className="truncate flex-1">
                       {emailSent ? 'Invitación enviada por email' : emailSent === false ? 'Email no pudo enviarse, copiá el link' : 'Invitación creada'}
                     </span>
