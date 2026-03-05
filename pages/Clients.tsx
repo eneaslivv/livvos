@@ -967,13 +967,6 @@ export const Clients: React.FC = () => {
                       <option value="inactive">Inactivo</option>
                     </select>
                     <button
-                      onClick={handleInvitePortal}
-                      disabled={!selectedClient.email || isInvitingPortal}
-                      className="px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 transition-all"
-                    >
-                      {isInvitingPortal ? '...' : 'Invitar al portal'}
-                    </button>
-                    <button
                       onClick={async () => {
                         if (!confirm('¿Estás seguro de que querés eliminar este cliente? Esta acción no se puede deshacer.')) return;
                         try {
@@ -1009,23 +1002,95 @@ export const Clients: React.FC = () => {
                   </div>
                 )}
 
-                {portalInviteError && (
-                  <p className="mt-3 text-[11px] text-rose-600 bg-rose-50 dark:bg-rose-500/10 rounded-lg px-3 py-2">{portalInviteError}</p>
-                )}
-                {portalInviteLink && (
-                  <div className={`mt-3 text-[11px] rounded-lg px-3 py-2 flex items-center gap-2 ${emailSent === false ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10' : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'}`}>
-                    {emailSent === false ? <Icons.AlertCircle size={13} className="shrink-0" /> : <Icons.CheckCircle size={13} className="shrink-0" />}
-                    <span className="truncate flex-1">
-                      {emailSent ? 'Invitación enviada por email' : emailSent === false ? 'Email no pudo enviarse, copiá el link' : 'Invitación creada'}
-                    </span>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(portalInviteLink); }}
-                      className="px-2 py-1 bg-emerald-100 dark:bg-emerald-500/20 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 rounded-md text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 transition-colors shrink-0"
-                    >
-                      Copiar link
-                    </button>
+                {/* Portal Access Card */}
+                <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50/80 to-violet-50/80 dark:from-indigo-950/30 dark:to-violet-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Icons.External size={14} className="text-indigo-500" />
+                      <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">Portal del Cliente</h4>
+                    </div>
+                    {portalInviteLink && (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Icons.CheckCircle size={10} /> Invitado
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  {!portalInviteLink ? (
+                    <div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                        {selectedClient.email
+                          ? 'Invitá al cliente para que pueda ver el progreso de sus proyectos, archivos y comunicarse.'
+                          : 'Agregá un email al cliente para poder invitarlo al portal.'}
+                      </p>
+                      <button
+                        onClick={handleInvitePortal}
+                        disabled={!selectedClient.email || isInvitingPortal}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        {isInvitingPortal ? (
+                          <><Icons.Loader size={13} className="animate-spin" /> Generando invitación...</>
+                        ) : (
+                          <><Icons.Send size={13} /> Invitar al portal</>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {emailSent === true && (
+                        <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 rounded-lg">
+                          <Icons.CheckCircle size={14} className="shrink-0" />
+                          <span>Email de invitación enviado a <strong>{selectedClient.email}</strong></span>
+                        </div>
+                      )}
+                      {emailSent === false && (
+                        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 rounded-lg">
+                          <Icons.AlertCircle size={14} className="shrink-0" />
+                          <span>No se pudo enviar el email. Copiá el link y envialo manualmente.</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={portalInviteLink}
+                          className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 select-all"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(portalInviteLink);
+                            alert('Link copiado al portapapeles');
+                          }}
+                          className="px-3 py-2 text-xs font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shrink-0"
+                        >
+                          Copiar link
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => window.open(portalInviteLink, '_blank')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                        >
+                          <Icons.External size={12} /> Abrir vista del cliente
+                        </button>
+                        <button
+                          onClick={handleInvitePortal}
+                          disabled={isInvitingPortal}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
+                        >
+                          <Icons.Send size={12} /> Reenviar invitación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {portalInviteError && (
+                    <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 rounded-lg px-3 py-2">
+                      {portalInviteError}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Tabs */}
