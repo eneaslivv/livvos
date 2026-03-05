@@ -122,14 +122,14 @@ export const AcceptInvite: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
         <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
-          <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icons.Mail size={24} className="text-emerald-500" />
+          <div className="w-14 h-14 bg-[#2C0405]/5 dark:bg-[#2C0405]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icons.Mail size={24} className="text-[#2C0405] dark:text-[#e8b4b4]" />
           </div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Verificá tu email</h2>
           <p className="text-sm text-zinc-500 mb-6">{successMessage}</p>
           <a
             href={isClientInvite ? '/?portal=client' : '/auth'}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2C0405] hover:text-[#1a0203] hover:underline"
           >
             Ir a iniciar sesión
             <Icons.ChevronRight size={14} />
@@ -168,12 +168,12 @@ export const AcceptInvite: React.FC = () => {
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
         style={{ backgroundColor: isClientInvite ? '#0a0a0a' : '#09090b' }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/10 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#2C0405]/20 via-transparent to-transparent" />
 
         {/* Logo */}
         <div className="relative z-10">
           <span className="text-2xl font-light tracking-wider text-white" style={{ fontFamily: 'serif' }}>
-            livv<span className="text-emerald-500">~</span>
+            livv<span className="text-[#e8b4b4]">~</span>
           </span>
         </div>
 
@@ -182,7 +182,7 @@ export const AcceptInvite: React.FC = () => {
           <div>
             <h1 className="text-4xl font-light leading-tight mb-4 text-white" style={{ fontFamily: 'serif' }}>
               {isClientInvite ? (
-                <>Bienvenido a tu <span className="text-emerald-500">Portal</span></>
+                <>Bienvenido a tu <span className="text-[#e8b4b4]">Portal</span></>
               ) : (
                 <>Únete al <span className="text-amber-500">equipo</span></>
               )}
@@ -202,11 +202,11 @@ export const AcceptInvite: React.FC = () => {
                 { icon: '⌘', title: 'Documentos seguros', desc: 'Accedé a contratos, credenciales y archivos del proyecto.' },
               ].map((f, i) => (
                 <div key={i} className="flex items-start gap-4 group">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-500 text-lg group-hover:border-emerald-500/50 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
                     {f.icon}
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-emerald-400">{f.title}</h3>
+                    <h3 className="text-sm font-medium text-[#e8b4b4]">{f.title}</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">{f.desc}</p>
                   </div>
                 </div>
@@ -217,7 +217,7 @@ export const AcceptInvite: React.FC = () => {
 
         {/* Footer */}
         <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-          <span className={isClientInvite ? 'text-emerald-600' : 'text-amber-600'}>PORTAL SEGURO</span>
+          <span className={isClientInvite ? 'text-[#e8b4b4]' : 'text-amber-600'}>PORTAL SEGURO</span>
           <span className="text-zinc-700">&bull;</span>
           <span>Datos encriptados</span>
         </div>
@@ -228,8 +228,8 @@ export const AcceptInvite: React.FC = () => {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-10">
-            <div className={`w-14 h-14 ${isClientInvite ? 'bg-emerald-50' : 'bg-amber-50'} rounded-full flex items-center justify-center mx-auto mb-4`}>
-              <Icons.Mail size={22} className={isClientInvite ? 'text-emerald-600' : 'text-amber-600'} />
+            <div className={`w-14 h-14 ${isClientInvite ? 'bg-[#2C0405]/5' : 'bg-amber-50'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+              <Icons.Mail size={22} className={isClientInvite ? 'text-[#2C0405]' : 'text-amber-600'} />
             </div>
             <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
               {isClientInvite ? 'Creá tu cuenta' : 'Completá tu registro'}
@@ -271,7 +271,7 @@ export const AcceptInvite: React.FC = () => {
                   placeholder="Mínimo 6 caracteres"
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                     isClientInvite
-                      ? 'border-zinc-200 focus:ring-emerald-500/20 focus:border-emerald-500'
+                      ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
                       : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
                   }`}
                   autoFocus
@@ -293,7 +293,7 @@ export const AcceptInvite: React.FC = () => {
                   placeholder="Repetí la contraseña"
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                     isClientInvite
-                      ? 'border-zinc-200 focus:ring-emerald-500/20 focus:border-emerald-500'
+                      ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
                       : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
                   }`}
                   required
@@ -314,7 +314,7 @@ export const AcceptInvite: React.FC = () => {
               disabled={isSubmitting || !password || !confirmPassword}
               className={`w-full py-3.5 mt-2 text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
                 isClientInvite
-                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20'
+                  ? 'bg-[#2C0405] hover:bg-[#1a0203] shadow-lg shadow-[#2C0405]/20'
                   : 'bg-zinc-900 hover:bg-zinc-800'
               }`}
             >
@@ -342,7 +342,7 @@ export const AcceptInvite: React.FC = () => {
             {isClientInvite && (
               <a
                 href="/?portal=client"
-                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium hover:underline"
+                className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
               >
                 Iniciar sesión
               </a>

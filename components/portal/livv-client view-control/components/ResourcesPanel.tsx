@@ -142,16 +142,16 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
                     transition={{ duration: 1.2, ease: 'circOut' }}
-                    className="h-full bg-emerald-500 rounded-full"
+                    className="h-full bg-[#2C0405] rounded-full"
                   />
                 </div>
               </div>
 
               {/* Paid / Remaining cards */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 bg-emerald-50/60 rounded-xl">
-                  <p className="text-[9px] text-emerald-600/50 font-semibold mb-0.5">Cobrado</p>
-                  <p className="text-sm font-bold text-emerald-700">{fmt(budget.paid)}</p>
+                <div className="p-3 bg-[#2C0405]/5 rounded-xl">
+                  <p className="text-[9px] text-[#2C0405]/50 font-semibold mb-0.5">Cobrado</p>
+                  <p className="text-sm font-bold text-[#2C0405]">{fmt(budget.paid)}</p>
                 </div>
                 <div className="p-3 bg-zinc-50 rounded-xl">
                   <p className="text-[9px] text-zinc-400 font-semibold mb-0.5">Pendiente</p>
@@ -199,7 +199,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                           key={p.id}
                           className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${
                             isPaid
-                              ? 'bg-emerald-50/40 border-emerald-100/60'
+                              ? 'bg-[#2C0405]/[0.03] border-[#2C0405]/10'
                               : isOverdue
                               ? 'bg-red-50/40 border-red-100/60'
                               : isNext
@@ -210,7 +210,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                           {/* Status icon */}
                           <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
                             isPaid
-                              ? 'bg-emerald-100 text-emerald-600'
+                              ? 'bg-[#2C0405]/10 text-[#2C0405]'
                               : isOverdue
                               ? 'bg-red-100 text-red-500'
                               : 'bg-zinc-100 text-zinc-400'
@@ -221,18 +221,18 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <p className={`text-[10px] font-semibold truncate ${
-                              isPaid ? 'text-emerald-700' : isOverdue ? 'text-red-700' : 'text-zinc-600'
+                              isPaid ? 'text-[#2C0405]' : isOverdue ? 'text-red-700' : 'text-zinc-600'
                             }`}>
                               {p.concept}
                             </p>
-                            <p className={`text-[9px] ${isPaid ? 'text-emerald-500' : isOverdue ? 'text-red-400' : 'text-zinc-400'}`}>
+                            <p className={`text-[9px] ${isPaid ? 'text-[#2C0405]/70' : isOverdue ? 'text-red-400' : 'text-zinc-400'}`}>
                               {isPaid && p.paidDate ? `Pagado ${fmtDate(p.paidDate)}` : `Vence ${fmtDate(p.dueDate)}`}
                             </p>
                           </div>
 
                           {/* Amount */}
                           <p className={`text-[11px] font-bold flex-shrink-0 ${
-                            isPaid ? 'text-emerald-600' : isOverdue ? 'text-red-600' : 'text-zinc-600'
+                            isPaid ? 'text-[#2C0405]' : isOverdue ? 'text-red-600' : 'text-zinc-600'
                           }`}>
                             {fmt(p.amount)}
                           </p>
@@ -272,7 +272,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                         {showPass[c.id] ? <EyeOff size={12} /> : <Eye size={12} />}
                       </button>
                       <button onClick={() => copyText(c.pass || '', c.id)} className="p-1 text-zinc-300 hover:text-zinc-500 rounded transition-colors">
-                        {copied === c.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                        {copied === c.id ? <Check size={12} className="text-[#2C0405]/70" /> : <Copy size={12} />}
                       </button>
                     </div>
                   </div>

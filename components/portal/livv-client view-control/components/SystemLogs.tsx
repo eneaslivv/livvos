@@ -5,7 +5,7 @@ import { Activity, CheckCircle2, CreditCard, Package, MessageSquare, Clock } fro
 import { LogEntry } from '../types';
 
 const typeConfig: Record<string, { icon: React.ElementType; bg: string; text: string }> = {
-  milestone: { icon: CheckCircle2, bg: 'bg-emerald-50', text: 'text-emerald-500' },
+  milestone: { icon: CheckCircle2, bg: 'bg-[#2C0405]/5', text: 'text-[#2C0405]' },
   payment: { icon: CreditCard, bg: 'bg-blue-50', text: 'text-blue-500' },
   delivery: { icon: Package, bg: 'bg-indigo-50', text: 'text-indigo-500' },
   review: { icon: MessageSquare, bg: 'bg-amber-50', text: 'text-amber-500' },

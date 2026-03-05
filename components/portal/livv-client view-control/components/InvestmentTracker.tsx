@@ -45,7 +45,7 @@ const InvestmentTracker: React.FC<{ budget: { total: number, paid: number, nextP
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
             transition={{ duration: 1.5, ease: 'circOut' }}
-            className="h-full bg-emerald-500 rounded-full"
+            className="h-full bg-[#2C0405] rounded-full"
           />
         </div>
       </div>
@@ -69,9 +69,9 @@ const InvestmentTracker: React.FC<{ budget: { total: number, paid: number, nextP
 
       {/* Cards */}
       <div className="grid grid-cols-2 gap-2.5 mt-auto">
-        <div className="p-3.5 bg-emerald-50/70 rounded-xl">
-          <p className="text-[10px] text-emerald-600/60 font-medium mb-1">Pagado</p>
-          <p className="text-[15px] font-bold text-emerald-700">{fmt(budget.paid)}</p>
+        <div className="p-3.5 bg-[#2C0405]/5 rounded-xl">
+          <p className="text-[10px] text-[#2C0405]/60 font-medium mb-1">Pagado</p>
+          <p className="text-[15px] font-bold text-[#2C0405]">{fmt(budget.paid)}</p>
         </div>
         <div className="p-3.5 bg-zinc-50 rounded-xl">
           <p className="text-[10px] text-zinc-400 font-medium mb-1">Pendiente</p>

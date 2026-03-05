@@ -154,7 +154,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
           <div>
             <p className="text-[11px] font-bold leading-none mb-1">Soporte</p>
             <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              <div className="w-1.5 h-1.5 bg-[#2C0405] rounded-full animate-pulse" />
               <span className="text-[9px] uppercase opacity-50">En línea</span>
             </div>
           </div>

@@ -40,7 +40,7 @@ const Vault: React.FC<{ credentials?: CredentialItem[] }> = ({ credentials }) =>
                   {showPass[c.id] ? <EyeOff size={13} /> : <Eye size={13} />}
                 </button>
                 <button onClick={() => copy(c.pass || '', c.id)} className="p-1.5 text-zinc-300 hover:text-zinc-500 rounded-md hover:bg-white transition-all">
-                  {copied === c.id ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                  {copied === c.id ? <Check size={13} className="text-[#2C0405]" /> : <Copy size={13} />}
                 </button>
               </div>
             </div>

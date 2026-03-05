@@ -18,8 +18,8 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Progreso del Proyecto</h3>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${data.onTrack ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${data.onTrack ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${data.onTrack ? 'bg-[#2C0405]/5 text-[#2C0405]' : 'bg-amber-50 text-amber-600'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${data.onTrack ? 'bg-[#2C0405]' : 'bg-amber-400'}`} />
           {data.onTrack ? 'En tiempo' : 'Con retraso'}
         </div>
       </div>
@@ -31,7 +31,7 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
           <p className="text-[11px] text-zinc-400 mt-1.5">completado</p>
         </div>
         {data.progress >= 100 ? (
-          <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+          <div className="flex items-center gap-2 text-[#2C0405] bg-[#2C0405]/5 px-3 py-1.5 rounded-lg">
             <CheckCircle2 size={16} />
             <span className="text-xs font-semibold">Finalizado</span>
           </div>
@@ -49,7 +49,7 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(data.progress, 100)}%` }}
           transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
-          className={`absolute top-0 left-0 h-full rounded-full ${data.progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+          className={`absolute top-0 left-0 h-full rounded-full ${data.progress >= 100 ? 'bg-[#2C0405]' : 'bg-indigo-500'}`}
         />
       </div>
 

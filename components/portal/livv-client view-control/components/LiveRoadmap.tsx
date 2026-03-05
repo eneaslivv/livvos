@@ -25,7 +25,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
       {/* Progress bar */}
       <div className="w-full h-1.5 bg-zinc-100 rounded-full mb-6 overflow-hidden">
         <motion.div
-          className="h-full rounded-full bg-emerald-500"
+          className="h-full rounded-full bg-[#2C0405]"
           initial={{ width: 0 }}
           animate={{ width: `${progressPct}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -46,7 +46,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                 {/* Step circle */}
                 <div className={`
                   w-6 h-6 rounded-full flex items-center justify-center transition-all
-                  ${done ? 'bg-emerald-500 text-white' : ''}
+                  ${done ? 'bg-[#2C0405] text-white' : ''}
                   ${active ? 'bg-indigo-500 text-white ring-[3px] ring-indigo-100' : ''}
                   ${!done && !active ? 'bg-zinc-100 border-2 border-zinc-200' : ''}
                 `}>
@@ -58,7 +58,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                 </div>
                 {/* Connecting line */}
                 {!isLast && (
-                  <div className={`w-[1.5px] flex-1 min-h-[12px] ${done ? 'bg-emerald-200' : 'bg-zinc-100'}`} />
+                  <div className={`w-[1.5px] flex-1 min-h-[12px] ${done ? 'bg-[#2C0405]/20' : 'bg-zinc-100'}`} />
                 )}
               </div>
 
@@ -85,7 +85,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                 {/* Meta info */}
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {done && m.completedAt && (
-                    <span className="text-[10px] text-emerald-500 font-medium">
+                    <span className="text-[10px] text-[#2C0405] font-medium">
                       Completada {m.completedAt}
                     </span>
                   )}
@@ -106,7 +106,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
         <div className="mt-4 pt-3 border-t border-zinc-100">
           <p className="text-[11px] text-zinc-400 text-center">
             {progressPct === 100 ? (
-              <span className="text-emerald-500 font-semibold">Proyecto completado</span>
+              <span className="text-[#2C0405] font-semibold">Proyecto completado</span>
             ) : (
               <>{progressPct}% completado</>
             )}
