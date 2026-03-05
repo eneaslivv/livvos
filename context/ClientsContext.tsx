@@ -76,6 +76,29 @@ interface ClientsContextType {
 
 const ClientsContext = createContext<ClientsContextType | undefined>(undefined)
 
+// Cache tenant_id so we resolve it once
+let cachedTenantId: string | null = null
+let tenantIdResolved = false
+
+const resolveTenantId = async () => {
+  if (tenantIdResolved) return cachedTenantId
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single()
+      cachedTenantId = profile?.tenant_id || null
+    }
+  } catch {
+    // Continue without tenant_id
+  }
+  tenantIdResolved = true
+  return cachedTenantId
+}
+
 export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -153,19 +176,31 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [fetchClients])
 
   const createClient = async (clientData: Omit<Client, 'id' | 'owner_id' | 'created_at' | 'updated_at'>) => {
-    try {
-      const { data, error: err } = await supabase
-        .from('clients')
-        .insert(clientData)
-        .select()
-        .single()
-      
-      if (err) throw err
-      // El estado se actualizará vía realtime, pero podemos actualizar optimísticamente si queremos
-      return data
-    } catch (err) {
-      throw err
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) throw new Error('No hay usuario autenticado')
+
+    const tenantId = await resolveTenantId()
+
+    // Clean empty strings to null so DB constraints don't fail
+    const cleaned: Record<string, any> = {}
+    for (const [k, v] of Object.entries(clientData)) {
+      cleaned[k] = (typeof v === 'string' && v.trim() === '') ? null : v
     }
+
+    const payload: any = {
+      ...cleaned,
+      owner_id: user.id,
+      ...(tenantId && { tenant_id: tenantId }),
+    }
+
+    const { data, error: err } = await supabase
+      .from('clients')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (err) throw err
+    return data
   }
 
   const updateClient = async (id: string, updates: Partial<Client>) => {
@@ -287,12 +322,17 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }
 
   const addHistoryEntry = async (historyData: Omit<ClientHistory, 'id'>) => {
+    const tenantId = await resolveTenantId()
+    const payload: any = {
+      ...historyData,
+      ...(tenantId && { tenant_id: tenantId }),
+    }
     const { data, error } = await supabase
       .from('client_history')
-      .insert(historyData)
+      .insert(payload)
       .select()
       .single()
-    
+
     if (error) throw error
     return data
   }

@@ -100,7 +100,7 @@ export const Clients: React.FC = () => {
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [showNewTaskInline, setShowNewTaskInline] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
-  const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: '', assignee_id: '', status: 'todo' as const });
+  const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' as const });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -290,8 +290,9 @@ export const Clients: React.FC = () => {
       setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '' });
       setShowNewClientPanel(false);
       setSelectedClient(client);
-    } catch (err) {
+    } catch (err: any) {
       errorLogger.error('Error creando cliente', err);
+      alert('Error al crear cliente: ' + (err?.message || 'Error desconocido'));
     } finally {
       setCreatingClient(false);
     }
@@ -468,7 +469,7 @@ export const Clients: React.FC = () => {
         title: newTaskData.title,
         description: newTaskData.description || undefined,
         priority: newTaskData.priority as any,
-        start_date: newTaskData.due_date || undefined,
+        start_date: newTaskData.due_date || new Date().toISOString().split('T')[0],
         status: newTaskData.status || 'todo',
         assignee_id: newTaskData.assignee_id || undefined,
         completed: false,
@@ -485,7 +486,7 @@ export const Clients: React.FC = () => {
           action_description: `Tarea creada: ${newTaskData.title}`
         });
       } catch { /* history entry is non-critical */ }
-      setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' });
+      setNewTaskData({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' });
       setShowNewTaskInline(false);
     } catch (err: any) {
       errorLogger.error('Error creando tarea', err);
@@ -1499,7 +1500,7 @@ export const Clients: React.FC = () => {
                               {creatingTask ? 'Creando...' : 'Crear Tarea'}
                             </button>
                             <button
-                              onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: '', assignee_id: '', status: 'todo' }); }}
+                              onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' }); }}
                               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             >
                               Cancelar
