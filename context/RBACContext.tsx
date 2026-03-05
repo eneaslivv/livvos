@@ -158,14 +158,14 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     const fetchProfileWithRetry = async () => {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', authUser?.id)
           .single();
 
-        if (!profileError && profile?.tenant_id) {
+        if (!profileError && profile) {
           return profile as UserProfile;
         }
 
@@ -175,8 +175,8 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
           console.warn('[RBACContext] User is not assigned to any tenant yet.');
         }
 
-        if (attempt < 4) {
-          await sleep(250 * (attempt + 1));
+        if (attempt < 7) {
+          await sleep(300 * (attempt + 1));
         }
       }
 
@@ -185,12 +185,12 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
     try {
       if (!authUser) {
-        // Clear data on logout
+        // Clear data on logout but mark as initialized so app doesn't block
         setUser(null);
         setRoles([]);
         setPermissions([]);
         setUserRoleAssignments([]);
-        setIsInitialized(false);
+        setIsInitialized(true);
         return;
       }
 
@@ -219,11 +219,12 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       const profile = await fetchProfileWithRetry();
 
       if (!profile) {
+        console.warn('[RBACContext] Profile not found after retries — initializing with empty permissions');
         setUser(null);
         setRoles([]);
         setPermissions([]);
         setUserRoleAssignments([]);
-        setIsInitialized(false);
+        setIsInitialized(true);
         return;
       }
 
@@ -262,14 +263,13 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       errorLogger.error('Error loading RBAC data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load RBAC data');
 
-      // Only clear state if this was the first load attempt;
-      // if already initialized, keep existing data to avoid UI flicker
+      // On error: keep existing data if already loaded, otherwise initialize empty
       if (!hasLoadedRef.current) {
         setUser(null);
         setRoles([]);
         setPermissions([]);
         setUserRoleAssignments([]);
-        setIsInitialized(false);
+        setIsInitialized(true);
       }
     } finally {
       setIsLoading(false);

@@ -486,8 +486,20 @@ const AppContent: React.FC<{
   const { isInitialized, hasRole } = useRBAC();
   const { isLoading: tenantLoading, currentTenant } = useTenant();
 
+  // Safety timeout: force ready after 8s to avoid permanent skeleton
+  const [forceReady, setForceReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isInitialized || tenantLoading) {
+        console.warn('[AppContent] Force-ready after timeout — RBAC/Tenant took too long');
+        setForceReady(true);
+      }
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Wait for both RBAC + Tenant before rendering pages
-  const isReady = isInitialized && !tenantLoading && !!currentTenant;
+  const isReady = (isInitialized && !tenantLoading && !!currentTenant) || forceReady;
 
   // Track which pages have been visited so we mount them lazily but keep them alive
   const [visitedPages, setVisitedPages] = useState<Set<string>>(() => new Set([currentPage]));
