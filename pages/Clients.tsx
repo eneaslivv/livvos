@@ -14,15 +14,15 @@ import { sendInviteEmail } from '../lib/sendInviteEmail';
 
 /* ─── Helpers ─── */
 const statusConfig = {
-  active:   { label: 'Activo',    bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  prospect: { label: 'Prospecto', bg: 'bg-amber-50 dark:bg-amber-500/10',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
-  inactive: { label: 'Inactivo',  bg: 'bg-zinc-100 dark:bg-zinc-800',         text: 'text-zinc-500 dark:text-zinc-400',       dot: 'bg-zinc-400' },
+  active:   { label: 'Active',    bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  prospect: { label: 'Prospect', bg: 'bg-amber-50 dark:bg-amber-500/10',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
+  inactive: { label: 'Inactive',  bg: 'bg-zinc-100 dark:bg-zinc-800',         text: 'text-zinc-500 dark:text-zinc-400',       dot: 'bg-zinc-400' },
 } as const;
 
 const priorityConfig = {
-  high:   { label: 'Alta',   bg: 'bg-rose-50 dark:bg-rose-500/10',  text: 'text-rose-600 dark:text-rose-400' },
-  medium: { label: 'Media',  bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' },
-  low:    { label: 'Baja',   bg: 'bg-zinc-100 dark:bg-zinc-800',     text: 'text-zinc-500 dark:text-zinc-400' },
+  high:   { label: 'High',   bg: 'bg-rose-50 dark:bg-rose-500/10',  text: 'text-rose-600 dark:text-rose-400' },
+  medium: { label: 'Medium',  bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' },
+  low:    { label: 'Low',   bg: 'bg-zinc-100 dark:bg-zinc-800',     text: 'text-zinc-500 dark:text-zinc-400' },
 } as const;
 
 const getInitials = (name: string) => {
@@ -243,8 +243,8 @@ export const Clients: React.FC = () => {
         clientTasksQuery,
         projectTasksQuery,
       ]);
-      if (clientResult?.error) errorLogger.error('Error cargando tareas del cliente', clientResult.error);
-      if (projectResult && 'error' in projectResult && projectResult.error) errorLogger.error('Error cargando tareas de proyectos', projectResult.error);
+      if (clientResult?.error) errorLogger.error('Error loading client tasks', clientResult.error);
+      if (projectResult && 'error' in projectResult && projectResult.error) errorLogger.error('Error loading project tasks', projectResult.error);
       const clientDirectTasks = clientResult?.data || [];
       const projectLinkedTasks = projectResult?.data || [];
 
@@ -287,7 +287,7 @@ export const Clients: React.FC = () => {
         // Non-critical
       }
     } catch (err) {
-      errorLogger.error('Error cargando datos del cliente', err);
+      errorLogger.error('Error loading client data', err);
     }
   };
 
@@ -296,7 +296,7 @@ export const Clients: React.FC = () => {
       const msgs = await getClientMessages(clientId);
       setMessages(msgs);
     } catch (err) {
-      errorLogger.error('Error cargando mensajes', err);
+      errorLogger.error('Error loading messages', err);
     }
   };
 
@@ -311,7 +311,7 @@ export const Clients: React.FC = () => {
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
-        action_description: `Cliente creado: ${client.name}`
+        action_description: `Client created: ${client.name}`
       });
 
       // Auto-invite to portal if client has email
@@ -338,7 +338,7 @@ export const Clients: React.FC = () => {
               .catch(err => console.warn('[auto-invite] Email failed:', err));
             await addHistoryEntry({
               client_id: client.id, user_id: user?.id || '', user_name: user?.email?.split('@')[0] || 'User',
-              action_type: 'email', action_description: `Invitación al portal enviada automáticamente a ${client.email}`,
+              action_type: 'email', action_description: `Portal invitation sent automatically to ${client.email}`,
             });
           }
         } catch (autoInviteErr) {
@@ -350,8 +350,8 @@ export const Clients: React.FC = () => {
       setShowNewClientPanel(false);
       setSelectedClient(client);
     } catch (err: any) {
-      errorLogger.error('Error creando cliente', err);
-      alert('Error al crear cliente: ' + (err?.message || 'Error desconocido'));
+      errorLogger.error('Error creating client', err);
+      alert('Error creating client: ' + (err?.message || 'Unknown error'));
     } finally {
       setCreatingClient(false);
     }
@@ -373,12 +373,12 @@ export const Clients: React.FC = () => {
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
-        action_description: `Proyecto asignado: ${proj?.title || ''}`
+        action_description: `Project assigned: ${proj?.title || ''}`
       }).catch(() => {});
       loadClientData(selectedClient.id);
     } catch (err: any) {
       errorLogger.error('Error assigning project', err);
-      alert('Error al asignar proyecto: ' + (err?.message || 'Error desconocido'));
+      alert('Error assigning project: ' + (err?.message || 'Unknown error'));
     } finally {
       setAssigningProject(false);
     }
@@ -397,7 +397,7 @@ export const Clients: React.FC = () => {
 
   const handleInvitePortal = async () => {
     if (!selectedClient || !selectedClient.email) {
-      setPortalInviteError('El cliente necesita un email para ser invitado al portal.');
+      setPortalInviteError('Client needs an email to be invited to the portal.');
       return;
     }
     setIsInvitingPortal(true);
@@ -419,7 +419,7 @@ export const Clients: React.FC = () => {
       const withTimeout = <T,>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> =>
         Promise.race([
           Promise.resolve(promise),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label} tardó más de ${ms / 1000}s`)), ms))
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label} took more than ${ms / 1000}s`)), ms))
         ]);
 
       // 1. Try to find/create role and invitation in DB
@@ -450,7 +450,7 @@ export const Clients: React.FC = () => {
         try {
           const { data: existing } = await withTimeout(
             supabase.from('invitations').select('token').eq('email', selectedClient.email!).eq('tenant_id', tenantId).eq('status', 'pending').maybeSingle(),
-            8000, 'buscar invitación existente'
+            8000, 'search existing invitation'
           );
           if (existing?.token) {
             inviteLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
@@ -472,13 +472,13 @@ export const Clients: React.FC = () => {
           };
           const { data: invite, error: invErr } = await withTimeout(
             supabase.from('invitations').insert({ ...payload, client_id: selectedClient.id, type: 'client' }).select('token').single(),
-            8000, 'crear invitación'
+            8000, 'create invitation'
           );
           if (invErr) {
             // Retry without optional columns
             const { data: invite2, error: invErr2 } = await withTimeout(
               supabase.from('invitations').insert(payload).select('token').single(),
-              8000, 'crear invitación (retry)'
+              8000, 'create invitation (retry)'
             );
             if (!invErr2 && invite2) inviteLink = `${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`;
           } else if (invite) {
@@ -503,7 +503,7 @@ export const Clients: React.FC = () => {
       try {
         await withTimeout(
           sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink, tenantName: currentTenant?.name || 'Portal' }),
-          10000, 'enviar email'
+          10000, 'send email'
         );
         setEmailSent(true);
       } catch (emailErr) {
@@ -528,13 +528,13 @@ export const Clients: React.FC = () => {
       addHistoryEntry({
         client_id: selectedClient.id, user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User', action_type: 'email',
-        action_description: `Invitación al portal creada para ${selectedClient.email}`,
+        action_description: `Portal invitation created for ${selectedClient.email}`,
         action_date: new Date().toISOString(),
       }).catch(() => {});
 
     } catch (err: any) {
       console.error('[handleInvitePortal]', err);
-      setPortalInviteError(err.message || 'Error al crear invitación');
+      setPortalInviteError(err.message || 'Error creating invitation');
     } finally {
       setIsInvitingPortal(false);
     }
@@ -553,7 +553,7 @@ export const Clients: React.FC = () => {
       });
       setNewMessage('');
     } catch (err) {
-      errorLogger.error('Error enviando mensaje', err);
+      errorLogger.error('Error sending message', err);
     }
   };
 
@@ -581,14 +581,14 @@ export const Clients: React.FC = () => {
           user_id: user?.id || '',
           user_name: user?.email?.split('@')[0] || 'User',
           action_type: 'task_created',
-          action_description: `Tarea creada: ${newTaskData.title}`
+          action_description: `Task created: ${newTaskData.title}`
         });
       } catch { /* history entry is non-critical */ }
       setNewTaskData({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' });
       setShowNewTaskInline(false);
     } catch (err: any) {
-      errorLogger.error('Error creando tarea', err);
-      alert('No se pudo crear la tarea: ' + (err?.message || 'Error desconocido'));
+      errorLogger.error('Error creating task', err);
+      alert('Could not create task: ' + (err?.message || 'Unknown error'));
     } finally {
       setCreatingTask(false);
     }
@@ -606,8 +606,8 @@ export const Clients: React.FC = () => {
     } catch (err: any) {
       // Rollback
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t));
-      errorLogger.error('Error actualizando tarea', err);
-      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
+      errorLogger.error('Error updating task', err);
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -620,8 +620,8 @@ export const Clients: React.FC = () => {
     } catch (err: any) {
       // Rollback
       setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed, status: !completed ? 'done' : 'todo' } : t));
-      errorLogger.error('Error actualizando tarea', err);
-      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
+      errorLogger.error('Error updating task', err);
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -644,7 +644,7 @@ export const Clients: React.FC = () => {
       setNewSubtaskTitle('');
       if (selectedClient) await loadClientData(selectedClient.id);
     } catch (err) {
-      errorLogger.error('Error creando subtarea', err);
+      errorLogger.error('Error creating subtask', err);
     } finally {
       setAddingSubtask(false);
     }
@@ -655,7 +655,7 @@ export const Clients: React.FC = () => {
       await updateCalendarTask(subtaskId, { completed, status: completed ? 'done' : 'todo' });
       if (selectedClient) await loadClientData(selectedClient.id);
     } catch (err) {
-      errorLogger.error('Error actualizando subtarea', err);
+      errorLogger.error('Error updating subtask', err);
     }
   };
 
@@ -668,7 +668,7 @@ export const Clients: React.FC = () => {
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'status_change',
-        action_description: `Estado cambiado a ${statusConfig[status as keyof typeof statusConfig]?.label || status}`,
+        action_description: `Status changed to ${statusConfig[status as keyof typeof statusConfig]?.label || status}`,
         metadata: { prevStatus: selectedClient.status, newStatus: status }
       });
       setSelectedClient({ ...selectedClient, status });
@@ -678,7 +678,9 @@ export const Clients: React.FC = () => {
   };
 
   const handleInlineEdit = async (field: string): Promise<boolean> => {
-    if (!selectedClient || !editDraft[field]?.trim()) return false;
+    console.log("[EDIT] start:", field, "client:", selectedClient?.id, "draft:", JSON.stringify(editDraft));
+    if (!selectedClient) { console.log("[EDIT] no client"); return false; }
+    if (!editDraft[field]?.trim()) { console.log("[EDIT] empty draft:", field); return false; }
     try {
       await updateClient(selectedClient.id, { [field]: editDraft[field].trim() });
       setSelectedClient({ ...selectedClient, [field]: editDraft[field].trim() });
