@@ -425,12 +425,12 @@ export const Calendar: React.FC = () => {
 
   // Obtener semana actual
   const getWeekDays = () => {
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Ajustar para que lunes sea el primer día
+    const ref = new Date(currentDate);
+    const startOfWeek = new Date(ref);
+    const day = ref.getDay();
+    const diff = ref.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
-    
+
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
@@ -438,6 +438,32 @@ export const Calendar: React.FC = () => {
       weekDays.push(date);
     }
     return weekDays;
+  };
+
+  const navigateCalendar = (direction: -1 | 1) => {
+    setCurrentDate(prev => {
+      const next = new Date(prev);
+      if (view === 'week') next.setDate(next.getDate() + direction * 7);
+      else next.setMonth(next.getMonth() + direction);
+      return next;
+    });
+  };
+
+  const goToToday = () => setCurrentDate(new Date());
+
+  const getPeriodLabel = () => {
+    if (view === 'week') {
+      const days = getWeekDays();
+      const first = days[0], last = days[6];
+      const sameMonth = first.getMonth() === last.getMonth();
+      const opts: Intl.DateTimeFormatOptions = { month: 'short' };
+      if (sameMonth) {
+        return `${first.getDate()} - ${last.getDate()} ${first.toLocaleDateString('es-ES', opts)} ${first.getFullYear()}`;
+      }
+      return `${first.getDate()} ${first.toLocaleDateString('es-ES', opts)} - ${last.getDate()} ${last.toLocaleDateString('es-ES', opts)} ${last.getFullYear()}`;
+    }
+    const label = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
   };
 
   const getMonthDays = () => {
@@ -584,8 +610,9 @@ export const Calendar: React.FC = () => {
         completed,
         status: completed ? 'done' : 'todo',
       });
-    } catch (err) {
+    } catch (err: any) {
       errorLogger.error('Error actualizando tarea', err);
+      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
     }
   };
 
@@ -847,6 +874,20 @@ export const Calendar: React.FC = () => {
             value={view}
             onChange={setView}
           />
+
+          {/* Navigation */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => navigateCalendar(-1)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
+              <Icons.ChevronLeft size={16} />
+            </button>
+            <button onClick={goToToday} className="px-2.5 py-1 text-[11px] font-medium rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors">
+              Hoy
+            </button>
+            <button onClick={() => navigateCalendar(1)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
+              <Icons.ChevronRight size={16} />
+            </button>
+            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300 ml-1 min-w-[140px]">{getPeriodLabel()}</span>
+          </div>
 
           {/* Separator */}
           <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />

@@ -564,23 +564,33 @@ export const Clients: React.FC = () => {
   };
 
   const handleToggleTask = async (taskId: string, completed: boolean) => {
+    // Optimistic update for legacy tasks
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed } : t));
     try {
       await updateTask(taskId, { completed });
       if (selectedClient) {
         const updatedTasks = await getClientTasks(selectedClient.id);
         setTasks(updatedTasks);
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Rollback
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t));
       errorLogger.error('Error actualizando tarea', err);
+      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
     }
   };
 
   const handleToggleUnifiedTask = async (taskId: string, completed: boolean) => {
+    // Optimistic update — instant UI feedback
+    setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed, status: completed ? 'done' : 'todo' } : t));
     try {
       await updateCalendarTask(taskId, { completed, status: completed ? 'done' : 'todo' });
       if (selectedClient) await loadClientData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
+      // Rollback
+      setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed, status: !completed ? 'done' : 'todo' } : t));
       errorLogger.error('Error actualizando tarea', err);
+      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
     }
   };
 
@@ -1919,10 +1929,13 @@ export const Clients: React.FC = () => {
 
                             {/* Completed tasks */}
                             {completed.length > 0 && (
-                              <>
-                                <p className="text-[10px] font-semibold text-zinc-300 dark:text-zinc-600 uppercase tracking-wider pt-3 pb-1 px-3">Completadas</p>
+                              <div className="mt-3 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+                                <div className="flex items-center gap-2 px-3 pb-2">
+                                  <Icons.CheckCircle size={12} className="text-emerald-500" />
+                                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completadas ({completed.length})</p>
+                                </div>
                                 {completed.map(task => renderTask(task, true))}
-                              </>
+                              </div>
                             )}
                           </div>
                         );

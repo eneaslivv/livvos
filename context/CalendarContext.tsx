@@ -345,6 +345,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         client_id: taskData.client_id || null,
         assignee_id: taskData.assignee_id,
         due_date: taskData.start_date,
+        start_date: taskData.start_date,
         start_time: taskData.start_time || null,
         duration: taskData.duration || null,
         owner_id: taskData.owner_id,
@@ -390,7 +391,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if ('assignee_id' in payload) payload.assignee_id = payload.assignee_id || null
     if (payload.start_date) {
       payload.due_date = payload.start_date
-      delete payload.start_date
     }
 
     try {
