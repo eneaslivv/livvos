@@ -1260,6 +1260,86 @@ export const Projects: React.FC = () => {
                           />
                         </div>
                       </div>
+                      {/* Tasks Overview */}
+                      {(() => {
+                        const allTasks = derivedTasksGroups.flatMap((g: any, gIdx: number) =>
+                          g.tasks.map((t: any) => ({ ...t, groupName: g.name, groupIdx: gIdx }))
+                        );
+                        const openTasks = allTasks.filter((t: any) => !t.done);
+                        const displayTasks = openTasks.slice(0, 8);
+                        const totalOpen = openTasks.length;
+                        const totalAll = allTasks.length;
+                        return (
+                          <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Tasks</h3>
+                              {totalAll > 0 && (
+                                <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full tabular-nums">
+                                  {totalOpen} abiertas / {totalAll} total
+                                </span>
+                              )}
+                            </div>
+                            {displayTasks.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {displayTasks.map((task: any) => {
+                                  const priorityColor = task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500';
+                                  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10)) && !task.done;
+                                  return (
+                                    <div key={task.id} className="group/otask flex items-center gap-2.5 py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-100/60 dark:hover:bg-zinc-800/30 transition-colors">
+                                      <button
+                                        onClick={() => handleToggleTask(task.groupIdx, task.id)}
+                                        className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                          task.done
+                                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                                            : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 text-transparent'
+                                        }`}
+                                        style={{ width: 18, height: 18 }}
+                                      >
+                                        <Icons.Check size={10} strokeWidth={3} />
+                                      </button>
+                                      <button
+                                        onClick={() => { setActiveTab('tasks'); setExpandedTaskId(task.id); }}
+                                        className="flex-1 min-w-0 text-left"
+                                      >
+                                        <span className={`text-sm transition-colors truncate block ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'}`}>
+                                          {task.title}
+                                        </span>
+                                      </button>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
+                                        {task.dueDate && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                                            isOverdue
+                                              ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
+                                              : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
+                                          }`}>
+                                            {new Date(task.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : totalAll > 0 ? (
+                              <div className="flex items-center gap-2 py-3">
+                                <Icons.CheckCircle size={16} className="text-emerald-500" />
+                                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Todas las tareas completadas</span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-zinc-400 py-2">No hay tareas todavía.</p>
+                            )}
+                            {(totalOpen > 8 || totalAll > 0) && (
+                              <button
+                                onClick={() => setActiveTab('tasks')}
+                                className="mt-3 w-full py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-lg hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+                              >
+                                Ver todas las tareas →
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {/* Financial Summary */}
                       <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                         <div className="flex items-center justify-between mb-4">

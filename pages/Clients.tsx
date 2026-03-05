@@ -914,7 +914,25 @@ export const Clients: React.FC = () => {
                       ) : getInitials(selectedClient.name)}
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{selectedClient.name}</h2>
+                      {editingField === 'name' ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 bg-transparent border-b border-zinc-300 dark:border-zinc-600 outline-none px-0 py-0"
+                            value={editDraft['name'] || ''}
+                            onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
+                            onKeyDown={e => { if (e.key === 'Enter') handleInlineEdit('name'); if (e.key === 'Escape') setEditingField(null); }}
+                            onBlur={() => handleInlineEdit('name')}
+                          />
+                          <button onClick={() => setEditingField(null)} className="text-zinc-400 hover:text-zinc-600 text-xs ml-1">X</button>
+                        </div>
+                      ) : (
+                        <h2
+                          className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                          onClick={() => { setEditingField('name'); setEditDraft({ ...editDraft, name: selectedClient.name || '' }); }}
+                          title="Click para editar"
+                        >{selectedClient.name}</h2>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5">
                         {selectedClient.company && (
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">{selectedClient.company}</span>
@@ -942,6 +960,21 @@ export const Clients: React.FC = () => {
                       className="px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 transition-all"
                     >
                       {isInvitingPortal ? '...' : 'Invitar al portal'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('¿Estás seguro de que querés eliminar este cliente? Esta acción no se puede deshacer.')) return;
+                        try {
+                          await deleteClient(selectedClient.id);
+                          setSelectedClient(null);
+                        } catch (err: any) {
+                          alert('Error eliminando cliente: ' + (err?.message || 'Error desconocido'));
+                        }
+                      }}
+                      className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
+                      title="Eliminar cliente"
+                    >
+                      <Icons.Trash2 size={15} />
                     </button>
                   </div>
                 </div>
