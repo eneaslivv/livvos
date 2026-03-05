@@ -4,6 +4,16 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { DashboardData, Milestone, LogEntry, PaymentEntry } from './livv-client view-control/types';
 
+/** Wrap a promise with a timeout — returns fallback on timeout or error */
+const safeQuery = <T,>(promise: Promise<{ data: T; error: any }>, fallback: T, ms = 6000): Promise<{ data: T }> =>
+  Promise.race([
+    promise.then(res => {
+      if (res.error) { console.warn('Portal query error:', res.error.message); return { data: fallback }; }
+      return { data: res.data ?? fallback };
+    }).catch(() => ({ data: fallback })),
+    new Promise<{ data: T }>(resolve => setTimeout(() => { console.warn('Portal query timeout'); resolve({ data: fallback }); }, ms))
+  ]);
+
 type ClientRecord = {
   id: string;
   name: string;
@@ -99,76 +109,60 @@ export const ClientPortalView: React.FC = () => {
         let client: ClientRecord | null = null;
         let project: ProjectRecord | null = null;
 
+        // --- Resolve client (with clientId param: single fast lookup) ---
+        if (clientIdParam) {
+          const { data } = await safeQuery(
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('id', clientIdParam).single(),
+            null as ClientRecord | null, 5000
+          );
+          client = data;
+        }
+
         if (projectIdParam) {
-          const { data: projectData } = await supabase
-            .from('projects')
-            .select('id,title,description,status,created_at,client_id')
-            .eq('id', projectIdParam)
-            .single();
-          project = projectData as ProjectRecord | null;
-          if (project?.client_id) {
-            const { data: clientData } = await supabase
-              .from('clients')
-              .select('id,name,email,company,avatar_url')
-              .eq('id', project.client_id)
-              .single();
-            client = clientData as ClientRecord | null;
+          const { data } = await safeQuery(
+            supabase.from('projects').select('id,title,description,status,created_at,client_id').eq('id', projectIdParam).single(),
+            null as ProjectRecord | null, 5000
+          );
+          project = data;
+          if (!client && project?.client_id) {
+            const { data: cd } = await safeQuery(
+              supabase.from('clients').select('id,name,email,company,avatar_url').eq('id', project.client_id).single(),
+              null as ClientRecord | null, 5000
+            );
+            client = cd;
           }
         }
 
-        if (!client && clientIdParam) {
-          const { data: clientData } = await supabase
-            .from('clients')
-            .select('id,name,email,company,avatar_url')
-            .eq('id', clientIdParam)
-            .single();
-          client = clientData as ClientRecord | null;
-        }
-
+        // If no client yet, try auth_user_id, email, then owner_id (admin)
         if (!client) {
-          const { data: clientData, error: authUserErr } = await supabase
-            .from('clients')
-            .select('id,name,email,company,avatar_url')
-            .eq('auth_user_id', user.id)
-            .single();
-          if (authUserErr) console.warn('Portal: clients lookup by auth_user_id failed:', authUserErr.message);
-          client = clientData as ClientRecord | null;
+          const { data: cd1 } = await safeQuery(
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('auth_user_id', user.id).single(),
+            null as ClientRecord | null, 4000
+          );
+          client = cd1;
         }
-
-        if (!client) {
-          const { data: clientData, error: emailErr } = await supabase
-            .from('clients')
-            .select('id,name,email,company,avatar_url')
-            .eq('email', user.email)
-            .single();
-          if (emailErr) console.warn('Portal: clients lookup by email failed:', emailErr.message);
-          client = clientData as ClientRecord | null;
+        if (!client && user.email) {
+          const { data: cd2 } = await safeQuery(
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('email', user.email).single(),
+            null as ClientRecord | null, 4000
+          );
+          client = cd2;
         }
-
-        // Fallback for admin/owner: show the first client they own
         if (!client) {
-          const { data: ownedClient } = await supabase
-            .from('clients')
-            .select('id,name,email,company,avatar_url')
-            .eq('owner_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (ownedClient) {
-            client = ownedClient as ClientRecord;
-            console.log('[Portal] Admin access: showing first owned client:', client.name);
-          }
+          const { data: cd3 } = await safeQuery(
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('owner_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            null as ClientRecord | null, 4000
+          );
+          if (cd3) console.log('[Portal] Admin access:', cd3.name);
+          client = cd3;
         }
 
         if (!project && client?.id) {
-          const { data: projectData } = await supabase
-            .from('projects')
-            .select('id,title,description,status,created_at,client_id')
-            .eq('client_id', client.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          project = projectData as ProjectRecord | null;
+          const { data: pd } = await safeQuery(
+            supabase.from('projects').select('id,title,description,status,created_at,client_id').eq('client_id', client.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            null as ProjectRecord | null, 4000
+          );
+          project = pd;
         }
 
         if (!client) {
@@ -186,32 +180,32 @@ export const ClientPortalView: React.FC = () => {
 
         const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }, { data: incomesData }] = await Promise.all([
           projectId
-            ? supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('project_id', projectId)
+            ? safeQuery(supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('project_id', projectId), [] as any[])
             : client?.id
-            ? supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('client_id', client.id)
+            ? safeQuery(supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('client_id', client.id), [] as any[])
             : Promise.resolve({ data: [] }),
           projectId
-            ? supabase.from('finances').select('total_agreed,total_collected').eq('project_id', projectId).maybeSingle()
+            ? safeQuery(supabase.from('finances').select('total_agreed,total_collected').eq('project_id', projectId).maybeSingle(), null)
             : Promise.resolve({ data: null }),
           project?.title
-            ? supabase.from('activity_logs').select('id,action,created_at,project_title').eq('project_title', project.title).order('created_at', { ascending: false }).limit(5)
+            ? safeQuery(supabase.from('activity_logs').select('id,action,created_at,project_title').eq('project_title', project.title).order('created_at', { ascending: false }).limit(5), [] as any[])
             : Promise.resolve({ data: [] }),
           client?.id
-            ? supabase.from('client_documents').select('id,name,doc_type,url,size_label').eq('client_id', client.id).order('created_at', { ascending: false })
+            ? safeQuery(supabase.from('client_documents').select('id,name,doc_type,url,size_label').eq('client_id', client.id).order('created_at', { ascending: false }), [] as any[])
             : Promise.resolve({ data: [] }),
           client?.id
-            ? supabase.from('client_credentials').select('id,service,username,secret').eq('client_id', client.id)
+            ? safeQuery(supabase.from('client_credentials').select('id,service,username,secret').eq('client_id', client.id), [] as any[])
             : Promise.resolve({ data: [] }),
           client?.id
-            ? supabase.from('files').select('id,name,type,size,url').eq('client_id', client.id).order('created_at', { ascending: false })
+            ? safeQuery(supabase.from('files').select('id,name,type,size,url').eq('client_id', client.id).order('created_at', { ascending: false }), [] as any[])
             : Promise.resolve({ data: [] }),
           projectId
-            ? supabase.from('files').select('id,name,type,size,url').eq('project_id', projectId).order('created_at', { ascending: false })
+            ? safeQuery(supabase.from('files').select('id,name,type,size,url').eq('project_id', projectId).order('created_at', { ascending: false }), [] as any[])
             : Promise.resolve({ data: [] }),
           projectId
-            ? supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', projectId).order('due_date', { ascending: true })
+            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', projectId).order('due_date', { ascending: true }), [] as any[])
             : client?.id
-            ? supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('client_id', client.id).order('due_date', { ascending: true })
+            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('client_id', client.id).order('due_date', { ascending: true }), [] as any[])
             : Promise.resolve({ data: [] })
         ]);
 
