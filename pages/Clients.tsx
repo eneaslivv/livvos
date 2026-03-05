@@ -351,7 +351,7 @@ export const Clients: React.FC = () => {
       setSelectedClient(client);
     } catch (err: any) {
       errorLogger.error('Error creating client', err);
-      alert('Error creating client: ' + (err?.message || 'Unknown error'));
+      alert('Error creating client: ' + (err?.message || 'Error desconocido'));
     } finally {
       setCreatingClient(false);
     }
@@ -378,7 +378,7 @@ export const Clients: React.FC = () => {
       loadClientData(selectedClient.id);
     } catch (err: any) {
       errorLogger.error('Error assigning project', err);
-      alert('Error assigning project: ' + (err?.message || 'Unknown error'));
+      alert('Error assigning project: ' + (err?.message || 'Error desconocido'));
     } finally {
       setAssigningProject(false);
     }
@@ -588,7 +588,7 @@ export const Clients: React.FC = () => {
       setShowNewTaskInline(false);
     } catch (err: any) {
       errorLogger.error('Error creating task', err);
-      alert('Could not create task: ' + (err?.message || 'Unknown error'));
+      alert('Could not create task: ' + (err?.message || 'Error desconocido'));
     } finally {
       setCreatingTask(false);
     }
@@ -607,7 +607,7 @@ export const Clients: React.FC = () => {
       // Rollback
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t));
       errorLogger.error('Error updating task', err);
-      alert('Error updating task: ' + (err?.message || 'Unknown error'));
+      alert('Error updating task: ' + (err?.message || 'Error desconocido'));
     }
   };
 
@@ -621,7 +621,7 @@ export const Clients: React.FC = () => {
       // Rollback
       setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed, status: !completed ? 'done' : 'todo' } : t));
       errorLogger.error('Error updating task', err);
-      alert('Error updating task: ' + (err?.message || 'Unknown error'));
+      alert('Error updating task: ' + (err?.message || 'Error desconocido'));
     }
   };
 
@@ -673,21 +673,20 @@ export const Clients: React.FC = () => {
       });
       setSelectedClient({ ...selectedClient, status });
     } catch (err) {
-      errorLogger.error('Error actualizando estado', err);
+      errorLogger.error('Error updating status', err);
     }
   };
 
   const handleInlineEdit = async (field: string): Promise<boolean> => {
-    console.log("[EDIT] start:", field, "client:", selectedClient?.id, "draft:", JSON.stringify(editDraft));
-    if (!selectedClient) { console.log("[EDIT] no client"); return false; }
-    if (!editDraft[field]?.trim()) { console.log("[EDIT] empty draft:", field); return false; }
+    if (!selectedClient || !editDraft[field]?.trim()) return false;
+
     try {
       await updateClient(selectedClient.id, { [field]: editDraft[field].trim() });
       setSelectedClient({ ...selectedClient, [field]: editDraft[field].trim() });
       setEditingField(null);
       return true;
     } catch (err: any) {
-      errorLogger.error('Error updating field', err);
+      console.error('Error updating field:', err);
       alert(`Error al guardar: ${err?.message || 'Error desconocido'}`);
       return false;
     }
@@ -709,7 +708,7 @@ export const Clients: React.FC = () => {
     setCreatingIncome(true);
     try {
       const amount = parseFloat(newIncomeData.total_amount);
-      if (isNaN(amount) || amount <= 0) throw new Error('Monto inválido');
+      if (isNaN(amount) || amount <= 0) throw new Error('Invalid amount');
       const numInst = parseInt(newIncomeData.num_installments) || 1;
       await createIncome({
         client_id: selectedClient.id,
@@ -732,21 +731,21 @@ export const Clients: React.FC = () => {
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'payment' as any,
-        action_description: `Ingreso creado: ${newIncomeData.concept} — ${fmtMoney(amount)}`,
+        action_description: `Income created: ${newIncomeData.concept} — ${fmtMoney(amount)}`,
         action_date: new Date().toISOString(),
       });
       setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD', installment_dates: [] });
       setShowNewIncomeForm(false);
     } catch (err: any) {
-      errorLogger.error('Error creando ingreso', err);
-      alert(err.message || 'Error al crear ingreso');
+      errorLogger.error('Error creating income', err);
+      alert(err.message || 'Error creating income');
     } finally {
       setCreatingIncome(false);
     }
   };
 
   const handleDeleteIncome = async (incomeId: string) => {
-    if (!confirm('¿Eliminar este ingreso y todas sus cuotas?')) return;
+    if (!confirm('Delete this income and all its installments?')) return;
     setDeletingIncomeId(incomeId);
     try {
       await deleteIncome(incomeId);
@@ -756,12 +755,12 @@ export const Clients: React.FC = () => {
           user_id: user?.id || '',
           user_name: user?.email?.split('@')[0] || 'User',
           action_type: 'note',
-          action_description: 'Ingreso eliminado',
+          action_description: 'Income deleted',
           action_date: new Date().toISOString(),
         });
       }
     } catch (err) {
-      errorLogger.error('Error eliminando ingreso', err);
+      errorLogger.error('Error deleting income', err);
     } finally {
       setDeletingIncomeId(null);
     }
@@ -790,7 +789,7 @@ export const Clients: React.FC = () => {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
         <p className="text-sm text-red-700 dark:text-red-400 mb-3">{error}</p>
-        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">Recargar</button>
+        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">Reload</button>
       </div>
     );
   }
@@ -798,7 +797,7 @@ export const Clients: React.FC = () => {
   /* ─── Detail tabs ─── */
   const detailTabs: { id: DetailTab; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'info', label: 'Info', icon: Icons.Users },
-    { id: 'finance', label: 'Finanzas', icon: Icons.DollarSign || Icons.Activity, badge: clientFinanceSummary.overdue },
+    { id: 'finance', label: 'Finance', icon: Icons.DollarSign || Icons.Activity, badge: clientFinanceSummary.overdue },
     { id: 'messages', label: 'Chat', icon: Icons.Message, badge: messages.filter(m => m.sender_type === 'client' && !m.read_at).length },
     { id: 'tasks', label: 'Tareas', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
     { id: 'history', label: 'Historial', icon: Icons.Clock },
@@ -828,14 +827,14 @@ export const Clients: React.FC = () => {
             <button
               onClick={async () => { const ok = await handleInlineEdit(field); if (ok) { setSavedField(field); setTimeout(() => setSavedField(null), 1500); } }}
               className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
-              title="Guardar"
+              title="Save"
             >
               <Icons.Check size={14} />
             </button>
             <button
               onClick={() => setEditingField(null)}
               className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-              title="Cancelar"
+              title="Cancel"
             >
               <Icons.X size={14} />
             </button>
@@ -847,12 +846,12 @@ export const Clients: React.FC = () => {
           >
             {justSaved ? (
               <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-                <Icons.CheckCircle size={14} /> Guardado
+                <Icons.CheckCircle size={14} /> Saved
               </span>
             ) : (
               <>
                 <p className="text-sm text-zinc-900 dark:text-zinc-100 truncate flex-1">
-                  {value || <span className="text-zinc-300 dark:text-zinc-600 italic">{placeholder || 'Agregar...'}</span>}
+                  {value || <span className="text-zinc-300 dark:text-zinc-600 italic">{placeholder || 'Add...'}</span>}
                 </p>
                 <Icons.Edit size={12} className="text-zinc-300 opacity-0 group-hover/edit:opacity-100 transition-opacity shrink-0" />
               </>
@@ -868,15 +867,15 @@ export const Clients: React.FC = () => {
       {/* ─── Header ─── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Clientes</h1>
-          <p className="text-xs text-zinc-400 mt-0.5">{clients.length} {clients.length === 1 ? 'cliente' : 'clientes'} en total</p>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Clients</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">{clients.length} {clients.length === 1 ? 'client' : 'clients'} total</p>
         </div>
         <button
           onClick={() => setShowNewClientPanel(true)}
           className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all active:scale-[0.97] text-xs font-semibold"
         >
           <Icons.Plus size={15} />
-          Nuevo Cliente
+          New Client
         </button>
       </div>
 
@@ -890,7 +889,7 @@ export const Clients: React.FC = () => {
                 <Icons.Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
-                  placeholder="Buscar cliente..."
+                  placeholder="Search client..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-zinc-700/60 rounded-xl outline-none focus:border-zinc-300 dark:focus:border-zinc-600 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
@@ -955,7 +954,7 @@ export const Clients: React.FC = () => {
                               <p className={`text-[11px] truncate ${
                                 isSelected ? 'text-white/60 dark:text-zinc-900/50' : 'text-zinc-400'
                               }`}>
-                                {client.company || client.email || 'Sin detalles'}
+                                {client.company || client.email || 'No details'}
                               </p>
                               {clientTotal > 0 && (
                                 <span className={`text-[10px] font-semibold ${isSelected ? 'text-white/50' : 'text-zinc-300'}`}>
@@ -975,10 +974,10 @@ export const Clients: React.FC = () => {
                     <Icons.Users size={18} className="text-zinc-400" />
                   </div>
                   <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    {searchQuery || statusFilter !== 'all' ? 'Sin resultados' : 'No hay clientes'}
+                    {searchQuery || statusFilter !== 'all' ? 'No results' : 'No clients'}
                   </p>
                   <p className="text-[10px] text-zinc-400 mt-0.5">
-                    {searchQuery || statusFilter !== 'all' ? 'Ajusta tu búsqueda' : 'Crea tu primer cliente'}
+                    {searchQuery || statusFilter !== 'all' ? 'Adjust your search' : 'Create your first client'}
                   </p>
                 </div>
               )}
@@ -1015,14 +1014,14 @@ export const Clients: React.FC = () => {
                           <button
                             onClick={async () => { const ok = await handleInlineEdit('name'); if (ok) { setSavedField('name'); setTimeout(() => setSavedField(null), 1500); } }}
                             className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
-                            title="Guardar"
+                            title="Save"
                           >
                             <Icons.CheckCircle size={16} />
                           </button>
                           <button
                             onClick={() => setEditingField(null)}
                             className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                            title="Cancelar (Esc)"
+                            title="Cancel (Esc)"
                           >
                             <Icons.X size={16} />
                           </button>
@@ -1031,7 +1030,7 @@ export const Clients: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <h2 className="text-lg font-semibold text-emerald-600">{selectedClient.name}</h2>
                           <span className="text-xs text-emerald-500 font-medium flex items-center gap-1">
-                            <Icons.CheckCircle size={13} /> Guardado
+                            <Icons.CheckCircle size={13} /> Saved
                           </span>
                         </div>
                       ) : (
@@ -1043,7 +1042,7 @@ export const Clients: React.FC = () => {
                           <button
                             onClick={() => { setEditingField('name'); setEditDraft({ ...editDraft, name: selectedClient.name || '' }); }}
                             className="p-1 text-zinc-300 hover:text-zinc-500 opacity-0 group-hover/name:opacity-100 transition-all"
-                            title="Editar nombre"
+                            title="Edit name"
                           >
                             <Icons.Edit size={13} />
                           </button>
@@ -1066,22 +1065,22 @@ export const Clients: React.FC = () => {
                       onChange={(e) => handleUpdateClientStatus(e.target.value)}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border-0 outline-none cursor-pointer ${statusConfig[selectedClient.status]?.bg} ${statusConfig[selectedClient.status]?.text}`}
                     >
-                      <option value="prospect">Prospecto</option>
-                      <option value="active">Activo</option>
-                      <option value="inactive">Inactivo</option>
+                      <option value="prospect">Prospect</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
                     </select>
                     <button
                       onClick={async () => {
-                        if (!confirm('¿Estás seguro de que querés eliminar este cliente? Esta acción no se puede deshacer.')) return;
+                        if (!confirm('Are you sure you want to delete this client? This action cannot be undone.')) return;
                         try {
                           await deleteClient(selectedClient.id);
                           setSelectedClient(null);
                         } catch (err: any) {
-                          alert('Error eliminando cliente: ' + (err?.message || 'Error desconocido'));
+                          alert('Error deleting client: ' + (err?.message || 'Error desconocido'));
                         }
                       }}
                       className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
-                      title="Eliminar cliente"
+                      title="Delete client"
                     >
                       <Icons.Trash size={15} />
                     </button>
@@ -1092,15 +1091,15 @@ export const Clients: React.FC = () => {
                 {clientFinanceSummary.totalInvoiced > 0 && (
                   <div className="grid grid-cols-3 gap-2 mt-4">
                     <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl">
-                      <p className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Facturado</p>
+                      <p className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Invoiced</p>
                       <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">{fmtMoney(clientFinanceSummary.totalInvoiced)}</p>
                     </div>
                     <div className="p-2.5 bg-emerald-50/70 dark:bg-emerald-500/10 rounded-xl">
-                      <p className="text-[9px] font-semibold text-emerald-600/60 uppercase tracking-wider">Cobrado</p>
+                      <p className="text-[9px] font-semibold text-emerald-600/60 uppercase tracking-wider">Collected</p>
                       <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{fmtMoney(clientFinanceSummary.totalPaid)}</p>
                     </div>
                     <div className="p-2.5 bg-amber-50/70 dark:bg-amber-500/10 rounded-xl">
-                      <p className="text-[9px] font-semibold text-amber-600/60 uppercase tracking-wider">Pendiente</p>
+                      <p className="text-[9px] font-semibold text-amber-600/60 uppercase tracking-wider">Pending</p>
                       <p className="text-sm font-bold text-amber-700 dark:text-amber-400 mt-0.5">{fmtMoney(clientFinanceSummary.totalPending)}</p>
                     </div>
                   </div>
@@ -1121,7 +1120,7 @@ export const Clients: React.FC = () => {
                         clientInviteStatus === 'accepted' ? 'text-emerald-700 dark:text-emerald-400'
                         : clientInviteStatus === 'pending' ? 'text-amber-700 dark:text-amber-400'
                         : 'text-indigo-700 dark:text-indigo-400'
-                      }`}>Portal del Cliente</h4>
+                      }`}>Client Portal</h4>
                     </div>
                     {clientInviteStatus === 'accepted' && (
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-0.5 rounded-full flex items-center gap-1">
@@ -1130,7 +1129,7 @@ export const Clients: React.FC = () => {
                     )}
                     {clientInviteStatus === 'pending' && (
                       <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                        <Icons.Clock size={10} /> Pendiente
+                        <Icons.Clock size={10} /> Pending
                       </span>
                     )}
                   </div>

@@ -204,19 +204,17 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }
 
   const updateClient = async (id: string, updates: Partial<Client>) => {
-    try {
-      const { data, error: err } = await supabase
-        .from('clients')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-      
-      if (err) throw err
-      return data
-    } catch (err) {
-      throw err
-    }
+    const { data, error: err } = await supabase
+      .from('clients')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (err) throw err
+    // Update local state immediately (don't rely only on Realtime)
+    setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+    return data
   }
 
   const deleteClient = async (id: string) => {
