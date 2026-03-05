@@ -677,14 +677,17 @@ export const Clients: React.FC = () => {
     }
   };
 
-  const handleInlineEdit = async (field: string) => {
-    if (!selectedClient || !editDraft[field]) return;
+  const handleInlineEdit = async (field: string): Promise<boolean> => {
+    if (!selectedClient || !editDraft[field]?.trim()) return false;
     try {
-      await updateClient(selectedClient.id, { [field]: editDraft[field] });
-      setSelectedClient({ ...selectedClient, [field]: editDraft[field] });
+      await updateClient(selectedClient.id, { [field]: editDraft[field].trim() });
+      setSelectedClient({ ...selectedClient, [field]: editDraft[field].trim() });
       setEditingField(null);
-    } catch (err) {
+      return true;
+    } catch (err: any) {
       errorLogger.error('Error updating field', err);
+      alert(`Error al guardar: ${err?.message || 'Error desconocido'}`);
+      return false;
     }
   };
 
@@ -815,13 +818,13 @@ export const Clients: React.FC = () => {
               onChange={e => setEditDraft({ ...editDraft, [field]: e.target.value })}
               className="flex-1 px-2.5 py-1.5 bg-white dark:bg-zinc-800 border-2 border-indigo-400 dark:border-indigo-500 rounded-lg text-sm outline-none ring-2 ring-indigo-100 dark:ring-indigo-900/30"
               autoFocus
-              onKeyDown={e => {
-                if (e.key === 'Enter') { handleInlineEdit(field); setSavedField(field); setTimeout(() => setSavedField(null), 1500); }
+              onKeyDown={async e => {
+                if (e.key === 'Enter') { const ok = await handleInlineEdit(field); if (ok) { setSavedField(field); setTimeout(() => setSavedField(null), 1500); } }
                 if (e.key === 'Escape') setEditingField(null);
               }}
             />
             <button
-              onClick={() => { handleInlineEdit(field); setSavedField(field); setTimeout(() => setSavedField(null), 1500); }}
+              onClick={async () => { const ok = await handleInlineEdit(field); if (ok) { setSavedField(field); setTimeout(() => setSavedField(null), 1500); } }}
               className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
               title="Guardar"
             >
@@ -1002,13 +1005,13 @@ export const Clients: React.FC = () => {
                             className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800 border-2 border-indigo-400 dark:border-indigo-500 rounded-lg outline-none px-2.5 py-1 ring-2 ring-indigo-100 dark:ring-indigo-900/30"
                             value={editDraft['name'] || ''}
                             onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { handleInlineEdit('name'); setSavedField('name'); setTimeout(() => setSavedField(null), 1500); }
+                            onKeyDown={async e => {
+                              if (e.key === 'Enter') { const ok = await handleInlineEdit('name'); if (ok) { setSavedField('name'); setTimeout(() => setSavedField(null), 1500); } }
                               if (e.key === 'Escape') setEditingField(null);
                             }}
                           />
                           <button
-                            onClick={() => { handleInlineEdit('name'); setSavedField('name'); setTimeout(() => setSavedField(null), 1500); }}
+                            onClick={async () => { const ok = await handleInlineEdit('name'); if (ok) { setSavedField('name'); setTimeout(() => setSavedField(null), 1500); } }}
                             className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
                             title="Guardar"
                           >
