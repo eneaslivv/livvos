@@ -986,7 +986,7 @@ export const Clients: React.FC = () => {
                       className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
                       title="Eliminar cliente"
                     >
-                      <Icons.Trash2 size={15} />
+                      <Icons.Trash size={15} />
                     </button>
                   </div>
                 </div>
