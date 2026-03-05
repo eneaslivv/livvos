@@ -25,9 +25,13 @@ type TaskRecord = {
   id: string;
   title?: string | null;
   completed?: boolean | null;
+  completed_at?: string | null;
   start_date?: string | null;
   due_date?: string | null;
   created_at?: string | null;
+  group_name?: string | null;
+  status?: string | null;
+  priority?: string | null;
 };
 
 type FinanceRecord = {
@@ -161,9 +165,9 @@ export const ClientPortalView: React.FC = () => {
 
         const [{ data: tasksData }, { data: financesData }, { data: logsData }, { data: docsData }, { data: credsData }, { data: filesData }, { data: projectFilesData }, { data: incomesData }] = await Promise.all([
           projectId
-            ? supabase.from('tasks').select('id,title,completed,start_date,due_date,created_at,client_id').eq('project_id', projectId)
+            ? supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('project_id', projectId)
             : client?.id
-            ? supabase.from('tasks').select('id,title,completed,start_date,due_date,created_at,client_id').eq('client_id', client.id)
+            ? supabase.from('tasks').select('id,title,completed,completed_at,start_date,due_date,created_at,client_id,group_name,status,priority').eq('client_id', client.id)
             : Promise.resolve({ data: [] }),
           projectId
             ? supabase.from('finances').select('total_agreed,total_collected').eq('project_id', projectId).maybeSingle()
@@ -205,14 +209,36 @@ export const ClientPortalView: React.FC = () => {
         const eta = dueDates.length ? dueDates.sort().slice(-1)[0] : project?.created_at || new Date().toISOString();
         const etaDate = eta ? new Date(eta).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD';
 
-        const milestones: Milestone[] = tasks
-          .slice(0, 5)
-          .map((task, index) => ({
+        // Build milestones from ALL tasks with proper status
+        let foundCurrent = false;
+        const milestones: Milestone[] = tasks.map((task, index) => {
+          let status: 'completed' | 'current' | 'future';
+          if (task.completed) {
+            status = 'completed';
+          } else if (!foundCurrent) {
+            status = 'current';
+            foundCurrent = true;
+          } else {
+            status = 'future';
+          }
+
+          const completedAt = task.completed_at
+            ? new Date(task.completed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+            : undefined;
+
+          const eta = task.due_date
+            ? new Date(task.due_date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+            : undefined;
+
+          return {
             id: task.id,
-            title: task.title || `Milestone ${index + 1}`,
-            description: 'Project task milestone',
-            status: task.completed ? 'completed' : index === 0 ? 'current' : 'future'
-          }));
+            title: task.title || `Tarea ${index + 1}`,
+            description: task.group_name || '',
+            status,
+            eta,
+            completedAt,
+          };
+        });
 
         const logs: LogEntry[] = (logsData || []).map((log: any) => ({
           id: log.id,
@@ -307,7 +333,7 @@ export const ClientPortalView: React.FC = () => {
             payments,
           },
           milestones: milestones.length ? milestones : [
-            { id: 'm1', title: 'Project kickoff', description: 'Initial project setup.', status: 'current' }
+            { id: 'm1', title: 'Inicio del proyecto', description: 'Configuración inicial', status: 'current' }
           ],
           logs: logs.length ? logs : [
             { id: 'l1', timestamp: 'Today', message: 'Portal connected to live project data.' }

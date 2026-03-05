@@ -1,83 +1,118 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Circle, Loader2, User, Users, AlertCircle } from 'lucide-react';
+import { Check, Circle } from 'lucide-react';
 import { Milestone } from '../types';
-
-const ownerConfig = {
-  team: { label: 'Nuestro equipo', icon: Users, bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-100' },
-  client: { label: 'Tu acción', icon: User, bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-  review: { label: 'En revisión', icon: AlertCircle, bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-100' },
-};
 
 const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
   const completed = milestones.filter(m => m.status === 'completed').length;
+  const total = milestones.length;
+  const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, x: 16 }, visible: { opacity: 1, x: 0 } }}
       className="bg-white rounded-2xl border border-zinc-200/60 p-6 md:p-8 h-full flex flex-col"
     >
-      <div className="flex items-center justify-between mb-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Etapas del Proyecto</h3>
-        <span className="text-[10px] font-medium text-zinc-300">{completed}/{milestones.length}</span>
+        <span className="text-[11px] font-semibold text-zinc-500">
+          {completed}/{total}
+        </span>
       </div>
 
-      <div className="space-y-0.5 flex-1">
+      {/* Progress bar */}
+      <div className="w-full h-1.5 bg-zinc-100 rounded-full mb-6 overflow-hidden">
+        <motion.div
+          className="h-full rounded-full bg-emerald-500"
+          initial={{ width: 0 }}
+          animate={{ width: `${progressPct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+
+      {/* Steps */}
+      <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-0">
         {milestones.map((m, idx) => {
           const done = m.status === 'completed';
           const active = m.status === 'current';
-          const cfg = m.owner ? ownerConfig[m.owner] : null;
+          const isLast = idx === milestones.length - 1;
 
           return (
-            <div key={m.id} className="flex gap-3.5 group">
-              {/* Line + Icon */}
-              <div className="flex flex-col items-center">
+            <div key={m.id} className="flex gap-3 group">
+              {/* Timeline column */}
+              <div className="flex flex-col items-center shrink-0">
+                {/* Step circle */}
                 <div className={`
-                  w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all
+                  w-6 h-6 rounded-full flex items-center justify-center transition-all
                   ${done ? 'bg-emerald-500 text-white' : ''}
-                  ${active ? 'bg-indigo-500 text-white ring-4 ring-indigo-100' : ''}
-                  ${!done && !active ? 'bg-zinc-100 text-zinc-300' : ''}
+                  ${active ? 'bg-indigo-500 text-white ring-[3px] ring-indigo-100' : ''}
+                  ${!done && !active ? 'bg-zinc-100 border-2 border-zinc-200' : ''}
                 `}>
-                  {done && <CheckCircle2 size={14} />}
-                  {active && <Loader2 size={14} className="animate-spin" />}
-                  {!done && !active && <Circle size={6} className="fill-current" />}
+                  {done && <Check size={12} strokeWidth={3} />}
+                  {active && (
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  )}
+                  {!done && !active && <Circle size={5} className="text-zinc-300 fill-current" />}
                 </div>
-                {idx !== milestones.length - 1 && (
-                  <div className={`w-[1.5px] flex-1 min-h-[16px] mt-1 ${done ? 'bg-emerald-200' : 'bg-zinc-100'}`} />
+                {/* Connecting line */}
+                {!isLast && (
+                  <div className={`w-[1.5px] flex-1 min-h-[12px] ${done ? 'bg-emerald-200' : 'bg-zinc-100'}`} />
                 )}
               </div>
 
               {/* Content */}
-              <div className={`pb-4 flex-1 ${done ? 'opacity-45' : ''}`}>
+              <div className={`pb-4 flex-1 min-w-0 ${!done && !active ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className={`text-[13px] font-semibold ${active ? 'text-indigo-600' : 'text-zinc-700'}`}>
+                  <h4 className={`text-[13px] font-semibold leading-tight ${
+                    done ? 'text-zinc-400 line-through decoration-zinc-300' : ''
+                  } ${active ? 'text-indigo-600' : ''} ${!done && !active ? 'text-zinc-500' : ''}`}>
                     {m.title}
                   </h4>
-                  {active && <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 text-[9px] font-semibold rounded">En curso</span>}
-                  {m.eta && !done && <span className="text-[9px] text-zinc-300 font-medium">· {m.eta}</span>}
+                  {active && (
+                    <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 text-[9px] font-bold rounded uppercase tracking-wide">
+                      En curso
+                    </span>
+                  )}
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">{m.description}</p>
 
-                {/* Owner badge */}
-                {cfg && !done && (
-                  <div className={`inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md text-[10px] font-medium ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
-                    <cfg.icon size={11} />
-                    {cfg.label}
-                  </div>
+                {/* Description / phase name */}
+                {m.description && (
+                  <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">{m.description}</p>
                 )}
 
-                {/* Client action callout */}
-                {m.clientAction && !done && (
-                  <div className="mt-2 p-2.5 bg-amber-50/80 border border-amber-200/50 rounded-lg">
-                    <p className="text-[10px] text-amber-700 font-medium">{m.clientAction}</p>
-                  </div>
-                )}
+                {/* Meta info */}
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {done && m.completedAt && (
+                    <span className="text-[10px] text-emerald-500 font-medium">
+                      Completada {m.completedAt}
+                    </span>
+                  )}
+                  {!done && m.eta && (
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      Fecha: {m.eta}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Summary footer */}
+      {total > 0 && (
+        <div className="mt-4 pt-3 border-t border-zinc-100">
+          <p className="text-[11px] text-zinc-400 text-center">
+            {progressPct === 100 ? (
+              <span className="text-emerald-500 font-semibold">Proyecto completado</span>
+            ) : (
+              <>{progressPct}% completado</>
+            )}
+          </p>
+        </div>
+      )}
     </motion.div>
   );
 };

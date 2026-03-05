@@ -10,6 +10,8 @@ export interface Milestone {
   clientAction?: string;
   /** Estimated completion date */
   eta?: string;
+  /** When this milestone was completed */
+  completedAt?: string;
 }
 
 export interface Credential {
