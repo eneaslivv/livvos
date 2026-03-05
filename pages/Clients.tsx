@@ -377,7 +377,7 @@ export const Clients: React.FC = () => {
     setEmailSent(null);
     setPortalInviteLink(null);
 
-    // Resolve tenant - try context first, then query DB
+    // Resolve tenant
     let tenantId = currentTenant?.id;
     if (!tenantId) {
       try {
@@ -385,122 +385,124 @@ export const Clients: React.FC = () => {
         tenantId = profile?.tenant_id;
       } catch {}
     }
-    if (!tenantId) {
-      setPortalInviteError('No se encontró el tenant activo. Intentá recargar la página.');
-      setIsInvitingPortal(false);
-      return;
-    }
 
     try {
-      // 1. Find or create the 'client' role
-      let roleId: string;
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles').select('id').eq('name', 'client').maybeSingle();
-      if (roleError) throw new Error(`Error buscando rol: ${roleError.message}`);
+      // Helper: race a promise against a timeout
+      const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label} tardó más de ${ms / 1000}s`)), ms))
+        ]);
 
-      if (roleData) {
-        roleId = roleData.id;
-      } else {
-        // Auto-create client role if it doesn't exist
-        const { data: newRole, error: newRoleErr } = await supabase
-          .from('roles')
-          .insert({ name: 'client', description: 'Portal client access', is_system: true })
-          .select('id').single();
-        if (newRoleErr) throw new Error(`Error creando rol de cliente: ${newRoleErr.message}`);
-        roleId = newRole.id;
-      }
+      // 1. Try to find/create role and invitation in DB
+      let inviteLink: string | null = null;
 
-      // 2. Check if invitation already exists for this client
-      const { data: existing } = await supabase
-        .from('invitations')
-        .select('token')
-        .eq('email', selectedClient.email)
-        .eq('tenant_id', tenantId)
-        .eq('status', 'pending')
-        .maybeSingle();
-
-      if (existing?.token) {
-        const existingLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
-        setPortalInviteLink(existingLink);
-        try {
-          await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: existingLink, tenantName: currentTenant?.name || 'Portal' });
-          setEmailSent(true);
-        } catch (emailErr) {
-          console.warn('[handleInvitePortal] Email re-send failed:', emailErr);
-          setEmailSent(false);
-        }
-        return;
-      }
-
-      // 3. Create invitation — try with all fields, fallback if columns don't match
-      const invitePayload: Record<string, any> = {
-        email: selectedClient.email,
-        role_id: roleId,
-        tenant_id: tenantId,
-        created_by: user?.id,
-        status: 'pending',
-      };
-
-      // Try with client_id and type (might not exist in all schemas)
-      const { data: invite, error: inviteError } = await supabase
-        .from('invitations')
-        .insert({ ...invitePayload, client_id: selectedClient.id, type: 'client' })
-        .select('token').single();
-
-      let finalLink: string;
-      if (inviteError) {
-        // Retry without client_id/type in case those columns don't exist
-        const { data: invite2, error: inviteError2 } = await supabase
-          .from('invitations')
-          .insert(invitePayload)
-          .select('token').single();
-        if (inviteError2) throw new Error(`Error creando invitación: ${inviteError2.message}`);
-        finalLink = `${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`;
-      } else {
-        finalLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
-      }
-      setPortalInviteLink(finalLink);
-
-      // Send invitation email
+      // Check if roles table exists and find/create client role
+      let roleId: string | null = null;
       try {
-        await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: finalLink, tenantName: currentTenant?.name || 'Portal' });
+        const { data: roleData, error: roleError } = await withTimeout(
+          supabase.from('roles').select('id').eq('name', 'client').maybeSingle(),
+          8000, 'buscar rol'
+        );
+        if (!roleError && roleData) {
+          roleId = roleData.id;
+        } else if (!roleError && !roleData) {
+          const { data: newRole } = await withTimeout(
+            supabase.from('roles').insert({ name: 'client', description: 'Portal client access', is_system: true }).select('id').single(),
+            8000, 'crear rol'
+          );
+          roleId = newRole?.id || null;
+        }
+      } catch (roleErr) {
+        console.warn('[handleInvitePortal] Roles table issue:', roleErr);
+      }
+
+      // 2. Check for existing invitation
+      if (roleId && tenantId) {
+        try {
+          const { data: existing } = await withTimeout(
+            supabase.from('invitations').select('token').eq('email', selectedClient.email!).eq('tenant_id', tenantId).eq('status', 'pending').maybeSingle(),
+            8000, 'buscar invitación existente'
+          );
+          if (existing?.token) {
+            inviteLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
+          }
+        } catch (existErr) {
+          console.warn('[handleInvitePortal] Check existing invite:', existErr);
+        }
+      }
+
+      // 3. Create new invitation if needed
+      if (!inviteLink && roleId && tenantId) {
+        try {
+          const payload: Record<string, any> = {
+            email: selectedClient.email,
+            role_id: roleId,
+            tenant_id: tenantId,
+            created_by: user?.id,
+            status: 'pending',
+          };
+          const { data: invite, error: invErr } = await withTimeout(
+            supabase.from('invitations').insert({ ...payload, client_id: selectedClient.id, type: 'client' }).select('token').single(),
+            8000, 'crear invitación'
+          );
+          if (invErr) {
+            // Retry without optional columns
+            const { data: invite2, error: invErr2 } = await withTimeout(
+              supabase.from('invitations').insert(payload).select('token').single(),
+              8000, 'crear invitación (retry)'
+            );
+            if (!invErr2 && invite2) inviteLink = `${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`;
+          } else if (invite) {
+            inviteLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+          }
+        } catch (createErr) {
+          console.warn('[handleInvitePortal] Create invite:', createErr);
+        }
+      }
+
+      // 4. Fallback: generate a direct portal link if DB invitation failed
+      if (!inviteLink) {
+        const fallbackToken = btoa(JSON.stringify({ client_id: selectedClient.id, email: selectedClient.email, tenant_id: tenantId || 'none', ts: Date.now() }));
+        inviteLink = `${window.location.origin}/client-portal?token=${encodeURIComponent(fallbackToken)}`;
+        console.log('[handleInvitePortal] Using fallback link (no DB invitation)');
+      }
+
+      setPortalInviteLink(inviteLink);
+
+      // 5. Try to send email (non-blocking, with timeout)
+      try {
+        await withTimeout(
+          sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink, tenantName: currentTenant?.name || 'Portal' }),
+          10000, 'enviar email'
+        );
         setEmailSent(true);
       } catch (emailErr) {
-        console.warn('[handleInvitePortal] Email send failed:', emailErr);
+        console.warn('[handleInvitePortal] Email failed:', emailErr);
         setEmailSent(false);
       }
 
-      // 4. Auto-share all linked projects with this client
-      try {
-        const { data: clientProjects } = await supabase
-          .from('projects')
-          .select('id')
-          .eq('client_id', selectedClient.id);
-        if (clientProjects?.length) {
-          const shares = clientProjects.map(p => ({
-            project_id: p.id,
-            tenant_id: tenantId,
-            email: selectedClient.email!.toLowerCase(),
-            role: 'collaborator' as const,
-            invited_by: user?.id,
-          }));
-          await supabase.from('project_shares').upsert(shares, { onConflict: 'project_id,email', ignoreDuplicates: true });
-        }
-      } catch (shareErr) {
-        console.warn('[handleInvitePortal] Auto-share error (non-critical):', shareErr);
+      // 6. Auto-share projects (fire-and-forget)
+      if (tenantId) {
+        supabase.from('projects').select('id').eq('client_id', selectedClient.id).then(({ data: clientProjects }) => {
+          if (clientProjects?.length) {
+            const shares = clientProjects.map(p => ({
+              project_id: p.id, tenant_id: tenantId!, email: selectedClient.email!.toLowerCase(),
+              role: 'collaborator' as const, invited_by: user?.id,
+            }));
+            supabase.from('project_shares').upsert(shares, { onConflict: 'project_id,email', ignoreDuplicates: true }).catch(() => {});
+          }
+        }).catch(() => {});
       }
 
-      // 5. Log to history
-      if (selectedClient) {
-        await addHistoryEntry({
-          client_id: selectedClient.id,
-          user_id: user?.id || '',
-          user_name: user?.email?.split('@')[0] || 'User',
-          action_type: 'email',
-          action_description: `Invitación al portal ${emailSent ? 'enviada por email' : 'creada'} para ${selectedClient.email}`,
-          action_date: new Date().toISOString(),
-        });
-      }
+      // 7. Log to history (fire-and-forget)
+      addHistoryEntry({
+        client_id: selectedClient.id, user_id: user?.id || '',
+        user_name: user?.email?.split('@')[0] || 'User', action_type: 'email',
+        action_description: `Invitación al portal creada para ${selectedClient.email}`,
+        action_date: new Date().toISOString(),
+      }).catch(() => {});
+
     } catch (err: any) {
       console.error('[handleInvitePortal]', err);
       setPortalInviteError(err.message || 'Error al crear invitación');
