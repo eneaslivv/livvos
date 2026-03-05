@@ -416,9 +416,9 @@ export const Clients: React.FC = () => {
 
     try {
       // Helper: race a promise against a timeout
-      const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+      const withTimeout = <T,>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> =>
         Promise.race([
-          promise,
+          Promise.resolve(promise),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label} tardó más de ${ms / 1000}s`)), ms))
         ]);
 
@@ -513,13 +513,13 @@ export const Clients: React.FC = () => {
 
       // 6. Auto-share projects (fire-and-forget)
       if (tenantId) {
-        supabase.from('projects').select('id').eq('client_id', selectedClient.id).then(({ data: clientProjects }) => {
+        Promise.resolve(supabase.from('projects').select('id').eq('client_id', selectedClient.id)).then(({ data: clientProjects }) => {
           if (clientProjects?.length) {
             const shares = clientProjects.map(p => ({
               project_id: p.id, tenant_id: tenantId!, email: selectedClient.email!.toLowerCase(),
               role: 'collaborator' as const, invited_by: user?.id,
             }));
-            supabase.from('project_shares').upsert(shares, { onConflict: 'project_id,email', ignoreDuplicates: true }).catch(() => {});
+            Promise.resolve(supabase.from('project_shares').upsert(shares, { onConflict: 'project_id,email', ignoreDuplicates: true })).catch(() => {});
           }
         }).catch(() => {});
       }

@@ -80,7 +80,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
     const tempMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       sender_type: 'client',
-      sender_name: clientName || 'Cliente',
+      sender_name: clientName || 'Client',
       message: msgText,
       created_at: new Date().toISOString(),
     };
@@ -93,7 +93,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         client_id: clientId,
         sender_type: 'client',
         sender_id: userId,
-        sender_name: clientName || 'Cliente',
+        sender_name: clientName || 'Client',
         message: msgText,
         message_type: 'text',
       };
@@ -111,7 +111,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
           .insert({
             client_id: clientId,
             sender_type: 'client',
-            sender_name: clientName || 'Cliente',
+            sender_name: clientName || 'Client',
             message: msgText,
           })
           .select('id, sender_type, sender_name, message, created_at')
@@ -129,7 +129,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
       }
     } catch (err: any) {
       console.error('[ChatSupport] Error sending message:', err);
-      setError('No se pudo enviar el mensaje');
+      setError('Failed to send message');
       // Remove optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
       setInput(msgText); // Restore input
@@ -152,10 +152,10 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
             <User size={16} />
           </div>
           <div>
-            <p className="text-[11px] font-bold leading-none mb-1">Soporte</p>
+            <p className="text-[11px] font-bold leading-none mb-1">Support</p>
             <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 bg-[#2C0405] rounded-full animate-pulse" />
-              <span className="text-[9px] uppercase opacity-50">En línea</span>
+              <span className="text-[9px] uppercase opacity-50">Online</span>
             </div>
           </div>
         </div>
@@ -169,7 +169,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         {messages.length === 0 && (
           <div className="flex justify-start">
             <div className="max-w-[80%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed bg-white border border-zinc-100 text-zinc-700 rounded-tl-none shadow-sm">
-              Bienvenido al soporte. ¿En qué podemos ayudarte?
+              Welcome to support. How can we help you?
             </div>
           </div>
         )}
@@ -203,7 +203,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
             value={input}
             onChange={(e) => { setInput(e.target.value); setError(null); }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Escribe un mensaje..."
+            placeholder="Type a message..."
             className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-300 transition-colors"
           />
           <button
@@ -216,7 +216,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         </div>
         <div className="mt-3 flex items-center justify-center gap-1.5 opacity-25">
           <ShieldCheck size={10} />
-          <span className="text-[8px] uppercase tracking-widest font-bold">Canal seguro</span>
+          <span className="text-[8px] uppercase tracking-widest font-bold">Secure Channel</span>
         </div>
       </div>
     </motion.div>

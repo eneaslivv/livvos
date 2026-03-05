@@ -152,7 +152,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const { clientId = null, projectId = null } = options || {}
 
-    const { data, error: err } = await supabase.from('folders').insert({
+    const insertPayload = {
       name,
       parent_id: currentFolderId,
       color,
@@ -160,11 +160,17 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       tenant_id: effectiveTenantId,
       client_id: clientId,
       project_id: projectId
-    }).select().single()
+    }
+    console.log('Creating folder with payload:', insertPayload)
+
+    const { data, error: err } = await supabase.from('folders').insert(insertPayload).select().single()
 
     if (err) {
       console.error('Supabase folder insert error:', err)
-      throw err
+      throw new Error(`Error al crear carpeta: ${err.message} (code: ${err.code})`)
+    }
+    if (!data) {
+      throw new Error('La carpeta no se creó. Posible problema de permisos (RLS). Verifica que la migración de folders se haya ejecutado.')
     }
     setFolders(prev => [...prev, data])
     return data

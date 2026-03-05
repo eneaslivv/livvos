@@ -610,6 +610,10 @@ export const Calendar: React.FC = () => {
         completed,
         status: completed ? 'done' : 'todo',
       });
+      // Update selectedTask in place so detail panel reflects change immediately
+      if (selectedTask?.id === taskId) {
+        setSelectedTask(prev => prev ? { ...prev, completed, status: completed ? 'done' : 'todo' } : prev);
+      }
     } catch (err: any) {
       errorLogger.error('Error actualizando tarea', err);
       alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
@@ -1624,19 +1628,28 @@ export const Calendar: React.FC = () => {
             {/* Completed toggle */}
             <button
               onClick={() => toggleTaskComplete(selectedTask.id, !selectedTask.completed)}
-              className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg border transition-all ${
+              className={`flex items-center gap-2.5 w-full px-3.5 py-2.5 rounded-xl border transition-all duration-300 ${
                 selectedTask.completed
                   ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30'
-                  : 'bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                  : 'bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5'
               }`}
             >
-              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                selectedTask.completed ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300 dark:border-zinc-600'
+              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-300 ${
+                selectedTask.completed ? 'bg-emerald-500 border-emerald-500 scale-110' : 'border-zinc-300 dark:border-zinc-600'
               }`}>
-                {selectedTask.completed && <Icons.Check size={12} className="text-white" />}
+                {selectedTask.completed && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
+                    <Icons.Check size={12} className="text-white" />
+                  </motion.div>
+                )}
               </div>
-              <span className={`text-xs font-medium ${selectedTask.completed ? 'text-emerald-600 dark:text-emerald-400 line-through' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                {selectedTask.completed ? 'Completada' : 'Marcar como completada'}
+              <span className={`text-xs font-medium transition-all duration-300 ${selectedTask.completed ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                {selectedTask.completed ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="line-through">Completada</span>
+                    <Icons.CheckCircle size={12} className="text-emerald-500" />
+                  </span>
+                ) : 'Marcar como completada'}
               </span>
             </button>
 
@@ -2132,19 +2145,21 @@ export const Calendar: React.FC = () => {
                         draggable
                         onDragStart={(e) => handleTaskDragStart(e, task.id)}
                         onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border ${tc.bg} ${tc.border} ${
-                          task.completed ? 'line-through opacity-50' : ''
+                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
+                          task.completed ? 'opacity-60' : ''
                         } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
                         title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOQUEADA' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
                         onClick={() => handleOpenTaskDetail(task)}
                       >
                         <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                          {isTaskBlocked(task) ? (
+                          {task.completed ? (
+                            <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
+                          ) : isTaskBlocked(task) ? (
                             <Icons.Lock size={8} className="text-amber-500 shrink-0" />
                           ) : (
                             <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
                           )}
-                          <span className="truncate">{task.title}</span>
+                          <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
                           {overdue > 0 && (
                             <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
                               +{overdue}d
@@ -2230,21 +2245,23 @@ export const Calendar: React.FC = () => {
                             draggable
                             onDragStart={(e) => handleTaskDragStart(e, task.id)}
                             onDragEnd={() => setDraggingTaskId(null)}
-                            className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border ${tc.bg} ${tc.border} ${
-                              task.completed || task.status === 'done' ? 'line-through opacity-60' : ''
-                            } ${task.status === 'cancelled' ? 'line-through opacity-50' : ''} ${
+                            className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
+                              task.completed || task.status === 'done' ? 'opacity-60' : ''
+                            } ${task.status === 'cancelled' ? 'opacity-50' : ''} ${
                               task.status === 'in-progress' ? 'border-l-[3px]' : ''
                             }`}
                             title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOQUEADA — esperando: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
                             onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                           >
                             <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                              {isTaskBlocked(task) ? (
+                              {task.completed ? (
+                                <Icons.CheckCircle size={9} className="text-emerald-500 shrink-0" />
+                              ) : isTaskBlocked(task) ? (
                                 <Icons.Lock size={9} className="text-amber-500 shrink-0" />
                               ) : (
                                 <span className={`w-1.5 h-1.5 rounded-full ${tc.dot} shrink-0`} />
                               )}
-                              {task.title}
+                              <span className={task.completed ? 'line-through' : ''}>{task.title}</span>
                               {overdue > 0 && (
                                 <span className="text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
                                   +{overdue}d
@@ -2371,13 +2388,13 @@ export const Calendar: React.FC = () => {
                           draggable
                           onDragStart={(e) => handleTaskDragStart(e, task.id)}
                           onDragEnd={() => setDraggingTaskId(null)}
-                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing ${tc.bg} ${tc.border} ${
-                            task.completed ? 'line-through opacity-50' : ''
+                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border} ${
+                            task.completed ? 'opacity-60' : ''
                           }`}
                           onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                         >
                           <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
-                          <span className={`${tc.text} truncate`}>{task.title}</span>
+                          <span className={`${tc.text} truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
                           {overdue > 0 && (
                             <span className="ml-auto text-[8px] font-bold text-red-500 shrink-0">+{overdue}d</span>
                           )}

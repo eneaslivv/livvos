@@ -47,6 +47,8 @@ export const Docs: React.FC = () => {
   const [linkType, setLinkType] = useState<'none' | 'client' | 'project'>('none');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   const currentLinkOptions = {
     clientId: linkType === 'client' && selectedClientId ? selectedClientId : null,
@@ -55,13 +57,17 @@ export const Docs: React.FC = () => {
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
+    setFolderError(null);
+    setIsCreatingFolder(true);
     try {
       await createFolder(newFolderName, '#3b82f6', currentLinkOptions);
       setNewFolderName('');
       setShowNewFolderInput(false);
     } catch (err: any) {
       console.error('Error creating folder:', err);
-      alert(`Error al crear carpeta: ${err?.message || JSON.stringify(err)}`);
+      setFolderError(err?.message || 'Error desconocido al crear carpeta');
+    } finally {
+      setIsCreatingFolder(false);
     }
   };
 
@@ -269,24 +275,32 @@ export const Docs: React.FC = () => {
               type="text"
               placeholder="Nombre de la carpeta..."
               value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
+              onChange={(e) => { setNewFolderName(e.target.value); setFolderError(null); }}
               className="flex-1 px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-zinc-400"
               autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+              onKeyDown={(e) => e.key === 'Enter' && !isCreatingFolder && handleCreateFolder()}
+              disabled={isCreatingFolder}
             />
             <button
               onClick={handleCreateFolder}
-              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={isCreatingFolder}
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Crear
+              {isCreatingFolder ? 'Creando...' : 'Crear'}
             </button>
             <button
-              onClick={() => { setShowNewFolderInput(false); setNewFolderName(''); }}
+              onClick={() => { setShowNewFolderInput(false); setNewFolderName(''); setFolderError(null); }}
+              disabled={isCreatingFolder}
               className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
             >
               Cancelar
             </button>
           </div>
+          {folderError && (
+            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-600 dark:text-red-400">{folderError}</p>
+            </div>
+          )}
         </div>
       )}
 

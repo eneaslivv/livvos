@@ -123,7 +123,8 @@ const App: React.FC<ClientPortalAppProps> = ({
         <div className="fixed bottom-6 left-6 z-[100]">
           <button
             onClick={() => setMode(mode === 'client' ? 'creator' : 'client')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-full hover:bg-indigo-600 transition-all text-[10px] font-semibold"
+            className="flex items-center gap-2 px-4 py-2.5 text-white rounded-full hover:opacity-90 transition-all text-[10px] font-semibold"
+            style={{ backgroundColor: '#2C0405' }}
           >
             {mode === 'client' ? <UserCog size={14} /> : <Eye size={14} />}
             {mode === 'client' ? 'Modo Editor' : 'Vista Cliente'}
@@ -152,17 +153,18 @@ const App: React.FC<ClientPortalAppProps> = ({
 
           <div className="flex items-center gap-2">
             {clientName && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200/80 rounded-lg mr-1">
-                <div className="w-6 h-6 bg-indigo-500 rounded-md flex items-center justify-center text-white font-semibold text-[10px]">
+              <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-white border border-zinc-200/80 rounded-full mr-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-semibold text-[10px]" style={{ backgroundColor: '#2C0405' }}>
                   {clientName.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-[11px] font-medium text-zinc-500">{clientName}</span>
+                <span className="text-[11px] font-medium text-zinc-600">{clientName}</span>
               </div>
             )}
             {mode === 'creator' && (
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-700 transition-all text-[10px] font-semibold"
+                className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full hover:opacity-90 transition-all text-[10px] font-semibold"
+                style={{ backgroundColor: '#2C0405' }}
               >
                 <Settings size={13} />
                 Configurar
@@ -170,7 +172,8 @@ const App: React.FC<ClientPortalAppProps> = ({
             )}
             <button
               onClick={() => setIsChatOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-all text-[11px] font-semibold"
+              className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full hover:opacity-90 transition-all text-[11px] font-semibold"
+              style={{ backgroundColor: '#2C0405' }}
             >
               <MessageSquare size={14} />
               <span className="hidden sm:inline">Soporte</span>
@@ -178,7 +181,7 @@ const App: React.FC<ClientPortalAppProps> = ({
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="p-2 bg-white border border-zinc-200/80 rounded-lg hover:bg-red-50 hover:border-red-200 transition-all text-zinc-400 hover:text-red-500"
+                className="p-2 bg-white border border-zinc-200/80 rounded-full hover:bg-red-50 hover:border-red-200 transition-all text-zinc-400 hover:text-red-500"
                 title="Salir"
               >
                 <LogOut size={16} />
