@@ -109,8 +109,8 @@ const ClientViewPreview: React.FC<{
     const totalTasks = tasks.length || 1;
     const completedTasks = tasks.filter((t: any) => t.completed).length;
     const progress = project.progress || Math.min(100, Math.round((completedTasks / totalTasks) * 100));
-    const startDate = project.updatedAt
-      ? new Date(project.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const startDate = project.createdAt
+      ? new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : 'TBD';
     const dueDates = tasks.map((t: any) => t.due_date).filter(Boolean) as string[];
     const etaRaw = dueDates.length ? dueDates.sort().slice(-1)[0] : project.deadline;
@@ -387,7 +387,7 @@ export const Projects: React.FC = () => {
         clientName: selectedClientObj?.name || selectedClientObj?.company || 'TBD',
         clientAvatar: selectedClientObj?.name?.substring(0, 2).toUpperCase() || 'XX',
         ...(selectedClientObj ? { client_id: selectedClientObj.id } as any : {}),
-        deadline: newProjectDeadline || new Date().toISOString().slice(0, 10),
+        deadline: newProjectDeadline || '',
         nextSteps: 'Kick-off',
         tags: [],
         team: [],
@@ -1010,7 +1010,7 @@ export const Projects: React.FC = () => {
                         Proyecto propio
                       </span>
                     )}
-                    <span className="flex items-center gap-1"><Icons.Calendar size={12} /> {selectedProject.deadline}</span>
+                    <span className="flex items-center gap-1"><Icons.Calendar size={12} /> {new Date(selectedProject.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </>
                 )}
               </div>
@@ -1195,7 +1195,7 @@ export const Projects: React.FC = () => {
                         />
                       </div>
                       {/* Stats */}
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                           <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider mb-2">Progress</div>
                           <div className="flex items-end gap-3">
@@ -1218,6 +1218,46 @@ export const Projects: React.FC = () => {
                             {derivedTasksGroups.flatMap(g => g.tasks).filter((t: any) => !t.done).length}
                           </div>
                           <div className="text-[11px] text-zinc-400">Across {derivedTasksGroups.length} phases</div>
+                          {(() => {
+                            const openTasks = derivedTasksGroups.flatMap(g => g.tasks).filter((t: any) => !t.done && t.dueDate);
+                            const nextDue = openTasks.sort((a: any, b: any) => a.dueDate.localeCompare(b.dueDate))[0];
+                            return nextDue ? (
+                              <div className="text-[10px] text-amber-500 font-medium mt-1">
+                                Próxima: {new Date(nextDue.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                        <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider mb-2">Deadline</div>
+                          {selectedProject.deadline ? (
+                            <>
+                              <div className="flex items-center gap-1.5">
+                                <Icons.Calendar size={14} className="text-zinc-400" />
+                                <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                  {new Date(selectedProject.deadline).toLocaleDateString('es', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                              </div>
+                              {(() => {
+                                const deadlineDate = new Date(selectedProject.deadline);
+                                const now = new Date();
+                                const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                return (
+                                  <div className={`mt-1 text-[11px] font-medium ${daysLeft < 0 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                    {daysLeft < 0 ? `${Math.abs(daysLeft)} días de atraso` : daysLeft === 0 ? 'Vence hoy' : `${daysLeft} días restantes`}
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          ) : (
+                            <div className="text-sm text-zinc-400 italic">Sin definir</div>
+                          )}
+                          <input
+                            type="date"
+                            value={selectedProject.deadline}
+                            onChange={e => handleUpdateProject({ deadline: e.target.value })}
+                            className="mt-2 w-full px-2 py-1 text-[11px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600"
+                          />
                         </div>
                       </div>
                       {/* Financial Summary */}
@@ -1469,27 +1509,6 @@ export const Projects: React.FC = () => {
                           </div>
                         </div>
                       )}
-
-                      {/* Deadline */}
-                      <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Deadline</h3>
-                        <div className="flex items-center gap-2">
-                          <Icons.Calendar size={14} className="text-zinc-400" />
-                          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                            {selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Not set'}
-                          </span>
-                        </div>
-                        {selectedProject.deadline && (() => {
-                          const deadlineDate = new Date(selectedProject.deadline);
-                          const now = new Date();
-                          const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                          return (
-                            <div className={`mt-2 text-xs font-medium ${daysLeft < 0 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : 'text-zinc-400'}`}>
-                              {daysLeft < 0 ? `${Math.abs(daysLeft)} days overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft} days remaining`}
-                            </div>
-                          );
-                        })()}
-                      </div>
 
                       {/* Recent Activity */}
                       {selectedProject.activity.length > 0 && (

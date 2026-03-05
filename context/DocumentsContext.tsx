@@ -135,9 +135,20 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     color: string = '#3b82f6',
     options?: { clientId?: string | null; projectId?: string | null }
   ) => {
-    const user = (await supabase.auth.getUser()).data.user
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Usuario no autenticado')
-    if (!tenantId) throw new Error('Tenant no disponible')
+
+    // If tenantId is not yet available, try to fetch it directly
+    let effectiveTenantId = tenantId
+    if (!effectiveTenantId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single()
+      effectiveTenantId = profile?.tenant_id
+    }
+    if (!effectiveTenantId) throw new Error('Tenant no disponible. Recarga la página.')
 
     const { clientId = null, projectId = null } = options || {}
 
@@ -146,11 +157,15 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       parent_id: currentFolderId,
       color,
       owner_id: user.id,
-      tenant_id: tenantId,
+      tenant_id: effectiveTenantId,
       client_id: clientId,
       project_id: projectId
     }).select().single()
-    if (err) throw err
+
+    if (err) {
+      console.error('Supabase folder insert error:', err)
+      throw err
+    }
     setFolders(prev => [...prev, data])
     return data
   }

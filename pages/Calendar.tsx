@@ -358,8 +358,10 @@ export const Calendar: React.FC = () => {
       if (updates.status === 'done') updates.completed = true;
       else if (updates.status === 'cancelled') updates.completed = false;
       else if (updates.status) updates.completed = false;
-      // Normalize blocked_by: empty string → null for DB
+      // Normalize FK fields: empty string → null for DB
       if ('blocked_by' in updates && !updates.blocked_by) (updates as any).blocked_by = null;
+      if ('project_id' in updates && !updates.project_id) (updates as any).project_id = null;
+      if ('client_id' in updates && !(updates as any).client_id) (updates as any).client_id = null;
       await updateTask(selectedTask.id, updates);
       setSelectedTask(null);
     } catch (err) {

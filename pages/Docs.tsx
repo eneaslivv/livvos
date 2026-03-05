@@ -59,8 +59,9 @@ export const Docs: React.FC = () => {
       await createFolder(newFolderName, '#3b82f6', currentLinkOptions);
       setNewFolderName('');
       setShowNewFolderInput(false);
-    } catch (err) {
-      alert('Error al crear carpeta');
+    } catch (err: any) {
+      console.error('Error creating folder:', err);
+      alert(`Error al crear carpeta: ${err?.message || JSON.stringify(err)}`);
     }
   };
 

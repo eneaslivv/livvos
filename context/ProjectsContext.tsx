@@ -53,6 +53,7 @@ export interface Project {
   clientName: string
   clientAvatar: string
   deadline: string
+  createdAt: string
   updatedAt: string
   nextSteps: string
   tags: string[]
@@ -114,7 +115,8 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     client_id: p.client_id ?? null,
     clientName: p.client_name ?? p.clientName ?? p.client ?? 'Client',
     clientAvatar: p.client_avatar ?? p.clientAvatar ?? 'CL',
-    deadline: p.deadline ?? new Date().toISOString().slice(0, 10),
+    deadline: p.deadline ?? '',
+    createdAt: p.created_at ?? p.createdAt ?? new Date().toISOString(),
     updatedAt: p.updated_at ?? p.updatedAt ?? new Date().toISOString(),
     nextSteps: p.next_steps ?? p.nextSteps ?? '',
     tags: Array.isArray(p.tags) ? p.tags : [],
@@ -138,7 +140,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if ((p as any).client_id !== undefined) payload.client_id = (p as any).client_id;
     if (p.clientName !== undefined) payload.client_name = p.clientName;
     if (p.clientAvatar !== undefined) payload.client_avatar = p.clientAvatar;
-    if (p.deadline !== undefined) payload.deadline = p.deadline;
+    if (p.deadline !== undefined) payload.deadline = p.deadline || null;
     if (p.nextSteps !== undefined) payload.next_steps = p.nextSteps;
     if (p.tags !== undefined) payload.tags = p.tags;
     if (p.team !== undefined) payload.team = p.team;

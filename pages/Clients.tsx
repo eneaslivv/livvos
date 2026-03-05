@@ -10,6 +10,7 @@ import { useCalendar, CalendarTask } from '../context/CalendarContext';
 import { useTeam } from '../context/TeamContext';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
+import { sendInviteEmail } from '../lib/sendInviteEmail';
 
 /* ─── Helpers ─── */
 const statusConfig = {
@@ -111,6 +112,7 @@ export const Clients: React.FC = () => {
   const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
+  const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number }[]>([]);
   const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -287,6 +289,39 @@ export const Clients: React.FC = () => {
         action_type: 'note',
         action_description: `Cliente creado: ${client.name}`
       });
+
+      // Auto-invite to portal if client has email
+      if (client.email && currentTenant?.id) {
+        try {
+          let roleId: string;
+          const { data: roleData } = await supabase.from('roles').select('id').eq('name', 'client').maybeSingle();
+          if (roleData) {
+            roleId = roleData.id;
+          } else {
+            const { data: newRole, error: newRoleErr } = await supabase
+              .from('roles').insert({ name: 'client', description: 'Portal client access', is_system: true }).select('id').single();
+            if (newRoleErr) throw newRoleErr;
+            roleId = newRole.id;
+          }
+
+          const { data: invite } = await supabase.from('invitations')
+            .insert({ email: client.email, role_id: roleId, tenant_id: currentTenant.id, created_by: user?.id, status: 'pending', client_id: client.id, type: 'client' })
+            .select('token').single();
+
+          if (invite?.token) {
+            const inviteLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+            sendInviteEmail({ clientName: client.name, clientEmail: client.email, inviteLink, tenantName: currentTenant.name })
+              .catch(err => console.warn('[auto-invite] Email failed:', err));
+            await addHistoryEntry({
+              client_id: client.id, user_id: user?.id || '', user_name: user?.email?.split('@')[0] || 'User',
+              action_type: 'email', action_description: `Invitación al portal enviada automáticamente a ${client.email}`,
+            });
+          }
+        } catch (autoInviteErr) {
+          console.warn('[auto-invite] Failed:', autoInviteErr);
+        }
+      }
+
       setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '' });
       setShowNewClientPanel(false);
       setSelectedClient(client);
@@ -343,6 +378,7 @@ export const Clients: React.FC = () => {
     }
     setIsInvitingPortal(true);
     setPortalInviteError(null);
+    setEmailSent(null);
     try {
       // 1. Find or create the 'client' role
       let roleId: string;
@@ -372,7 +408,15 @@ export const Clients: React.FC = () => {
         .maybeSingle();
 
       if (existing?.token) {
-        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${existing.token}&portal=client`);
+        const existingLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
+        setPortalInviteLink(existingLink);
+        try {
+          await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: existingLink, tenantName: currentTenant?.name });
+          setEmailSent(true);
+        } catch (emailErr) {
+          console.warn('[handleInvitePortal] Email re-send failed:', emailErr);
+          setEmailSent(false);
+        }
         return;
       }
 
@@ -391,6 +435,7 @@ export const Clients: React.FC = () => {
         .insert({ ...invitePayload, client_id: selectedClient.id, type: 'client' })
         .select('token').single();
 
+      let finalLink: string;
       if (inviteError) {
         // Retry without client_id/type in case those columns don't exist
         const { data: invite2, error: inviteError2 } = await supabase
@@ -398,9 +443,19 @@ export const Clients: React.FC = () => {
           .insert(invitePayload)
           .select('token').single();
         if (inviteError2) throw new Error(`Error creando invitación: ${inviteError2.message}`);
-        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`);
+        finalLink = `${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`;
       } else {
-        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+        finalLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+      }
+      setPortalInviteLink(finalLink);
+
+      // Send invitation email
+      try {
+        await sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink: finalLink, tenantName: currentTenant?.name });
+        setEmailSent(true);
+      } catch (emailErr) {
+        console.warn('[handleInvitePortal] Email send failed:', emailErr);
+        setEmailSent(false);
       }
 
       // 4. Auto-share all linked projects with this client
@@ -430,7 +485,7 @@ export const Clients: React.FC = () => {
           user_id: user?.id || '',
           user_name: user?.email?.split('@')[0] || 'User',
           action_type: 'email',
-          action_description: `Invitación al portal enviada a ${selectedClient.email}`,
+          action_description: `Invitación al portal ${emailSent ? 'enviada por email' : 'creada'} para ${selectedClient.email}`,
           action_date: new Date().toISOString(),
         });
       }
@@ -913,9 +968,11 @@ export const Clients: React.FC = () => {
                   <p className="mt-3 text-[11px] text-rose-600 bg-rose-50 dark:bg-rose-500/10 rounded-lg px-3 py-2">{portalInviteError}</p>
                 )}
                 {portalInviteLink && (
-                  <div className="mt-3 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg px-3 py-2 flex items-center gap-2">
-                    <Icons.CheckCircle size={13} className="shrink-0" />
-                    <span className="truncate flex-1">Invitación creada</span>
+                  <div className={`mt-3 text-[11px] rounded-lg px-3 py-2 flex items-center gap-2 ${emailSent === false ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10' : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'}`}>
+                    {emailSent === false ? <Icons.AlertTriangle size={13} className="shrink-0" /> : <Icons.CheckCircle size={13} className="shrink-0" />}
+                    <span className="truncate flex-1">
+                      {emailSent ? 'Invitación enviada por email' : emailSent === false ? 'Email no pudo enviarse, copiá el link' : 'Invitación creada'}
+                    </span>
                     <button
                       onClick={() => { navigator.clipboard.writeText(portalInviteLink); }}
                       className="px-2 py-1 bg-emerald-100 dark:bg-emerald-500/20 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 rounded-md text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 transition-colors shrink-0"

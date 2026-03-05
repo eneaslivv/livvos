@@ -384,6 +384,10 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates, updated_at: new Date().toISOString() } : t))
 
     const payload: any = { ...updates }
+    // Sanitize FK fields: empty string → null for DB
+    if ('project_id' in payload) payload.project_id = payload.project_id || null
+    if ('client_id' in payload) payload.client_id = payload.client_id || null
+    if ('assignee_id' in payload) payload.assignee_id = payload.assignee_id || null
     if (payload.start_date) {
       payload.due_date = payload.start_date
       delete payload.start_date
