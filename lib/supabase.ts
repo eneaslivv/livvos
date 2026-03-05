@@ -1,5 +1,38 @@
 import { createClient } from '@supabase/supabase-js'
 
+// Clean up localStorage if near quota to prevent kQuotaBytes errors
+function cleanupLocalStorage() {
+  try {
+    // Test if we can write
+    localStorage.setItem('__quota_test__', 'x')
+    localStorage.removeItem('__quota_test__')
+  } catch {
+    console.warn('[Storage] localStorage quota exceeded, cleaning up...')
+    // Remove non-essential keys (keep Supabase auth)
+    const keysToKeep = ['sb-', 'supabase.auth']
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && !keysToKeep.some(prefix => key.includes(prefix))) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+    console.log(`[Storage] Removed ${keysToRemove.length} non-essential keys`)
+
+    // If still full, clear everything
+    try {
+      localStorage.setItem('__quota_test__', 'x')
+      localStorage.removeItem('__quota_test__')
+    } catch {
+      console.warn('[Storage] Still full, clearing all localStorage')
+      localStorage.clear()
+    }
+  }
+}
+
+cleanupLocalStorage()
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''

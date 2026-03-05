@@ -10,13 +10,17 @@ ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
 -- FOLDERS policies
 -- =============================================
 
--- Drop all existing folder policies
+-- Drop ALL existing folder policies (old + new names)
 DROP POLICY IF EXISTS "Users can view their own folders" ON public.folders;
 DROP POLICY IF EXISTS "Users can create their own folders" ON public.folders;
 DROP POLICY IF EXISTS "Users can update their own folders" ON public.folders;
 DROP POLICY IF EXISTS "Users can delete their own folders" ON public.folders;
 DROP POLICY IF EXISTS "client_folders_select" ON public.folders;
 DROP POLICY IF EXISTS "client_folders_project_select" ON public.folders;
+DROP POLICY IF EXISTS "folders_select_policy" ON public.folders;
+DROP POLICY IF EXISTS "folders_insert_policy" ON public.folders;
+DROP POLICY IF EXISTS "folders_update_policy" ON public.folders;
+DROP POLICY IF EXISTS "folders_delete_policy" ON public.folders;
 
 -- SELECT: owner OR same tenant OR client portal
 CREATE POLICY "folders_select_policy" ON public.folders
@@ -73,6 +77,10 @@ DROP POLICY IF EXISTS "Users can update their own files" ON public.files;
 DROP POLICY IF EXISTS "Users can delete their own files" ON public.files;
 DROP POLICY IF EXISTS "client_files_select" ON public.files;
 DROP POLICY IF EXISTS "client_files_project_select" ON public.files;
+DROP POLICY IF EXISTS "files_select_policy" ON public.files;
+DROP POLICY IF EXISTS "files_insert_policy" ON public.files;
+DROP POLICY IF EXISTS "files_update_policy" ON public.files;
+DROP POLICY IF EXISTS "files_delete_policy" ON public.files;
 
 -- SELECT: owner OR same tenant OR client portal
 CREATE POLICY "files_select_policy" ON public.files
