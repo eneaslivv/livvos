@@ -38,12 +38,34 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         if (error) throw error
         setMessage({ text: 'Te enviamos un magic link. Revisá tu email.', type: 'success' })
       } else if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password })
+        if (password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres')
+        const { data: signUpData, error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
+        if (isClientPortal && signUpData?.user?.id) {
+          // Link auth user to client record by email
+          await supabase
+            .from('clients')
+            .update({ auth_user_id: signUpData.user.id })
+            .eq('email', email)
+            .is('auth_user_id', null)
+          // Auto-login if session was created immediately
+          if (signUpData.session) {
+            onAuthenticated()
+            return
+          }
+        }
         setMessage({ text: 'Cuenta creada exitosamente. Ya podés iniciar sesión.', type: 'success' })
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
+        // On portal login, link auth_user_id if not yet linked
+        if (isClientPortal && signInData?.user?.id) {
+          await supabase
+            .from('clients')
+            .update({ auth_user_id: signInData.user.id })
+            .eq('email', email)
+            .is('auth_user_id', null)
+        }
         onAuthenticated()
       }
     } catch (err: any) {
@@ -63,18 +85,18 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
       <div className="min-h-screen flex">
         {/* Left Panel - Dark with client branding */}
         <div className="hidden lg:flex lg:w-1/2 bg-[#0a0a0a] text-white flex-col justify-between p-12 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/10 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#2C0405]/20 via-transparent to-transparent" />
 
           <div className="relative z-10">
             <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-              livv<span className="text-emerald-500">~</span>
+              livv<span className="text-[#e8b4b4]">~</span>
             </span>
           </div>
 
           <div className="relative z-10 space-y-6">
             <div>
               <h1 className="text-4xl font-light leading-tight mb-4" style={{ fontFamily: 'serif' }}>
-                Tu <span className="text-emerald-500">proyecto</span>,<br />
+                Tu <span className="text-[#e8b4b4]">proyecto</span>,<br />
                 en tiempo real
               </h1>
               <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
@@ -89,11 +111,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                 { icon: '⌘', title: 'Comunicación directa', desc: 'Mensajes y actualizaciones del equipo.' },
               ].map((f, i) => (
                 <div key={i} className="flex items-start gap-4 group">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-500 text-lg group-hover:border-emerald-500/50 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
                     {f.icon}
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-emerald-400">{f.title}</h3>
+                    <h3 className="text-sm font-medium text-[#e8b4b4]">{f.title}</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">{f.desc}</p>
                   </div>
                 </div>
@@ -102,7 +124,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           </div>
 
           <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-            <span className="text-emerald-600">PORTAL SEGURO</span>
+            <span className="text-[#e8b4b4]">PORTAL SEGURO</span>
             <span className="text-zinc-700">&bull;</span>
             <span>Datos encriptados</span>
           </div>
@@ -112,8 +134,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         <div className="flex-1 flex items-center justify-center p-8 lg:p-12" style={{ backgroundColor: '#faf9f7' }}>
           <div className="w-full max-w-md">
             <div className="text-center mb-10">
-              <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icons.Users size={22} className="text-emerald-600" />
+              <div className="w-14 h-14 bg-[#2C0405]/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icons.Users size={22} className="text-[#2C0405]" />
               </div>
               <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
                 Portal del Cliente
@@ -123,18 +145,18 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
               </p>
             </div>
 
-            {/* Tabs - signin / forgot only */}
+            {/* Tabs */}
             <div className="flex justify-center gap-6 mb-8">
-              {(['signin', 'forgot'] as const).map(m => (
+              {(['signin', 'signup', 'forgot'] as const).map(m => (
                 <button
                   key={m}
                   onClick={() => { setMode(m); setMessage(null); }}
                   className={`text-sm transition-all pb-1 border-b-2 ${mode === m
-                    ? 'text-zinc-900 border-emerald-500'
+                    ? 'text-zinc-900 border-[#2C0405]'
                     : 'text-zinc-400 border-transparent hover:text-zinc-600'
                   }`}
                 >
-                  {m === 'signin' ? 'Iniciar sesión' : 'Recuperar contraseña'}
+                  {m === 'signin' ? 'Iniciar sesión' : m === 'signup' ? 'Crear cuenta' : 'Recuperar contraseña'}
                 </button>
               ))}
             </div>
@@ -150,13 +172,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                     onChange={e => setEmail(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="tu@email.com"
-                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#2C0405]/15 focus:border-[#2C0405] transition-all"
                     autoFocus
                   />
                 </div>
               </div>
 
-              {mode === 'signin' && (
+              {(mode === 'signin' || mode === 'signup') && (
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Contraseña</label>
                   <div className="relative">
@@ -166,8 +188,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="••••••••••••"
-                      className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                      placeholder={mode === 'signup' ? 'Mínimo 6 caracteres' : '••••••••••••'}
+                      className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#2C0405]/15 focus:border-[#2C0405] transition-all"
                     />
                   </div>
                 </div>
@@ -182,7 +204,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full py-3.5 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                className="w-full py-3.5 mt-2 bg-[#2C0405] hover:bg-[#1a0203] text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#2C0405]/20"
               >
                 {loading ? (
                   <>
@@ -191,7 +213,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                   </>
                 ) : (
                   <>
-                    {mode === 'signin' ? 'Acceder al portal' : 'Enviar link de recuperación'}
+                    {mode === 'signin' ? 'Acceder al portal' : mode === 'signup' ? 'Crear cuenta' : 'Enviar link de recuperación'}
                     <Icons.ChevronRight size={16} />
                   </>
                 )}
@@ -199,12 +221,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
               {message && (
                 <div className={`p-4 rounded-xl text-sm ${message.type === 'success'
-                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  ? 'bg-[#2C0405]/5 border border-[#2C0405]/15 text-[#2C0405]'
                   : 'bg-red-50 border border-red-200 text-red-700'
                 }`}>
                   <div className="flex items-center gap-2">
                     {message.type === 'success'
-                      ? <Icons.CheckCircle size={16} className="text-emerald-500" />
+                      ? <Icons.CheckCircle size={16} className="text-[#e8b4b4]" />
                       : <Icons.AlertCircle size={16} className="text-red-500" />}
                     {message.text}
                   </div>
@@ -214,7 +236,15 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
             <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
               <p className="text-zinc-400 text-xs">
-                ¿No tenés cuenta? Pedile a tu equipo que te envíe una invitación.
+                {mode === 'signup'
+                  ? '¿Ya tenés cuenta? '
+                  : '¿No tenés cuenta? '}
+                <button
+                  onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setMessage(null); }}
+                  className="text-[#2C0405] hover:text-[#2C0405] font-medium"
+                >
+                  {mode === 'signup' ? 'Iniciá sesión' : 'Creá una cuenta'}
+                </button>
               </p>
             </div>
           </div>
@@ -381,12 +411,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
             {message && (
               <div className={`p-4 rounded-xl text-sm ${message.type === 'success'
-                ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                ? 'bg-[#2C0405]/5 border border-[#2C0405]/15 text-[#2C0405]'
                 : 'bg-red-50 border border-red-200 text-red-700'
               }`}>
                 <div className="flex items-center gap-2">
                   {message.type === 'success'
-                    ? <Icons.CheckCircle size={16} className="text-emerald-500" />
+                    ? <Icons.CheckCircle size={16} className="text-[#e8b4b4]" />
                     : <Icons.AlertCircle size={16} className="text-red-500" />}
                   {message.text}
                 </div>

@@ -75,6 +75,12 @@ export const ClientPortalView: React.FC = () => {
   const [clientEmail, setClientEmail] = useState<string | undefined>();
 
   const handleLogout = async () => {
+    // If admin is previewing the portal, just go back to the app (no signout)
+    const portalFlag = new URLSearchParams(window.location.search).get('portal');
+    if (portalFlag === 'client') {
+      window.location.href = '/';
+      return;
+    }
     await supabase.auth.signOut();
     window.location.href = '/';
   };
@@ -137,6 +143,21 @@ export const ClientPortalView: React.FC = () => {
             .single();
           if (emailErr) console.warn('Portal: clients lookup by email failed:', emailErr.message);
           client = clientData as ClientRecord | null;
+        }
+
+        // Fallback for admin/owner: show the first client they own
+        if (!client) {
+          const { data: ownedClient } = await supabase
+            .from('clients')
+            .select('id,name,email,company,avatar_url')
+            .eq('owner_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (ownedClient) {
+            client = ownedClient as ClientRecord;
+            console.log('[Portal] Admin access: showing first owned client:', client.name);
+          }
         }
 
         if (!project && client?.id) {
@@ -372,7 +393,7 @@ export const ClientPortalView: React.FC = () => {
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+              className="px-4 py-2 bg-[#2C0405] text-white rounded-xl text-sm font-medium hover:bg-[#1a0203] transition-colors"
             >
               Reintentar
             </button>
