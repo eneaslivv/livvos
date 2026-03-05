@@ -22,6 +22,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Load messages from Supabase
@@ -29,11 +30,14 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
     if (!clientId) return;
 
     const loadMessages = async () => {
-      const { data } = await supabase
+      const { data, error: fetchErr } = await supabase
         .from('client_messages')
         .select('id, sender_type, sender_name, message, created_at')
         .eq('client_id', clientId)
         .order('created_at', { ascending: true });
+      if (fetchErr) {
+        console.warn('[ChatSupport] Error loading messages:', fetchErr.message);
+      }
       if (data) setMessages(data as ChatMessage[]);
     };
 
@@ -67,20 +71,68 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
   const handleSend = async () => {
     if (!input.trim() || !clientId || sending) return;
     setSending(true);
+    setError(null);
+
+    const userId = (await supabase.auth.getUser()).data.user?.id;
+    const msgText = input.trim();
+
+    // Optimistic update
+    const tempMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      sender_type: 'client',
+      sender_name: clientName || 'Cliente',
+      message: msgText,
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, tempMsg]);
+    setInput('');
+
     try {
-      const { error } = await supabase
+      // Try full insert first
+      const payload: Record<string, any> = {
+        client_id: clientId,
+        sender_type: 'client',
+        sender_id: userId,
+        sender_name: clientName || 'Cliente',
+        message: msgText,
+        message_type: 'text',
+      };
+
+      const { data, error: insertErr } = await supabase
         .from('client_messages')
-        .insert({
-          client_id: clientId,
-          sender_type: 'client',
-          sender_id: (await supabase.auth.getUser()).data.user?.id,
-          sender_name: clientName || 'Client',
-          message: input.trim(),
-          message_type: 'text'
-        });
-      if (!error) setInput('');
-    } catch (err) {
-      console.error('Error sending message:', err);
+        .insert(payload)
+        .select('id, sender_type, sender_name, message, created_at')
+        .single();
+
+      if (insertErr) {
+        // Retry without optional columns that might not exist
+        const { data: retryData, error: retryErr } = await supabase
+          .from('client_messages')
+          .insert({
+            client_id: clientId,
+            sender_type: 'client',
+            sender_name: clientName || 'Cliente',
+            message: msgText,
+          })
+          .select('id, sender_type, sender_name, message, created_at')
+          .single();
+
+        if (retryErr) throw retryErr;
+
+        // Replace temp with real
+        if (retryData) {
+          setMessages(prev => prev.map(m => m.id === tempMsg.id ? (retryData as ChatMessage) : m));
+        }
+      } else if (data) {
+        // Replace temp with real
+        setMessages(prev => prev.map(m => m.id === tempMsg.id ? (data as ChatMessage) : m));
+      }
+    } catch (err: any) {
+      console.error('[ChatSupport] Error sending message:', err);
+      setError('No se pudo enviar el mensaje');
+      // Remove optimistic message on failure
+      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+      setInput(msgText); // Restore input
     } finally {
       setSending(false);
     }
@@ -91,44 +143,48 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
       initial={{ y: 50, opacity: 0, scale: 0.95 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
       exit={{ y: 50, opacity: 0, scale: 0.95 }}
-      className="fixed bottom-8 right-8 w-[400px] h-[500px] bg-white border border-brand-dark/10 rounded-[2rem] shadow-2xl z-[60] flex flex-col overflow-hidden"
+      className="fixed bottom-8 right-8 w-[400px] h-[500px] bg-white border border-zinc-200 rounded-2xl shadow-2xl z-[60] flex flex-col overflow-hidden"
     >
-      <div className="p-6 bg-brand-dark text-brand-light flex justify-between items-center">
+      {/* Header */}
+      <div className="p-5 bg-zinc-900 text-white flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-brand-accent rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
             <User size={16} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Priority Support</p>
+            <p className="text-[11px] font-bold leading-none mb-1">Soporte</p>
             <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-[8px] mono uppercase opacity-50">Architects Online</span>
+              <span className="text-[9px] uppercase opacity-50">En línea</span>
             </div>
           </div>
         </div>
-        <button onClick={onClose} className="hover:text-brand-accent transition-colors">
+        <button onClick={onClose} className="hover:text-indigo-300 transition-colors">
           <X size={20} />
         </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 custom-scroll bg-brand-cream/10">
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3 bg-zinc-50">
         {messages.length === 0 && (
           <div className="flex justify-start">
-            <div className="max-w-[80%] p-4 rounded-2xl text-xs font-medium leading-relaxed bg-white border border-brand-dark/5 text-brand-dark rounded-tl-none shadow-sm">
-              Welcome to Priority Support. How can we assist you today?
+            <div className="max-w-[80%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed bg-white border border-zinc-100 text-zinc-700 rounded-tl-none shadow-sm">
+              Bienvenido al soporte. ¿En qué podemos ayudarte?
             </div>
           </div>
         )}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-4 rounded-2xl text-xs font-medium leading-relaxed ${
-              m.sender_type === 'client' ? 'bg-brand-accent text-white rounded-tr-none' : 'bg-white border border-brand-dark/5 text-brand-dark rounded-tl-none shadow-sm'
+            <div className={`max-w-[80%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed ${
+              m.sender_type === 'client'
+                ? 'bg-indigo-500 text-white rounded-tr-none'
+                : 'bg-white border border-zinc-100 text-zinc-700 rounded-tl-none shadow-sm'
             }`}>
               {m.sender_type === 'user' && (
-                <p className="text-[9px] font-black uppercase tracking-wider opacity-60 mb-1">{m.sender_name}</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider opacity-60 mb-1">{m.sender_name}</p>
               )}
               {m.message}
-              <p className="text-[8px] opacity-50 mt-2">
+              <p className={`text-[8px] mt-1.5 ${m.sender_type === 'client' ? 'opacity-50' : 'text-zinc-400'}`}>
                 {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
@@ -136,27 +192,31 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         ))}
       </div>
 
-      <div className="p-6 bg-white border-t border-brand-dark/5">
+      {/* Input */}
+      <div className="p-4 bg-white border-t border-zinc-100">
+        {error && (
+          <p className="text-[10px] text-red-500 mb-2 px-1">{error}</p>
+        )}
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            onChange={(e) => { setInput(e.target.value); setError(null); }}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="Escribe un mensaje..."
-            className="flex-1 bg-brand-grey/30 border border-brand-dark/5 rounded-xl px-4 py-3 text-xs mono focus:outline-none focus:border-brand-accent/30"
+            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-300 transition-colors"
           />
           <button
             onClick={handleSend}
             disabled={sending || !input.trim()}
-            className="w-12 h-12 bg-brand-dark text-white rounded-xl flex items-center justify-center hover:bg-brand-accent transition-all disabled:opacity-50"
+            className="w-11 h-11 bg-zinc-900 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all disabled:opacity-40"
           >
-            <Send size={18} />
+            <Send size={16} />
           </button>
         </div>
-        <div className="mt-4 flex items-center justify-center gap-2 opacity-30">
-          <ShieldCheck size={12} />
-          <span className="text-[8px] mono uppercase tracking-widest font-black">Encrypted Priority Lane</span>
+        <div className="mt-3 flex items-center justify-center gap-1.5 opacity-25">
+          <ShieldCheck size={10} />
+          <span className="text-[8px] uppercase tracking-widest font-bold">Canal seguro</span>
         </div>
       </div>
     </motion.div>
