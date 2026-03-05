@@ -113,6 +113,7 @@ export const Clients: React.FC = () => {
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
+  const [clientInviteStatus, setClientInviteStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number }[]>([]);
   const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -262,6 +263,29 @@ export const Clients: React.FC = () => {
         project_name: linkedProjects.find(p => p.id === t.project_id)?.title || ''
       }));
       setProjectTasks(enriched);
+
+      // Load portal invitation status
+      try {
+        const { data: invite } = await supabase
+          .from('invitations')
+          .select('token, status')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (invite) {
+          setClientInviteStatus(invite.status === 'accepted' ? 'accepted' : 'pending');
+          setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+        } else {
+          setClientInviteStatus('none');
+          setPortalInviteLink(null);
+        }
+        setEmailSent(null);
+        setPortalInviteError(null);
+      } catch {
+        // Non-critical
+      }
     } catch (err) {
       errorLogger.error('Error cargando datos del cliente', err);
     }
@@ -333,26 +357,30 @@ export const Clients: React.FC = () => {
     }
   };
 
+  const [assigningProject, setAssigningProject] = useState(false);
   const handleAssignProject = async () => {
-    if (!selectedClient || !selectedProjectId) return;
+    if (!selectedClient || !selectedProjectId || assigningProject) return;
+    setAssigningProject(true);
     try {
       const { error: err } = await supabase.from('projects').update({ client_id: selectedClient.id }).eq('id', selectedProjectId);
       if (err) throw err;
-      setAvailableProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, client_id: selectedClient.id } : p));
       const proj = availableProjects.find(p => p.id === selectedProjectId);
+      setAvailableProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, client_id: selectedClient.id } : p));
       if (proj) setAssignedProjects(prev => [...prev, { id: proj.id, title: proj.title, status: proj.status, progress: proj.progress }]);
       setSelectedProjectId('');
-      await addHistoryEntry({
+      addHistoryEntry({
         client_id: selectedClient.id,
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
         action_description: `Proyecto asignado: ${proj?.title || ''}`
-      });
-      // Reload project tasks
+      }).catch(() => {});
       loadClientData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       errorLogger.error('Error assigning project', err);
+      alert('Error al asignar proyecto: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      setAssigningProject(false);
     }
   };
 
@@ -469,6 +497,7 @@ export const Clients: React.FC = () => {
       }
 
       setPortalInviteLink(inviteLink);
+      setClientInviteStatus('pending');
 
       // 5. Try to send email (non-blocking, with timeout)
       try {
@@ -771,31 +800,59 @@ export const Clients: React.FC = () => {
   ];
 
   /* ─── Editable info field ─── */
+  const [savedField, setSavedField] = useState<string | null>(null);
   const EditableField = ({ field, label, value, type = 'text', placeholder = '' }: { field: string; label: string; value: string | undefined; type?: string; placeholder?: string }) => {
     const isEditing = editingField === field;
+    const justSaved = savedField === field;
     return (
       <div className="group">
         <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">{label}</p>
         {isEditing ? (
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5">
             <input
               type={type}
               value={editDraft[field] || ''}
               onChange={e => setEditDraft({ ...editDraft, [field]: e.target.value })}
-              className="flex-1 px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg text-sm outline-none focus:border-zinc-500"
+              className="flex-1 px-2.5 py-1.5 bg-white dark:bg-zinc-800 border-2 border-indigo-400 dark:border-indigo-500 rounded-lg text-sm outline-none ring-2 ring-indigo-100 dark:ring-indigo-900/30"
               autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleInlineEdit(field)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { handleInlineEdit(field); setSavedField(field); setTimeout(() => setSavedField(null), 1500); }
+                if (e.key === 'Escape') setEditingField(null);
+              }}
             />
-            <button onClick={() => handleInlineEdit(field)} className="px-2 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[10px] font-semibold">OK</button>
-            <button onClick={() => setEditingField(null)} className="px-2 py-1 text-zinc-400 hover:text-zinc-600 text-[10px]">X</button>
+            <button
+              onClick={() => { handleInlineEdit(field); setSavedField(field); setTimeout(() => setSavedField(null), 1500); }}
+              className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+              title="Guardar"
+            >
+              <Icons.Check size={14} />
+            </button>
+            <button
+              onClick={() => setEditingField(null)}
+              className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              title="Cancelar"
+            >
+              <Icons.X size={14} />
+            </button>
           </div>
         ) : (
-          <p
+          <div
             onClick={() => { setEditingField(field); setEditDraft({ ...editDraft, [field]: value || '' }); }}
-            className="text-sm text-zinc-900 dark:text-zinc-100 truncate cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/60 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors group-hover:bg-zinc-50 dark:group-hover:bg-zinc-800/40"
+            className="flex items-center gap-1.5 cursor-pointer rounded-lg px-2 py-1.5 -mx-2 -my-1 transition-all hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group/edit"
           >
-            {value || <span className="text-zinc-300 italic">{placeholder || 'Agregar...'}</span>}
-          </p>
+            {justSaved ? (
+              <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+                <Icons.CheckCircle size={14} /> Guardado
+              </span>
+            ) : (
+              <>
+                <p className="text-sm text-zinc-900 dark:text-zinc-100 truncate flex-1">
+                  {value || <span className="text-zinc-300 dark:text-zinc-600 italic">{placeholder || 'Agregar...'}</span>}
+                </p>
+                <Icons.Edit size={12} className="text-zinc-300 opacity-0 group-hover/edit:opacity-100 transition-opacity shrink-0" />
+              </>
+            )}
+          </div>
         )}
       </div>
     );
@@ -939,23 +996,53 @@ export const Clients: React.FC = () => {
                     </div>
                     <div>
                       {editingField === 'name' ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <input
                             autoFocus
-                            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 bg-transparent border-b border-zinc-300 dark:border-zinc-600 outline-none px-0 py-0"
+                            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800 border-2 border-indigo-400 dark:border-indigo-500 rounded-lg outline-none px-2.5 py-1 ring-2 ring-indigo-100 dark:ring-indigo-900/30"
                             value={editDraft['name'] || ''}
                             onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                            onKeyDown={e => { if (e.key === 'Enter') handleInlineEdit('name'); if (e.key === 'Escape') setEditingField(null); }}
-                            onBlur={() => handleInlineEdit('name')}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { handleInlineEdit('name'); setSavedField('name'); setTimeout(() => setSavedField(null), 1500); }
+                              if (e.key === 'Escape') setEditingField(null);
+                            }}
                           />
-                          <button onClick={() => setEditingField(null)} className="text-zinc-400 hover:text-zinc-600 text-xs ml-1">X</button>
+                          <button
+                            onClick={() => { handleInlineEdit('name'); setSavedField('name'); setTimeout(() => setSavedField(null), 1500); }}
+                            className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                            title="Guardar"
+                          >
+                            <Icons.CheckCircle size={16} />
+                          </button>
+                          <button
+                            onClick={() => setEditingField(null)}
+                            className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                            title="Cancelar (Esc)"
+                          >
+                            <Icons.X size={16} />
+                          </button>
+                        </div>
+                      ) : savedField === 'name' ? (
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-lg font-semibold text-emerald-600">{selectedClient.name}</h2>
+                          <span className="text-xs text-emerald-500 font-medium flex items-center gap-1">
+                            <Icons.CheckCircle size={13} /> Guardado
+                          </span>
                         </div>
                       ) : (
-                        <h2
-                          className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                          onClick={() => { setEditingField('name'); setEditDraft({ ...editDraft, name: selectedClient.name || '' }); }}
-                          title="Click para editar"
-                        >{selectedClient.name}</h2>
+                        <div className="flex items-center gap-1.5 group/name">
+                          <h2
+                            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                            onClick={() => { setEditingField('name'); setEditDraft({ ...editDraft, name: selectedClient.name || '' }); }}
+                          >{selectedClient.name}</h2>
+                          <button
+                            onClick={() => { setEditingField('name'); setEditDraft({ ...editDraft, name: selectedClient.name || '' }); }}
+                            className="p-1 text-zinc-300 hover:text-zinc-500 opacity-0 group-hover/name:opacity-100 transition-all"
+                            title="Editar nombre"
+                          >
+                            <Icons.Edit size={13} />
+                          </button>
+                        </div>
                       )}
                       <div className="flex items-center gap-2 mt-0.5">
                         {selectedClient.company && (
@@ -1015,20 +1102,36 @@ export const Clients: React.FC = () => {
                 )}
 
                 {/* Portal Access Card */}
-                <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50/80 to-violet-50/80 dark:from-indigo-950/30 dark:to-violet-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                <div className={`mt-4 p-4 rounded-xl border ${
+                  clientInviteStatus === 'accepted'
+                    ? 'bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/20 dark:to-teal-950/20 border-emerald-200 dark:border-emerald-900/30'
+                    : clientInviteStatus === 'pending'
+                    ? 'bg-gradient-to-r from-amber-50/80 to-orange-50/80 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200 dark:border-amber-900/30'
+                    : 'bg-gradient-to-r from-indigo-50/80 to-violet-50/80 dark:from-indigo-950/30 dark:to-violet-950/30 border-indigo-100 dark:border-indigo-900/30'
+                }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Icons.External size={14} className="text-indigo-500" />
-                      <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">Portal del Cliente</h4>
+                      <Icons.External size={14} className={clientInviteStatus === 'accepted' ? 'text-emerald-500' : clientInviteStatus === 'pending' ? 'text-amber-500' : 'text-indigo-500'} />
+                      <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                        clientInviteStatus === 'accepted' ? 'text-emerald-700 dark:text-emerald-400'
+                        : clientInviteStatus === 'pending' ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-indigo-700 dark:text-indigo-400'
+                      }`}>Portal del Cliente</h4>
                     </div>
-                    {portalInviteLink && (
-                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Icons.CheckCircle size={10} /> Invitado
+                    {clientInviteStatus === 'accepted' && (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Icons.CheckCircle size={10} /> Activo
+                      </span>
+                    )}
+                    {clientInviteStatus === 'pending' && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Icons.Clock size={10} /> Pendiente
                       </span>
                     )}
                   </div>
 
-                  {!portalInviteLink ? (
+                  {/* Status: No invitation yet */}
+                  {clientInviteStatus === 'none' && (
                     <div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
                         {selectedClient.email
@@ -1047,52 +1150,67 @@ export const Clients: React.FC = () => {
                         )}
                       </button>
                     </div>
-                  ) : (
+                  )}
+
+                  {/* Status: Pending - invited but not accepted yet */}
+                  {clientInviteStatus === 'pending' && (
                     <div className="space-y-2.5">
+                      <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
+                        Invitación enviada. El cliente aún no creó su cuenta.
+                      </p>
                       {emailSent === true && (
                         <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 rounded-lg">
                           <Icons.CheckCircle size={14} className="shrink-0" />
-                          <span>Email de invitación enviado a <strong>{selectedClient.email}</strong></span>
+                          <span>Email enviado a <strong>{selectedClient.email}</strong></span>
                         </div>
                       )}
                       {emailSent === false && (
-                        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 rounded-lg">
+                        <div className="flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400 bg-rose-50/80 dark:bg-rose-500/10 px-3 py-2 rounded-lg">
                           <Icons.AlertCircle size={14} className="shrink-0" />
-                          <span>No se pudo enviar el email. Copiá el link y envialo manualmente.</span>
+                          <span>No se pudo enviar el email. Copiá el link manualmente.</span>
+                        </div>
+                      )}
+                      {portalInviteLink && (
+                        <div className="flex items-center gap-2">
+                          <input type="text" readOnly value={portalInviteLink}
+                            className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 select-all"
+                            onClick={(e) => (e.target as HTMLInputElement).select()} />
+                          <button onClick={() => navigator.clipboard.writeText(portalInviteLink)}
+                            className="px-3 py-2 text-xs font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shrink-0">
+                            Copiar link
+                          </button>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={portalInviteLink}
-                          className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 select-all"
-                          onClick={(e) => (e.target as HTMLInputElement).select()}
-                        />
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(portalInviteLink);
-                            alert('Link copiado al portapapeles');
-                          }}
-                          className="px-3 py-2 text-xs font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shrink-0"
-                        >
-                          Copiar link
+                        <button onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors">
+                          <Icons.External size={12} /> Vista previa
+                        </button>
+                        <button onClick={handleInvitePortal} disabled={isInvitingPortal}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40">
+                          {isInvitingPortal ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Send size={12} />} Reenviar
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Status: Accepted - client has portal access */}
+                  {clientInviteStatus === 'accepted' && (
+                    <div className="space-y-2.5">
+                      <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
+                        El cliente tiene acceso al portal y puede ver sus proyectos, pagos y documentos.
+                      </p>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-                        >
-                          <Icons.External size={12} /> Vista previa del portal
+                        <button onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
+                          <Icons.External size={12} /> Ver portal del cliente
                         </button>
-                        <button
-                          onClick={handleInvitePortal}
-                          disabled={isInvitingPortal}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
-                        >
-                          <Icons.Send size={12} /> Reenviar invitación
-                        </button>
+                        {portalInviteLink && (
+                          <button onClick={() => navigator.clipboard.writeText(portalInviteLink)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                            <Icons.Link size={12} /> Copiar link
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1168,37 +1286,55 @@ export const Clients: React.FC = () => {
                         </div>
 
                         {/* Linked projects list */}
-                        {assignedProjects.length > 0 && (
-                          <div className="space-y-2 mb-3">
-                            {assignedProjects.map(proj => (
-                              <div key={proj.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/60 dark:border-zinc-700/40 rounded-xl">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                                    <Icons.Briefcase size={14} className="text-emerald-600 dark:text-emerald-400" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{proj.title}</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className={`text-[10px] font-medium ${proj.status === 'Active' ? 'text-emerald-500' : proj.status === 'Pending' ? 'text-amber-500' : 'text-zinc-400'}`}>
-                                        {proj.status || 'Active'}
-                                      </span>
-                                      {typeof proj.progress === 'number' && (
-                                        <span className="text-[10px] text-zinc-400">{proj.progress}%</span>
-                                      )}
+                        <AnimatePresence>
+                          {assignedProjects.length > 0 && (
+                            <div className="space-y-2 mb-3">
+                              {assignedProjects.map((proj, idx) => (
+                                <motion.div
+                                  key={proj.id}
+                                  initial={{ opacity: 0, y: -8 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, x: -20 }}
+                                  transition={{ duration: 0.2, delay: idx * 0.05 }}
+                                  className="group flex items-center justify-between p-3 bg-white dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/40 rounded-xl shadow-sm hover:shadow-md transition-all"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                                      <Icons.Briefcase size={15} className="text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{proj.title}</p>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                                          proj.status === 'Active' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                          : proj.status === 'Pending' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
+                                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
+                                        }`}>
+                                          {proj.status || 'Activo'}
+                                        </span>
+                                        {typeof proj.progress === 'number' && (
+                                          <div className="flex items-center gap-1.5">
+                                            <div className="w-16 h-1.5 bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
+                                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${proj.progress}%` }} />
+                                            </div>
+                                            <span className="text-[10px] text-zinc-400 font-medium">{proj.progress}%</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                                <button
-                                  onClick={() => handleUnassignProject(proj.id)}
-                                  className="p-1.5 text-zinc-400 hover:text-rose-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-                                  title="Desvincular"
-                                >
-                                  <Icons.X size={12} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                                  <button
+                                    onClick={() => handleUnassignProject(proj.id)}
+                                    className="p-1.5 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all shrink-0"
+                                    title="Desvincular"
+                                  >
+                                    <Icons.X size={13} />
+                                  </button>
+                                </motion.div>
+                              ))}
+                            </div>
+                          )}
+                        </AnimatePresence>
 
                         {/* Assign new project */}
                         <div className="flex gap-2">
@@ -1214,10 +1350,10 @@ export const Clients: React.FC = () => {
                           </select>
                           <button
                             onClick={handleAssignProject}
-                            disabled={!selectedProjectId}
-                            className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 disabled:opacity-40 text-xs font-semibold transition-all"
+                            disabled={!selectedProjectId || assigningProject}
+                            className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 text-xs font-semibold transition-all active:scale-[0.97]"
                           >
-                            Asignar
+                            {assigningProject ? '...' : 'Asignar'}
                           </button>
                         </div>
                       </div>
