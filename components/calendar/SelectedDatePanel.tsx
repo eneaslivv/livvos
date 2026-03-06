@@ -132,7 +132,15 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                     getDayTasks(selectedDate).map((task) => (
                       <div
                         key={task.id}
-                        className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+                        className={`flex items-center gap-3 p-3 rounded-lg group cursor-pointer transition-colors ${
+                          task.completed || task.status === 'done'
+                            ? 'bg-emerald-50/60 dark:bg-emerald-900/10 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20'
+                            : task.status === 'cancelled'
+                            ? 'bg-red-50/40 dark:bg-red-900/10 hover:bg-red-50/60 dark:hover:bg-red-900/15 opacity-60'
+                            : task.status === 'in-progress'
+                            ? 'bg-indigo-50/60 dark:bg-indigo-900/10 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20'
+                            : 'bg-zinc-50 dark:bg-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                        }`}
                         onClick={() => onOpenTaskDetail(task)}
                       >
                         <input
@@ -186,8 +194,13 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                               {getClientLabel(task)}
                             </span>
                           )}
-                          <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
-                            {task.status}
+                          <span className={`text-[10px] font-medium capitalize px-2 py-0.5 rounded-full ${
+                            task.status === 'done' || task.completed ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' :
+                            task.status === 'in-progress' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' :
+                            task.status === 'cancelled' ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' :
+                            'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                          }`}>
+                            {task.completed ? 'done' : task.status}
                           </span>
                           {task.completed && getElapsedDays(task) !== null && (
                             <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
