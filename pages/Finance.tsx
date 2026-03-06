@@ -825,7 +825,7 @@ export const Finance: React.FC = () => {
                                 return (
                                   <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg p-2.5 text-xs">
                                     <p className="font-semibold text-zinc-800 dark:text-zinc-100">{d.source}</p>
-                                    <p className="text-zinc-500">{fmtCurrency(d.amount)} · {d.count} ingreso{d.count > 1 ? 's' : ''}</p>
+                                    <p className="text-zinc-500">{fmtCurrency(d.amount)} · {d.count} income{d.count > 1 ? 's' : ''}</p>
                                   </div>
                                 );
                               }} />
@@ -1356,7 +1356,7 @@ export const Finance: React.FC = () => {
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Client</label>
                   <select value={incomeForm.client_id} onChange={e => setIncomeForm(p => ({ ...p, client_id: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
-                    <option value="">Sin cliente asignado</option>
+                    <option value="">No client assigned</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</option>)}
                   </select>
                 </div>
@@ -1364,16 +1364,16 @@ export const Finance: React.FC = () => {
 
               {/* Concept — auto-filled from project, always editable */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Concepto *</label>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Concept *</label>
                 <input type="text" value={incomeForm.concept} onChange={e => setIncomeForm(p => ({ ...p, concept: e.target.value }))}
-                  placeholder="Ej: Desarrollo web completo, Consultoría..."
+                  placeholder="E.g.: Full web development, Consulting..."
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
 
               {/* Amount + installments in a row */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Monto Total *</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total Amount *</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">$</span>
                     <input type="number" min="0" step="0.01" value={incomeForm.total_amount}
@@ -1383,7 +1383,7 @@ export const Finance: React.FC = () => {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Cuotas</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Installments</label>
                   <input type="number" min="1" max="24" value={incomeForm.num_installments}
                     onChange={e => setIncomeForm(p => ({ ...p, num_installments: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 text-center" />
@@ -1392,7 +1392,7 @@ export const Finance: React.FC = () => {
 
               {/* Due date */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Fecha primera cuota</label>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">First installment date</label>
                 <input type="date" value={incomeForm.due_date}
                   onChange={e => setIncomeForm(p => ({ ...p, due_date: e.target.value }))}
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
@@ -1403,7 +1403,7 @@ export const Finance: React.FC = () => {
                 <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
                   <Receipt size={14} className="text-emerald-500 shrink-0" />
                   <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                    {incomeForm.num_installments} cuotas de ~{fmtCurrency(Number(incomeForm.total_amount) / parseInt(incomeForm.num_installments))} c/u
+                    {incomeForm.num_installments} installments of ~{fmtCurrency(Number(incomeForm.total_amount) / parseInt(incomeForm.num_installments))} each
                   </span>
                 </div>
               )}
@@ -1411,21 +1411,21 @@ export const Finance: React.FC = () => {
           ) : (
             <>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Concepto *</label>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Concept *</label>
                 <input type="text" value={expenseForm.concept} onChange={e => setExpenseForm(p => ({ ...p, concept: e.target.value }))}
-                  placeholder="Ej: Licencias Figma, Hosting..."
+                  placeholder="E.g.: Figma licenses, Hosting..."
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Categoría</label>
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Category</label>
                   <select value={expenseForm.category} onChange={e => setExpenseForm(p => ({ ...p, category: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
                     {Object.keys(EXPENSE_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Monto *</label>
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Amount *</label>
                   <input type="number" min="0" step="0.01" value={expenseForm.amount}
                     onChange={e => setExpenseForm(p => ({ ...p, amount: e.target.value }))}
                     placeholder="0"
@@ -1433,14 +1433,14 @@ export const Finance: React.FC = () => {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Proveedor / Vendor</label>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Vendor</label>
                 <input type="text" value={expenseForm.vendor} onChange={e => setExpenseForm(p => ({ ...p, vendor: e.target.value }))}
-                  placeholder="Nombre del proveedor..."
+                  placeholder="Vendor name..."
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Proyecto</label>
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Project</label>
                   <select value={expenseForm.project_id} onChange={e => setExpenseForm(p => ({ ...p, project_id: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
                     <option value="">General</option>
@@ -1448,7 +1448,7 @@ export const Finance: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Fecha *</label>
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Date *</label>
                   <input type="date" value={expenseForm.date}
                     onChange={e => setExpenseForm(p => ({ ...p, date: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
@@ -1456,11 +1456,11 @@ export const Finance: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Estado</label>
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Status</label>
                   <select value={expenseForm.status} onChange={e => setExpenseForm(p => ({ ...p, status: e.target.value as 'paid' | 'pending' }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
-                    <option value="pending">Pendiente</option>
-                    <option value="paid">Pagado</option>
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
                   </select>
                 </div>
                 <div className="flex items-end pb-2">
@@ -1468,7 +1468,7 @@ export const Finance: React.FC = () => {
                     <input type="checkbox" checked={expenseForm.recurring}
                       onChange={e => setExpenseForm(p => ({ ...p, recurring: e.target.checked }))}
                       className="rounded border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Recurrente (mensual)</span>
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Recurring (monthly)</span>
                   </label>
                 </div>
               </div>

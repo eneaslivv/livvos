@@ -21,7 +21,7 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
       setLoading(true);
       const { data, error } = await supabase.rpc('get_public_proposal', { p_token: token });
       if (error || !data) {
-        setError(error?.message || 'Propuesta no encontrada');
+        setError(error?.message || 'Proposal not found');
         setLoading(false);
         return;
       }
@@ -57,13 +57,13 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500">Cargando propuesta...</div>
+      <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading proposal...</div>
     );
   }
 
   if (error || !data?.proposal) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500">{error || 'Propuesta no encontrada'}</div>
+      <div className="min-h-screen flex items-center justify-center text-zinc-500">{error || 'Proposal not found'}</div>
     );
   }
 
@@ -76,13 +76,13 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">{proposal.title}</h1>
-            <p className="text-xs text-zinc-500">Estado: {proposal.status}</p>
+            <p className="text-xs text-zinc-500">Status: {proposal.status}</p>
           </div>
           <div className="text-xs text-zinc-500">{proposal.currency || 'USD'}</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-zinc-200 p-6 whitespace-pre-wrap text-sm">
-          {proposal.content || 'Propuesta en preparación'}
+          {proposal.content || 'Proposal in preparation'}
         </div>
 
         {proposal.timeline?.items?.length ? (
@@ -126,13 +126,13 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
             onClick={() => handleFeedback('approved')}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold"
           >
-            <Icons.Check size={16} /> Aprobar
+            <Icons.Check size={16} /> Approve
           </button>
           <button
             onClick={() => handleFeedback('rejected')}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-rose-600 text-white text-sm font-semibold"
           >
-            <Icons.X size={16} /> Rechazar
+            <Icons.X size={16} /> Reject
           </button>
         </div>
 
@@ -159,13 +159,13 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Comentarios o cambios sugeridos"
+            placeholder="Comments or suggested changes"
             className="w-full min-h-[120px] p-4 rounded-xl border border-zinc-200 bg-white text-sm"
           />
         </div>
 
         <div className="mt-6">
-          <h3 className="text-sm font-semibold">Comentarios</h3>
+          <h3 className="text-sm font-semibold">Comments</h3>
           <div className="space-y-2 mt-2">
             {(data.comments || []).map((c: any) => (
               <div key={c.id} className={`text-xs p-3 rounded-lg ${c.is_client ? 'bg-blue-50' : 'bg-zinc-100'}`}>

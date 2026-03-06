@@ -71,12 +71,12 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
       const { data: result, error: rpcErr } = await supabase.rpc('get_shared_project', { p_project_id: projectId });
       if (rpcErr) throw rpcErr;
       if (!result) {
-        setError('No tenés acceso a este proyecto o no existe.');
+        setError('You do not have access to this project or it does not exist.');
         return;
       }
       setData(result as SharedProjectData);
     } catch (err: any) {
-      setError(err.message || 'Error cargando proyecto');
+      setError(err.message || 'Error loading project');
     } finally {
       setLoading(false);
     }
@@ -105,7 +105,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
       setCommentEntity({ type: 'project' });
       await loadData();
     } catch (err: any) {
-      alert('Error al comentar: ' + (err.message || 'Error'));
+      alert('Error commenting: ' + (err.message || 'Error'));
     } finally {
       setSubmittingComment(false);
     }
@@ -143,9 +143,9 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
           <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.AlertCircle size={24} className="text-red-500" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Sin acceso</h2>
-          <p className="text-sm text-zinc-500 mb-6">{error || 'No se encontraron datos.'}</p>
-          <button onClick={handleLogout} className="text-sm text-emerald-600 hover:underline">Cerrar sesión</button>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">No access</h2>
+          <p className="text-sm text-zinc-500 mb-6">{error || 'No data found.'}</p>
+          <button onClick={handleLogout} className="text-sm text-emerald-600 hover:underline">Sign out</button>
         </div>
       </div>
     );
@@ -158,11 +158,11 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
   const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: 'overview', label: 'Resumen' },
-    { id: 'tasks', label: 'Tareas', count: mainTasks.length },
-    { id: 'files', label: 'Archivos', count: files.length },
-    { id: 'comments', label: 'Comentarios', count: comments.length },
-    { id: 'deliverables', label: 'Entregables', count: deliverables.length },
+    { id: 'overview', label: 'Overview' },
+    { id: 'tasks', label: 'Tasks', count: mainTasks.length },
+    { id: 'files', label: 'Files', count: files.length },
+    { id: 'comments', label: 'Comments', count: comments.length },
+    { id: 'deliverables', label: 'Deliverables', count: deliverables.length },
   ];
 
   return (
@@ -175,7 +175,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
               livv<span className="text-emerald-500">~</span>
             </span>
             <span className="text-zinc-300 dark:text-zinc-600">|</span>
-            <span className="text-sm text-zinc-500">Proyecto compartido</span>
+            <span className="text-sm text-zinc-500">Shared project</span>
           </div>
           <div className="flex items-center gap-3">
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
@@ -183,10 +183,10 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
               share_role === 'collaborator' ? 'bg-blue-100 text-blue-700' :
               'bg-zinc-100 text-zinc-500'
             }`}>
-              {share_role === 'editor' ? 'Editor' : share_role === 'collaborator' ? 'Colaborador' : 'Visualización'}
+              {share_role === 'editor' ? 'Editor' : share_role === 'collaborator' ? 'Collaborator' : 'Viewer'}
             </span>
             <button onClick={handleLogout} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
-              Salir
+              Sign out
             </button>
           </div>
         </div>
@@ -240,22 +240,22 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Tareas completadas</div>
+              <div className="text-xs text-zinc-500 mb-1">Completed tasks</div>
               <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{completedCount}/{tasks.length}</div>
             </div>
             <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Archivos</div>
+              <div className="text-xs text-zinc-500 mb-1">Files</div>
               <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{files.length}</div>
             </div>
             <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Equipo</div>
+              <div className="text-xs text-zinc-500 mb-1">Team</div>
               <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{team.length}</div>
             </div>
 
             {/* Team members */}
             {team.length > 0 && (
               <div className="md:col-span-3 bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Equipo</h3>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Team</h3>
                 <div className="flex flex-wrap gap-3">
                   {team.map((m, i) => (
                     <div key={i} className="flex items-center gap-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
@@ -271,7 +271,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
 
             {/* Recent tasks */}
             <div className="md:col-span-3 bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Tareas recientes</h3>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Recent tasks</h3>
               <div className="space-y-2">
                 {mainTasks.slice(0, 5).map(t => (
                   <div key={t.id} className="flex items-center gap-3 py-2">
@@ -286,7 +286,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                     <span className={`text-xs ${priorityColors[t.priority] || 'text-zinc-400'}`}>{t.priority}</span>
                   </div>
                 ))}
-                {mainTasks.length === 0 && <p className="text-xs text-zinc-400">Sin tareas</p>}
+                {mainTasks.length === 0 && <p className="text-xs text-zinc-400">No tasks</p>}
               </div>
             </div>
           </div>
@@ -332,7 +332,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                 </div>
               );
             })}
-            {mainTasks.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">Sin tareas</div>}
+            {mainTasks.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No tasks</div>}
           </div>
         )}
 
@@ -347,13 +347,13 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{f.name}</div>
                   <div className="text-[10px] text-zinc-400">
-                    {f.type || 'archivo'} {f.size ? `· ${(f.size / 1024).toFixed(0)}KB` : ''}
+                    {f.type || 'file'} {f.size ? `· ${(f.size / 1024).toFixed(0)}KB` : ''}
                   </div>
                 </div>
                 <Icons.External size={14} className="text-zinc-300" />
               </a>
             ))}
-            {files.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">Sin archivos</div>}
+            {files.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No files</div>}
           </div>
         )}
 
@@ -374,7 +374,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{c.author_name}</span>
-                          {c.is_external && <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">Externo</span>}
+                          {c.is_external && <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">External</span>}
                           <span className="text-[10px] text-zinc-400">{new Date(c.created_at).toLocaleString()}</span>
                         </div>
                         <p className="text-sm text-zinc-700 dark:text-zinc-300">{c.content}</p>
@@ -392,7 +392,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                   </div>
                 );
               })}
-              {comments.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">Sin comentarios todavía</div>}
+              {comments.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No comments yet</div>}
             </div>
 
             {/* New comment input */}
@@ -401,20 +401,20 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                 <textarea
                   value={newComment}
                   onChange={e => setNewComment(e.target.value)}
-                  placeholder="Escribí un comentario..."
+                  placeholder="Write a comment..."
                   rows={3}
                   className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-[10px] text-zinc-400">
-                    Comentando en: {commentEntity.type === 'project' ? 'Proyecto general' : commentEntity.type}
+                    Commenting on: {commentEntity.type === 'project' ? 'General project' : commentEntity.type}
                   </span>
                   <button
                     onClick={handleSubmitComment}
                     disabled={!newComment.trim() || submittingComment}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
                   >
-                    {submittingComment ? 'Enviando...' : 'Enviar comentario'}
+                    {submittingComment ? 'Sending...' : 'Send comment'}
                   </button>
                 </div>
               </div>
@@ -432,14 +432,14 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                     {d.description && <p className="text-xs text-zinc-500 mt-0.5">{d.description}</p>}
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold ${deliverableStatusColors[d.status] || 'bg-zinc-100 text-zinc-500'}`}>
-                    {d.status === 'pending' ? 'Pendiente' : d.status === 'approved' ? 'Aprobado' :
-                     d.status === 'rejected' ? 'Rechazado' : 'Revisión solicitada'}
+                    {d.status === 'pending' ? 'Pending' : d.status === 'approved' ? 'Approved' :
+                     d.status === 'rejected' ? 'Rejected' : 'Revision requested'}
                   </span>
                 </div>
 
                 {d.review_comment && (
                   <div className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-400">
-                    <span className="font-medium">Comentario de revisión:</span> {d.review_comment}
+                    <span className="font-medium">Review comment:</span> {d.review_comment}
                   </div>
                 )}
 
@@ -450,26 +450,26 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                         <textarea
                           value={reviewComment}
                           onChange={e => setReviewComment(e.target.value)}
-                          placeholder="Comentario de revisión (opcional)..."
+                          placeholder="Review comment (optional)..."
                           rows={2}
                           className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs resize-none"
                         />
                         <div className="flex gap-2">
                           <button onClick={() => handleReview(d.id, 'approved')}
                             className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700">
-                            Aprobar
+                            Approve
                           </button>
                           <button onClick={() => handleReview(d.id, 'revision_requested')}
                             className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600">
-                            Pedir revisión
+                            Request revision
                           </button>
                           <button onClick={() => handleReview(d.id, 'rejected')}
                             className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600">
-                            Rechazar
+                            Reject
                           </button>
                           <button onClick={() => { setReviewingId(null); setReviewComment(''); }}
                             className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-700">
-                            Cancelar
+                            Cancel
                           </button>
                         </div>
                       </div>
@@ -478,7 +478,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                         onClick={() => setReviewingId(d.id)}
                         className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
                       >
-                        Revisar entregable
+                        Review deliverable
                       </button>
                     )}
                   </div>
@@ -487,7 +487,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
             ))}
             {deliverables.length === 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 text-center">
-                <p className="text-sm text-zinc-400">Sin entregables pendientes</p>
+                <p className="text-sm text-zinc-400">No pending deliverables</p>
               </div>
             )}
           </div>

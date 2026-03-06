@@ -214,7 +214,7 @@ export const Projects: React.FC = () => {
   }, [loading]);
 
   useEffect(() => {
-    errorLogger.log('Projects component montado', { loading, error, projectsCount: projects?.length });
+    errorLogger.log('Projects component mounted', { loading, error, projectsCount: projects?.length });
   }, [loading, error, projects?.length]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -646,11 +646,11 @@ export const Projects: React.FC = () => {
   const handleInviteMember = async () => {
     if (!selectedProject || !inviteEmail.trim()) return;
     const { data: profiles, error: profileErr } = await supabase.from('profiles').select('user_id,email').eq('email', inviteEmail.trim()).limit(1);
-    if (profileErr) { alert('Error buscando usuario: ' + profileErr.message); return; }
+    if (profileErr) { alert('Error searching user: ' + profileErr.message); return; }
     if (!profiles || profiles.length === 0) { alert('No user found with that email. Ask them to sign in at least once.'); return; }
     const memberId = profiles[0].user_id;
     const { error: insertErr } = await supabase.from('project_members').insert({ project_id: selectedProject.id, member_id: memberId });
-    if (insertErr) { alert('Error invitando: ' + insertErr.message); return; }
+    if (insertErr) { alert('Error inviting: ' + insertErr.message); return; }
     setInviteEmail('');
     setIsShareModalOpen(false);
     await logActivity({ action: 'invited', target: inviteEmail.trim(), project_title: selectedProject.title, type: 'project_update', details: 'Member added to project' });
@@ -1419,7 +1419,7 @@ export const Projects: React.FC = () => {
                             </div>
                             {projectFinancials.pendingAmount > 0 && (
                               <div className="text-[10px] text-amber-500 font-medium mt-1">
-                                ${projectFinancials.pendingAmount.toLocaleString()} pendiente de cobro
+                                ${projectFinancials.pendingAmount.toLocaleString()} pending collection
                               </div>
                             )}
                           </div>
@@ -1455,7 +1455,7 @@ export const Projects: React.FC = () => {
                             <div className="flex-1 flex items-center gap-2">
                               <input
                                 type="number"
-                                placeholder="Budget del proyecto..."
+                                placeholder="Project budget..."
                                 className="flex-1 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600"
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
@@ -1472,13 +1472,13 @@ export const Projects: React.FC = () => {
                           <button
                             onClick={async () => {
                               if (!selectedProject) return;
-                              const concept = prompt('Concepto de la factura:');
+                              const concept = prompt('Invoice concept:');
                               if (!concept) return;
-                              const amountStr = prompt('Monto total:');
+                              const amountStr = prompt('Total amount:');
                               if (!amountStr) return;
                               const amount = parseFloat(amountStr);
                               if (isNaN(amount) || amount <= 0) return;
-                              const installmentsStr = prompt('Cantidad de cuotas (1 = pago único):', '1');
+                              const installmentsStr = prompt('Number of installments (1 = single payment):', '1');
                               const numInstallments = parseInt(installmentsStr || '1') || 1;
                               try {
                                 await createIncome({
@@ -1498,14 +1498,14 @@ export const Projects: React.FC = () => {
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors"
                           >
                             <Icons.Plus size={12} />
-                            Agregar ingreso
+                            Add income
                           </button>
                         </div>
                       </div>
 
                       {/* Client assignment + info card */}
                       <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Cliente</h3>
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Client</h3>
                         {selectedClient ? (
                           <div className="flex items-center gap-3 mb-3">
                             {selectedClient.avatar_url ? (
@@ -1524,7 +1524,7 @@ export const Projects: React.FC = () => {
                             <button
                               onClick={() => handleUpdateProject({ client_id: null, client: 'TBD', clientName: 'TBD' } as any)}
                               className="p-1 text-zinc-300 hover:text-red-400 transition-colors"
-                              title="Desvincular cliente"
+                              title="Unlink client"
                             >
                               <Icons.X size={14} />
                             </button>
@@ -1545,7 +1545,7 @@ export const Projects: React.FC = () => {
                           }}
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600"
                         >
-                          <option value="">Sin cliente (proyecto propio)</option>
+                          <option value="">No client (own project)</option>
                           {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>)}
                         </select>
                       </div>
@@ -1575,7 +1575,7 @@ export const Projects: React.FC = () => {
                                 <button
                                   onClick={() => handleUpdateProject({ team: selectedProject.team.filter(id => id !== userId) })}
                                   className="p-1 rounded-md opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition-all shrink-0"
-                                  title="Quitar del equipo"
+                                  title="Remove from team"
                                 >
                                   <Icons.X size={12} />
                                 </button>
@@ -1583,7 +1583,7 @@ export const Projects: React.FC = () => {
                             );
                           })}
                           {selectedProject.team.length === 0 && (
-                            <p className="text-xs text-zinc-400 mb-1">Sin miembros asignados.</p>
+                            <p className="text-xs text-zinc-400 mb-1">No members assigned.</p>
                           )}
                         </div>
                         {/* Add member dropdown */}
@@ -1597,7 +1597,7 @@ export const Projects: React.FC = () => {
                             }}
                             className="w-full mt-3 px-2.5 py-1.5 bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 transition-colors"
                           >
-                            <option value="">+ Agregar miembro...</option>
+                            <option value="">+ Add member...</option>
                             {members.filter(m => !selectedProject.team.includes(m.id)).map(m => (
                               <option key={m.id} value={m.id}>{m.name || m.email} ({m.role})</option>
                             ))}
@@ -1653,21 +1653,21 @@ export const Projects: React.FC = () => {
                           value={aiPrompt}
                           onChange={e => setAiPrompt(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleAiGenerate(); } }}
-                          placeholder="Describe el trabajo a realizar y la AI lo dividirá en fases y tareas..."
+                          placeholder="Describe the work to be done and AI will break it into phases and tasks..."
                           rows={2}
                           className="w-full px-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-800 resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
                         />
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-zinc-400">Ctrl+Enter para generar</span>
+                          <span className="text-[10px] text-zinc-400">Ctrl+Enter to generate</span>
                           <button
                             onClick={handleAiGenerate}
                             disabled={aiGenerating || !aiPrompt.trim()}
                             className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                           >
                             {aiGenerating ? (
-                              <><Icons.Loader size={13} className="animate-spin" /> Generando...</>
+                              <><Icons.Loader size={13} className="animate-spin" /> Generating...</>
                             ) : (
-                              <><Icons.Sparkles size={13} /> Generar tareas</>
+                              <><Icons.Sparkles size={13} /> Generate tasks</>
                             )}
                           </button>
                         </div>
@@ -1683,11 +1683,11 @@ export const Projects: React.FC = () => {
                         <div className="border-t border-violet-100/50 dark:border-violet-900/20">
                           <div className="px-5 py-3 flex items-center justify-between bg-violet-50/50 dark:bg-violet-950/10">
                             <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">
-                              {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tareas en {aiPreview.phases.length} fases
+                              {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks in {aiPreview.phases.length} phases
                             </span>
                             <div className="flex items-center gap-2">
                               <button onClick={() => { setAiPreview(null); setAiPrompt(''); }} className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
-                                Descartar
+                                Discard
                               </button>
                               <button
                                 onClick={handleAiAccept}
@@ -1695,7 +1695,7 @@ export const Projects: React.FC = () => {
                                 className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-50 active:scale-95"
                               >
                                 {aiGenerating ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Check size={12} />}
-                                Aceptar y crear
+                                Accept and create
                               </button>
                             </div>
                           </div>
@@ -1733,7 +1733,7 @@ export const Projects: React.FC = () => {
                     {/* ── Summary bar ── */}
                     <div className="flex items-center justify-between px-1">
                       <div className="flex items-center gap-4">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectTasks.length} tareas</span>
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectTasks.length} tasks</span>
                         {projectTasks.length > 0 && (
                           <div className="flex items-center gap-2">
                             <div className="w-24 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
@@ -1757,7 +1757,7 @@ export const Projects: React.FC = () => {
                         value={quickTaskTitle}
                         onChange={e => setQuickTaskTitle(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleQuickTask()}
-                        placeholder="Tarea rápida... (Enter para crear)"
+                        placeholder="Quick task... (Enter to create)"
                         className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none"
                       />
                       {quickTaskTitle.trim() && (
@@ -1765,7 +1765,7 @@ export const Projects: React.FC = () => {
                           onClick={handleQuickTask}
                           className="px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity active:scale-95"
                         >
-                          Crear
+                          Create
                         </button>
                       )}
                     </div>
@@ -1842,13 +1842,13 @@ export const Projects: React.FC = () => {
                                         </span>
                                       ) : (
                                         <span className="text-[10px] text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full font-medium italic">
-                                          Sin fecha
+                                          No date
                                         </span>
                                       )}
                                       <button
                                         onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
                                         className={`p-1 rounded-md transition-all ${isExpanded ? 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500'}`}
-                                        title="Subtareas"
+                                        title="Subtasks"
                                       >
                                         <Icons.ChevronDown size={13} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                       </button>
@@ -1901,7 +1901,7 @@ export const Projects: React.FC = () => {
                                               value={expandedTaskId === task.id ? newSubtaskTitle : ''}
                                               onChange={e => setNewSubtaskTitle(e.target.value)}
                                               onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(task.id); }}
-                                              placeholder="Agregar subtarea..."
+                                              placeholder="Add subtask..."
                                               className="flex-1 bg-transparent text-xs text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 focus:outline-none"
                                             />
                                             {newSubtaskTitle.trim() && (
@@ -1928,7 +1928,7 @@ export const Projects: React.FC = () => {
                                 value={newTaskTitle[gIdx] ?? ''}
                                 onChange={e => setNewTaskTitle(prev => ({ ...prev, [gIdx]: e.target.value }))}
                                 onKeyDown={e => e.key === 'Enter' && handleAddTask(gIdx)}
-                                placeholder="Agregar tarea..."
+                                placeholder="Add task..."
                                 className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none py-1"
                               />
                               {(newTaskTitle[gIdx] ?? '').trim() && (
@@ -1948,7 +1948,7 @@ export const Projects: React.FC = () => {
                         value={newGroupName}
                         onChange={e => setNewGroupName(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleAddGroup()}
-                        placeholder="Nueva fase..."
+                        placeholder="New phase..."
                         className="px-4 py-2.5 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm bg-transparent focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors"
                       />
                       {newGroupName.trim() && (
@@ -1964,9 +1964,9 @@ export const Projects: React.FC = () => {
                         <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
                           <Icons.CheckCircle size={24} className="text-zinc-300 dark:text-zinc-600" />
                         </div>
-                        <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">No hay tareas todavía</p>
+                        <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">No tasks yet</p>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs">
-                          Usá el generador AI para crear tareas automáticamente o agregá fases manualmente.
+                          Use the AI generator to create tasks automatically or add phases manually.
                         </p>
                       </div>
                     )}
@@ -2035,7 +2035,7 @@ export const Projects: React.FC = () => {
                             ))}
                             {/* Today marker */}
                             <div className="absolute top-0 h-full w-px bg-rose-400" style={{ left: `${dayToPercent(today)}%` }}>
-                              <div className="absolute -top-0 -translate-x-1/2 px-1 py-0 text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 rounded-b">HOY</div>
+                              <div className="absolute -top-0 -translate-x-1/2 px-1 py-0 text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 rounded-b">TODAY</div>
                             </div>
                           </div>
 
@@ -2494,7 +2494,7 @@ export const Projects: React.FC = () => {
                             try {
                               await deleteProject(selectedProject.id);
                               setSelectedId(null);
-                            } catch (err: any) { alert('Error eliminando proyecto: ' + (err?.message || 'Error desconocido')); }
+                            } catch (err: any) { alert('Error deleting project: ' + (err?.message || 'Unknown error')); }
                           }}
                           className="px-4 py-2 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                         >

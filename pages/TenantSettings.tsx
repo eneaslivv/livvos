@@ -55,9 +55,9 @@ export const TenantSettings: React.FC = () => {
 
             if (error) throw error;
 
-            setMessage({ text: 'Configuración guardada exitosamente', type: 'success' });
+            setMessage({ text: 'Configuration saved successfully', type: 'success' });
         } catch (err: any) {
-            setMessage({ text: err.message || 'Error al guardar', type: 'error' });
+            setMessage({ text: err.message || 'Error saving', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -88,10 +88,10 @@ export const TenantSettings: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                        Configuración del Tenant
+                        Tenant Settings
                     </h1>
                     <p className="text-zinc-500 mt-1">
-                        Personaliza la apariencia y funcionalidades de tu workspace
+                        Customize the appearance and features of your workspace
                     </p>
                 </div>
                 <button
@@ -104,7 +104,7 @@ export const TenantSettings: React.FC = () => {
                     ) : (
                         <Icons.Save size={16} />
                     )}
-                    Guardar cambios
+                    Save changes
                 </button>
             </div>
 
@@ -122,14 +122,14 @@ export const TenantSettings: React.FC = () => {
             <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
                     <Icons.Palette size={20} />
-                    Identidad de marca
+                    Brand Identity
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Name */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            Nombre de la aplicación
+                            Application name
                         </label>
                         <input
                             type="text"
@@ -142,7 +142,7 @@ export const TenantSettings: React.FC = () => {
                     {/* Logo URL */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            URL del Logo
+                            Logo URL
                         </label>
                         <input
                             type="text"
@@ -159,14 +159,14 @@ export const TenantSettings: React.FC = () => {
             <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
                     <Icons.Droplet size={20} />
-                    Colores
+                    Colors
                 </h2>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                     {/* Primary Color */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            Color primario
+                            Primary color
                         </label>
                         <div className="flex items-center gap-3">
                             <input
@@ -187,7 +187,7 @@ export const TenantSettings: React.FC = () => {
                     {/* Secondary Color */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            Color secundario
+                            Secondary color
                         </label>
                         <div className="flex items-center gap-3">
                             <input
@@ -208,7 +208,7 @@ export const TenantSettings: React.FC = () => {
                     {/* Accent Color */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            Color de acento
+                            Accent color
                         </label>
                         <div className="flex items-center gap-3">
                             <input

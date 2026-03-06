@@ -14,7 +14,7 @@ export const GoogleCallback: React.FC<GoogleCallbackProps> = ({ code, onComplete
   useEffect(() => {
     if (!code) {
       setStatus('error');
-      setErrorMsg('No se recibió código de autorización');
+      setErrorMsg('No authorization code received');
       return;
     }
 
@@ -28,7 +28,7 @@ export const GoogleCallback: React.FC<GoogleCallbackProps> = ({ code, onComplete
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMsg(err.message || 'Error al conectar');
+        setErrorMsg(err.message || 'Error connecting');
         // Clean URL params even on error
         window.history.replaceState({}, '', window.location.pathname);
       });
@@ -40,9 +40,9 @@ export const GoogleCallback: React.FC<GoogleCallbackProps> = ({ code, onComplete
         {status === 'loading' && (
           <>
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Conectando Google Calendar...</p>
+            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Connecting Google Calendar...</p>
             <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">
-              Intercambiando credenciales de forma segura
+              Exchanging credentials securely
             </p>
           </>
         )}
@@ -53,8 +53,8 @@ export const GoogleCallback: React.FC<GoogleCallbackProps> = ({ code, onComplete
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Google Calendar conectado</p>
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">Redirigiendo al calendario...</p>
+            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Google Calendar connected</p>
+            <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">Redirecting to calendar...</p>
           </>
         )}
         {status === 'error' && (
@@ -64,13 +64,13 @@ export const GoogleCallback: React.FC<GoogleCallbackProps> = ({ code, onComplete
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Error al conectar</p>
+            <p className="text-zinc-900 dark:text-zinc-100 font-semibold">Connection error</p>
             <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">{errorMsg}</p>
             <button
               onClick={onComplete}
               className="mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
             >
-              Volver al calendario
+              Back to calendar
             </button>
           </>
         )}
