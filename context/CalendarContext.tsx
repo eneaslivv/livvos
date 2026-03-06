@@ -450,12 +450,24 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Getters — always compare date-only portion (TIMESTAMPTZ can include time)
   const getEventsByDate = (date: string) => events.filter(event => event.start_date?.slice(0, 10) === date)
-  const getTasksByDate = (date: string) => tasks.filter(task => task.start_date?.slice(0, 10) === date)
+  const getTasksByDate = (date: string) => tasks.filter(task => {
+    // Completed tasks pin to their completed_at date
+    if (task.completed && task.completed_at) {
+      return task.completed_at.slice(0, 10) === date
+    }
+    // Pending tasks show on their start_date
+    return task.start_date?.slice(0, 10) === date
+  })
   const getEventsByDateRange = (startDate: string, endDate: string) => events.filter(event => {
     const d = event.start_date?.slice(0, 10)
     return d && d >= startDate && d <= endDate
   })
   const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => {
+    // Completed tasks pin to their completed_at date
+    if (task.completed && task.completed_at) {
+      const d = task.completed_at.slice(0, 10)
+      return d >= startDate && d <= endDate
+    }
     const d = task.start_date?.slice(0, 10)
     return d && d >= startDate && d <= endDate
   })

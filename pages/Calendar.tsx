@@ -762,6 +762,17 @@ export const Calendar: React.FC = () => {
     return diff;
   };
 
+  // Helper: elapsed days from start/created to completion
+  const getElapsedDays = (task: CalendarTask): number | null => {
+    if (!task.completed || !task.completed_at) return null;
+    const startRef = task.start_date?.slice(0, 10) || task.created_at?.slice(0, 10);
+    if (!startRef) return null;
+    const diff = Math.max(1, Math.ceil(
+      (new Date(task.completed_at.slice(0, 10)).getTime() - new Date(startRef).getTime()) / (1000 * 60 * 60 * 24)
+    ));
+    return diff;
+  };
+
   // Estadísticas del calendario
   const stats = getCalendarStats();
 
@@ -1654,6 +1665,11 @@ export const Calendar: React.FC = () => {
                   <span className="flex items-center gap-1.5">
                     <span className="line-through">Completed</span>
                     <Icons.CheckCircle size={12} className="text-emerald-500" />
+                    {getElapsedDays(selectedTask) !== null && (
+                      <span className="no-underline text-[10px] font-semibold text-emerald-500 bg-emerald-100 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded-full">
+                        {getElapsedDays(selectedTask)}d
+                      </span>
+                    )}
                   </span>
                 ) : 'Mark as completed'}
               </span>
@@ -2177,6 +2193,9 @@ export const Calendar: React.FC = () => {
                               +{overdue}d
                             </span>
                           )}
+                          {task.completed && getElapsedDays(task) !== null && (
+                            <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
+                          )}
                         </div>
                       </div>
                     );
@@ -2410,6 +2429,9 @@ export const Calendar: React.FC = () => {
                           {overdue > 0 && (
                             <span className="ml-auto text-[8px] font-bold text-red-500 shrink-0">+{overdue}d</span>
                           )}
+                          {task.completed && getElapsedDays(task) !== null && (
+                            <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
+                          )}
                         </div>
                       );
                     })}
@@ -2623,6 +2645,11 @@ export const Calendar: React.FC = () => {
                             <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
                               {task.status}
                             </span>
+                            {task.completed && getElapsedDays(task) !== null && (
+                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                {getElapsedDays(task)}d
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))
