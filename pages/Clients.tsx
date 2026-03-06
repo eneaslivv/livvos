@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
@@ -152,12 +152,36 @@ export const Clients: React.FC = () => {
     return { totalInvoiced, totalPaid, totalPending, paidCount, totalCount, overdue };
   }, [clientIncomes]);
 
+  // Load portal invitation status independently (so it doesn't depend on other data loading)
+  const loadInvitationStatus = useCallback(async (clientId: string) => {
+    try {
+      const { data: invite } = await supabase
+        .from('invitations')
+        .select('token, status')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (invite) {
+        setClientInviteStatus(invite.status === 'accepted' ? 'accepted' : 'pending');
+        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+      } else {
+        setClientInviteStatus('none');
+        setPortalInviteLink(null);
+      }
+      setPortalInviteError(null);
+    } catch {
+      // Non-critical - keep previous state
+    }
+  }, []);
+
   /* ─── Data loading ─── */
   useEffect(() => {
     if (selectedClient) {
       loadClientData(selectedClient.id);
+      loadInvitationStatus(selectedClient.id);
       setDetailTab('info');
-      setPortalInviteLink(null);
       setPortalInviteError(null);
       setEditingField(null);
     }
@@ -178,10 +202,14 @@ export const Clients: React.FC = () => {
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        const { data } = await supabase
+        const { data, error: fetchErr } = await supabase
           .from('projects')
           .select('id, title, client_id, status, progress')
           .order('created_at', { ascending: false });
+        if (fetchErr) {
+          console.error('[Clients] Error loading projects:', fetchErr.message);
+        }
+        console.log('[Clients] Projects loaded:', data?.length || 0);
         setAvailableProjects(data || []);
       } catch (err) {
         errorLogger.error('Error loading projects', err);
@@ -263,29 +291,6 @@ export const Clients: React.FC = () => {
         project_name: linkedProjects.find(p => p.id === t.project_id)?.title || ''
       }));
       setProjectTasks(enriched);
-
-      // Load portal invitation status
-      try {
-        const { data: invite } = await supabase
-          .from('invitations')
-          .select('token, status')
-          .eq('client_id', clientId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (invite) {
-          setClientInviteStatus(invite.status === 'accepted' ? 'accepted' : 'pending');
-          setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
-        } else {
-          setClientInviteStatus('none');
-          setPortalInviteLink(null);
-        }
-        setEmailSent(null);
-        setPortalInviteError(null);
-      } catch {
-        // Non-critical
-      }
     } catch (err) {
       errorLogger.error('Error loading client data', err);
     }
@@ -537,6 +542,8 @@ export const Clients: React.FC = () => {
       setPortalInviteError(err.message || 'Error creating invitation');
     } finally {
       setIsInvitingPortal(false);
+      // Reload invitation status from DB to ensure consistency
+      if (selectedClient) loadInvitationStatus(selectedClient.id);
     }
   };
 
@@ -1341,25 +1348,45 @@ export const Clients: React.FC = () => {
                         </AnimatePresence>
 
                         {/* Assign new project */}
-                        <div className="flex gap-2">
-                          <select
-                            value={selectedProjectId}
-                            onChange={(e) => setSelectedProjectId(e.target.value)}
-                            className={inputClass + ' flex-1'}
-                          >
-                            <option value="">Link project...</option>
-                            {availableProjects.filter(p => !p.client_id).map(p => (
-                              <option key={p.id} value={p.id}>{p.title}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={handleAssignProject}
-                            disabled={!selectedProjectId || assigningProject}
-                            className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 text-xs font-semibold transition-all active:scale-[0.97]"
-                          >
-                            {assigningProject ? '...' : 'Assign'}
-                          </button>
-                        </div>
+                        {(() => {
+                          const unlinked = availableProjects.filter(p => !p.client_id || p.client_id !== selectedClient.id)
+                            .filter(p => !assignedProjects.some(ap => ap.id === p.id));
+                          return (
+                            <>
+                              {availableProjects.length === 0 ? (
+                                <p className="text-[11px] text-zinc-400 italic">No projects found. Create a project first.</p>
+                              ) : unlinked.length === 0 ? (
+                                <p className="text-[11px] text-zinc-400 italic">All projects are already linked to this client.</p>
+                              ) : (
+                                <div className="flex gap-2">
+                                  <select
+                                    value={selectedProjectId}
+                                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                                    className={inputClass + ' flex-1'}
+                                  >
+                                    <option value="">Link project...</option>
+                                    {unlinked.filter(p => !p.client_id).map(p => (
+                                      <option key={p.id} value={p.id}>{p.title}</option>
+                                    ))}
+                                    {unlinked.some(p => p.client_id) && unlinked.filter(p => !p.client_id).length > 0 && (
+                                      <option disabled>──────────</option>
+                                    )}
+                                    {unlinked.filter(p => p.client_id).map(p => (
+                                      <option key={p.id} value={p.id}>{p.title} (linked to other client)</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={handleAssignProject}
+                                    disabled={!selectedProjectId || assigningProject}
+                                    className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 text-xs font-semibold transition-all active:scale-[0.97]"
+                                  >
+                                    {assigningProject ? '...' : 'Assign'}
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </motion.div>
                   )}

@@ -37,22 +37,22 @@ type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'proyectos' | 'config';
 // ─── Formatters ───────────────────────────────────────────────────
 
 const fmtCurrency = (v: number) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
 const fmtPercent = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
 
 const fmtDate = (d: string) => {
   const date = new Date(d + 'T12:00:00');
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 // ─── Expense categories ───────────────────────────────────────────
 
 const EXPENSE_CATEGORIES: Record<string, { icon: typeof BarChart3; color: string }> = {
   'Software': { icon: Building2, color: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' },
-  'Talento': { icon: Users, color: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10' },
+  'Talent': { icon: Users, color: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10' },
   'Marketing': { icon: Target, color: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10' },
-  'Operaciones': { icon: Briefcase, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
+  'Operations': { icon: Briefcase, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
   'Legal': { icon: FileText, color: 'text-rose-500 bg-rose-50 dark:bg-rose-500/10' },
 };
 
@@ -66,7 +66,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     overdue: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400',
   };
   const labels: Record<string, string> = {
-    paid: 'Cobrado', partial: 'Parcial', pending: 'Pendiente', overdue: 'Vencido',
+    paid: 'Paid', partial: 'Partial', pending: 'Pending', overdue: 'Overdue',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${styles[status] || styles.pending}`}>
@@ -217,7 +217,7 @@ export const Finance: React.FC = () => {
   // Build liquidity timeline from real data (group by month)
   const liquidityData = useMemo((): LiquidityPoint[] => {
     const monthMap: Record<string, { ingresos: number; gastos: number }> = {};
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // Count paid installments as income
     incomes.forEach((inc: IncomeEntry) => {
@@ -258,7 +258,7 @@ export const Finance: React.FC = () => {
   const projectPnL = useMemo(() => {
     const map: Record<string, { name: string; income: number; expenses: number }> = {};
     incomes.forEach((inc: IncomeEntry) => {
-      const key = inc.project_name || 'Sin Proyecto';
+      const key = inc.project_name || 'No Project';
       if (!map[key]) map[key] = { name: key, income: 0, expenses: 0 };
       map[key].income += (inc.installments || []).filter((i: Installment) => i.status === 'paid').reduce((s: number, i: Installment) => s + i.amount, 0);
     });
@@ -340,8 +340,8 @@ export const Finance: React.FC = () => {
   }, []);
 
   const handleSubmitIncome = useCallback(async () => {
-    if (!incomeForm.concept.trim()) { setEntryError('Ingresa un concepto.'); return; }
-    if (!incomeForm.total_amount || Number(incomeForm.total_amount) <= 0) { setEntryError('El monto debe ser mayor a 0.'); return; }
+    if (!incomeForm.concept.trim()) { setEntryError('Enter a concept.'); return; }
+    if (!incomeForm.total_amount || Number(incomeForm.total_amount) <= 0) { setEntryError('Amount must be greater than 0.'); return; }
 
     setIsSubmitting(true);
     setEntryError(null);
@@ -354,8 +354,8 @@ export const Finance: React.FC = () => {
       const data: CreateIncomeData = {
         client_id: incomeForm.client_id || null,
         project_id: incomeForm.project_id || null,
-        client_name: client?.name || (incomeForm.client_id ? 'Cliente' : 'Sin cliente'),
-        project_name: project?.title || (incomeForm.project_id ? 'Proyecto' : 'Sin proyecto'),
+        client_name: client?.name || (incomeForm.client_id ? 'Client' : 'No client'),
+        project_name: project?.title || (incomeForm.project_id ? 'Project' : 'No project'),
         concept: incomeForm.concept.trim(),
         total_amount: Number(incomeForm.total_amount),
         due_date: incomeForm.due_date || new Date().toISOString().split('T')[0],
@@ -364,25 +364,25 @@ export const Finance: React.FC = () => {
 
       console.log('[Finance] Creating income:', data);
 
-      // Timeout wrapper to prevent infinite "Guardando..." state
+      // Timeout wrapper to prevent infinite "Saving..." state
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Tiempo de espera agotado. Intentá de nuevo.')), 15000)
+        setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
       );
 
       await Promise.race([createIncome(data), timeout]);
       closeForm();
     } catch (err: any) {
       console.error('[Finance] Error creating income:', err);
-      setEntryError(err?.message || 'Error al guardar ingreso. Revisá la consola.');
+      setEntryError(err?.message || 'Error saving income. Check the console.');
     } finally {
       setIsSubmitting(false);
     }
   }, [incomeForm, clients, projects, createIncome, closeForm]);
 
   const handleSubmitExpense = useCallback(async () => {
-    if (!expenseForm.concept.trim()) { setEntryError('Ingresa un concepto.'); return; }
-    if (!expenseForm.amount || Number(expenseForm.amount) <= 0) { setEntryError('El monto debe ser mayor a 0.'); return; }
-    if (!expenseForm.date) { setEntryError('Selecciona una fecha.'); return; }
+    if (!expenseForm.concept.trim()) { setEntryError('Enter a concept.'); return; }
+    if (!expenseForm.amount || Number(expenseForm.amount) <= 0) { setEntryError('Amount must be greater than 0.'); return; }
+    if (!expenseForm.date) { setEntryError('Select a date.'); return; }
 
     setIsSubmitting(true);
     setEntryError(null);
@@ -405,14 +405,14 @@ export const Finance: React.FC = () => {
       console.log('[Finance] Creating expense:', data);
 
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Tiempo de espera agotado. Intentá de nuevo.')), 15000)
+        setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
       );
 
       await Promise.race([createExpense(data), timeout]);
       closeForm();
     } catch (err: any) {
       console.error('[Finance] Error creating expense:', err);
-      setEntryError(err?.message || 'Error al guardar gasto. Revisá la consola.');
+      setEntryError(err?.message || 'Error saving expense. Check the console.');
     } finally {
       setIsSubmitting(false);
     }
@@ -453,8 +453,8 @@ export const Finance: React.FC = () => {
         <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg mb-4">
           <CreditCard className="w-8 h-8 text-zinc-400" />
         </div>
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Acceso Restringido</h3>
-        <p className="text-zinc-400 text-xs max-w-xs">No tienes permisos para acceder a los datos financieros.</p>
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Restricted Access</h3>
+        <p className="text-zinc-400 text-xs max-w-xs">You do not have permission to access financial data.</p>
       </div>
     );
   }
@@ -471,27 +471,27 @@ export const Finance: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-2">
             <div className="w-1 h-1 rounded-full bg-emerald-500" />
-            Módulo Financiero
+            Finance Module
           </div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finanzas</h1>
-          <p className="text-zinc-400 text-xs max-w-md">Control de ingresos, gastos, márgenes y liquidez del equipo.</p>
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finance</h1>
+          <p className="text-zinc-400 text-xs max-w-md">Track income, expenses, margins, and team liquidity.</p>
         </div>
         <div className="flex gap-2">
           {hasPermission('finance', 'create') && (
             <>
               <button onClick={openIncomeForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
                 <ArrowDownLeft size={14} strokeWidth={2.5} />
-                <span>Ingreso</span>
+                <span>Income</span>
               </button>
               <button onClick={openExpenseForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-medium shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200">
                 <ArrowUpFromLine size={14} strokeWidth={2.5} />
-                <span>Gasto</span>
+                <span>Expense</span>
               </button>
             </>
           )}
           <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
             <Download size={14} />
-            <span>Exportar</span>
+            <span>Export</span>
           </button>
         </div>
       </div>
@@ -500,10 +500,10 @@ export const Finance: React.FC = () => {
       <div className="flex overflow-x-auto no-scrollbar gap-0.5 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg w-fit">
         {([
           { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-          { id: 'ingresos', label: 'Ingresos', icon: ArrowDownLeft },
-          { id: 'gastos', label: 'Gastos', icon: Receipt },
-          { id: 'proyectos', label: 'Proyectos P&L', icon: Target },
-          { id: 'config', label: 'Configuración', icon: Settings },
+          { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
+          { id: 'gastos', label: 'Expenses', icon: Receipt },
+          { id: 'proyectos', label: 'Projects P&L', icon: Target },
+          { id: 'config', label: 'Settings', icon: Settings },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -527,10 +527,10 @@ export const Finance: React.FC = () => {
           {/* Metric Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { title: 'Balance General', value: fmtCurrency(currentBalance), change: incomes.length > 0 ? fmtPercent(margin > 0 ? 12.4 : -5.2) : null, trend: 'up' as const, status: currentBalance >= 0 ? 'positive' as const : 'negative' as const, icon: Wallet, accent: 'emerald' },
-              { title: 'Liquidez Disponible', value: fmtCurrency(liquidez), change: incomes.length > 0 ? fmtPercent(8.2) : null, trend: 'up' as const, status: liquidez >= 0 ? 'positive' as const : 'negative' as const, icon: Banknote, accent: 'blue' },
-              { title: 'Proyección 90d', value: fmtCurrency(projection90d), change: null, trend: 'up' as const, status: 'neutral' as const, icon: TrendingUp, accent: 'violet' },
-              { title: 'Margen Operativo', value: `${margin.toFixed(1)}%`, change: incomes.length > 0 ? fmtPercent(3.1) : null, trend: 'up' as const, status: margin >= 0 ? 'positive' as const : 'negative' as const, icon: PieChart, accent: 'amber' },
+              { title: 'Overall Balance', value: fmtCurrency(currentBalance), change: incomes.length > 0 ? fmtPercent(margin > 0 ? 12.4 : -5.2) : null, trend: 'up' as const, status: currentBalance >= 0 ? 'positive' as const : 'negative' as const, icon: Wallet, accent: 'emerald' },
+              { title: 'Available Liquidity', value: fmtCurrency(liquidez), change: incomes.length > 0 ? fmtPercent(8.2) : null, trend: 'up' as const, status: liquidez >= 0 ? 'positive' as const : 'negative' as const, icon: Banknote, accent: 'blue' },
+              { title: '90-Day Forecast', value: fmtCurrency(projection90d), change: null, trend: 'up' as const, status: 'neutral' as const, icon: TrendingUp, accent: 'violet' },
+              { title: 'Operating Margin', value: `${margin.toFixed(1)}%`, change: incomes.length > 0 ? fmtPercent(3.1) : null, trend: 'up' as const, status: margin >= 0 ? 'positive' as const : 'negative' as const, icon: PieChart, accent: 'amber' },
             ].map((m, i) => (
               <div key={i} className="group relative p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all duration-300">
                 <div className="flex items-center gap-2 mb-3">
@@ -561,8 +561,8 @@ export const Finance: React.FC = () => {
             <div className="lg:col-span-2 p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Timeline de Liquidez</h3>
-                  <p className="text-[10px] text-zinc-400 mt-0.5">Ingresos vs gastos por mes</p>
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Liquidity Timeline</h3>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">Income vs expenses by month</p>
                 </div>
                 <span className="flex items-center gap-1 text-[9px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 rounded">
                   <CircleDot size={8} /> Live
@@ -577,22 +577,22 @@ export const Finance: React.FC = () => {
                         <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
                         <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="ingresos" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} barSize={24} />
-                        <Bar dataKey="gastos" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} barSize={24} />
+                        <Bar dataKey="ingresos" name="Income" fill="#34d399" radius={[4, 4, 0, 0]} barSize={24} />
+                        <Bar dataKey="gastos" name="Expenses" fill="#fb7185" radius={[4, 4, 0, 0]} barSize={24} />
                         <Line type="monotone" dataKey="balance" name="Balance" stroke="#818cf8" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3, fill: '#818cf8' }} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="flex items-center gap-4 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/40">
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><div className="w-3 h-2 rounded-sm bg-emerald-400" /> Ingresos</div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><div className="w-3 h-2 rounded-sm bg-rose-400" /> Gastos</div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><div className="w-3 h-2 rounded-sm bg-emerald-400" /> Income</div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><div className="w-3 h-2 rounded-sm bg-rose-400" /> Expenses</div>
                     <div className="flex items-center gap-1.5 text-[10px] text-zinc-400"><div className="w-3 h-0.5 border-t-2 border-dashed border-indigo-400" style={{ width: 12 }} /> Balance</div>
                   </div>
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-[220px] text-zinc-400">
                   <BarChart3 size={28} className="mb-2 text-zinc-300" />
-                  <p className="text-xs">Carga ingresos y gastos para ver el timeline.</p>
+                  <p className="text-xs">Add income and expenses to see the timeline.</p>
                 </div>
               )}
             </div>
@@ -600,7 +600,7 @@ export const Finance: React.FC = () => {
             {/* Expense Breakdown */}
             <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Gastos por Categoría</h3>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Expenses by Category</h3>
                 <span className="text-[10px] text-zinc-400">{fmtCurrency(totalExpensesPaid + totalExpensesPending)}</span>
               </div>
               {expenseByCategory.length > 0 ? (
@@ -634,19 +634,19 @@ export const Finance: React.FC = () => {
               ) : (
                 <div className="flex flex-col items-center justify-center h-[160px] text-zinc-400">
                   <Receipt size={24} className="mb-2 text-zinc-300" />
-                  <p className="text-xs">Sin gastos registrados.</p>
+                  <p className="text-xs">No expenses recorded.</p>
                 </div>
               )}
               {expenses.length > 0 && (
                 <div className="mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800/40 space-y-2">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-zinc-400">Recurrentes</span>
+                    <span className="text-zinc-400">Recurring</span>
                     <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                      {fmtCurrency(expenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0))}/mes
+                      {fmtCurrency(expenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0))}/mo
                     </span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-zinc-400">Pendientes</span>
+                    <span className="text-zinc-400">Pending</span>
                     <span className="font-medium text-amber-600 dark:text-amber-400">{fmtCurrency(totalExpensesPending)}</span>
                   </div>
                 </div>
@@ -659,9 +659,9 @@ export const Finance: React.FC = () => {
             {/* Upcoming Payments */}
             <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Próximos Cobros</h3>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Upcoming Payments</h3>
                 <button onClick={() => setActiveTab('ingresos')} className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-0.5">
-                  Ver todos <ChevronRight size={10} />
+                  View all <ChevronRight size={10} />
                 </button>
               </div>
               {incomes.length > 0 ? (
@@ -687,16 +687,16 @@ export const Finance: React.FC = () => {
                     ))}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-400 text-center py-6">Carga un ingreso para ver los próximos cobros.</p>
+                <p className="text-xs text-zinc-400 text-center py-6">Add an income entry to see upcoming payments.</p>
               )}
             </div>
 
             {/* Recent Expenses */}
             <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Gastos Recientes</h3>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Recent Expenses</h3>
                 <button onClick={() => setActiveTab('gastos')} className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-0.5">
-                  Ver todos <ChevronRight size={10} />
+                  View all <ChevronRight size={10} />
                 </button>
               </div>
               {expenses.length > 0 ? (
@@ -722,7 +722,7 @@ export const Finance: React.FC = () => {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-400 text-center py-6">Carga un gasto para verlo aquí.</p>
+                <p className="text-xs text-zinc-400 text-center py-6">Add an expense to see it here.</p>
               )}
             </div>
           </div>
@@ -735,24 +735,24 @@ export const Finance: React.FC = () => {
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Facturado</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Invoiced</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 {fmtCurrency(incomes.reduce((s: number, i: IncomeEntry) => s + i.total_amount, 0))}
               </div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Cobrado</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Collected</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(totalPaidIncome)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pendiente</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pending</div>
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(totalPendingIncome)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Vencido</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Overdue</div>
               <div className={`text-sm font-semibold ${totalOverdueIncome > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
                 {fmtCurrency(totalOverdueIncome)}
-                {overdueInstallmentCount > 0 && <span className="text-[10px] font-normal text-rose-400 ml-1">({overdueInstallmentCount} cuotas)</span>}
+                {overdueInstallmentCount > 0 && <span className="text-[10px] font-normal text-rose-400 ml-1">({overdueInstallmentCount} installments)</span>}
               </div>
             </div>
           </div>
@@ -760,10 +760,10 @@ export const Finance: React.FC = () => {
           {/* Status filter tabs */}
           <div className="flex gap-1 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-1">
             {([
-              { key: 'all' as const, label: 'Todos', count: incomes.length },
-              { key: 'pending' as const, label: 'Por cobrar', count: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length },
-              { key: 'paid' as const, label: 'Cobrado', count: incomes.filter(i => i.status === 'paid').length },
-              { key: 'overdue' as const, label: 'Vencido', count: incomes.filter(i => i.status === 'overdue').length },
+              { key: 'all' as const, label: 'All', count: incomes.length },
+              { key: 'pending' as const, label: 'To collect', count: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length },
+              { key: 'paid' as const, label: 'Collected', count: incomes.filter(i => i.status === 'paid').length },
+              { key: 'overdue' as const, label: 'Overdue', count: incomes.filter(i => i.status === 'overdue').length },
             ]).map(tab => (
               <button
                 key={tab.key}
@@ -786,8 +786,8 @@ export const Finance: React.FC = () => {
             <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Ingresos por Servicio</h3>
-                  <p className="text-[10px] text-zinc-400 mt-0.5">Distribución por proyecto</p>
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Income by Service</h3>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">Distribution by project</p>
                 </div>
                 <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
                   <PieChart size={14} className="text-emerald-500" />
@@ -853,7 +853,7 @@ export const Finance: React.FC = () => {
               ) : (
                 <div className="flex flex-col items-center justify-center h-[180px] text-zinc-400">
                   <Briefcase size={24} className="mb-2 text-zinc-300" />
-                  <p className="text-xs text-center">Crea ingresos para ver<br />la distribución por servicio.</p>
+                  <p className="text-xs text-center">Create income entries to see<br />the distribution by service.</p>
                 </div>
               )}
             </div>
@@ -863,7 +863,7 @@ export const Finance: React.FC = () => {
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input type="text" value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)}
-                  placeholder="Buscar por cliente, proyecto o concepto..."
+                  placeholder="Search by client, project, or concept..."
                   className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40 transition-all" />
               </div>
 
@@ -871,7 +871,7 @@ export const Finance: React.FC = () => {
               {incomes.length > 0 && (
                 <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Progreso de cobro</span>
+                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Collection progress</span>
                     <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                       {incomes.reduce((s: number, i: IncomeEntry) => s + i.total_amount, 0) > 0
                         ? `${((totalPaidIncome / incomes.reduce((s: number, i: IncomeEntry) => s + i.total_amount, 0)) * 100).toFixed(0)}%`
@@ -885,8 +885,8 @@ export const Finance: React.FC = () => {
                     />
                   </div>
                   <div className="flex justify-between mt-2 text-[10px] text-zinc-400">
-                    <span>Cobrado: {fmtCurrency(totalPaidIncome)}</span>
-                    <span>Pendiente: {fmtCurrency(totalPendingIncome)}</span>
+                    <span>Collected: {fmtCurrency(totalPaidIncome)}</span>
+                    <span>Pending: {fmtCurrency(totalPendingIncome)}</span>
                   </div>
                 </div>
               )}
@@ -894,12 +894,12 @@ export const Finance: React.FC = () => {
               {/* Top clients mini-list */}
               {incomes.length > 0 && (
                 <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">Top Clientes</h4>
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">Top Clients</h4>
                   <div className="space-y-2">
                     {(() => {
                       const clientMap: Record<string, number> = {};
                       incomes.forEach((inc: IncomeEntry) => {
-                        const key = inc.client_name || 'Sin cliente';
+                        const key = inc.client_name || 'No client';
                         clientMap[key] = (clientMap[key] || 0) + inc.total_amount;
                       });
                       return Object.entries(clientMap)
@@ -926,24 +926,24 @@ export const Finance: React.FC = () => {
             {incomesLoading && !incomesTimedOut ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
-                <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Cargando ingresos...</p>
+                <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Loading income...</p>
               </div>
             ) : filteredIncomes.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <ArrowDownLeft size={24} className="text-zinc-300" />
-                <p className="text-zinc-400 text-xs">{incomeSearch ? 'Sin resultados.' : 'Sin ingresos registrados. Crea el primero con el botón "Ingreso".'}</p>
+                <p className="text-zinc-400 text-xs">{incomeSearch ? 'No results.' : 'No income recorded. Create the first one with the "Income" button.'}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px]">
                   <thead>
                     <tr className="bg-zinc-50/50 dark:bg-zinc-800/20">
-                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Cliente / Proyecto</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Concepto</th>
+                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Client / Project</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Concept</th>
                       <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Total</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Cobrado</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Cuotas</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Estado</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Collected</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Installments</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Status</th>
                       <th className="px-4 py-2.5 w-16 border-b border-zinc-100 dark:border-zinc-800/60" />
                     </tr>
                   </thead>
@@ -981,7 +981,7 @@ export const Finance: React.FC = () => {
                           {isExpanded && (
                             <tr>
                               <td colSpan={7} className="bg-zinc-50/50 dark:bg-zinc-800/10 px-5 py-3">
-                                <div className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-2">Detalle de Cuotas</div>
+                                <div className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-2">Installment Details</div>
                                 <div className="space-y-1.5">
                                   {(inc.installments || []).map((inst: Installment) => (
                                     <div key={inst.id} className="flex items-center gap-3 p-2 rounded-lg bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800/40">
@@ -990,10 +990,10 @@ export const Finance: React.FC = () => {
                                          inst.status === 'overdue' ? <AlertTriangle size={12} className="text-rose-500" /> :
                                          <Clock size={12} className="text-amber-500" />}
                                       </div>
-                                      <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 w-20">Cuota {inst.number}</span>
+                                      <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 w-20">Inst. {inst.number}</span>
                                       <span className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 w-24">{fmtCurrency(inst.amount)}</span>
-                                      <span className="text-[10px] text-zinc-400 w-28">Vence: {fmtDate(inst.due_date)}</span>
-                                      {inst.paid_date && <span className="text-[10px] text-emerald-500">Pagado: {fmtDate(inst.paid_date)}</span>}
+                                      <span className="text-[10px] text-zinc-400 w-28">Due: {fmtDate(inst.due_date)}</span>
+                                      {inst.paid_date && <span className="text-[10px] text-emerald-500">Paid: {fmtDate(inst.paid_date)}</span>}
                                       <div className="ml-auto flex items-center gap-2">
                                         <StatusBadge status={inst.status} />
                                         {inst.status !== 'paid' && (
@@ -1001,7 +1001,7 @@ export const Finance: React.FC = () => {
                                             onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(inst); }}
                                             className="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
                                           >
-                                            Marcar pagada
+                                            Mark as paid
                                           </button>
                                         )}
                                       </div>
@@ -1028,19 +1028,19 @@ export const Finance: React.FC = () => {
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Gastos Totales</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(totalExpensesPaid + totalExpensesPending)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pagados</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Paid</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(totalExpensesPaid)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pendientes</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pending</div>
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(totalExpensesPending)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Recurrentes / mes</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Recurring / month</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 {fmtCurrency(expenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0))}
               </div>
@@ -1052,7 +1052,7 @@ export const Finance: React.FC = () => {
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input type="text" value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)}
-                placeholder="Buscar gastos..."
+                placeholder="Search expenses..."
                 className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all" />
             </div>
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
@@ -1063,7 +1063,7 @@ export const Finance: React.FC = () => {
                       ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm'
                       : 'bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700'
                     }`}>
-                  {cat === 'all' ? 'Todas' : cat}
+                  {cat === 'all' ? 'All' : cat}
                 </button>
               ))}
             </div>
@@ -1074,24 +1074,24 @@ export const Finance: React.FC = () => {
             {expensesLoading && !expensesTimedOut ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
-                <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Cargando gastos...</p>
+                <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Loading expenses...</p>
               </div>
             ) : filteredExpenses.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <Receipt size={24} className="text-zinc-300" />
-                <p className="text-zinc-400 text-xs">{expenseSearch || expenseCategoryFilter !== 'all' ? 'Sin resultados.' : 'Sin gastos registrados. Crea el primero con el botón "Gasto".'}</p>
+                <p className="text-zinc-400 text-xs">{expenseSearch || expenseCategoryFilter !== 'all' ? 'No results.' : 'No expenses recorded. Create the first one with the "Expense" button.'}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[650px]">
                   <thead>
                     <tr className="bg-zinc-50/50 dark:bg-zinc-800/20">
-                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Concepto</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Categoría</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Proyecto</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Monto</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Fecha</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Estado</th>
+                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Concept</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Category</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Project</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Amount</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Date</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Status</th>
                       <th className="px-4 py-2.5 w-10 border-b border-zinc-100 dark:border-zinc-800/60" />
                     </tr>
                   </thead>
@@ -1140,23 +1140,23 @@ export const Finance: React.FC = () => {
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Proyectos</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Projects</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectPnL.length}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Ingresos Total</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Income</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 {fmtCurrency(projectPnL.reduce((s: number, p: { income: number }) => s + p.income, 0))}
               </div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Gastos Total</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses</div>
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">
                 {fmtCurrency(projectPnL.reduce((s: number, p: { expenses: number }) => s + p.expenses, 0))}
               </div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Profit Neto</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Net Profit</div>
               <div className={`text-sm font-semibold ${projectPnL.reduce((s: number, p: { profit: number }) => s + p.profit, 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {fmtCurrency(projectPnL.reduce((s: number, p: { profit: number }) => s + p.profit, 0))}
               </div>
@@ -1166,7 +1166,7 @@ export const Finance: React.FC = () => {
           {projectPnL.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-10 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 gap-2">
               <Target size={24} className="text-zinc-300" />
-              <p className="text-zinc-400 text-xs">Carga ingresos y gastos asociados a proyectos para ver el análisis P&L.</p>
+              <p className="text-zinc-400 text-xs">Add income and expenses linked to projects to see the P&L analysis.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1182,9 +1182,9 @@ export const Finance: React.FC = () => {
                             ${p.health === 'profitable' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' :
                               p.health === 'loss' ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' :
                               'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'}`}>
-                            {p.health === 'profitable' ? 'Rentable' : p.health === 'loss' ? 'Pérdida' : 'Break-even'}
+                            {p.health === 'profitable' ? 'Profitable' : p.health === 'loss' ? 'Loss' : 'Break-even'}
                           </span>
-                          <span className="text-[10px] text-zinc-400">Margen: {p.margin.toFixed(1)}%</span>
+                          <span className="text-[10px] text-zinc-400">Margin: {p.margin.toFixed(1)}%</span>
                         </div>
                       </div>
                       <div className="text-right">
@@ -1196,18 +1196,18 @@ export const Finance: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg">
-                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mb-0.5">Ingresos</div>
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mb-0.5">Income</div>
                         <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(p.income)}</div>
                       </div>
                       <div className="p-2.5 bg-rose-50/50 dark:bg-rose-500/5 rounded-lg">
-                        <div className="text-[10px] text-rose-600 dark:text-rose-400 mb-0.5">Gastos</div>
+                        <div className="text-[10px] text-rose-600 dark:text-rose-400 mb-0.5">Expenses</div>
                         <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(p.expenses)}</div>
                       </div>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-[10px] text-zinc-400">
                         <span>Burn Rate</span>
-                        <span>{progressPct.toFixed(0)}% consumido</span>
+                        <span>{progressPct.toFixed(0)}% consumed</span>
                       </div>
                       <div className="h-1.5 w-full bg-zinc-100 dark:bg-zinc-800/60 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full transition-all duration-700 ${progressPct > 90 ? 'bg-rose-500' : progressPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -1226,37 +1226,37 @@ export const Finance: React.FC = () => {
       {activeTab === 'config' && (
         <div className="animate-in fade-in duration-500">
           <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Configuración Financiera</h3>
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Financial Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Moneda Principal</div>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Primary Currency</div>
                 <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">USD ($)</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Todos los registros usan esta moneda.</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">All records use this currency.</p>
               </div>
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Registros</div>
-                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{incomes.length} ingresos / {expenses.length} gastos</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Total de registros financieros cargados.</p>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Records</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{incomes.length} income / {expenses.length} expenses</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Total financial records loaded.</p>
               </div>
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Categorías de Gasto</div>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Expense Categories</div>
                 <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{Object.keys(EXPENSE_CATEGORIES).length}</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Software, Talento, Marketing, Operaciones, Legal</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Software, Talent, Marketing, Operations, Legal</p>
               </div>
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Integración Clientes</div>
-                <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Conectado</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">{clients.length} clientes sincronizados desde CRM.</p>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Client Integration</div>
+                <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Connected</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">{clients.length} clients synced from CRM.</p>
               </div>
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Integración Proyectos</div>
-                <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Conectado</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">{projects.length} proyectos sincronizados.</p>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Project Integration</div>
+                <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Connected</div>
+                <p className="text-[10px] text-zinc-400 mt-0.5">{projects.length} projects synced.</p>
               </div>
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
-                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Modelos de Negocio</div>
+                <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Business Models</div>
                 <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Fixed + Hourly + Retainer</div>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Soporta los 3 modelos por proyecto.</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Supports all 3 models per project.</p>
               </div>
             </div>
           </div>
@@ -1267,14 +1267,14 @@ export const Finance: React.FC = () => {
       <SlidePanel
         isOpen={isEntryOpen}
         onClose={closeForm}
-        title={entryType === 'income' ? 'Nuevo Ingreso' : 'Nuevo Gasto'}
-        subtitle={entryType === 'income' ? 'Seleccioná un proyecto o registrá un ingreso general' : 'Registrar gasto'}
+        title={entryType === 'income' ? 'New Income' : 'New Expense'}
+        subtitle={entryType === 'income' ? 'Select a project or register a general income' : 'Register expense'}
         width="md"
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={closeForm}
               className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
-              Cancelar
+              Cancel
             </button>
             <button
               onClick={entryType === 'income' ? handleSubmitIncome : handleSubmitExpense}
@@ -1282,7 +1282,7 @@ export const Finance: React.FC = () => {
               className={`px-4 py-1.5 rounded-lg text-white text-xs font-medium shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity
                 ${entryType === 'income' ? 'bg-emerald-600' : 'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900'}`}
             >
-              {isSubmitting ? 'Guardando...' : 'Guardar'}
+              {isSubmitting ? 'Saving...' : 'Save'}
             </button>
           </div>
         }
@@ -1292,7 +1292,7 @@ export const Finance: React.FC = () => {
             <>
               {/* Project selector — primary action, auto-fills client + concept */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Proyecto</label>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Project</label>
                 <div className="grid grid-cols-1 gap-1.5">
                   {projects.length > 0 ? (
                     <>
@@ -1341,11 +1341,11 @@ export const Finance: React.FC = () => {
                             : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
                         }`}
                       >
-                        <span className="text-[10px] font-medium">Sin proyecto (ingreso general)</span>
+                        <span className="text-[10px] font-medium">No project (general income)</span>
                       </button>
                     </>
                   ) : (
-                    <div className="text-xs text-zinc-400 italic py-2">No hay proyectos creados aún</div>
+                    <div className="text-xs text-zinc-400 italic py-2">No projects created yet</div>
                   )}
                 </div>
               </div>
@@ -1353,7 +1353,7 @@ export const Finance: React.FC = () => {
               {/* Client — auto-filled from project, but editable */}
               {!incomeForm.project_id && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Cliente</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Client</label>
                   <select value={incomeForm.client_id} onChange={e => setIncomeForm(p => ({ ...p, client_id: e.target.value }))}
                     className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
                     <option value="">Sin cliente asignado</option>

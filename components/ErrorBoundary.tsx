@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('🚨 ErrorBoundary capturó un error:');
+    console.error('ErrorBoundary caught an error:');
     console.error('Error:', error);
     console.error('Error Info:', errorInfo);
     console.error('Stack:', error.stack);
@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      // Fallback personalizado si se proporciona
+      // Custom fallback if provided
       if (this.props.fallback) {
         return this.props.fallback;
       }
@@ -57,20 +57,20 @@ export class ErrorBoundary extends Component<Props, State> {
                 <span className="text-red-600 dark:text-red-400 text-xl">🚨</span>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Algo salió mal</h2>
-                <p className="text-sm text-red-600 dark:text-red-400">Ha ocurrido un error inesperado.</p>
+                <h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Something went wrong</h2>
+                <p className="text-sm text-red-600 dark:text-red-400">An unexpected error has occurred.</p>
               </div>
             </div>
 
             <div className="bg-white dark:bg-zinc-800 rounded-lg p-4 mb-4">
-              <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-2">Detalles técnicos:</h3>
+              <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-2">Technical details:</h3>
               <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-2 font-mono break-all">
-                {this.state.error?.message || 'Error desconocido'}
+                {this.state.error?.message || 'Unknown error'}
               </p>
               {this.state.errorInfo && (
                 <details className="text-xs text-zinc-500 dark:text-zinc-500">
                   <summary className="cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300">
-                    Stack trace completo
+                    Full stack trace
                   </summary>
                   <pre className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-900 rounded overflow-auto max-h-32 text-xs">
                     {this.state.errorInfo.componentStack}
@@ -84,19 +84,19 @@ export class ErrorBoundary extends Component<Props, State> {
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
               >
-                Recargar página
+                Reload page
               </button>
               <button
                 onClick={() => { window.location.href = '/'; }}
                 className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm font-medium rounded-lg transition-colors"
               >
-                Ir al inicio
+                Go to home
               </button>
               <button
                 onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
                 className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm font-medium rounded-lg transition-colors"
               >
-                Intentar de nuevo
+                Try again
               </button>
             </div>
           </div>

@@ -54,6 +54,24 @@ export interface PaymentEntry {
   number?: number;
 }
 
+export interface PortalTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;
+  startDate?: string;
+  dueDate?: string;
+  groupName: string;
+  status?: string;
+  priority?: string;
+}
+
+export interface PortalProject {
+  id: string;
+  title: string;
+  status?: string;
+}
+
 export interface DashboardData {
   progress: number;
   startDate: string;
@@ -71,4 +89,6 @@ export interface DashboardData {
   logs: LogEntry[];
   credentials?: CredentialItem[];
   assets?: AssetItem[];
+  tasks?: PortalTask[];
+  projects?: PortalProject[];
 }

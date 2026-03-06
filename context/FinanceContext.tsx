@@ -470,7 +470,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   // ─── Income CRUD ────────────────────────────────────────────
 
   const createIncome = useCallback(async (data: CreateIncomeData): Promise<IncomeEntry | null> => {
-    if (!user || !currentTenant) throw new Error('Sesión no disponible. Recargá la página.')
+    if (!user || !currentTenant) throw new Error('Session not available. Reload the page.')
     try {
       // 1. Build income payload — strip empty-string FKs to null
       const incomePayload: Record<string, any> = {
@@ -498,7 +498,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       if (incErr) {
         console.error('[FinanceContext] Income insert error:', incErr)
-        throw new Error(incErr.message || 'Error al crear ingreso en la base de datos.')
+        throw new Error(incErr.message || 'Error creating income record in the database.')
       }
 
       // 2. Create installments (installments table has NO tenant_id column)
@@ -534,7 +534,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       if (instErr) {
         console.error('[FinanceContext] Installments insert error:', instErr)
-        throw new Error(instErr.message || 'Error al crear cuotas.')
+        throw new Error(instErr.message || 'Error creating installments.')
       }
 
       // 3. Reload incomes to get full data with installments
@@ -577,7 +577,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   // ─── Expense CRUD ───────────────────────────────────────────
 
   const createExpense = useCallback(async (data: CreateExpenseData): Promise<ExpenseEntry | null> => {
-    if (!user || !currentTenant) throw new Error('Sesión no disponible. Recargá la página.')
+    if (!user || !currentTenant) throw new Error('Session not available. Reload the page.')
     try {
       const expensePayload: Record<string, any> = {
         tenant_id: currentTenant.id,
@@ -605,7 +605,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       if (err) {
         console.error('[FinanceContext] Expense insert error:', err)
-        throw new Error(err.message || 'Error al crear gasto en la base de datos.')
+        throw new Error(err.message || 'Error creating expense in the database.')
       }
       setExpenses(prev => [expense, ...prev])
       return expense

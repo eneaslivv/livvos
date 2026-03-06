@@ -18,6 +18,7 @@ import Vault from './components/Vault';
 import LegalAssets from './components/LegalAssets';
 import ResourcesPanel from './components/ResourcesPanel';
 import SystemLogs from './components/SystemLogs';
+import ProjectTasks from './components/ProjectTasks';
 import Onboarding from './components/Onboarding';
 import ChatSupport from './components/ChatSupport';
 import PreferencesPanel from './components/PreferencesPanel';
@@ -68,6 +69,8 @@ interface ClientPortalAppProps {
   clientName?: string;
   clientEmail?: string;
   onLogout?: () => void;
+  onProjectSwitch?: (projectId: string) => void;
+  selectedProjectId?: string;
 }
 
 const App: React.FC<ClientPortalAppProps> = ({
@@ -81,7 +84,9 @@ const App: React.FC<ClientPortalAppProps> = ({
   clientId,
   clientName,
   clientEmail,
-  onLogout
+  onLogout,
+  onProjectSwitch,
+  selectedProjectId
 }) => {
   const [data, setData] = useState<DashboardData>(initialData || INITIAL_DATA);
   const [projectTitle, setProjectTitle] = useState(projectTitleProp || "My Project");
@@ -152,6 +157,23 @@ const App: React.FC<ClientPortalAppProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Project selector — only if multiple projects */}
+            {data.projects && data.projects.length > 1 && (
+              <select
+                value={selectedProjectId || data.projects[0]?.id || ''}
+                onChange={(e) => onProjectSwitch?.(e.target.value)}
+                className="text-[11px] font-medium text-zinc-600 bg-white border border-zinc-200/80 rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-200 focus:border-indigo-300 transition-all cursor-pointer mr-1"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                }}
+              >
+                {data.projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+            )}
             {clientName && (
               <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-white border border-zinc-200/80 rounded-full mr-1">
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-semibold text-[10px]" style={{ backgroundColor: '#2C0405' }}>
@@ -212,7 +234,14 @@ const App: React.FC<ClientPortalAppProps> = ({
                 <LiveRoadmap milestones={data.milestones} />
               </div>
 
-              {/* Row 2: Combined Resources (Finance + Access + Docs) */}
+              {/* Row 2: Tasks by Stage */}
+              {data.tasks && data.tasks.length > 0 && (
+                <div className="md:col-span-12">
+                  <ProjectTasks tasks={data.tasks} />
+                </div>
+              )}
+
+              {/* Row 3: Combined Resources (Finance + Access + Docs) */}
               <div className="md:col-span-12">
                 <ResourcesPanel
                   credentials={data.credentials}

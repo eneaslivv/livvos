@@ -305,7 +305,7 @@ export const Calendar: React.FC = () => {
   // Helper: get color scheme for a task based on priority + status
   const getTaskColor = (task: CalendarTask) => {
     if (task.completed || task.status === 'done') {
-      return { bg: 'bg-zinc-100 dark:bg-zinc-800', border: 'border-zinc-200 dark:border-zinc-700', text: 'text-zinc-400 dark:text-zinc-500', dot: 'bg-zinc-400' };
+      return { bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-700/40', text: 'text-emerald-600/70 dark:text-emerald-400/60', dot: 'bg-emerald-400' };
     }
     if (task.status === 'cancelled') {
       return { bg: 'bg-red-50/50 dark:bg-red-900/10', border: 'border-red-200/50 dark:border-red-800/30', text: 'text-red-400 dark:text-red-500', dot: 'bg-red-400' };
@@ -606,13 +606,15 @@ export const Calendar: React.FC = () => {
   // Alternar completado de tarea (sync status ↔ completed)
   const toggleTaskComplete = async (taskId: string, completed: boolean) => {
     try {
+      const completedAt = completed ? new Date().toISOString() : null;
       await updateTask(taskId, {
         completed,
         status: completed ? 'done' : 'todo',
-      });
+        completed_at: completedAt,
+      } as any);
       // Update selectedTask in place so detail panel reflects change immediately
       if (selectedTask?.id === taskId) {
-        setSelectedTask(prev => prev ? { ...prev, completed, status: completed ? 'done' : 'todo' } : prev);
+        setSelectedTask(prev => prev ? { ...prev, completed, status: completed ? 'done' : 'todo', completed_at: completedAt } : prev);
       }
     } catch (err: any) {
       errorLogger.error('Error actualizando tarea', err);
@@ -1756,7 +1758,15 @@ export const Calendar: React.FC = () => {
                 <label className="block text-[10px] font-medium text-zinc-400 mb-1">Project</label>
                 <select
                   value={editingTask.project_id || ''}
-                  onChange={e => setEditingTask({ ...editingTask, project_id: e.target.value })}
+                  onChange={e => {
+                    const pid = e.target.value;
+                    const proj = projectOptions.find(p => p.id === pid);
+                    setEditingTask({
+                      ...editingTask,
+                      project_id: pid,
+                      client_id: proj?.client_id || editingTask.client_id || '',
+                    });
+                  }}
                   className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
                     editingTask.project_id
                       ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-400'
@@ -2149,9 +2159,7 @@ export const Calendar: React.FC = () => {
                         draggable
                         onDragStart={(e) => handleTaskDragStart(e, task.id)}
                         onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
-                          task.completed ? 'opacity-60' : ''
-                        } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
                         title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
                         onClick={() => handleOpenTaskDetail(task)}
                       >
@@ -2250,10 +2258,8 @@ export const Calendar: React.FC = () => {
                             onDragStart={(e) => handleTaskDragStart(e, task.id)}
                             onDragEnd={() => setDraggingTaskId(null)}
                             className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
-                              task.completed || task.status === 'done' ? 'opacity-60' : ''
-                            } ${task.status === 'cancelled' ? 'opacity-50' : ''} ${
-                              task.status === 'in-progress' ? 'border-l-[3px]' : ''
-                            }`}
+                              task.status === 'cancelled' ? 'opacity-50' : ''
+                            } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
                             title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOCKED — waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
                             onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                           >
@@ -2392,12 +2398,14 @@ export const Calendar: React.FC = () => {
                           draggable
                           onDragStart={(e) => handleTaskDragStart(e, task.id)}
                           onDragEnd={() => setDraggingTaskId(null)}
-                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border} ${
-                            task.completed ? 'opacity-60' : ''
-                          }`}
+                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border}`}
                           onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                         >
-                          <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                          {task.completed ? (
+                            <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
+                          ) : (
+                            <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                          )}
                           <span className={`${tc.text} truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
                           {overdue > 0 && (
                             <span className="ml-auto text-[8px] font-bold text-red-500 shrink-0">+{overdue}d</span>

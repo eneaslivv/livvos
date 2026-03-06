@@ -25,16 +25,16 @@ const CATEGORIES = [
     { id: 'general', label: 'General', color: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
     { id: 'social', label: 'Social', color: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' },
     { id: 'hosting', label: 'Hosting', color: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400' },
-    { id: 'banking', label: 'Bancaria', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' },
+    { id: 'banking', label: 'Banking', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' },
     { id: 'email', label: 'Email', color: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' },
     { id: 'dev', label: 'Dev / API', color: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' },
-    { id: 'client', label: 'Cliente', color: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400' },
+    { id: 'client', label: 'Client', color: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400' },
 ];
 
 const VISIBILITY_OPTIONS = [
-    { id: 'private', label: 'Solo yo', icon: Icons.Lock },
-    { id: 'team', label: 'Todo el equipo', icon: Icons.Users },
-    { id: 'role', label: 'Roles específicos', icon: Icons.Shield },
+    { id: 'private', label: 'Only me', icon: Icons.Lock },
+    { id: 'team', label: 'Entire team', icon: Icons.Users },
+    { id: 'role', label: 'Specific roles', icon: Icons.Shield },
 ];
 
 // ─── Component ────────────────────────────────────────────────────
@@ -157,8 +157,8 @@ export const PasswordsPanel: React.FC = () => {
     };
 
     const handleSubmit = async () => {
-        if (!form.title.trim()) { setFormError('Ingresá un título.'); return; }
-        if (!form.password_encrypted.trim()) { setFormError('Ingresá la contraseña.'); return; }
+        if (!form.title.trim()) { setFormError('Enter a title.'); return; }
+        if (!form.password_encrypted.trim()) { setFormError('Enter the password.'); return; }
 
         setIsSubmitting(true);
         setFormError(null);
@@ -183,14 +183,14 @@ export const PasswordsPanel: React.FC = () => {
             setIsFormOpen(false);
             resetForm();
         } catch (err: any) {
-            setFormError(err.message || 'Error al guardar.');
+            setFormError(err.message || 'Error saving.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('¿Eliminar esta contraseña?')) return;
+        if (!confirm('Delete this password?')) return;
         try {
             await remove(id);
         } catch (err) {
@@ -212,7 +212,7 @@ export const PasswordsPanel: React.FC = () => {
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar por título, usuario o URL..."
+                        placeholder="Search by title, user or URL..."
                         className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 transition-all"
                     />
                 </div>
@@ -222,7 +222,7 @@ export const PasswordsPanel: React.FC = () => {
                         onChange={e => setCategoryFilter(e.target.value)}
                         className="px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none"
                     >
-                        <option value="all">Todas las categorías</option>
+                        <option value="all">All categories</option>
                         {CATEGORIES.map(c => (
                             <option key={c.id} value={c.id}>{c.label}</option>
                         ))}
@@ -241,16 +241,16 @@ export const PasswordsPanel: React.FC = () => {
             {isActuallyLoading ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                     <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
-                    <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Cargando contraseñas...</p>
+                    <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Loading passwords...</p>
                 </div>
             ) : fetchError ? (
                 <div className="text-center py-16">
                     <div className="w-16 h-16 bg-amber-50 dark:bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-5">
                         <Icons.AlertTriangle size={28} className="text-amber-500" />
                     </div>
-                    <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">No se pudo cargar</h3>
+                    <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">Could not load</h3>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-                        Es posible que la tabla de contraseñas no exista aún. Ejecutá la migración correspondiente.
+                        The passwords table may not exist yet. Run the corresponding migration.
                     </p>
                 </div>
             ) : filteredPasswords.length === 0 ? (
@@ -259,12 +259,12 @@ export const PasswordsPanel: React.FC = () => {
                         <Icons.Lock size={28} className="text-zinc-400 dark:text-zinc-500" />
                     </div>
                     <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">
-                        {search || categoryFilter !== 'all' ? 'Sin resultados' : 'Sin contraseñas'}
+                        {search || categoryFilter !== 'all' ? 'No results' : 'No passwords'}
                     </h3>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
                         {search || categoryFilter !== 'all'
-                            ? 'Probá con otros filtros o términos de búsqueda.'
-                            : 'Guardá tus credenciales de forma segura. Solo vos y los usuarios autorizados podrán verlas.'}
+                            ? 'Try different filters or search terms.'
+                            : 'Store your credentials securely. Only you and authorized users can see them.'}
                     </p>
                 </div>
             ) : (
@@ -304,7 +304,7 @@ export const PasswordsPanel: React.FC = () => {
                                         {/* Username */}
                                         {p.username && (
                                             <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1.5 truncate">
-                                                <span className="text-zinc-400 dark:text-zinc-500">Usuario:</span> {p.username}
+                                                <span className="text-zinc-400 dark:text-zinc-500">User:</span> {p.username}
                                             </p>
                                         )}
 
@@ -316,14 +316,14 @@ export const PasswordsPanel: React.FC = () => {
                                             <button
                                                 onClick={() => togglePasswordVisibility(p.id)}
                                                 className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
-                                                title={isVisible ? 'Ocultar' : 'Mostrar'}
+                                                title={isVisible ? 'Hide' : 'Show'}
                                             >
                                                 {isVisible ? <Icons.EyeOff size={13} /> : <Icons.Eye size={13} />}
                                             </button>
                                             <button
                                                 onClick={() => copyToClipboard(p.password_encrypted, p.id)}
                                                 className={`p-1 rounded transition-colors ${isCopied ? 'text-emerald-500' : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
-                                                title="Copiar"
+                                                title="Copy"
                                             >
                                                 {isCopied ? <Icons.Check size={13} /> : <Icons.File size={13} />}
                                             </button>
@@ -366,7 +366,7 @@ export const PasswordsPanel: React.FC = () => {
             <SlidePanel
                 isOpen={isFormOpen}
                 onClose={() => { setIsFormOpen(false); resetForm(); }}
-                title={editingId ? 'Editar Contraseña' : 'Nueva Contraseña'}
+                title={editingId ? 'Edit Password' : 'New Password'}
                 size="md"
             >
                 <div className="space-y-4 p-5">
@@ -378,7 +378,7 @@ export const PasswordsPanel: React.FC = () => {
 
                     {/* Title */}
                     <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Título *</label>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Title *</label>
                         <input
                             type="text"
                             value={form.title}
@@ -402,7 +402,7 @@ export const PasswordsPanel: React.FC = () => {
 
                     {/* Password */}
                     <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Contraseña *</label>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Password *</label>
                         <input
                             type="password"
                             value={form.password_encrypted}
@@ -426,7 +426,7 @@ export const PasswordsPanel: React.FC = () => {
 
                     {/* Category */}
                     <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Categoría</label>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Category</label>
                         <div className="flex flex-wrap gap-1.5">
                             {CATEGORIES.map(cat => (
                                 <button
@@ -445,7 +445,7 @@ export const PasswordsPanel: React.FC = () => {
 
                     {/* Visibility */}
                     <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Acceso</label>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Access</label>
                         <div className="space-y-1.5">
                             {VISIBILITY_OPTIONS.map(opt => {
                                 const OptIcon = opt.icon;
@@ -468,7 +468,7 @@ export const PasswordsPanel: React.FC = () => {
                         {/* Role selector */}
                         {form.visibility === 'role' && (
                             <div className="mt-2 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
-                                <p className="text-[10px] text-zinc-400 mb-2 uppercase tracking-wider font-medium">Roles con acceso:</p>
+                                <p className="text-[10px] text-zinc-400 mb-2 uppercase tracking-wider font-medium">Roles with access:</p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {['owner', 'admin', 'manager', 'member'].map(roleName => (
                                         <button
@@ -496,11 +496,11 @@ export const PasswordsPanel: React.FC = () => {
 
                     {/* Notes */}
                     <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Notas</label>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5 block">Notes</label>
                         <textarea
                             value={form.notes}
                             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                            placeholder="Notas adicionales..."
+                            placeholder="Additional notes..."
                             rows={3}
                             className="w-full px-3 py-2.5 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 resize-none"
                         />
@@ -513,13 +513,13 @@ export const PasswordsPanel: React.FC = () => {
                             disabled={isSubmitting}
                             className="flex-1 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50 shadow-sm"
                         >
-                            {isSubmitting ? 'Guardando...' : editingId ? 'Actualizar' : 'Guardar'}
+                            {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Save'}
                         </button>
                         <button
                             onClick={() => { setIsFormOpen(false); resetForm(); }}
                             className="px-4 py-2.5 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
                         >
-                            Cancelar
+                            Cancel
                         </button>
                     </div>
                 </div>

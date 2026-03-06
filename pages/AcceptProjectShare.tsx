@@ -30,19 +30,19 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
 
     if (shareErr || !share) {
       setStatus('error');
-      setError('Invitación no encontrada o inválida.');
+      setError('Invitation not found or invalid.');
       return;
     }
 
     if (share.status === 'accepted') {
       setStatus('error');
-      setError('Esta invitación ya fue aceptada.');
+      setError('This invitation has already been accepted.');
       return;
     }
 
     if (share.status === 'revoked') {
       setStatus('error');
-      setError('Esta invitación fue revocada.');
+      setError('This invitation has been revoked.');
       return;
     }
 
@@ -86,7 +86,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
       }, 1500);
     } catch (err: any) {
       setStatus('error');
-      setError(err.message || 'Error al aceptar la invitación');
+      setError(err.message || 'Error accepting the invitation');
     }
   };
 
@@ -103,7 +103,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
           await new Promise(r => setTimeout(r, 1000));
           await acceptShare();
         } else {
-          setError('Revisá tu email para confirmar tu cuenta, luego volvé a este link.');
+          setError('Check your email to confirm your account, then come back to this link.');
           setAuthLoading(false);
         }
       } else {
@@ -112,7 +112,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
         await acceptShare();
       }
     } catch (err: any) {
-      setError(err.message || 'Error de autenticación');
+      setError(err.message || 'Authentication error');
       setAuthLoading(false);
     }
   };
@@ -123,7 +123,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-zinc-300 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4" />
           <p className="text-sm text-zinc-500">
-            {status === 'loading' ? 'Verificando invitación...' : 'Aceptando invitación...'}
+            {status === 'loading' ? 'Verifying invitation...' : 'Accepting invitation...'}
           </p>
         </div>
       </div>
@@ -137,8 +137,8 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
           <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.CheckCircle size={24} className="text-emerald-500" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitación aceptada</h2>
-          <p className="text-sm text-zinc-500">Redirigiendo al proyecto{projectName ? `: ${projectName}` : ''}...</p>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitation accepted</h2>
+          <p className="text-sm text-zinc-500">Redirecting to project{projectName ? `: ${projectName}` : ''}...</p>
         </div>
       </div>
     );
@@ -153,7 +153,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
           </div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Error</h2>
           <p className="text-sm text-zinc-500 mb-6">{error}</p>
-          <a href="/" className="text-sm text-emerald-600 hover:underline">Volver al inicio</a>
+          <a href="/" className="text-sm text-emerald-600 hover:underline">Go back to home</a>
         </div>
       </div>
     );
@@ -172,16 +172,16 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
         </div>
         <div className="relative z-10 space-y-4">
           <h1 className="text-3xl font-light leading-tight text-white" style={{ fontFamily: 'serif' }}>
-            Te invitaron a ver <span className="text-emerald-500">{projectName || 'un proyecto'}</span>
+            You were invited to view <span className="text-emerald-500">{projectName || 'a project'}</span>
           </h1>
           <p className="text-zinc-400 text-base leading-relaxed max-w-md">
-            Iniciá sesión o creá una cuenta para acceder al proyecto compartido. Vas a poder ver el progreso, archivos, y dejar comentarios.
+            Sign in or create an account to access the shared project. You will be able to see progress, files, and leave comments.
           </p>
         </div>
         <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-          <span className="text-emerald-600">ACCESO COMPARTIDO</span>
+          <span className="text-emerald-600">SHARED ACCESS</span>
           <span className="text-zinc-700">&bull;</span>
-          <span>Solo por invitación</span>
+          <span>Invite only</span>
         </div>
       </div>
 
@@ -191,11 +191,11 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
           <div className="text-center mb-8">
             <div className="lg:hidden mb-4">
               <h2 className="text-xl font-light text-zinc-800 dark:text-zinc-100" style={{ fontFamily: 'serif' }}>
-                Accedé a <span className="text-emerald-600">{projectName || 'un proyecto'}</span>
+                Access <span className="text-emerald-600">{projectName || 'a project'}</span>
               </h2>
             </div>
             <p className="text-zinc-500 text-sm">
-              {isSignup ? 'Creá tu cuenta para acceder' : 'Iniciá sesión para acceder'}
+              {isSignup ? 'Create your account to access' : 'Sign in to access'}
             </p>
           </div>
 
@@ -212,12 +212,12 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1.5">Contraseña</label>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => { setPassword(e.target.value); setError(null); }}
-                placeholder={isSignup ? 'Mínimo 6 caracteres' : 'Tu contraseña'}
+                placeholder={isSignup ? 'Minimum 6 characters' : 'Your password'}
                 className="w-full px-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 required
                 autoFocus
@@ -237,9 +237,9 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-full disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
             >
               {authLoading ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Procesando...</>
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing...</>
               ) : (
-                <>{isSignup ? 'Crear cuenta y acceder' : 'Iniciar sesión'} <Icons.ChevronRight size={16} /></>
+                <>{isSignup ? 'Create account and access' : 'Sign in'} <Icons.ChevronRight size={16} /></>
               )}
             </button>
           </form>
@@ -249,7 +249,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
               onClick={() => { setIsSignup(!isSignup); setError(null); }}
               className="text-xs text-emerald-600 hover:text-emerald-700 font-medium hover:underline"
             >
-              {isSignup ? '¿Ya tenés cuenta? Iniciá sesión' : '¿No tenés cuenta? Registrate'}
+              {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
             </button>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { DebugPanel } from './components/DebugPanel';
 import { Layout } from './components/Layout';
 import { PageView, AppMode } from './types';
 import { ensureAuthSession } from './lib/auth';
-import { supabase } from './lib/supabase';
+import { supabase, cleanupLocalStorage } from './lib/supabase';
 
 // Updated Context Providers with security and enhanced features
 import { RBACProvider, useRBAC } from './context/RBACContext';
@@ -650,39 +650,7 @@ const AppContent: React.FC<{
   );
 };
 
-// Clear stale localStorage entries if quota is exceeded
-// Preserves Supabase auth keys (sb-*) and removes old/debug cruft
-const cleanupLocalStorage = () => {
-  try {
-    // Test if localStorage is writable
-    localStorage.setItem('__quota_test__', '1');
-    localStorage.removeItem('__quota_test__');
-  } catch {
-    console.warn('[Storage] Quota exceeded — cleaning stale entries');
-    try {
-      const keysToKeep: string[] = [];
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        // Keep Supabase auth tokens
-        if (key.startsWith('sb-') || key.startsWith('supabase')) {
-          keysToKeep.push(key);
-        } else {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach(k => localStorage.removeItem(k));
-      if (keysToRemove.length > 0) {
-        console.log(`[Storage] Cleared ${keysToRemove.length} non-auth entries`);
-      }
-    } catch {
-      // Last resort: clear everything
-      localStorage.clear();
-      console.warn('[Storage] Cleared all localStorage');
-    }
-  }
-};
+// Run cleanup again at App module load (supabase.ts already runs it once at import)
 cleanupLocalStorage();
 
 const App: React.FC = () => {

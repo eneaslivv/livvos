@@ -319,7 +319,7 @@ export const Projects: React.FC = () => {
     if (personalProjects.length > 0) {
       groups.push({
         id: 'personal',
-        label: 'Proyectos propios',
+        label: 'Own projects',
         category: 'personal',
         projects: personalProjects,
       });
@@ -374,7 +374,7 @@ export const Projects: React.FC = () => {
     setIsSubmittingProject(true);
     setCreateError(null);
     try {
-      errorLogger.log('Creando nuevo proyecto', { title: newProjectTitle });
+      errorLogger.log('Creating new project', { title: newProjectTitle });
 
       // Resolve client_id if a client was selected
       const selectedClientObj = clients.find(c => c.id === newProjectClient);
@@ -397,7 +397,7 @@ export const Projects: React.FC = () => {
         activity: [],
         color: '#3b82f6',
       });
-      errorLogger.log('Proyecto creado exitosamente');
+      errorLogger.log('Project created successfully');
       await logActivity({
         action: 'created project', target: newProject.title,
         project_title: newProject.title, type: 'project_created', details: 'New project added'
@@ -406,8 +406,8 @@ export const Projects: React.FC = () => {
       setIsCreating(false);
       setSelectedId(newProject.id);
     } catch (err: any) {
-      errorLogger.error('Error creando proyecto', err);
-      setCreateError(err?.message || 'Error al crear el proyecto.');
+      errorLogger.error('Error creating project', err);
+      setCreateError(err?.message || 'Error creating the project.');
     } finally {
       setIsSubmittingProject(false);
     }
@@ -440,23 +440,23 @@ export const Projects: React.FC = () => {
 
   const handleUpdateProject = async (updates: Partial<Project>) => {
     try {
-      errorLogger.log('Actualizando proyecto', { id: selectedProject.id, updates });
+      errorLogger.log('Updating project', { id: selectedProject.id, updates });
       if (!selectedProject) return;
       const updatedProject = await updateProject(selectedProject.id, updates);
-      errorLogger.log('Proyecto actualizado exitosamente');
+      errorLogger.log('Project updated successfully');
       await logActivity({
         action: 'updated project', target: updatedProject.title,
         project_title: updatedProject.title, type: 'status_change', details: 'Project settings updated'
       });
     } catch (err) {
-      errorLogger.error('Error actualizando proyecto', err);
-      alert('Error al actualizar el proyecto. Por favor intenta de nuevo.');
+      errorLogger.error('Error updating project', err);
+      alert('Error updating the project. Please try again.');
     }
   };
 
   useEffect(() => {
     if (!selectedId && projects.length) {
-      errorLogger.log('Seleccionando primer proyecto por defecto');
+      errorLogger.log('Selecting first project by default');
       setSelectedId(projects[0].id);
     }
   }, [projects, selectedId]);
@@ -480,8 +480,8 @@ export const Projects: React.FC = () => {
       setTimeout(() => refreshTasks(), 1000);
       await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
     } catch (err: any) {
-      errorLogger.error('Error creando tarea rápida', err);
-      setTaskError(err?.message || 'Error al crear tarea');
+      errorLogger.error('Error creating quick task', err);
+      setTaskError(err?.message || 'Error creating task');
       setTimeout(() => setTaskError(null), 5000);
     }
   };
@@ -499,8 +499,8 @@ export const Projects: React.FC = () => {
       setTimeout(() => refreshTasks(), 1000);
       await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
     } catch (err: any) {
-      errorLogger.error('Error creando tarea', err);
-      setTaskError(err?.message || 'Error al crear tarea');
+      errorLogger.error('Error creating task', err);
+      setTaskError(err?.message || 'Error creating task');
       setTimeout(() => setTaskError(null), 5000);
     }
   };
@@ -519,8 +519,8 @@ export const Projects: React.FC = () => {
       setTimeout(() => refreshTasks(), 800);
       await logActivity({ action: newDone ? 'completed task' : 'reopened task', target: task.title, project_title: selectedProject.title, type: 'task_completed' });
     } catch (err: any) {
-      errorLogger.error('Error actualizando tarea', err);
-      alert('Error al actualizar tarea: ' + (err?.message || 'Error desconocido'));
+      errorLogger.error('Error updating task', err);
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -531,7 +531,7 @@ export const Projects: React.FC = () => {
       setTimeout(() => refreshTasks(), 500);
       await logActivity({ action: 'deleted task', target: taskTitle, project_title: selectedProject.title, type: 'project_update' });
     } catch (err: any) {
-      errorLogger.error('Error eliminando tarea', err);
+      errorLogger.error('Error deleting task', err);
     }
   };
 
@@ -553,7 +553,7 @@ export const Projects: React.FC = () => {
       setNewSubtaskTitle('');
       setTimeout(() => refreshTasks(), 800);
     } catch (err: any) {
-      errorLogger.error('Error creando subtarea', err);
+      errorLogger.error('Error creating subtask', err);
     }
   };
 
@@ -562,7 +562,7 @@ export const Projects: React.FC = () => {
       await updateSyncedTask(subtaskId, { completed: !currentCompleted, status: !currentCompleted ? 'done' : 'todo' } as any);
       setTimeout(() => refreshTasks(), 800);
     } catch (err: any) {
-      errorLogger.error('Error actualizando subtarea', err);
+      errorLogger.error('Error updating subtask', err);
     }
   };
 
@@ -571,7 +571,7 @@ export const Projects: React.FC = () => {
       await removeSyncedTask(subtaskId);
       setTimeout(() => refreshTasks(), 500);
     } catch (err: any) {
-      errorLogger.error('Error eliminando subtarea', err);
+      errorLogger.error('Error deleting subtask', err);
     }
   };
 
@@ -592,10 +592,10 @@ export const Projects: React.FC = () => {
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'AI generation failed');
-      if (!json.result?.phases?.length) throw new Error('No se generaron tareas');
+      if (!json.result?.phases?.length) throw new Error('No tasks generated');
       setAiPreview(json.result);
     } catch (err: any) {
-      setAiError(err.message || 'Error generando tareas con AI');
+      setAiError(err.message || 'Error generating tasks with AI');
     } finally {
       setAiGenerating(false);
     }
@@ -637,7 +637,7 @@ export const Projects: React.FC = () => {
       setAiPrompt('');
     } catch (err: any) {
       errorLogger.error('Error saving AI tasks', err);
-      setAiError(err.message || 'Error guardando tareas');
+      setAiError(err.message || 'Error saving tasks');
     } finally {
       setAiGenerating(false);
     }
@@ -647,7 +647,7 @@ export const Projects: React.FC = () => {
     if (!selectedProject || !inviteEmail.trim()) return;
     const { data: profiles, error: profileErr } = await supabase.from('profiles').select('user_id,email').eq('email', inviteEmail.trim()).limit(1);
     if (profileErr) { alert('Error buscando usuario: ' + profileErr.message); return; }
-    if (!profiles || profiles.length === 0) { alert('No existe un usuario con ese email. Pídeles que inicien sesión al menos una vez.'); return; }
+    if (!profiles || profiles.length === 0) { alert('No user found with that email. Ask them to sign in at least once.'); return; }
     const memberId = profiles[0].user_id;
     const { error: insertErr } = await supabase.from('project_members').insert({ project_id: selectedProject.id, member_id: memberId });
     if (insertErr) { alert('Error invitando: ' + insertErr.message); return; }
@@ -693,7 +693,7 @@ export const Projects: React.FC = () => {
         .single();
       if (error) {
         if (error.code === '23505') {
-          setExternalShareError('Esta persona ya tiene acceso a este proyecto.');
+          setExternalShareError('This person already has access to this project.');
         } else {
           throw error;
         }
@@ -760,10 +760,10 @@ export const Projects: React.FC = () => {
     return (
       <div className="flex flex-col h-[calc(100vh-100px)] pt-4 pb-6">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Error al cargar proyectos</h2>
+          <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Error loading projects</h2>
           <p className="text-red-700 dark:text-red-400 mb-4">{error}</p>
           <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium">
-            Recargar
+            Reload
           </button>
         </div>
       </div>
@@ -777,7 +777,7 @@ export const Projects: React.FC = () => {
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <div className="animate-spin rounded-full h-10 w-10 border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-900 dark:border-t-zinc-100 mx-auto mb-4" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando proyectos...</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading projects...</p>
           </div>
         </div>
       </div>
@@ -842,7 +842,7 @@ export const Projects: React.FC = () => {
                       value={newProjectTitle}
                       onChange={e => setNewProjectTitle(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && newProjectTitle.trim()) handleCreateProject(); if (e.key === 'Escape') { setIsCreating(false); resetCreateForm(); } }}
-                      placeholder="Nombre del proyecto..."
+                      placeholder="Project name..."
                       className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                     />
                     <select
@@ -850,7 +850,7 @@ export const Projects: React.FC = () => {
                       onChange={e => setNewProjectClient(e.target.value)}
                       className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
                     >
-                      <option value="">Sin cliente</option>
+                      <option value="">No client</option>
                       {clients.map(c => (
                         <option key={c.id} value={c.id}>{c.name || c.company || c.email}</option>
                       ))}
@@ -864,7 +864,7 @@ export const Projects: React.FC = () => {
                     <textarea
                       value={newProjectDesc}
                       onChange={e => setNewProjectDesc(e.target.value)}
-                      placeholder="Descripción (opcional)..."
+                      placeholder="Description (optional)..."
                       rows={2}
                       className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none"
                     />
@@ -878,13 +878,13 @@ export const Projects: React.FC = () => {
                         className="flex-1 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-1.5"
                       >
                         {isSubmittingProject ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Icons.Plus size={12} />}
-                        Crear
+                        Create
                       </button>
                       <button
                         onClick={() => { setIsCreating(false); resetCreateForm(); }}
                         className="px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                       >
-                        Cancelar
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -895,9 +895,9 @@ export const Projects: React.FC = () => {
             {/* Category filter pills */}
             <div className="flex items-center gap-1">
               {([
-                { id: 'all' as const, label: 'Todos', count: projects.length },
-                { id: 'client' as const, label: 'Clientes', count: clientCount },
-                { id: 'personal' as const, label: 'Propios', count: personalCount },
+                { id: 'all' as const, label: 'All', count: projects.length },
+                { id: 'client' as const, label: 'Clients', count: clientCount },
+                { id: 'personal' as const, label: 'Own', count: personalCount },
               ]).map(f => (
                 <button
                   key={f.id}
@@ -919,7 +919,7 @@ export const Projects: React.FC = () => {
             {filteredGroups.length === 0 && (
               <div className="px-3 py-8 text-center">
                 <div className="text-zinc-300 dark:text-zinc-600 mb-2"><Icons.Folder size={28} className="mx-auto" /></div>
-                <p className="text-xs text-zinc-400">No hay proyectos en esta categoría</p>
+                <p className="text-xs text-zinc-400">No projects in this category</p>
               </div>
             )}
 
@@ -995,7 +995,7 @@ export const Projects: React.FC = () => {
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">{selectedProject ? `PRJ-${selectedProject.id.slice(0, 6)}` : '—'}</span>
                 {selectedProject && <StatusBadge status={selectedProject.status} />}
               </div>
-              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 truncate">{selectedProject ? selectedProject.title : 'Sin proyecto seleccionado'}</h1>
+              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 truncate">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
               <div className="flex items-center gap-4 mt-1.5 text-xs text-zinc-400">
                 {selectedProject && (
                   <>
@@ -1012,7 +1012,7 @@ export const Projects: React.FC = () => {
                     ) : (
                       <span className="flex items-center gap-1.5 text-zinc-400">
                         <Icons.Star size={12} />
-                        Proyecto propio
+                        Own project
                       </span>
                     )}
                     <span className="flex items-center gap-1"><Icons.Calendar size={12} /> {new Date(selectedProject.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
@@ -1055,7 +1055,7 @@ export const Projects: React.FC = () => {
                           className="flex-1 px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm" />
                         <button onClick={handleInviteMember} className="px-3 py-2 text-sm bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium">Invite</button>
                       </div>
-                      <p className="text-[10px] text-zinc-400 mt-1.5">El usuario debe tener cuenta activa en el sistema.</p>
+                      <p className="text-[10px] text-zinc-400 mt-1.5">The user must have an active account in the system.</p>
                     </div>
                     <div className="border-t border-zinc-100 dark:border-zinc-800 my-4" />
                     <div>
@@ -1076,7 +1076,7 @@ export const Projects: React.FC = () => {
                               Open Portal
                             </button>
                           </div>
-                          <p className="text-[10px] text-zinc-400">El cliente recibirá un link para registrarse. Su acceso es privado y protegido.</p>
+                          <p className="text-[10px] text-zinc-400">The client will receive a link to register. Their access is private and secure.</p>
                           {clientInviteError && <p className="text-xs text-rose-600">{clientInviteError}</p>}
                           {clientInviteLink && (
                             <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
@@ -1092,7 +1092,7 @@ export const Projects: React.FC = () => {
                       ) : (
                         <div className="p-3 bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 rounded-lg">
                           <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">No client linked</p>
-                          <p className="text-[10px] text-amber-600 dark:text-amber-500">Asigná un cliente desde Settings para habilitar el portal.</p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-500">Assign a client from Settings to enable the portal.</p>
                         </div>
                       )}
                     </div>
@@ -1125,7 +1125,7 @@ export const Projects: React.FC = () => {
                           {isCreatingShare ? '...' : 'Share'}
                         </button>
                       </div>
-                      <p className="text-[10px] text-zinc-400 mb-2">La persona recibirá un link para crear cuenta y ver el proyecto.</p>
+                      <p className="text-[10px] text-zinc-400 mb-2">The person will receive a link to create an account and view the project.</p>
                       {externalShareError && <p className="text-xs text-rose-600 mb-2">{externalShareError}</p>}
                       {externalShareLink && (
                         <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg mb-3">
@@ -1228,7 +1228,7 @@ export const Projects: React.FC = () => {
                             const nextDue = openTasks.sort((a: any, b: any) => a.dueDate.localeCompare(b.dueDate))[0];
                             return nextDue ? (
                               <div className="text-[10px] text-amber-500 font-medium mt-1">
-                                Próxima: {new Date(nextDue.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
+                                Next: {new Date(nextDue.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </div>
                             ) : null;
                           })()}
@@ -1240,7 +1240,7 @@ export const Projects: React.FC = () => {
                               <div className="flex items-center gap-1.5">
                                 <Icons.Calendar size={14} className="text-zinc-400" />
                                 <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                  {new Date(selectedProject.deadline).toLocaleDateString('es', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  {new Date(selectedProject.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </span>
                               </div>
                               {(() => {
@@ -1249,13 +1249,13 @@ export const Projects: React.FC = () => {
                                 const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                                 return (
                                   <div className={`mt-1 text-[11px] font-medium ${daysLeft < 0 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                    {daysLeft < 0 ? `${Math.abs(daysLeft)} días de atraso` : daysLeft === 0 ? 'Vence hoy' : `${daysLeft} días restantes`}
+                                    {daysLeft < 0 ? `${Math.abs(daysLeft)} days overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft} days remaining`}
                                   </div>
                                 );
                               })()}
                             </>
                           ) : (
-                            <div className="text-sm text-zinc-400 italic">Sin definir</div>
+                            <div className="text-sm text-zinc-400 italic">Not set</div>
                           )}
                           <input
                             type="date"
@@ -1284,7 +1284,7 @@ export const Projects: React.FC = () => {
                               {totalAll > 0 && (
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full tabular-nums">
-                                    {totalDone}/{totalAll} completadas
+                                    {totalDone}/{totalAll} completed
                                   </span>
                                 </div>
                               )}
@@ -1327,7 +1327,7 @@ export const Projects: React.FC = () => {
                                         </span>
                                         {task.done && task.completedAt && (
                                           <span className="text-[10px] text-emerald-500/70 dark:text-emerald-400/60">
-                                            Completada {new Date(task.completedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                            Completed {new Date(task.completedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
                                           </span>
                                         )}
                                       </button>
@@ -1343,7 +1343,7 @@ export const Projects: React.FC = () => {
                                                   ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
                                                   : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
                                               }`}>
-                                                {new Date(task.dueDate).toLocaleDateString('es', { month: 'short', day: 'numeric' })}
+                                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                               </span>
                                             )}
                                           </>
@@ -1354,14 +1354,14 @@ export const Projects: React.FC = () => {
                                 })}
                               </div>
                             ) : (
-                              <p className="text-xs text-zinc-400 py-2">No hay tareas todavía.</p>
+                              <p className="text-xs text-zinc-400 py-2">No tasks yet.</p>
                             )}
                             {totalAll > 0 && (
                               <button
                                 onClick={() => setActiveTab('tasks')}
                                 className="mt-3 w-full py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-lg hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
                               >
-                                Ver todas las tareas →
+                                View all tasks →
                               </button>
                             )}
                           </div>
@@ -1379,25 +1379,25 @@ export const Projects: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-4 gap-3 mb-4">
                           <div>
-                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Facturado</div>
+                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Invoiced</div>
                             <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
                               ${projectFinancials.totalIncome.toLocaleString()}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Cobrado</div>
+                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Collected</div>
                             <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                               ${projectFinancials.totalCollected.toLocaleString()}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Gastos</div>
+                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Expenses</div>
                             <div className="text-lg font-bold text-red-500 dark:text-red-400 tabular-nums">
                               ${projectFinancials.totalExpenses.toLocaleString()}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Ganancia</div>
+                            <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Profit</div>
                             <div className={`text-lg font-bold tabular-nums ${projectFinancials.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                               ${projectFinancials.profit.toLocaleString()}
                             </div>
@@ -1408,7 +1408,7 @@ export const Projects: React.FC = () => {
                         {projectFinancials.totalIncome > 0 && (
                           <div className="mb-4">
                             <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-                              <span>Avance de cobro</span>
+                              <span>Collection progress</span>
                               <span className="tabular-nums">{Math.round((projectFinancials.totalCollected / projectFinancials.totalIncome) * 100)}%</span>
                             </div>
                             <div className="w-full bg-zinc-200/60 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
@@ -1530,7 +1530,7 @@ export const Projects: React.FC = () => {
                             </button>
                           </div>
                         ) : (
-                          <p className="text-xs text-zinc-400 mb-2">Proyecto propio — sin cliente asignado.</p>
+                          <p className="text-xs text-zinc-400 mb-2">Own project — no client assigned.</p>
                         )}
                         <select
                           value={selectedProject.client_id || ''}

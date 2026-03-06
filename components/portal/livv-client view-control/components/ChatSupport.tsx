@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, User, ShieldCheck } from 'lucide-react';
+import { X, Send, ShieldCheck, ArrowRight } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 
 interface ChatMessage {
@@ -16,6 +16,25 @@ interface ChatSupportProps {
   onClose: () => void;
   clientId?: string;
   clientName?: string;
+}
+
+/* helper: group consecutive messages by date */
+function groupByDate(msgs: ChatMessage[]) {
+  const groups: { label: string; messages: ChatMessage[] }[] = [];
+  let current: { label: string; messages: ChatMessage[] } | null = null;
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+  for (const m of msgs) {
+    const d = new Date(m.created_at).toDateString();
+    const label = d === today ? 'Today' : d === yesterday ? 'Yesterday' : new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (!current || current.label !== label) {
+      current = { label, messages: [] };
+      groups.push(current);
+    }
+    current.messages.push(m);
+  }
+  return groups;
 }
 
 const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName }) => {
@@ -88,7 +107,6 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
     setInput('');
 
     try {
-      // Try full insert first
       const payload: Record<string, any> = {
         client_id: clientId,
         sender_type: 'client',
@@ -105,7 +123,6 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         .single();
 
       if (insertErr) {
-        // Retry without optional columns that might not exist
         const { data: retryData, error: retryErr } = await supabase
           .from('client_messages')
           .insert({
@@ -119,107 +136,166 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
 
         if (retryErr) throw retryErr;
 
-        // Replace temp with real
         if (retryData) {
           setMessages(prev => prev.map(m => m.id === tempMsg.id ? (retryData as ChatMessage) : m));
         }
       } else if (data) {
-        // Replace temp with real
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? (data as ChatMessage) : m));
       }
     } catch (err: any) {
       console.error('[ChatSupport] Error sending message:', err);
       setError('Failed to send message');
-      // Remove optimistic message on failure
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-      setInput(msgText); // Restore input
+      setInput(msgText);
     } finally {
       setSending(false);
     }
   };
 
+  const dateGroups = groupByDate(messages);
+  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
   return (
-    <motion.div
-      initial={{ y: 50, opacity: 0, scale: 0.95 }}
-      animate={{ y: 0, opacity: 1, scale: 1 }}
-      exit={{ y: 50, opacity: 0, scale: 0.95 }}
-      className="fixed bottom-8 right-8 w-[400px] h-[500px] bg-white border border-zinc-200 rounded-2xl shadow-2xl z-[60] flex flex-col overflow-hidden"
-    >
-      {/* Header */}
-      <div className="p-5 bg-zinc-900 text-white flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-            <User size={16} />
-          </div>
-          <div>
-            <p className="text-[11px] font-bold leading-none mb-1">Support</p>
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-[#2C0405] rounded-full animate-pulse" />
-              <span className="text-[9px] uppercase opacity-50">Online</span>
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[59]"
+      />
+
+      {/* Side Panel */}
+      <motion.div
+        initial={{ x: '100%', opacity: 0.5 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={{ x: '100%', opacity: 0 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 h-full w-full max-w-[420px] bg-white/95 backdrop-blur-xl z-[60] flex flex-col shadow-[-8px_0_40px_rgba(0,0,0,0.06)]"
+      >
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-zinc-100/80">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-white tracking-wide">L</span>
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white" />
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-zinc-800 leading-none">Support</p>
+                <p className="text-[11px] text-emerald-500 font-medium mt-1">Online</p>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all"
+            >
+              <X size={16} strokeWidth={2} />
+            </button>
           </div>
         </div>
-        <button onClick={onClose} className="hover:text-indigo-300 transition-colors">
-          <X size={20} />
-        </button>
-      </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3 bg-zinc-50">
-        {messages.length === 0 && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed bg-white border border-zinc-100 text-zinc-700 rounded-tl-none shadow-sm">
-              Welcome to support. How can we help you?
-            </div>
-          </div>
-        )}
-        {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed ${
-              m.sender_type === 'client'
-                ? 'bg-indigo-500 text-white rounded-tr-none'
-                : 'bg-white border border-zinc-100 text-zinc-700 rounded-tl-none shadow-sm'
-            }`}>
-              {m.sender_type === 'user' && (
-                <p className="text-[9px] font-bold uppercase tracking-wider opacity-60 mb-1">{m.sender_name}</p>
-              )}
-              {m.message}
-              <p className={`text-[8px] mt-1.5 ${m.sender_type === 'client' ? 'opacity-50' : 'text-zinc-400'}`}>
-                {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {/* Messages area */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Empty state */}
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4 -mt-8">
+              <div className="w-14 h-14 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-4">
+                <ShieldCheck size={22} className="text-zinc-300" />
+              </div>
+              <p className="text-[13px] font-medium text-zinc-700 mb-1">How can we help?</p>
+              <p className="text-[11px] text-zinc-400 leading-relaxed max-w-[240px]">
+                Send us a message and we'll get back to you as soon as possible.
               </p>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
 
-      {/* Input */}
-      <div className="p-4 bg-white border-t border-zinc-100">
-        {error && (
-          <p className="text-[10px] text-red-500 mb-2 px-1">{error}</p>
-        )}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => { setInput(e.target.value); setError(null); }}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Type a message..."
-            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-300 transition-colors"
-          />
-          <button
-            onClick={handleSend}
-            disabled={sending || !input.trim()}
-            className="w-11 h-11 bg-zinc-900 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all disabled:opacity-40"
-          >
-            <Send size={16} />
-          </button>
+          {/* Message groups by date */}
+          {dateGroups.map((group) => (
+            <div key={group.label} className="mb-5 last:mb-0">
+              {/* Date divider */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-zinc-100" />
+                <span className="text-[10px] font-medium text-zinc-300 uppercase tracking-wider">{group.label}</span>
+                <div className="flex-1 h-px bg-zinc-100" />
+              </div>
+
+              {/* Messages */}
+              <div className="space-y-3">
+                {group.messages.map((m, idx) => {
+                  const isClient = m.sender_type === 'client';
+                  const showAvatar = idx === 0 || group.messages[idx - 1].sender_type !== m.sender_type;
+
+                  return (
+                    <div key={m.id} className={`flex items-end gap-2.5 ${isClient ? 'flex-row-reverse' : ''}`}>
+                      {/* Avatar */}
+                      {!isClient && showAvatar ? (
+                        <div className="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center flex-shrink-0 mb-4">
+                          <span className="text-[8px] font-bold text-white">
+                            {initials(m.sender_name)}
+                          </span>
+                        </div>
+                      ) : !isClient ? (
+                        <div className="w-7 flex-shrink-0" />
+                      ) : null}
+
+                      {/* Bubble */}
+                      <div className={`max-w-[75%] ${isClient ? 'items-end' : 'items-start'} flex flex-col`}>
+                        {!isClient && showAvatar && (
+                          <p className="text-[10px] font-medium text-zinc-400 mb-1 ml-1">{m.sender_name}</p>
+                        )}
+                        <div className={`px-4 py-2.5 text-[13px] leading-relaxed ${
+                          isClient
+                            ? 'bg-zinc-900 text-white rounded-2xl rounded-br-md'
+                            : 'bg-zinc-50 border border-zinc-100 text-zinc-700 rounded-2xl rounded-bl-md'
+                        }`}>
+                          {m.message}
+                        </div>
+                        <p className={`text-[10px] mt-1 mx-1 ${isClient ? 'text-zinc-300' : 'text-zinc-300'}`}>
+                          {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="mt-3 flex items-center justify-center gap-1.5 opacity-25">
-          <ShieldCheck size={10} />
-          <span className="text-[8px] uppercase tracking-widest font-bold">Secure Channel</span>
+
+        {/* Input area */}
+        <div className="px-5 pb-5 pt-3 border-t border-zinc-100/80">
+          {error && (
+            <p className="text-[11px] text-red-400 mb-2 px-1">{error}</p>
+          )}
+          <div className="flex items-center gap-2 bg-zinc-50/80 border border-zinc-200/60 rounded-2xl px-4 py-1 focus-within:border-zinc-300 focus-within:bg-white transition-all">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => { setInput(e.target.value); setError(null); }}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder="Write a message..."
+              className="flex-1 bg-transparent py-2.5 text-[13px] text-zinc-700 placeholder:text-zinc-300 focus:outline-none"
+            />
+            <button
+              onClick={handleSend}
+              disabled={sending || !input.trim()}
+              className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center hover:bg-zinc-700 transition-all disabled:opacity-20 disabled:hover:bg-zinc-900 flex-shrink-0"
+            >
+              <ArrowRight size={14} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5">
+            <ShieldCheck size={10} className="text-zinc-200" />
+            <span className="text-[9px] text-zinc-300 font-medium tracking-wide">End-to-end encrypted</span>
+          </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 };
 

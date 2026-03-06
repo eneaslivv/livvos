@@ -49,6 +49,7 @@ export interface CalendarTask {
   blocked_by?: string
   created_at: string
   updated_at: string
+  completed_at?: string | null
 }
 
 export interface CalendarLabel {
@@ -117,6 +118,7 @@ const normalizeTask = (task: any): CalendarTask => ({
   blocked_by: task.blocked_by ?? undefined,
   created_at: task.created_at ?? new Date().toISOString(),
   updated_at: task.updated_at ?? new Date().toISOString(),
+  completed_at: task.completed_at ?? null,
 })
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

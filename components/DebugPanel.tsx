@@ -9,7 +9,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
   const [isOpen, setIsOpen] = React.useState(visible);
 
   React.useEffect(() => {
-    // Capturar logs del console
+    // Capture console logs
     const originalLog = console.log;
     const originalError = console.error;
     const originalWarn = console.warn;
@@ -21,7 +21,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
       ).join(' ');
       
       const logEntry = `[${timestamp}] ${type}: ${message}`;
-      setLogs(prev => [...prev.slice(-50), logEntry]); // Mantener últimos 50 logs
+      setLogs(prev => [...prev.slice(-50), logEntry]); // Keep last 50 logs
     };
 
     console.log = (...args) => {
@@ -51,7 +51,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-4 right-4 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center z-50 transition-colors"
-        title="Abrir panel de debug"
+        title="Open debug panel"
       >
         🐛
       </button>
@@ -67,14 +67,14 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
           <button
             onClick={() => setLogs([])}
             className="text-xs px-2 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            title="Limpiar logs"
+            title="Clear logs"
           >
-            Limpiar
+            Clear
           </button>
           <button
             onClick={() => setIsOpen(false)}
             className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-            title="Cerrar"
+            title="Close"
           >
             ✕
           </button>
@@ -84,7 +84,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
       {/* Logs */}
       <div className="flex-1 overflow-y-auto p-3 text-xs font-mono">
         {logs.length === 0 ? (
-          <p className="text-zinc-500 dark:text-zinc-400">No hay logs aún...</p>
+          <p className="text-zinc-500 dark:text-zinc-400">No logs yet...</p>
         ) : (
           logs.map((log, index) => (
             <div
@@ -105,7 +105,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
 
       {/* Footer */}
       <div className="p-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
-        Logs: {logs.length} | Auto-scroll activado
+        Logs: {logs.length} | Auto-scroll enabled
       </div>
     </div>
   );

@@ -123,25 +123,25 @@ export const BlogPanel: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Blog</h3>
-            <p className="text-xs text-zinc-500">Genera contenido con IA y publícalo.</p>
+            <p className="text-xs text-zinc-500">Generate content with AI and publish it.</p>
           </div>
           <button
             onClick={createPost}
             className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide"
           >
-            Nuevo
+            New
           </button>
         </div>
 
         <textarea
           value={draftInput}
           onChange={(e) => setDraftInput(e.target.value)}
-          placeholder="Brief o ideas para el blog"
+          placeholder="Brief or ideas for the blog"
           className="w-full min-h-[120px] px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
         />
 
         <div className="space-y-2">
-          {isLoading && <div className="text-xs text-zinc-500">Cargando posts...</div>}
+          {isLoading && <div className="text-xs text-zinc-500">Loading posts...</div>}
           {posts.map(post => (
             <button
               key={post.id}
@@ -170,13 +170,13 @@ export const BlogPanel: React.FC = () => {
             <textarea
               value={selected.excerpt || ''}
               onChange={(e) => updatePost({ excerpt: e.target.value })}
-              placeholder="Resumen"
+              placeholder="Summary"
               className="w-full min-h-[80px] p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             />
             <textarea
               value={selected.content || ''}
               onChange={(e) => updatePost({ content: e.target.value })}
-              placeholder="Contenido del blog"
+              placeholder="Blog content"
               className="w-full min-h-[240px] p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             />
             <div className="flex flex-wrap gap-2">
@@ -184,19 +184,19 @@ export const BlogPanel: React.FC = () => {
                 onClick={generateWithAI}
                 className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold"
               >
-                Generar con IA
+                Generate with AI
               </button>
               <button
                 onClick={publishPost}
                 className="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-semibold"
               >
-                Publicar
+                Publish
               </button>
             </div>
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-zinc-500 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-            Selecciona un post para editarlo
+            Select a post to edit
           </div>
         )}
       </div>

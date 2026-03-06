@@ -20,7 +20,7 @@ export const AcceptInvite: React.FC = () => {
   useEffect(() => {
     if (!token) {
       setIsLoading(false);
-      setError('El enlace de invitación no es válido. Verificá la URL.');
+      setError('The invitation link is not valid. Check the URL.');
       return;
     }
 
@@ -33,16 +33,16 @@ export const AcceptInvite: React.FC = () => {
           .single();
 
         if (error || !data) {
-          setError('Invitación no encontrada o expirada.');
+          setError('Invitation not found or expired.');
         } else if (data.status === 'accepted') {
-          setError('Esta invitación ya fue utilizada.');
+          setError('This invitation has already been used.');
         } else {
           setEmail(data.email);
           setInviteType(data.type || 'team');
           setIsValidToken(true);
         }
       } catch {
-        setError('Ocurrió un error al verificar la invitación.');
+        setError('An error occurred while verifying the invitation.');
       } finally {
         setIsLoading(false);
       }
@@ -54,11 +54,11 @@ export const AcceptInvite: React.FC = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.');
+      setError('Password must be at least 6 characters.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
+      setError('Passwords do not match.');
       return;
     }
 
@@ -93,14 +93,14 @@ export const AcceptInvite: React.FC = () => {
       } else if (authData.user && !authData.session) {
         // Email confirmation required
         setSuccessMessage(
-          'Cuenta creada. Revisá tu email para confirmar tu cuenta antes de iniciar sesión.'
+          'Account created. Check your email to confirm your account before signing in.'
         );
         setIsSubmitting(false);
       } else {
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/auth';
       }
     } catch (err: any) {
-      setError(err.message || 'Error al registrar la cuenta.');
+      setError(err.message || 'Error registering the account.');
       setIsSubmitting(false);
     }
   };
@@ -111,7 +111,7 @@ export const AcceptInvite: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
         <div className="flex items-center gap-3 text-zinc-500">
           <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-          <span className="text-sm">Verificando invitación...</span>
+          <span className="text-sm">Verifying invitation...</span>
         </div>
       </div>
     );
@@ -125,13 +125,13 @@ export const AcceptInvite: React.FC = () => {
           <div className="w-14 h-14 bg-[#2C0405]/5 dark:bg-[#2C0405]/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.Mail size={24} className="text-[#2C0405] dark:text-[#e8b4b4]" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Verificá tu email</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Check your email</h2>
           <p className="text-sm text-zinc-500 mb-6">{successMessage}</p>
           <a
             href={isClientInvite ? '/?portal=client' : '/auth'}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2C0405] hover:text-[#1a0203] hover:underline"
           >
-            Ir a iniciar sesión
+            Go to sign in
             <Icons.ChevronRight size={14} />
           </a>
         </div>
@@ -147,13 +147,13 @@ export const AcceptInvite: React.FC = () => {
           <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.AlertCircle size={24} className="text-red-500" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Error de invitación</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitation error</h2>
           <p className="text-sm text-zinc-500 mb-6">{error}</p>
           <a
             href={isClientInvite ? '/?portal=client' : '/auth'}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
           >
-            Ir al inicio de sesión
+            Go to sign in
             <Icons.ChevronRight size={14} />
           </a>
         </div>
@@ -182,24 +182,24 @@ export const AcceptInvite: React.FC = () => {
           <div>
             <h1 className="text-4xl font-light leading-tight mb-4 text-white" style={{ fontFamily: 'serif' }}>
               {isClientInvite ? (
-                <>Bienvenido a tu <span className="text-[#e8b4b4]">Portal</span></>
+                <>Welcome to your <span className="text-[#e8b4b4]">Portal</span></>
               ) : (
-                <>Únete al <span className="text-amber-500">equipo</span></>
+                <>Join the <span className="text-amber-500">team</span></>
               )}
             </h1>
             <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
               {isClientInvite
-                ? 'Accedé al seguimiento de tu proyecto en tiempo real. Progreso, pagos, documentos y comunicación directa con el equipo.'
-                : 'Fuiste invitado a colaborar en Eneas OS. Completá tu registro para comenzar.'}
+                ? 'Access real-time project tracking. Progress, payments, documents and direct communication with the team.'
+                : 'You were invited to collaborate on Eneas OS. Complete your registration to get started.'}
             </p>
           </div>
 
           {isClientInvite && (
             <div className="space-y-5 mt-8">
               {[
-                { icon: '◎', title: 'Progreso en vivo', desc: 'Seguí el avance de tu proyecto con milestones y timeline.' },
-                { icon: '◈', title: 'Pagos & Finanzas', desc: 'Consultá tu plan de pagos y estado de facturación.' },
-                { icon: '⌘', title: 'Documentos seguros', desc: 'Accedé a contratos, credenciales y archivos del proyecto.' },
+                { icon: '◎', title: 'Live Progress', desc: 'Track your project progress with milestones and timeline.' },
+                { icon: '◈', title: 'Payments & Finance', desc: 'Check your payment plan and billing status.' },
+                { icon: '⌘', title: 'Secure Documents', desc: 'Access contracts, credentials and project files.' },
               ].map((f, i) => (
                 <div key={i} className="flex items-start gap-4 group">
                   <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
@@ -217,9 +217,9 @@ export const AcceptInvite: React.FC = () => {
 
         {/* Footer */}
         <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-          <span className={isClientInvite ? 'text-[#e8b4b4]' : 'text-amber-600'}>PORTAL SEGURO</span>
+          <span className={isClientInvite ? 'text-[#e8b4b4]' : 'text-amber-600'}>SECURE PORTAL</span>
           <span className="text-zinc-700">&bull;</span>
-          <span>Datos encriptados</span>
+          <span>Encrypted data</span>
         </div>
       </div>
 
@@ -232,12 +232,12 @@ export const AcceptInvite: React.FC = () => {
               <Icons.Mail size={22} className={isClientInvite ? 'text-[#2C0405]' : 'text-amber-600'} />
             </div>
             <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
-              {isClientInvite ? 'Creá tu cuenta' : 'Completá tu registro'}
+              {isClientInvite ? 'Create your account' : 'Complete your registration'}
             </h2>
             <p className="text-zinc-500 text-sm">
               {isClientInvite
-                ? 'Configurá tu acceso al portal del cliente.'
-                : 'Fuiste invitado a unirte al equipo.'}
+                ? 'Set up your client portal access.'
+                : 'You were invited to join the team.'}
             </p>
           </div>
 
@@ -260,7 +260,7 @@ export const AcceptInvite: React.FC = () => {
 
             <div>
               <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                Contraseña
+                Password
               </label>
               <div className="relative">
                 <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -268,7 +268,7 @@ export const AcceptInvite: React.FC = () => {
                   type="password"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Minimum 6 characters"
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                     isClientInvite
                       ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
@@ -282,7 +282,7 @@ export const AcceptInvite: React.FC = () => {
 
             <div>
               <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                Confirmar contraseña
+                Confirm password
               </label>
               <div className="relative">
                 <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -290,7 +290,7 @@ export const AcceptInvite: React.FC = () => {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                  placeholder="Repetí la contraseña"
+                  placeholder="Repeat password"
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                     isClientInvite
                       ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
@@ -321,11 +321,11 @@ export const AcceptInvite: React.FC = () => {
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creando cuenta...
+                  Creating account...
                 </>
               ) : (
                 <>
-                  Crear cuenta y acceder
+                  Create account and access
                   <Icons.ChevronRight size={16} />
                 </>
               )}
@@ -336,15 +336,15 @@ export const AcceptInvite: React.FC = () => {
           <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
             <p className="text-zinc-400 text-xs">
               {isClientInvite
-                ? '¿Ya tenés cuenta? '
-                : 'Acceso restringido · Solo por invitación'}
+                ? 'Already have an account? '
+                : 'Restricted access · Invite only'}
             </p>
             {isClientInvite && (
               <a
                 href="/?portal=client"
                 className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
               >
-                Iniciar sesión
+                Sign in
               </a>
             )}
           </div>

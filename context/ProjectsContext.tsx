@@ -104,7 +104,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [currentTenant?.id, user?.id])
 
-  // Función para normalizar datos de la DB al formato de la UI
+  // Function to normalize DB data to the UI format
   const normalizeProject = (p: any): Project => ({
     id: p.id,
     title: p.title ?? 'Untitled Project',
@@ -129,7 +129,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     currency: p.currency ?? 'USD',
   });
 
-  // Función inversa para guardar en DB
+  // Inverse function to save to DB
   const toDbPayload = (p: Partial<Project>) => {
     const payload: any = {};
     if (p.title !== undefined) payload.title = p.title;
@@ -150,7 +150,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.budget !== undefined) payload.budget = p.budget;
     if (p.currency !== undefined) payload.currency = p.currency;
     if (p.color !== undefined) payload.color = p.color;
-    // updatedAt se maneja automáticamente o por trigger, pero podemos mandarlo
+    // updatedAt is handled automatically or by trigger, but we can send it
     payload.updated_at = new Date().toISOString();
     return payload;
   };
@@ -228,12 +228,12 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const createProject = async (projectData: Partial<Project>) => {
     if (!user) {
-      throw new Error('No hay sesión de usuario. Recargá la página.')
+      throw new Error('No user session. Reload the page.')
     }
 
     const tenantId = await resolveTenantId()
     if (!tenantId) {
-      throw new Error('No se pudo determinar el tenant. Recargá la página.')
+      throw new Error('Could not determine tenant. Reload the page.')
     }
 
     try {
@@ -252,7 +252,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (err) {
         errorLogger.error('[ProjectsContext] Insert error:', err)
-        throw new Error(err.message || 'Error al crear proyecto en la base de datos.')
+        throw new Error(err.message || 'Error creating project in the database.')
       }
       const newProject = normalizeProject(data)
       setProjects(prev => [newProject, ...prev])

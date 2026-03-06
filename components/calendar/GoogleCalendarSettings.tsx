@@ -83,14 +83,14 @@ export const GoogleCalendarSettings: React.FC = () => {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
             >
               <Icons.RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Sincronizando...' : 'Sincronizar'}
+              {syncing ? 'Syncing...' : 'Sync'}
             </button>
             <button
               onClick={handleDisconnect}
               disabled={disconnecting}
               className="px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
             >
-              {disconnecting ? 'Desconectando...' : 'Desconectar'}
+              {disconnecting ? 'Disconnecting...' : 'Disconnect'}
             </button>
           </div>
         ) : (
@@ -99,7 +99,7 @@ export const GoogleCalendarSettings: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Icons.Plus size={14} />
-            Conectar
+            Connect
           </button>
         )}
       </div>
@@ -109,7 +109,7 @@ export const GoogleCalendarSettings: React.FC = () => {
         <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-1.5">
           {lastSyncedAt && (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Última sincronización: {new Date(lastSyncedAt).toLocaleString('es-ES')}
+              Last synced: {new Date(lastSyncedAt).toLocaleString('en-US')}
             </p>
           )}
           {syncError && (
@@ -120,7 +120,7 @@ export const GoogleCalendarSettings: React.FC = () => {
           )}
           {!lastSyncedAt && !syncError && (
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              Conectado. Haz click en &quot;Sincronizar&quot; para importar eventos.
+              Connected. Click &quot;Sync&quot; to import events.
             </p>
           )}
         </div>
@@ -128,7 +128,7 @@ export const GoogleCalendarSettings: React.FC = () => {
 
       {!isConnected && (
         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-2">
-          Conecta tu Google Calendar para ver tus eventos aquí (solo lectura).
+          Connect your Google Calendar to see your events here (read-only).
         </p>
       )}
     </div>

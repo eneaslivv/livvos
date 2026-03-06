@@ -3,7 +3,17 @@
 -- =============================================
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
+-- Drop ALL legacy task policies
 DROP POLICY IF EXISTS "tasks_select_policy" ON tasks;
+DROP POLICY IF EXISTS "tasks_insert_policy" ON tasks;
+DROP POLICY IF EXISTS "tasks_update_policy" ON tasks;
+DROP POLICY IF EXISTS "tasks_delete_policy" ON tasks;
+DROP POLICY IF EXISTS "Users can view own tasks" ON tasks;
+DROP POLICY IF EXISTS "Users can create own tasks" ON tasks;
+DROP POLICY IF EXISTS "Users can update own tasks" ON tasks;
+DROP POLICY IF EXISTS "Users can delete own tasks" ON tasks;
+DROP POLICY IF EXISTS "client_tasks_select" ON tasks;
+
 CREATE POLICY "tasks_select_policy" ON tasks
 FOR SELECT USING (
   can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
@@ -32,8 +42,15 @@ GRANT ALL ON tasks TO authenticated;
 -- =============================================
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 
+-- Drop ALL legacy client policies
 DROP POLICY IF EXISTS "clients_select_policy" ON clients;
+DROP POLICY IF EXISTS "clients_insert_policy" ON clients;
+DROP POLICY IF EXISTS "clients_update_policy" ON clients;
+DROP POLICY IF EXISTS "clients_delete_policy" ON clients;
+DROP POLICY IF EXISTS "clients_modify_policy" ON clients;
 DROP POLICY IF EXISTS "Users can view their own clients" ON clients;
+DROP POLICY IF EXISTS "Users can manage their clients" ON clients;
+DROP POLICY IF EXISTS "Users can create clients" ON clients;
 CREATE POLICY "clients_select_policy" ON clients
 FOR SELECT USING (
   can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
@@ -84,8 +101,22 @@ GRANT ALL ON client_history TO authenticated;
 -- =============================================
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
+-- Drop ALL legacy project policies (this is critical!)
 DROP POLICY IF EXISTS "projects_select_policy" ON projects;
+DROP POLICY IF EXISTS "projects_insert_policy" ON projects;
+DROP POLICY IF EXISTS "projects_update_policy" ON projects;
+DROP POLICY IF EXISTS "projects_delete_policy" ON projects;
 DROP POLICY IF EXISTS "projects_select_own" ON projects;
+DROP POLICY IF EXISTS "projects_insert_own" ON projects;
+DROP POLICY IF EXISTS "projects_update_own" ON projects;
+DROP POLICY IF EXISTS "projects_delete_own" ON projects;
+DROP POLICY IF EXISTS "projects_select_own_or_member" ON projects;
+DROP POLICY IF EXISTS "projects_update_own_or_member" ON projects;
+DROP POLICY IF EXISTS "View Projects Policy" ON projects;
+DROP POLICY IF EXISTS "Edit Projects Policy" ON projects;
+DROP POLICY IF EXISTS "Create Projects Policy" ON projects;
+DROP POLICY IF EXISTS "Users can manage projects" ON projects;
+DROP POLICY IF EXISTS "client_projects_select" ON projects;
 CREATE POLICY "projects_select_policy" ON projects
 FOR SELECT USING (
   can_access_tenant(tenant_id) OR tenant_id IS NULL OR owner_id = auth.uid()
@@ -111,3 +142,5 @@ FOR DELETE USING (
 );
 
 GRANT ALL ON projects TO authenticated;
+
+NOTIFY pgrst, 'reload config';

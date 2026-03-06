@@ -92,9 +92,9 @@ const NavItem: React.FC<{
 
 // --- GLOBAL TASK MODAL ---
 const PRIORITY_CONFIG = {
-  [Priority.Low]: { label: 'Baja', color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
-  [Priority.Medium]: { label: 'Media', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
-  [Priority.High]: { label: 'Alta', color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800', dot: 'bg-red-500' },
+  [Priority.Low]: { label: 'Low', color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
+  [Priority.Medium]: { label: 'Medium', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
+  [Priority.High]: { label: 'High', color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800', dot: 'bg-red-500' },
 };
 
 const CreateTaskModal = ({
@@ -106,7 +106,7 @@ const CreateTaskModal = ({
   isOpen: boolean,
   onClose: () => void,
   onAdd: (task: any) => Promise<void> | void,
-  projects: { id: string; title: string }[]
+  projects: { id: string; title: string; client_id?: string }[]
 }) => {
   const { user } = useAuth();
   const { members: teamMembers } = useTeam();
@@ -119,6 +119,7 @@ const CreateTaskModal = ({
   const [aiInput, setAiInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [projectId, setProjectId] = useState('');
+  const [clientId, setClientId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,6 +144,7 @@ const CreateTaskModal = ({
       setAiInput('');
       setMode('quick');
       setProjectId('');
+      setClientId('');
       setAssigneeId('');
       setDueDate('');
       setAiResult(null);
@@ -179,6 +181,7 @@ const CreateTaskModal = ({
         completed: false,
         priority: finalPriority,
         project_id: projectId || undefined,
+        client_id: clientId || undefined,
         assignee_id: assigneeId || undefined,
         due_date: dueDate || undefined,
         group_name: finalTag !== 'General' ? finalTag : undefined,
@@ -216,10 +219,10 @@ const CreateTaskModal = ({
 
   const footer = mode !== 'ai' ? (
     <div className="flex justify-between items-center">
-      <span className="text-xs text-zinc-400"><b>Enter</b> para crear</span>
+      <span className="text-xs text-zinc-400"><b>Enter</b> to create</span>
       <div className="flex gap-2">
         <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors rounded-lg">
-          Cancelar
+          Cancel
         </button>
         <button
           onClick={handleSubmit}
@@ -227,7 +230,7 @@ const CreateTaskModal = ({
           className="px-5 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 flex items-center gap-2"
         >
           {isSubmitting ? <Icons.Clock size={14} className="animate-spin" /> : <Icons.Plus size={14} />}
-          Crear tarea
+          Create task
         </button>
       </div>
     </div>
@@ -236,12 +239,12 @@ const CreateTaskModal = ({
   const activeMembers = teamMembers.filter(m => m.status === 'active');
 
   return (
-    <SlidePanel isOpen={isOpen} onClose={onClose} title="Nueva tarea" subtitle="Crea y asigna tareas al equipo" width="md" footer={footer}>
+    <SlidePanel isOpen={isOpen} onClose={onClose} title="New task" subtitle="Create and assign tasks to the team" width="md" footer={footer}>
       {/* Mode Tabs */}
       <div className="flex border-b border-zinc-100 dark:border-zinc-800">
         {[
-          { id: 'quick', label: 'Rápida', icon: <Icons.Zap size={14} /> },
-          { id: 'detailed', label: 'Detallada', icon: <Icons.List size={14} /> },
+          { id: 'quick', label: 'Quick', icon: <Icons.Zap size={14} /> },
+          { id: 'detailed', label: 'Detailed', icon: <Icons.List size={14} /> },
           { id: 'ai', label: 'IA', icon: <Icons.Sparkles size={14} /> },
         ].map(m => (
           <button
@@ -262,12 +265,12 @@ const CreateTaskModal = ({
         {mode === 'ai' ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Describe la tarea en lenguaje natural</label>
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Describe the task in natural language</label>
               <textarea
                 autoFocus
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
-                placeholder="Ej: 'Recordarme llamar a Sofia mañana por el UI kit, es urgente'"
+                placeholder="E.g.: 'Remind me to call Sofia tomorrow about the UI kit, it's urgent'"
                 className="w-full h-28 p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 dark:focus:border-violet-600 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiGenerate(); } }}
               />
@@ -281,7 +284,7 @@ const CreateTaskModal = ({
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-sm transition-all disabled:opacity-50"
             >
               {isThinking ? <Icons.Clock size={16} className="animate-spin" /> : <Icons.Sparkles size={16} />}
-              {isThinking ? 'Procesando...' : 'Generar tarea con IA'}
+              {isThinking ? 'Processing...' : 'Generate task with AI'}
             </button>
           </div>
         ) : (
@@ -293,7 +296,7 @@ const CreateTaskModal = ({
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder="¿Qué hay que hacer?"
+                placeholder="What needs to be done?"
                 className="w-full px-0 py-2 bg-transparent border-0 border-b-2 border-zinc-200 dark:border-zinc-700 outline-none focus:border-zinc-900 dark:focus:border-zinc-100 text-lg font-semibold text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors"
                 onKeyDown={e => { if (e.key === 'Enter' && mode === 'quick') handleSubmit(); }}
               />
@@ -301,7 +304,7 @@ const CreateTaskModal = ({
 
             {/* Priority */}
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Prioridad</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Priority</label>
               <div className="flex gap-2">
                 {([Priority.Low, Priority.Medium, Priority.High] as const).map(p => {
                   const config = PRIORITY_CONFIG[p];
@@ -324,7 +327,7 @@ const CreateTaskModal = ({
             {/* Assignee - always visible */}
             {activeMembers.length > 0 && (
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Asignar a</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Assign to</label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setAssigneeId('')}
@@ -334,7 +337,7 @@ const CreateTaskModal = ({
                         : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300'
                     }`}
                   >
-                    Sin asignar
+                    Unassigned
                   </button>
                   {activeMembers.map(member => (
                     <button
@@ -353,7 +356,7 @@ const CreateTaskModal = ({
                           {(member.name || member.email)?.[0]?.toUpperCase()}
                         </div>
                       )}
-                      {member.id === user?.id ? 'Yo' : (member.name || member.email?.split('@')[0])}
+                      {member.id === user?.id ? 'Me' : (member.name || member.email?.split('@')[0])}
                     </button>
                   ))}
                 </div>
@@ -363,7 +366,7 @@ const CreateTaskModal = ({
             {/* Quick mode: date + project row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Fecha límite</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Deadline</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -372,13 +375,19 @@ const CreateTaskModal = ({
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Proyecto</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Project</label>
                 <select
                   value={projectId}
-                  onChange={e => setProjectId(e.target.value)}
+                  onChange={e => {
+                    const pid = e.target.value;
+                    setProjectId(pid);
+                    const proj = projects.find(p => p.id === pid);
+                    if (proj?.client_id) setClientId(proj.client_id);
+                    else if (!pid) setClientId('');
+                  }}
                   className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                 >
-                  <option value="">Sin proyecto</option>
+                  <option value="">No project</option>
                   {projects.map(project => (
                     <option key={project.id} value={project.id}>{project.title}</option>
                   ))}
@@ -391,9 +400,9 @@ const CreateTaskModal = ({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Estado</label>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Status</label>
                     <div className="flex gap-2">
-                      {([{ id: 'todo', label: 'Por hacer' }, { id: 'in-progress', label: 'En progreso' }] as const).map(s => (
+                      {([{ id: 'todo', label: 'To do' }, { id: 'in-progress', label: 'In progress' }] as const).map(s => (
                         <button
                           key={s.id}
                           onClick={() => setStatus(s.id)}
@@ -409,22 +418,22 @@ const CreateTaskModal = ({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Categoría</label>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Category</label>
                     <input
                       type="text"
                       value={tag}
                       onChange={e => setTag(e.target.value)}
-                      placeholder="Ej: Diseño"
+                      placeholder="E.g.: Design"
                       className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Descripción</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">Description</label>
                   <textarea
                     value={description}
                     onChange={e => setDescription(e.target.value)}
-                    placeholder="Agrega detalles o contexto..."
+                    placeholder="Add details or context..."
                     className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-zinc-400 text-sm text-zinc-900 dark:text-zinc-100 resize-none placeholder:text-zinc-400"
                     rows={3}
                   />
@@ -448,10 +457,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   // Global Task Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const { add: addTask } = useSupabase<any>('tasks', { enabled: false, subscribe: false });
-  const { data: taskProjects } = useSupabase<{ id: string; title: string }>('projects', {
+  const { data: taskProjects } = useSupabase<{ id: string; title: string; client_id?: string }>('projects', {
     enabled: isTaskModalOpen,
     subscribe: false,
-    select: 'id,title'
+    select: 'id,title,client_id'
   });
 
   // Persistent Sidebar State
@@ -521,7 +530,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     try {
       await addTask(task);
     } catch (err: any) {
-      alert('No se pudo crear la tarea: ' + (err?.message || 'Error'));
+      alert('Could not create task: ' + (err?.message || 'Error'));
     }
   };
 

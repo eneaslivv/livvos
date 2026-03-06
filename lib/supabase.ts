@@ -1,24 +1,39 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Clean up localStorage if near quota to prevent kQuotaBytes errors
-function cleanupLocalStorage() {
+// Proactively clean localStorage to prevent kQuotaBytes errors.
+// Runs on startup and is exported so other modules can call it on demand.
+export function cleanupLocalStorage() {
   try {
+    // Proactive: remove known bloat keys even before quota is hit
+    const bloatPrefixes = ['ld:', 'launchdarkly', 'lD_', 'intercom', 'analytics', '_dd_', 'ajs_', 'debug']
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && bloatPrefixes.some(prefix => key.toLowerCase().startsWith(prefix))) {
+        keysToRemove.push(key)
+      }
+    }
+    if (keysToRemove.length) {
+      keysToRemove.forEach(key => localStorage.removeItem(key))
+      console.log(`[Storage] Proactively removed ${keysToRemove.length} non-essential keys`)
+    }
+
     // Test if we can write
     localStorage.setItem('__quota_test__', 'x')
     localStorage.removeItem('__quota_test__')
   } catch {
     console.warn('[Storage] localStorage quota exceeded, cleaning up...')
-    // Remove non-essential keys (keep Supabase auth)
+    // Remove everything except Supabase auth
     const keysToKeep = ['sb-', 'supabase.auth']
-    const keysToRemove: string[] = []
+    const toRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && !keysToKeep.some(prefix => key.includes(prefix))) {
-        keysToRemove.push(key)
+        toRemove.push(key)
       }
     }
-    keysToRemove.forEach(key => localStorage.removeItem(key))
-    console.log(`[Storage] Removed ${keysToRemove.length} non-essential keys`)
+    toRemove.forEach(key => localStorage.removeItem(key))
+    console.log(`[Storage] Removed ${toRemove.length} non-essential keys`)
 
     // If still full, clear everything
     try {

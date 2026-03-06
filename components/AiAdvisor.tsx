@@ -16,8 +16,8 @@ const AREA_CONFIG: Record<string, { gradient: string; iconBg: string; border: st
 };
 
 const PRIORITY_LABEL: Record<string, { text: string; color: string }> = {
-  high: { text: 'Urgente', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
-  medium: { text: 'Esta semana', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  high: { text: 'Urgent', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  medium: { text: 'This week', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
   low: { text: 'Info', color: 'bg-zinc-500/10 text-zinc-500 dark:text-zinc-400' },
 };
 
@@ -38,10 +38,10 @@ const getIconComponent = (iconName: string) => {
 };
 
 const LOADING_STEPS = [
-  { text: 'Revisando proyectos activos...', icon: Icons.Briefcase },
-  { text: 'Analizando finanzas e ingresos...', icon: Icons.TrendingUp },
-  { text: 'Evaluando equipo y productividad...', icon: Icons.Users },
-  { text: 'Generando recomendaciones...', icon: Icons.Sparkles },
+  { text: 'Reviewing active projects...', icon: Icons.Briefcase },
+  { text: 'Analyzing finances and revenue...', icon: Icons.TrendingUp },
+  { text: 'Evaluating team and productivity...', icon: Icons.Users },
+  { text: 'Generating recommendations...', icon: Icons.Sparkles },
 ];
 
 const ORB_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
@@ -170,7 +170,7 @@ export const AiAdvisor: React.FC = () => {
       setHasLoaded(true);
     } catch (err: any) {
       console.error('AI Advisor error:', err);
-      setError(err?.message || 'No se pudo generar el análisis');
+      setError(err?.message || 'Could not generate the analysis');
     } finally {
       setLoading(false);
     }
@@ -251,7 +251,7 @@ export const AiAdvisor: React.FC = () => {
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">AI Advisor</h2>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">Análisis inteligente de tu negocio</p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">Smart analysis of your business</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -259,7 +259,7 @@ export const AiAdvisor: React.FC = () => {
                       onClick={loadInsights}
                       disabled={loading}
                       className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600"
-                      title="Regenerar análisis"
+                      title="Regenerate analysis"
                     >
                       <Icons.RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                     </button>
@@ -276,7 +276,7 @@ export const AiAdvisor: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100/80 dark:bg-zinc-800/50">
                     <Icons.Briefcase size={11} className="text-zinc-400" />
-                    <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">{activeCount} activos</span>
+                    <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">{activeCount} active</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100/80 dark:bg-zinc-800/50">
                     <Icons.TrendingUp size={11} className="text-zinc-400" />
@@ -295,7 +295,7 @@ export const AiAdvisor: React.FC = () => {
                   <div className="flex flex-col items-center justify-center h-full gap-5 px-6">
                     <LoadingOrb />
                     <div className="text-center">
-                      <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Analizando tu negocio</p>
+                      <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Analyzing your business</p>
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={loadingStep}
@@ -332,7 +332,7 @@ export const AiAdvisor: React.FC = () => {
                       onClick={loadInsights}
                       className="mt-1 px-4 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100 rounded-lg transition-colors"
                     >
-                      Reintentar
+                      Retry
                     </button>
                   </div>
 
@@ -355,13 +355,13 @@ export const AiAdvisor: React.FC = () => {
                         {highPriority > 0 && (
                           <span className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            {highPriority} urgente{highPriority > 1 ? 's' : ''}
+                            {highPriority} urgent
                           </span>
                         )}
                         {medPriority > 0 && (
                           <span className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                            {medPriority} esta semana
+                            {medPriority} this week
                           </span>
                         )}
                       </div>
@@ -405,12 +405,12 @@ export const AiAdvisor: React.FC = () => {
                     <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
                       <Icons.Sparkles size={20} className="text-zinc-300 dark:text-zinc-600" />
                     </div>
-                    <p className="text-xs text-zinc-400">Sin datos todavía</p>
+                    <p className="text-xs text-zinc-400">No data yet</p>
                     <button
                       onClick={loadInsights}
                       className="mt-1 px-4 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity"
                     >
-                      Generar análisis
+                      Generate analysis
                     </button>
                   </div>
                 )}
@@ -423,7 +423,7 @@ export const AiAdvisor: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                       <span className="text-[10px] text-zinc-400">
-                        {insights.length} insights &middot; {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                        {insights.length} insights &middot; {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <button
@@ -432,7 +432,7 @@ export const AiAdvisor: React.FC = () => {
                       className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                     >
                       <Icons.RefreshCw size={10} />
-                      Actualizar
+                      Refresh
                     </button>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PortalApp from './livv-client view-control/App';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { DashboardData, Milestone, LogEntry, PaymentEntry } from './livv-client view-control/types';
+import { DashboardData, Milestone, LogEntry, PaymentEntry, PortalTask, PortalProject } from './livv-client view-control/types';
 
 /** Wrap a promise with a timeout — returns fallback on timeout or error */
 const safeQuery = <T,>(promise: Promise<{ data: T; error: any }>, fallback: T, ms = 6000): Promise<{ data: T }> =>
@@ -83,6 +83,7 @@ export const ClientPortalView: React.FC = () => {
   const [clientId, setClientId] = useState<string | undefined>();
   const [clientName, setClientName] = useState<string | undefined>();
   const [clientEmail, setClientEmail] = useState<string | undefined>();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
 
   // Auth timeout: if user isn't available after 6s, stop waiting
   useEffect(() => {
@@ -170,12 +171,23 @@ export const ClientPortalView: React.FC = () => {
           client = cd3;
         }
 
-        if (!project && client?.id) {
-          const { data: pd } = await safeQuery(
-            supabase.from('projects').select('id,title,description,status,created_at,client_id').eq('client_id', client.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            null as ProjectRecord | null, 4000
+        // Fetch ALL projects for this client (for project selector)
+        let allProjects: ProjectRecord[] = [];
+        if (client?.id) {
+          const { data: allPd } = await safeQuery(
+            supabase.from('projects').select('id,title,description,status,created_at,client_id').eq('client_id', client.id).order('created_at', { ascending: false }),
+            [] as ProjectRecord[], 4000
           );
-          project = pd;
+          allProjects = allPd || [];
+        }
+
+        if (!project && allProjects.length > 0) {
+          // If selectedProjectId is set (user switched), use it
+          if (selectedProjectId) {
+            project = allProjects.find(p => p.id === selectedProjectId) || allProjects[0];
+          } else {
+            project = allProjects[0];
+          }
         }
 
         if (!client) {
@@ -349,6 +361,26 @@ export const ClientPortalView: React.FC = () => {
           ? { amount: nextPending.amount, dueDate: nextPending.dueDate, concept: nextPending.concept }
           : undefined;
 
+        // Map tasks for the ProjectTasks component
+        const portalTasks: PortalTask[] = tasks.map(t => ({
+          id: t.id,
+          title: t.title || 'Untitled',
+          completed: !!t.completed,
+          completedAt: t.completed_at || undefined,
+          startDate: t.start_date || undefined,
+          dueDate: t.due_date || undefined,
+          groupName: t.group_name || 'General',
+          status: t.status || undefined,
+          priority: t.priority || undefined,
+        }));
+
+        // Map projects for the project selector
+        const portalProjects: PortalProject[] = allProjects.map(p => ({
+          id: p.id,
+          title: p.title || 'Untitled Project',
+          status: p.status || undefined,
+        }));
+
         const dashboard: DashboardData = {
           progress,
           startDate,
@@ -367,7 +399,9 @@ export const ClientPortalView: React.FC = () => {
             { id: 'l1', timestamp: 'Today', message: 'Portal connected to live project data.' }
           ],
           assets: [...assets, ...fileAssets, ...projectFileAssets],
-          credentials
+          credentials,
+          tasks: portalTasks,
+          projects: portalProjects,
         };
 
         setProjectTitle(project?.title || client.company || client.name || 'Client Portal');
@@ -382,7 +416,7 @@ export const ClientPortalView: React.FC = () => {
     };
 
     loadPortal();
-  }, [user, clientIdParam, projectIdParam]);
+  }, [user, clientIdParam, projectIdParam, selectedProjectId]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading portal...</div>;
@@ -416,6 +450,14 @@ export const ClientPortalView: React.FC = () => {
     );
   }
 
+  const handleProjectSwitch = (newProjectId: string) => {
+    setSelectedProjectId(newProjectId);
+    // Update URL param without page reload
+    const url = new URL(window.location.href);
+    url.searchParams.set('projectId', newProjectId);
+    window.history.replaceState({}, '', url.toString());
+  };
+
   return (
     <PortalApp
       initialData={data}
@@ -429,6 +471,8 @@ export const ClientPortalView: React.FC = () => {
       clientName={clientName}
       clientEmail={clientEmail}
       onLogout={handleLogout}
+      onProjectSwitch={handleProjectSwitch}
+      selectedProjectId={selectedProjectId || data.projects?.[0]?.id}
     />
   );
 };

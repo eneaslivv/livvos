@@ -233,14 +233,14 @@ export const ServiceManagement: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-medium leading-6 text-zinc-900 dark:text-zinc-100">Pricing & Proposals</h3>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Define servicios y precios base para propuestas automáticas.</p>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Define services and base prices for automatic proposals.</p>
           </div>
           {isAdmin && (
             <button
               onClick={resetPricingForm}
               className="px-3 py-1.5 text-xs font-semibold border border-zinc-200 dark:border-zinc-700 rounded-lg"
             >
-              Nuevo
+              New
             </button>
           )}
         </div>
@@ -250,14 +250,14 @@ export const ServiceManagement: React.FC = () => {
             <div key={item.id} className="flex items-start justify-between p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
               <div>
                 <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</div>
-                <div className="text-xs text-zinc-500">{item.pricing_model} · {item.estimated_weeks || 4} semanas</div>
+                <div className="text-xs text-zinc-500">{item.pricing_model} · {item.estimated_weeks || 4} weeks</div>
               </div>
               {isAdmin && (
                 <button
                   onClick={() => handleEditPricing(item)}
                   className="text-xs text-indigo-600 hover:text-indigo-700"
                 >
-                  Editar
+                  Edit
                 </button>
               )}
             </div>
@@ -268,13 +268,13 @@ export const ServiceManagement: React.FC = () => {
           <input
             value={pricingForm.name}
             onChange={(e) => setPricingForm(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Nombre del servicio"
+            placeholder="Service name"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <input
             value={pricingForm.description}
             onChange={(e) => setPricingForm(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Descripción corta"
+            placeholder="Short description"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <select
@@ -282,9 +282,9 @@ export const ServiceManagement: React.FC = () => {
             onChange={(e) => setPricingForm(prev => ({ ...prev, pricing_model: e.target.value }))}
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           >
-            <option value="fixed">Precio fijo</option>
-            <option value="hourly">Por hora</option>
-            <option value="service">Por servicio</option>
+            <option value="fixed">Fixed price</option>
+            <option value="hourly">Hourly</option>
+            <option value="service">Per service</option>
           </select>
           <div className="grid grid-cols-2 gap-2">
             <input
@@ -296,32 +296,32 @@ export const ServiceManagement: React.FC = () => {
             <input
               value={pricingForm.fixed_price}
               onChange={(e) => setPricingForm(prev => ({ ...prev, fixed_price: e.target.value }))}
-              placeholder="Precio fijo"
+              placeholder="Fixed price"
               className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
             />
           </div>
           <input
             value={pricingForm.estimated_weeks}
             onChange={(e) => setPricingForm(prev => ({ ...prev, estimated_weeks: e.target.value }))}
-            placeholder="Semanas estimadas"
+            placeholder="Estimated weeks"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <input
             value={pricingForm.complexity}
             onChange={(e) => setPricingForm(prev => ({ ...prev, complexity: e.target.value }))}
-            placeholder="Complejidad (standard, advanced)"
+            placeholder="Complexity (standard, advanced)"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <input
             value={pricingForm.tech_stack}
             onChange={(e) => setPricingForm(prev => ({ ...prev, tech_stack: e.target.value }))}
-            placeholder="Tech stack (coma separada)"
+            placeholder="Tech stack (comma separated)"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <input
             value={pricingForm.deliverables}
             onChange={(e) => setPricingForm(prev => ({ ...prev, deliverables: e.target.value }))}
-            placeholder="Deliverables (coma separada)"
+            placeholder="Deliverables (comma separated)"
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           />
           <div className="grid grid-cols-2 gap-2">
@@ -360,7 +360,7 @@ export const ServiceManagement: React.FC = () => {
               disabled={isSaving}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold"
             >
-              {isSaving ? 'Guardando...' : (editingId ? 'Actualizar' : 'Guardar')}
+              {isSaving ? 'Saving...' : (editingId ? 'Update' : 'Save')}
             </button>
           </div>
         )}

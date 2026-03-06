@@ -402,20 +402,20 @@ export const ProposalsPanel: React.FC = () => {
       <div className="xl:col-span-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Propuestas</h3>
-            <p className="text-xs text-zinc-500">Desde leads o clientes, con tracking de estado.</p>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Proposals</h3>
+            <p className="text-xs text-zinc-500">From leads or clients, with status tracking.</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
             className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide"
           >
-            Nueva
+            New
           </button>
         </div>
 
         {!currentTenant?.id && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            Tenant no está listo todavía. Si no cargan leads/clientes, cerrá sesión y volvé a entrar.
+            Tenant is not ready yet. If leads/clients are not loading, sign out and sign back in.
           </div>
         )}
 
@@ -430,13 +430,13 @@ export const ProposalsPanel: React.FC = () => {
             <input
               value={createTitle}
               onChange={(e) => setCreateTitle(e.target.value)}
-              placeholder="Título de la propuesta"
+              placeholder="Proposal title"
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             />
             <textarea
               value={createBrief}
               onChange={(e) => setCreateBrief(e.target.value)}
-              placeholder="Brief o contexto para la propuesta"
+              placeholder="Brief or context for the proposal"
               className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             />
             <div className="grid grid-cols-3 gap-2">
@@ -455,7 +455,7 @@ export const ProposalsPanel: React.FC = () => {
                 className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
               >
                 <option value="en">English</option>
-                <option value="es">Español</option>
+                <option value="es">Spanish</option>
               </select>
               <select
                 value={createComplexity}
@@ -472,7 +472,7 @@ export const ProposalsPanel: React.FC = () => {
               onChange={(e) => setCreateLeadId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             >
-              <option value="">Asignar a lead (opcional)</option>
+              <option value="">Assign to lead (optional)</option>
               {leads.map(lead => (
                 <option key={lead.id} value={lead.id}>{lead.name} · {lead.email}</option>
               ))}
@@ -482,14 +482,14 @@ export const ProposalsPanel: React.FC = () => {
               onChange={(e) => setCreateClientId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             >
-              <option value="">Asignar a cliente (opcional)</option>
+              <option value="">Assign to client (optional)</option>
               {clients.map(client => (
                 <option key={client.id} value={client.id}>{client.name} {client.company ? `· ${client.company}` : ''}</option>
               ))}
             </select>
             {leads.length === 0 && clients.length === 0 && (
               <div className="text-[11px] text-zinc-500">
-                No hay leads/clientes disponibles. Podés crear la propuesta igual y asignarla después.
+                No leads/clients available. You can still create the proposal and assign it later.
               </div>
             )}
             <div className="flex items-center gap-2">
@@ -498,13 +498,13 @@ export const ProposalsPanel: React.FC = () => {
                 disabled={isSaving}
                 className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold"
               >
-                Crear
+                Create
               </button>
               <button
                 onClick={() => setShowCreate(false)}
                 className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs"
               >
-                Cancelar
+                Cancel
               </button>
             </div>
           </div>
@@ -512,10 +512,10 @@ export const ProposalsPanel: React.FC = () => {
 
         <div className="space-y-2">
           {isLoading && (
-            <div className="text-xs text-zinc-500">Cargando propuestas...</div>
+            <div className="text-xs text-zinc-500">Loading proposals...</div>
           )}
           {!isLoading && proposals.length === 0 && (
-            <div className="text-xs text-zinc-500">No hay propuestas todavía.</div>
+            <div className="text-xs text-zinc-500">No proposals yet.</div>
           )}
           {proposals.map((proposal) => (
             <button
@@ -531,7 +531,7 @@ export const ProposalsPanel: React.FC = () => {
                 <div>
                   <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{proposal.title}</div>
                 <div className="text-[11px] text-zinc-500">
-                    {proposal.project_type || 'general'} · {proposal.client_id ? 'Cliente' : proposal.lead_id ? 'Lead' : 'Sin asignar'}
+                    {proposal.project_type || 'general'} · {proposal.client_id ? 'Client' : proposal.lead_id ? 'Lead' : 'Unassigned'}
                   </div>
                 </div>
                 <span className={statusBadge(proposal.status)}>{proposal.status}</span>
@@ -571,7 +571,7 @@ export const ProposalsPanel: React.FC = () => {
                   onChange={(e) => setSelectedServiceId(e.target.value)}
                   className="text-xs px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950"
                 >
-                  <option value="">Template de pricing</option>
+                  <option value="">Pricing template</option>
                   {services.map(service => (
                     <option key={service.id} value={service.id}>{service.name}</option>
                   ))}
@@ -580,20 +580,20 @@ export const ProposalsPanel: React.FC = () => {
                   onClick={handleGenerate}
                   className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold"
                 >
-                  Generar estructura
+                  Generate structure
                 </button>
                 <button
                   onClick={handleSend}
                   className="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-semibold"
                 >
-                  Enviar link
+                  Send link
                 </button>
               </div>
             </div>
 
             {publicUrl && selectedProposal.public_enabled && (
               <div className="flex items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3">
-                <div className="text-xs text-emerald-700 dark:text-emerald-200">Link público listo</div>
+                <div className="text-xs text-emerald-700 dark:text-emerald-200">Public link ready</div>
                 <a href={publicUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-emerald-700">
                   {publicUrl}
                 </a>
@@ -605,23 +605,23 @@ export const ProposalsPanel: React.FC = () => {
                 <textarea
                   value={selectedProposal.summary || ''}
                   onChange={(e) => handleUpdate({ summary: e.target.value })}
-                  placeholder="Resumen ejecutivo"
+                  placeholder="Executive summary"
                   className="w-full min-h-[90px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
                 />
                 <textarea
                   value={selectedProposal.brief_text || ''}
                   onChange={(e) => handleUpdate({ brief_text: e.target.value })}
-                  placeholder="Texto crudo o brief del cliente..."
+                  placeholder="Raw text or client brief..."
                   className="w-full min-h-[140px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
                 />
                 <textarea
                   value={selectedProposal.content || ''}
                   onChange={(e) => handleUpdate({ content: e.target.value })}
-                  placeholder="Escribe tu propuesta aquí..."
+                  placeholder="Write your proposal here..."
                   className="w-full min-h-[280px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
                 />
                 <div>
-                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Comentarios</h4>
+                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Comments</h4>
                   <div className="space-y-2 mt-2">
                     {comments.map((c) => (
                       <div key={c.id} className={`text-xs p-3 rounded-lg ${c.is_client ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}>
@@ -633,21 +633,21 @@ export const ProposalsPanel: React.FC = () => {
                     <input
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
-                      placeholder="Agregar comentario interno"
+                      placeholder="Add internal comment"
                       className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs"
                     />
                     <button
                       onClick={handleComment}
                       className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs"
                     >
-                      Enviar
+                      Send
                     </button>
                   </div>
                 </div>
               </div>
               <div className="space-y-4">
                 <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-                  <div className="text-xs text-zinc-500">Asignación</div>
+                  <div className="text-xs text-zinc-500">Assignment</div>
                   <select
                     value={selectedProposal.project_type || 'web'}
                     onChange={(e) => handleUpdate({ project_type: e.target.value })}
@@ -663,7 +663,7 @@ export const ProposalsPanel: React.FC = () => {
                     className="mt-2 w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs"
                   >
                     <option value="en">English</option>
-                    <option value="es">Español</option>
+                    <option value="es">Spanish</option>
                   </select>
                   <select
                     value={selectedProposal.complexity || 'standard'}
@@ -689,7 +689,7 @@ export const ProposalsPanel: React.FC = () => {
                     onChange={(e) => handleUpdate({ client_id: e.target.value || null })}
                     className="mt-2 w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs"
                   >
-                    <option value="">Cliente</option>
+                    <option value="">Client</option>
                     {clients.map(client => (
                       <option key={client.id} value={client.id}>{client.name}</option>
                     ))}
@@ -708,7 +708,7 @@ export const ProposalsPanel: React.FC = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-xs text-zinc-400">Genera un timeline desde un template.</div>
+                    <div className="text-xs text-zinc-400">Generate a timeline from a template.</div>
                   )}
                 </div>
                 <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
@@ -743,7 +743,7 @@ export const ProposalsPanel: React.FC = () => {
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-zinc-500 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-            Selecciona una propuesta para editarla
+            Select a proposal to edit
           </div>
         )}
       </div>

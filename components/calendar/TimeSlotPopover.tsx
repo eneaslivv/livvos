@@ -71,22 +71,22 @@ export const TimeSlotPopover: React.FC<TimeSlotPopoverProps> = ({
   const endHour = `${(hour + 1).toString().padStart(2, '0')}:00`;
 
   const scheduleOptions = [
-    { type: 'event' as const, label: 'Evento', icon: Icons.Calendar, color: 'text-blue-600 dark:text-blue-400' },
-    { type: 'task' as const, label: 'Tarea', icon: Icons.Check, color: 'text-zinc-700 dark:text-zinc-300' },
-    { type: 'block' as const, label: 'Bloque de trabajo', icon: Icons.Clock, color: 'text-purple-600 dark:text-purple-400' },
+    { type: 'event' as const, label: 'Event', icon: Icons.Calendar, color: 'text-blue-600 dark:text-blue-400' },
+    { type: 'task' as const, label: 'Task', icon: Icons.Check, color: 'text-zinc-700 dark:text-zinc-300' },
+    { type: 'block' as const, label: 'Work block', icon: Icons.Clock, color: 'text-purple-600 dark:text-purple-400' },
   ];
 
   const contentOptions = [
-    { type: 'content' as const, label: 'Nuevo Contenido', icon: Icons.Calendar, color: 'text-emerald-600 dark:text-emerald-400' },
+    { type: 'content' as const, label: 'New Content', icon: Icons.Calendar, color: 'text-emerald-600 dark:text-emerald-400' },
   ];
 
   const options = mode === 'content' ? contentOptions : scheduleOptions;
 
   // Format the date nicely
   const dateObj = new Date(date + 'T12:00:00');
-  const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' });
+  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
   const dayNum = dateObj.getDate();
-  const monthName = dateObj.toLocaleDateString('es-ES', { month: 'short' });
+  const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
 
   return createPortal(
     <div

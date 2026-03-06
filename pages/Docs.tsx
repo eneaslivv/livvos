@@ -65,7 +65,7 @@ export const Docs: React.FC = () => {
       setShowNewFolderInput(false);
     } catch (err: any) {
       console.error('Error creating folder:', err);
-      setFolderError(err?.message || 'Error desconocido al crear carpeta');
+      setFolderError(err?.message || 'Unknown error creating folder');
     } finally {
       setIsCreatingFolder(false);
     }
@@ -80,7 +80,7 @@ export const Docs: React.FC = () => {
       await uploadFile(file as any, currentLinkOptions);
     } catch (err: any) {
       console.error('Full upload error:', err);
-      alert(`Error al subir archivo: ${err.message || JSON.stringify(err)}`);
+      alert(`Error uploading file: ${err.message || JSON.stringify(err)}`);
     } finally {
       setIsUploading(false);
     }
@@ -103,10 +103,10 @@ export const Docs: React.FC = () => {
   };
 
   const tabs = [
-    { id: 'documents' as const, label: 'Documentos', icon: Icons.Folder },
-    { id: 'proposals' as const, label: 'Propuestas', icon: Icons.File },
+    { id: 'documents' as const, label: 'Documents', icon: Icons.Folder },
+    { id: 'proposals' as const, label: 'Proposals', icon: Icons.File },
     { id: 'blog' as const, label: 'Blog', icon: Icons.Docs },
-    { id: 'passwords' as const, label: 'Contraseñas', icon: Icons.Lock },
+    { id: 'passwords' as const, label: 'Passwords', icon: Icons.Lock },
   ];
 
   if (loading && !loadingTimedOut && !folders.length && !files.length && activeTab === 'documents') {
@@ -114,7 +114,7 @@ export const Docs: React.FC = () => {
       <div className="max-w-7xl mx-auto p-4 sm:p-6 flex justify-center items-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-900 dark:border-t-zinc-100 mx-auto mb-3"></div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando documentos...</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading documents...</p>
         </div>
       </div>
     );
@@ -126,14 +126,14 @@ export const Docs: React.FC = () => {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Documentos</h1>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Documents</h1>
             {activeTab === 'documents' && (
               <div className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
                 <button
                   onClick={() => setCurrentFolderId(null)}
                   className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium"
                 >
-                  Inicio
+                  Home
                 </button>
                 {breadcrumbs.map((folder) => (
                   <React.Fragment key={folder.id}>
@@ -158,12 +158,12 @@ export const Docs: React.FC = () => {
                 className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
               >
                 <Icons.Folder size={15} />
-                <span className="hidden sm:inline">Nueva Carpeta</span>
+                <span className="hidden sm:inline">New Folder</span>
               </button>
 
               <label className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
                 <Icons.Upload size={15} />
-                {isUploading ? 'Subiendo...' : 'Subir Archivo'}
+                {isUploading ? 'Uploading...' : 'Upload File'}
                 <input
                   type="file"
                   className="hidden"
@@ -197,7 +197,7 @@ export const Docs: React.FC = () => {
             <div className="flex items-center gap-3 flex-wrap">
               {/* Assign selector */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:inline">Asignar a</span>
+                <span className="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:inline">Assign to</span>
                 <select
                   value={linkType}
                   onChange={(e) => {
@@ -208,9 +208,9 @@ export const Docs: React.FC = () => {
                   }}
                   className="px-3 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10"
                 >
-                  <option value="none">Sin asignar</option>
-                  <option value="client">Cliente</option>
-                  <option value="project">Proyecto</option>
+                  <option value="none">Unassigned</option>
+                  <option value="client">Client</option>
+                  <option value="project">Project</option>
                 </select>
                 {linkType === 'client' && (
                   <select
@@ -218,7 +218,7 @@ export const Docs: React.FC = () => {
                     onChange={(e) => setSelectedClientId(e.target.value)}
                     className="px-3 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10"
                   >
-                    <option value="">Selecciona cliente</option>
+                    <option value="">Select client</option>
                     {clients.map((client) => (
                       <option key={client.id} value={client.id}>{client.name}</option>
                     ))}
@@ -230,7 +230,7 @@ export const Docs: React.FC = () => {
                     onChange={(e) => setSelectedProjectId(e.target.value)}
                     className="px-3 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10"
                   >
-                    <option value="">Selecciona proyecto</option>
+                    <option value="">Select project</option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>{project.title}</option>
                     ))}
@@ -273,7 +273,7 @@ export const Docs: React.FC = () => {
             </div>
             <input
               type="text"
-              placeholder="Nombre de la carpeta..."
+              placeholder="Folder name..."
               value={newFolderName}
               onChange={(e) => { setNewFolderName(e.target.value); setFolderError(null); }}
               className="flex-1 px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 placeholder:text-zinc-400"
@@ -286,14 +286,14 @@ export const Docs: React.FC = () => {
               disabled={isCreatingFolder}
               className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isCreatingFolder ? 'Creando...' : 'Crear'}
+              {isCreatingFolder ? 'Creating...' : 'Create'}
             </button>
             <button
               onClick={() => { setShowNewFolderInput(false); setNewFolderName(''); setFolderError(null); }}
               disabled={isCreatingFolder}
               className="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
             >
-              Cancelar
+              Cancel
             </button>
           </div>
           {folderError && (
@@ -317,9 +317,9 @@ export const Docs: React.FC = () => {
           <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-5">
             <Icons.Folder size={28} className="text-zinc-400 dark:text-zinc-500" />
           </div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">Carpeta vacía</h3>
+          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">Empty folder</h3>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            No hay archivos ni carpetas en esta ubicación. Sube un archivo o crea una carpeta para empezar.
+            No files or folders in this location. Upload a file or create a folder to get started.
           </p>
         </div>
       ) : (
@@ -344,7 +344,7 @@ export const Docs: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm('¿Eliminar carpeta?')) deleteFolder(folder.id);
+                      if (confirm('Delete folder?')) deleteFolder(folder.id);
                     }}
                     className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1"
                   >
@@ -352,7 +352,7 @@ export const Docs: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">Carpeta</p>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">Folder</p>
               </div>
             ) : (
               <div
@@ -364,11 +364,11 @@ export const Docs: React.FC = () => {
                   <Icons.Folder size={16} className="text-blue-500" />
                 </div>
                 <span className="flex-1 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</span>
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 mr-2">Carpeta</span>
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 mr-2">Folder</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm('¿Eliminar carpeta?')) deleteFolder(folder.id);
+                    if (confirm('Delete folder?')) deleteFolder(folder.id);
                   }}
                   className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1"
                 >
@@ -400,7 +400,7 @@ export const Docs: React.FC = () => {
                     </a>
                     <button
                       onClick={() => {
-                        if (confirm('¿Eliminar archivo?')) deleteFile(file.id, file.url);
+                        if (confirm('Delete file?')) deleteFile(file.id, file.url);
                       }}
                       className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 p-1"
                     >
@@ -434,7 +434,7 @@ export const Docs: React.FC = () => {
                   </a>
                   <button
                     onClick={() => {
-                      if (confirm('¿Eliminar archivo?')) deleteFile(file.id, file.url);
+                      if (confirm('Delete file?')) deleteFile(file.id, file.url);
                     }}
                     className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 p-1"
                   >
