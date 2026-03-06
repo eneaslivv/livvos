@@ -137,10 +137,14 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                             ? 'bg-emerald-50/60 dark:bg-emerald-900/10 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20'
                             : task.status === 'cancelled'
                             ? 'bg-red-50/40 dark:bg-red-900/10 hover:bg-red-50/60 dark:hover:bg-red-900/15 opacity-60'
-                            : task.status === 'in-progress'
-                            ? 'bg-indigo-50/60 dark:bg-indigo-900/10 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20'
-                            : 'bg-zinc-50 dark:bg-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-                        }`}
+                            : task.priority === 'urgent'
+                            ? 'bg-red-50/50 dark:bg-red-900/10 hover:bg-red-50/70 dark:hover:bg-red-900/15'
+                            : task.priority === 'high'
+                            ? 'bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-50/70 dark:hover:bg-amber-900/15'
+                            : task.priority === 'low'
+                            ? 'bg-emerald-50/40 dark:bg-emerald-900/10 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/15'
+                            : 'bg-blue-50/40 dark:bg-blue-900/10 hover:bg-blue-50/60 dark:hover:bg-blue-900/15'
+                        } ${task.status === 'in-progress' ? 'border-l-[3px] border-l-indigo-500' : ''}`}
                         onClick={() => onOpenTaskDetail(task)}
                       >
                         <input
