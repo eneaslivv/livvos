@@ -253,8 +253,12 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [loadCalendarData])
 
   const getMissingColumn = (message: string) => {
-    const match = message.match(/column\s+"([^"]+)"\s+does\s+not\s+exist/i)
-    return match?.[1] || null
+    // Match "column X does not exist" errors
+    const colMatch = message.match(/column\s+"([^"]+)"\s+does\s+not\s+exist/i)
+    if (colMatch?.[1]) return colMatch[1]
+    // Match "invalid input" errors for specific columns (e.g. empty string for TIMESTAMPTZ)
+    const valMatch = message.match(/invalid input.*for.*column\s+"([^"]+)"/i)
+    return valMatch?.[1] || null
   }
 
   // ─── EVENTS: optimistic create / update / delete ───
@@ -347,8 +351,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         client_id: taskData.client_id || null,
         assigned_to: taskData.assignee_id || null,
         owner_id: taskData.owner_id || null,
-        due_date: taskData.start_date,
-        start_date: taskData.start_date,
+        due_date: taskData.start_date || null,
+        start_date: taskData.start_date || null,
         start_time: taskData.start_time || null,
         duration: taskData.duration || null,
         ...(taskData.parent_task_id && { parent_task_id: taskData.parent_task_id }),
@@ -394,6 +398,12 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Sanitize FK fields: empty string → null for DB
     if ('project_id' in payload) payload.project_id = payload.project_id || null
     if ('client_id' in payload) payload.client_id = payload.client_id || null
+    // Sanitize timestamp/nullable fields: empty string → null (prevents DB parse errors)
+    if ('start_date' in payload) payload.start_date = payload.start_date || null
+    if ('end_date' in payload) payload.end_date = payload.end_date || null
+    if ('due_date' in payload) payload.due_date = payload.due_date || null
+    if ('start_time' in payload) payload.start_time = payload.start_time || null
+    if ('blocked_by' in payload) payload.blocked_by = payload.blocked_by || null
     if (payload.start_date) {
       payload.due_date = payload.start_date
     }

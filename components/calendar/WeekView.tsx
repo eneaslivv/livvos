@@ -139,7 +139,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                     draggable
                     onDragStart={(e) => onTaskDragStart(e, task.id)}
                     onDragEnd={() => setDraggingTaskId(null)}
-                    className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                    className={`text-[10px] px-2 py-1 rounded-full mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
                     title={`${task.title}${isTaskBlocked(task) ? ' \u26A0 BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
                     onClick={() => onOpenTaskDetail(task)}
                   >
@@ -213,7 +213,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                   {dayEvents.map((event) => (
                     <div
                       key={event.id}
-                      className="text-xs p-2 rounded mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity"
+                      className="text-xs px-3 py-1.5 rounded-full mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity"
                       style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
                       title={event.title}
                       onClick={(e) => e.stopPropagation()}
@@ -240,7 +240,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                         draggable
                         onDragStart={(e) => onTaskDragStart(e, task.id)}
                         onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
+                        className={`text-xs px-3 py-1.5 rounded-full mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
                           task.status === 'cancelled' ? 'opacity-50' : ''
                         } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
                         title={`${task.title}${task.assignee_id ? ` \u2014 ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` \u00B7 ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` \u26A0 BLOCKED \u2014 waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}

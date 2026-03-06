@@ -107,7 +107,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                 {dayEvents.slice(0, maxVisible).map((event) => (
                   <div
                     key={event.id}
-                    className="text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-0.5"
+                    className="text-[10px] px-2 py-0.5 rounded-full truncate flex items-center gap-0.5"
                     style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
                   >
                     {event.source === 'google' && <span className="opacity-75">G</span>}
@@ -123,7 +123,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                       draggable
                       onDragStart={(e) => onTaskDragStart(e, task.id)}
                       onDragEnd={() => setDraggingTaskId(null)}
-                      className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border}`}
+                      className={`text-[10px] px-2 py-0.5 rounded-full truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border}`}
                       onClick={(e) => { e.stopPropagation(); onOpenTaskDetail(task); }}
                     >
                       {task.completed ? (
