@@ -231,7 +231,7 @@ export const TenantSettings: React.FC = () => {
                 <div className="mt-6 p-4 rounded-lg" style={{
                     background: `linear-gradient(135deg, ${branding.gradientFrom}, ${branding.gradientTo})`
                 }}>
-                    <p className="text-white font-medium text-center">Preview del gradiente</p>
+                    <p className="text-white font-medium text-center">Gradient preview</p>
                 </div>
             </section>
 
@@ -239,7 +239,7 @@ export const TenantSettings: React.FC = () => {
             <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
                     <Icons.Sparkles size={20} />
-                    Funcionalidades
+                    Features
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -266,10 +266,10 @@ export const TenantSettings: React.FC = () => {
             <section className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800 p-6">
                 <h2 className="text-lg font-semibold text-indigo-900 dark:text-indigo-100 mb-2 flex items-center gap-2">
                     <Icons.Plus size={20} />
-                    Crear nuevo Tenant
+                    Create new Tenant
                 </h2>
                 <p className="text-indigo-700 dark:text-indigo-300 text-sm mb-4">
-                    Para crear un nuevo tenant, ejecuta la siguiente función en SQL:
+                    To create a new tenant, run the following SQL function:
                 </p>
                 <code className="block p-4 bg-zinc-900 text-green-400 rounded-lg text-sm font-mono overflow-x-auto">
                     SELECT create_tenant_with_config('Mi Empresa', 'mi-empresa-slug');
