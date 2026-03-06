@@ -32,13 +32,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           redirectTo: `${window.location.origin}${isClientPortal ? '/?portal=client' : ''}`,
         })
         if (error) throw error
-        setMessage({ text: 'Te enviamos un link para restablecer tu contraseña. Revisá tu email.', type: 'success' })
+        setMessage({ text: 'We sent you a password reset link. Check your email.', type: 'success' })
       } else if (mode === 'magic') {
         const { error } = await supabase.auth.signInWithOtp({ email })
         if (error) throw error
-        setMessage({ text: 'Te enviamos un magic link. Revisá tu email.', type: 'success' })
+        setMessage({ text: 'We sent you a magic link. Check your email.', type: 'success' })
       } else if (mode === 'signup') {
-        if (password.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres')
+        if (password.length < 6) throw new Error('Password must be at least 6 characters')
         const { data: signUpData, error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
         if (isClientPortal && signUpData?.user?.id) {
@@ -54,7 +54,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
             return
           }
         }
-        setMessage({ text: 'Cuenta creada exitosamente. Ya podés iniciar sesión.', type: 'success' })
+        setMessage({ text: 'Account created successfully. You can now sign in.', type: 'success' })
       } else {
         const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
@@ -96,19 +96,19 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           <div className="relative z-10 space-y-6">
             <div>
               <h1 className="text-4xl font-light leading-tight mb-4" style={{ fontFamily: 'serif' }}>
-                Tu <span className="text-[#e8b4b4]">proyecto</span>,<br />
-                en tiempo real
+                Your <span className="text-[#e8b4b4]">project</span>,<br />
+                in real time
               </h1>
               <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
-                Accedé al portal para ver el progreso, pagos, documentos y comunicarte directamente con el equipo.
+                Access the portal to track progress, payments, documents and communicate directly with the team.
               </p>
             </div>
 
             <div className="space-y-5 mt-8">
               {[
-                { icon: '◎', title: 'Seguimiento en vivo', desc: 'Milestones, timeline y progreso actualizado.' },
-                { icon: '◈', title: 'Estado financiero', desc: 'Pagos realizados, pendientes y próximo vencimiento.' },
-                { icon: '⌘', title: 'Comunicación directa', desc: 'Mensajes y actualizaciones del equipo.' },
+                { icon: '◎', title: 'Live Tracking', desc: 'Milestones, timeline and updated progress.' },
+                { icon: '◈', title: 'Financial Status', desc: 'Completed payments, pending and next due date.' },
+                { icon: '⌘', title: 'Direct Communication', desc: 'Messages and team updates.' },
               ].map((f, i) => (
                 <div key={i} className="flex items-start gap-4 group">
                   <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
@@ -124,9 +124,9 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           </div>
 
           <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-            <span className="text-[#e8b4b4]">PORTAL SEGURO</span>
+            <span className="text-[#e8b4b4]">SECURE PORTAL</span>
             <span className="text-zinc-700">&bull;</span>
-            <span>Datos encriptados</span>
+            <span>Encrypted data</span>
           </div>
         </div>
 
@@ -138,10 +138,10 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                 <Icons.Users size={22} className="text-[#2C0405]" />
               </div>
               <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
-                Portal del Cliente
+                Client Portal
               </h2>
               <p className="text-zinc-500 text-sm">
-                Ingresá con tus credenciales para acceder a tu proyecto.
+                Sign in with your credentials to access your project.
               </p>
             </div>
 
@@ -156,7 +156,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                     : 'text-zinc-400 border-transparent hover:text-zinc-600'
                   }`}
                 >
-                  {m === 'signin' ? 'Iniciar sesión' : m === 'signup' ? 'Crear cuenta' : 'Recuperar contraseña'}
+                  {m === 'signin' ? 'Sign In' : m === 'signup' ? 'Create Account' : 'Reset Password'}
                 </button>
               ))}
             </div>
@@ -180,7 +180,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
               {(mode === 'signin' || mode === 'signup') && (
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Contraseña</label>
+                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Password</label>
                   <div className="relative">
                     <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
                     <input
@@ -188,7 +188,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder={mode === 'signup' ? 'Mínimo 6 caracteres' : '••••••••••••'}
+                      placeholder={mode === 'signup' ? 'Minimum 6 characters' : '••••••••••••'}
                       className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#2C0405]/15 focus:border-[#2C0405] transition-all"
                     />
                   </div>
@@ -197,7 +197,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
               {mode === 'forgot' && (
                 <p className="text-sm text-zinc-500 text-center">
-                  Ingresá tu email y te enviaremos un link para restablecer tu contraseña.
+                  Enter your email and we'll send you a link to reset your password.
                 </p>
               )}
 
@@ -209,11 +209,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Procesando...
+                    Processing...
                   </>
                 ) : (
                   <>
-                    {mode === 'signin' ? 'Acceder al portal' : mode === 'signup' ? 'Crear cuenta' : 'Enviar link de recuperación'}
+                    {mode === 'signin' ? 'Access Portal' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
                     <Icons.ChevronRight size={16} />
                   </>
                 )}
@@ -237,13 +237,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
             <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
               <p className="text-zinc-400 text-xs">
                 {mode === 'signup'
-                  ? '¿Ya tenés cuenta? '
-                  : '¿No tenés cuenta? '}
+                  ? 'Already have an account? '
+                  : "Don't have an account? "}
                 <button
                   onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setMessage(null); }}
                   className="text-[#2C0405] hover:text-[#2C0405] font-medium"
                 >
-                  {mode === 'signup' ? 'Iniciá sesión' : 'Creá una cuenta'}
+                  {mode === 'signup' ? 'Sign in' : 'Create an account'}
                 </button>
               </p>
             </div>

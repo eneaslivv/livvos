@@ -21,13 +21,27 @@ export function useAuth() {
     }
 
     const restoreSession = async () => {
-      const { data, error } = await supabase.auth.getSession()
-      if (!isMounted) return
-      if (error) {
-        console.warn('[Auth] Failed to restore session:', error.message)
+      try {
+        const { data, error } = await supabase.auth.getSession()
+        if (!isMounted) return
+        if (error) {
+          console.warn('[Auth] Failed to restore session:', error.message)
+        }
+        updateUser(data.session?.user ?? null)
+      } catch (err) {
+        // getSession can throw if localStorage quota is exceeded
+        console.warn('[Auth] getSession threw, trying getUser fallback:', err)
+        if (!isMounted) return
+        try {
+          const { data } = await supabase.auth.getUser()
+          if (!isMounted) return
+          updateUser(data.user ?? null)
+        } catch {
+          if (!isMounted) return
+          updateUser(null)
+        }
       }
-      updateUser(data.session?.user ?? null)
-      setLoading(false)
+      if (isMounted) setLoading(false)
     }
 
     restoreSession()

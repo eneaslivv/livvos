@@ -31,28 +31,28 @@ const INITIAL_DATA: DashboardData = {
   budget: {
     total: 245000,
     paid: 180000,
-    nextPayment: { amount: 32500, dueDate: '2026-03-01', concept: 'Entrega Fase 3' },
+    nextPayment: { amount: 32500, dueDate: '2026-03-01', concept: 'Phase 3 Delivery' },
     payments: [
-      { id: 'p1', concept: 'Anticipo inicial', amount: 73500, dueDate: '2026-02-01', paidDate: '2026-02-01', status: 'paid', number: 1 },
-      { id: 'p2', concept: 'Entrega Fase 1 — Backend', amount: 48750, dueDate: '2026-02-10', paidDate: '2026-02-10', status: 'paid', number: 2 },
-      { id: 'p3', concept: 'Entrega Fase 2 — Integraciones', amount: 57750, dueDate: '2026-02-20', paidDate: '2026-02-22', status: 'paid', number: 3 },
-      { id: 'p4', concept: 'Entrega Fase 3 — Frontend', amount: 32500, dueDate: '2026-03-01', status: 'pending', number: 4 },
-      { id: 'p5', concept: 'Entrega Final + QA', amount: 32500, dueDate: '2026-03-15', status: 'pending', number: 5 },
+      { id: 'p1', concept: 'Initial Deposit', amount: 73500, dueDate: '2026-02-01', paidDate: '2026-02-01', status: 'paid', number: 1 },
+      { id: 'p2', concept: 'Phase 1 Delivery — Backend', amount: 48750, dueDate: '2026-02-10', paidDate: '2026-02-10', status: 'paid', number: 2 },
+      { id: 'p3', concept: 'Phase 2 Delivery — Integrations', amount: 57750, dueDate: '2026-02-20', paidDate: '2026-02-22', status: 'paid', number: 3 },
+      { id: 'p4', concept: 'Phase 3 Delivery — Frontend', amount: 32500, dueDate: '2026-03-01', status: 'pending', number: 4 },
+      { id: 'p5', concept: 'Final Delivery + QA', amount: 32500, dueDate: '2026-03-15', status: 'pending', number: 5 },
     ],
   },
   milestones: [
-    { id: '1', title: 'Arquitectura', description: 'Diseño del sistema y configuración de infraestructura.', status: 'completed', owner: 'team' },
-    { id: '2', title: 'Desarrollo Backend', description: 'APIs, base de datos y lógica de negocio.', status: 'completed', owner: 'team' },
-    { id: '3', title: 'Diseño & Frontend', description: 'Interfaz de usuario, diseño visual y experiencia.', status: 'current', owner: 'team', eta: 'Mar 5' },
-    { id: '4', title: 'Revisión del Cliente', description: 'Aprobación de diseño y funcionalidad antes de QA.', status: 'future', owner: 'client', clientAction: 'Revisar y aprobar los entregables' },
-    { id: '5', title: 'Testing & Lanzamiento', description: 'Pruebas finales y despliegue a producción.', status: 'future', owner: 'team', eta: 'Mar 15' },
+    { id: '1', title: 'Architecture', description: 'System design and infrastructure setup.', status: 'completed', owner: 'team' },
+    { id: '2', title: 'Backend Development', description: 'APIs, database and business logic.', status: 'completed', owner: 'team' },
+    { id: '3', title: 'Design & Frontend', description: 'User interface, visual design and experience.', status: 'current', owner: 'team', eta: 'Mar 5' },
+    { id: '4', title: 'Client Review', description: 'Design and functionality approval before QA.', status: 'future', owner: 'client', clientAction: 'Review and approve deliverables' },
+    { id: '5', title: 'Testing & Launch', description: 'Final testing and deployment to production.', status: 'future', owner: 'team', eta: 'Mar 15' },
   ],
   logs: [
-    { id: '1', timestamp: 'Hoy', message: 'Se completó el módulo de autenticación y roles de usuario', type: 'milestone' },
-    { id: '2', timestamp: 'Ayer', message: 'Nuevo diseño del dashboard aprobado por el equipo', type: 'update' },
-    { id: '3', timestamp: 'Feb 22', message: 'Pago de $32,500 recibido — Fase 2', type: 'payment' },
-    { id: '4', timestamp: 'Feb 20', message: 'Integración con pasarela de pagos finalizada', type: 'delivery' },
-    { id: '5', timestamp: 'Feb 18', message: 'Esperando aprobación del logo final por parte del cliente', type: 'review' },
+    { id: '1', timestamp: 'Today', message: 'Authentication module and user roles completed', type: 'milestone' },
+    { id: '2', timestamp: 'Yesterday', message: 'New dashboard design approved by the team', type: 'update' },
+    { id: '3', timestamp: 'Feb 22', message: 'Payment of $32,500 received — Phase 2', type: 'payment' },
+    { id: '4', timestamp: 'Feb 20', message: 'Payment gateway integration completed', type: 'delivery' },
+    { id: '5', timestamp: 'Feb 18', message: 'Awaiting final logo approval from the client', type: 'review' },
   ]
 };
 
@@ -84,7 +84,7 @@ const App: React.FC<ClientPortalAppProps> = ({
   onLogout
 }) => {
   const [data, setData] = useState<DashboardData>(initialData || INITIAL_DATA);
-  const [projectTitle, setProjectTitle] = useState(projectTitleProp || "Mi Proyecto");
+  const [projectTitle, setProjectTitle] = useState(projectTitleProp || "My Project");
   const [projectSubtitle, setProjectSubtitle] = useState(projectSubtitleProp || "");
   const [isOnboarded, setIsOnboarded] = useState(forceOnboarded);
   const [loading, setLoading] = useState(!disableLoading);
@@ -110,7 +110,7 @@ const App: React.FC<ClientPortalAppProps> = ({
       <div className="h-screen w-screen bg-zinc-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-brand-accent/20 border-t-brand-accent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-xs text-zinc-400 font-medium">Cargando portal...</p>
+          <p className="text-xs text-zinc-400 font-medium">Loading portal...</p>
         </div>
       </div>
     );
@@ -127,7 +127,7 @@ const App: React.FC<ClientPortalAppProps> = ({
             style={{ backgroundColor: '#2C0405' }}
           >
             {mode === 'client' ? <UserCog size={14} /> : <Eye size={14} />}
-            {mode === 'client' ? 'Modo Editor' : 'Vista Cliente'}
+            {mode === 'client' ? 'Editor Mode' : 'Client View'}
           </button>
         </div>
       )}
@@ -167,7 +167,7 @@ const App: React.FC<ClientPortalAppProps> = ({
                 style={{ backgroundColor: '#2C0405' }}
               >
                 <Settings size={13} />
-                Configurar
+                Configure
               </button>
             )}
             <button
@@ -176,13 +176,13 @@ const App: React.FC<ClientPortalAppProps> = ({
               style={{ backgroundColor: '#2C0405' }}
             >
               <MessageSquare size={14} />
-              <span className="hidden sm:inline">Soporte</span>
+              <span className="hidden sm:inline">Support</span>
             </button>
             {onLogout && (
               <button
                 onClick={onLogout}
                 className="p-2 bg-white border border-zinc-200/80 rounded-full hover:bg-red-50 hover:border-red-200 transition-all text-zinc-400 hover:text-red-500"
-                title="Salir"
+                title="Sign Out"
               >
                 <LogOut size={16} />
               </button>

@@ -110,8 +110,8 @@ export const Calendar: React.FC = () => {
 
   const getMemberName = (id?: string) => {
     if (!id) return null;
-    if (id === user?.id) return 'Yo';
-    return memberMap[id]?.name || 'Miembro';
+    if (id === user?.id) return 'Me';
+    return memberMap[id]?.name || 'Member';
   };
 
   const getMemberAvatar = (id?: string) => {
@@ -372,7 +372,7 @@ export const Calendar: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('¿Eliminar esta tarea?')) return;
+    if (!confirm('Delete this task?')) return;
     try {
       await deleteTask(taskId);
       setSelectedTask(null);
@@ -458,11 +458,11 @@ export const Calendar: React.FC = () => {
       const sameMonth = first.getMonth() === last.getMonth();
       const opts: Intl.DateTimeFormatOptions = { month: 'short' };
       if (sameMonth) {
-        return `${first.getDate()} - ${last.getDate()} ${first.toLocaleDateString('es-ES', opts)} ${first.getFullYear()}`;
+        return `${first.getDate()} - ${last.getDate()} ${first.toLocaleDateString('en-US', opts)} ${first.getFullYear()}`;
       }
-      return `${first.getDate()} ${first.toLocaleDateString('es-ES', opts)} - ${last.getDate()} ${last.toLocaleDateString('es-ES', opts)} ${last.getFullYear()}`;
+      return `${first.getDate()} ${first.toLocaleDateString('en-US', opts)} - ${last.getDate()} ${last.toLocaleDateString('en-US', opts)} ${last.getFullYear()}`;
     }
-    const label = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const label = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     return label.charAt(0).toUpperCase() + label.slice(1);
   };
 
@@ -483,10 +483,10 @@ export const Calendar: React.FC = () => {
 
   // Formatear fecha para mostrar
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('es-ES', { 
-      weekday: 'short', 
-      day: 'numeric', 
-      month: 'short' 
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
     });
   };
 
@@ -525,7 +525,7 @@ export const Calendar: React.FC = () => {
     } catch (err) {
       errorLogger.error('Error creando evento', err);
       // Mostrar mensaje de error al usuario
-      alert('Error al crear evento: ' + (err as Error).message);
+      alert('Error creating event: ' + (err as Error).message);
     }
   };
 
@@ -563,7 +563,7 @@ export const Calendar: React.FC = () => {
       setShowNewEventForm(false);
     } catch (err) {
       errorLogger.error('Error creando contenido', err);
-      alert('Error al crear contenido: ' + (err as Error).message);
+      alert('Error creating content: ' + (err as Error).message);
     }
   };
 
@@ -616,7 +616,7 @@ export const Calendar: React.FC = () => {
       }
     } catch (err: any) {
       errorLogger.error('Error actualizando tarea', err);
-      alert('Error actualizando tarea: ' + (err?.message || 'Error desconocido'));
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -681,17 +681,17 @@ export const Calendar: React.FC = () => {
         const dayEvents = events.filter(e => e.start_date?.slice(0, 10) === day.dateStr);
         const dayTasks = getTasksByDate(day.dateStr);
         dayEvents.forEach(e => weekEvents.push(`${day.dateStr}: ${e.title} (${e.type})`));
-        dayTasks.forEach(t => weekTasks.push(`${day.dateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completada)' : '(pendiente)'}`));
+        dayTasks.forEach(t => weekTasks.push(`${day.dateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completed)' : '(pending)'}`));
       });
 
       const contextParts = [
-        `Semana del ${weekDaysList[0]?.dateStr || ''} al ${weekDaysList[6]?.dateStr || ''}`,
-        weekEvents.length > 0 ? `Eventos de la semana:\n${weekEvents.join('\n')}` : 'No hay eventos programados esta semana.',
-        weekTasks.length > 0 ? `Tareas de la semana:\n${weekTasks.join('\n')}` : 'No hay tareas asignadas esta semana.',
+        `Week from ${weekDaysList[0]?.dateStr || ''} to ${weekDaysList[6]?.dateStr || ''}`,
+        weekEvents.length > 0 ? `Events of the week:\n${weekEvents.join('\n')}` : 'No events scheduled this week.',
+        weekTasks.length > 0 ? `Tasks of the week:\n${weekTasks.join('\n')}` : 'No tasks assigned this week.',
       ];
 
       if (customExtra?.trim()) {
-        contextParts.push(`Instrucciones adicionales del usuario: ${customExtra.trim()}`);
+        contextParts.push(`Additional user instructions: ${customExtra.trim()}`);
       }
 
       const result = await generateWeeklySummaryFromAI(contextParts.join('\n\n'));
@@ -701,7 +701,7 @@ export const Calendar: React.FC = () => {
       setAiCustomPrompt('');
     } catch (err: any) {
       errorLogger.error('Error generating AI summary', err);
-      setAiSummaryError(err.message || 'Error al generar resumen');
+      setAiSummaryError(err.message || 'Error generating summary');
     } finally {
       setAiSummaryLoading(false);
     }
@@ -771,7 +771,7 @@ export const Calendar: React.FC = () => {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-10 w-10 border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-900 dark:border-t-zinc-100 mx-auto mb-4" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando calendario...</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading calendar...</p>
           </div>
         </div>
       </div>
@@ -788,19 +788,19 @@ export const Calendar: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendario</h1>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendar</h1>
           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
             {calendarMode === 'content'
-              ? `${filteredEvents.length} contenidos programados`
-              : `${stats.totalEvents} eventos · ${stats.totalTasks} tareas · ${stats.completedTasks} completadas`}
+              ? `${filteredEvents.length} scheduled contents`
+              : `${stats.totalEvents} events · ${stats.totalTasks} tasks · ${stats.completedTasks} completed`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {/* Mode toggle: Agenda / Contenido */}
           <ToggleGroup
             options={[
-              { id: 'schedule' as const, label: 'Agenda', icon: Icons.Calendar },
-              { id: 'content' as const, label: 'Contenido', icon: Icons.Layers },
+              { id: 'schedule' as const, label: 'Schedule', icon: Icons.Calendar },
+              { id: 'content' as const, label: 'Content', icon: Icons.Layers },
             ]}
             value={calendarMode}
             onChange={setCalendarMode}
@@ -814,7 +814,7 @@ export const Calendar: React.FC = () => {
                 className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
               >
                 <Icons.Filter size={13} />
-                Redes
+                Networks
                 {selectedPlatforms.length < Object.keys(CONTENT_PLATFORMS).length && (
                   <span className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[9px] font-bold">
                     {selectedPlatforms.length}
@@ -825,14 +825,14 @@ export const Calendar: React.FC = () => {
                 <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
                   {/* Select all / none */}
                   <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Plataformas</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Platforms</span>
                     <button
                       onClick={() => setSelectedPlatforms(prev =>
                         prev.length === Object.keys(CONTENT_PLATFORMS).length ? [] : Object.keys(CONTENT_PLATFORMS)
                       )}
                       className="text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
                     >
-                      {selectedPlatforms.length === Object.keys(CONTENT_PLATFORMS).length ? 'Ninguna' : 'Todas'}
+                      {selectedPlatforms.length === Object.keys(CONTENT_PLATFORMS).length ? 'None' : 'All'}
                     </button>
                   </div>
                   {Object.entries(CONTENT_PLATFORMS).map(([key, plat]) => {
@@ -872,8 +872,8 @@ export const Calendar: React.FC = () => {
           {/* View toggle: Semana / Mes */}
           <ToggleGroup
             options={[
-              { id: 'week' as const, label: 'Semana' },
-              { id: 'month' as const, label: 'Mes' },
+              { id: 'week' as const, label: 'Week' },
+              { id: 'month' as const, label: 'Month' },
             ]}
             value={view}
             onChange={setView}
@@ -885,7 +885,7 @@ export const Calendar: React.FC = () => {
               <Icons.ChevronLeft size={16} />
             </button>
             <button onClick={goToToday} className="px-2.5 py-1 text-[11px] font-medium rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors">
-              Hoy
+              Today
             </button>
             <button onClick={() => navigateCalendar(1)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
               <Icons.ChevronRight size={16} />
@@ -902,7 +902,7 @@ export const Calendar: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors active:scale-[0.97]"
           >
             <Icons.Plus size={14} />
-            {calendarMode === 'content' ? 'Contenido' : 'Evento'}
+            {calendarMode === 'content' ? 'Content' : 'Event'}
           </button>
           {calendarMode === 'schedule' && (
             <button
@@ -910,7 +910,7 @@ export const Calendar: React.FC = () => {
               className="flex items-center gap-1.5 px-4 py-2 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-[0.97]"
             >
               <Icons.Check size={14} />
-              Tarea
+              Task
             </button>
           )}
 
@@ -920,7 +920,7 @@ export const Calendar: React.FC = () => {
               onClick={() => syncGoogle().catch(() => {})}
               disabled={googleSyncing}
               className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
-              title="Sincronizar Google Calendar"
+              title="Sync Google Calendar"
             >
               <Icons.RefreshCw size={14} className={googleSyncing ? 'animate-spin' : ''} />
             </button>
@@ -928,7 +928,7 @@ export const Calendar: React.FC = () => {
           <button
             onClick={() => setShowGoogleSettings(prev => !prev)}
             className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
-            title="Integraciones de calendario"
+            title="Calendar integrations"
           >
             <Icons.Settings size={14} />
           </button>
@@ -946,7 +946,7 @@ export const Calendar: React.FC = () => {
               <Icons.Sparkles size={12} className="text-white" />
             </div>
             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-              Generar resumen semanal con IA
+              Generate weekly summary with AI
             </span>
           </button>
         )}
@@ -961,7 +961,7 @@ export const Calendar: React.FC = () => {
                 <div className="h-1.5 w-24 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
                   <div className="h-full w-1/2 bg-indigo-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
                 </div>
-                <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400">Analizando tu semana...</span>
+                <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400">Analyzing your week...</span>
               </div>
             </div>
           </div>
@@ -972,7 +972,7 @@ export const Calendar: React.FC = () => {
             <Icons.AlertCircle size={14} className="text-red-500 shrink-0" />
             <span className="text-xs text-red-600 dark:text-red-400">{aiSummaryError}</span>
             <button onClick={() => { setAiSummaryError(null); handleGenerateAiSummary(); }} className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors">
-              Reintentar
+              Retry
             </button>
           </div>
         )}
@@ -988,23 +988,23 @@ export const Calendar: React.FC = () => {
                 <Icons.Sparkles size={12} className="text-white" />
               </div>
               <div className="flex-1 text-left min-w-0">
-                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Resumen semanal IA</span>
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">AI Weekly Summary</span>
                 <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">
-                  {aiSummary.objectives.length} objetivos · {aiSummary.focus_tasks.length} tareas clave · {aiSummary.recommendations.length} recomendaciones
+                  {aiSummary.objectives.length} objectives · {aiSummary.focus_tasks.length} key tasks · {aiSummary.recommendations.length} recommendations
                 </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowAiPromptInput(!showAiPromptInput); }}
                   className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-                  title="Agregar contexto personalizado"
+                  title="Add custom context"
                 >
                   <Icons.Message size={13} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleGenerateAiSummary(); }}
                   className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-                  title="Regenerar resumen"
+                  title="Regenerate summary"
                 >
                   <Icons.RefreshCw size={13} />
                 </button>
@@ -1021,7 +1021,7 @@ export const Calendar: React.FC = () => {
                     value={aiCustomPrompt}
                     onChange={(e) => setAiCustomPrompt(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && aiCustomPrompt.trim()) handleGenerateAiSummary(aiCustomPrompt); }}
-                    placeholder="Ej: Enfocarse en entregas del cliente X, priorizar diseño..."
+                    placeholder="E.g.: Focus on client X deliverables, prioritize design..."
                     className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 dark:focus:border-indigo-600 placeholder-zinc-400"
                   />
                   <button
@@ -1029,10 +1029,10 @@ export const Calendar: React.FC = () => {
                     disabled={!aiCustomPrompt.trim()}
                     className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Generar
+                    Generate
                   </button>
                 </div>
-                <p className="text-[10px] text-zinc-400 mt-1.5">Agrega contexto extra para personalizar el resumen</p>
+                <p className="text-[10px] text-zinc-400 mt-1.5">Add extra context to customize the summary</p>
               </div>
             )}
 
@@ -1046,7 +1046,7 @@ export const Calendar: React.FC = () => {
                       <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
                         <Icons.Target size={10} className="text-blue-600 dark:text-blue-400" />
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Objetivos</span>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Objectives</span>
                     </div>
                     <ul className="space-y-1.5">
                       {aiSummary.objectives.map((obj, i) => (
@@ -1064,7 +1064,7 @@ export const Calendar: React.FC = () => {
                       <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
                         <Icons.Zap size={10} className="text-amber-600 dark:text-amber-400" />
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Tareas Clave</span>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Key Tasks</span>
                     </div>
                     <ul className="space-y-1.5">
                       {aiSummary.focus_tasks.map((task, i) => (
@@ -1082,7 +1082,7 @@ export const Calendar: React.FC = () => {
                       <div className="w-4 h-4 rounded bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
                         <Icons.Lightbulb size={10} className="text-emerald-600 dark:text-emerald-400" />
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Recomendaciones</span>
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Recommendations</span>
                     </div>
                     <ul className="space-y-1.5">
                       {aiSummary.recommendations.map((rec, i) => (
@@ -1103,13 +1103,13 @@ export const Calendar: React.FC = () => {
       {/* Filtro por miembro del equipo */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filtrar:</span>
+          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filter:</span>
           {[
-            { id: 'all', label: 'Todos' },
-            { id: 'me', label: 'Mis tareas' },
+            { id: 'all', label: 'All' },
+            { id: 'me', label: 'My tasks' },
             ...teamMembers
               .filter(m => m.status === 'active' && m.id !== user?.id)
-              .map(m => ({ id: m.id, label: m.name || m.email?.split('@')[0] || 'Miembro', avatar: m.avatar_url })),
+              .map(m => ({ id: m.id, label: m.name || m.email?.split('@')[0] || 'Member', avatar: m.avatar_url })),
           ].map((item: any) => (
             <button
               key={item.id}
@@ -1138,7 +1138,7 @@ export const Calendar: React.FC = () => {
       <SlidePanel
         isOpen={showNewEventForm || showNewTaskForm}
         onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
-        title={showNewEventForm ? (calendarMode === 'content' ? 'Nuevo Contenido' : 'Nuevo Evento') : 'Nueva Tarea'}
+        title={showNewEventForm ? (calendarMode === 'content' ? 'New Content' : 'New Event') : 'New Task'}
         width="sm"
       >
         <div className="p-5">
@@ -1147,7 +1147,7 @@ export const Calendar: React.FC = () => {
               {/* Title */}
               <input
                 type="text"
-                placeholder={calendarMode === 'content' ? 'Nombre del contenido...' : 'Nombre del evento...'}
+                placeholder={calendarMode === 'content' ? 'Content name...' : 'Event name...'}
                 value={calendarMode === 'content' ? newContentData.title : newEventData.title}
                 onChange={(e) => calendarMode === 'content'
                   ? setNewContentData({ ...newContentData, title: e.target.value })
@@ -1160,7 +1160,7 @@ export const Calendar: React.FC = () => {
               {calendarMode === 'content' ? (
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Plataforma</label>
+                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Platform</label>
                     <select
                       value={newContentData.platform}
                       onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
@@ -1172,7 +1172,7 @@ export const Calendar: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Canal</label>
+                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Channel</label>
                     <select
                       value={newContentData.channel}
                       onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
@@ -1186,7 +1186,7 @@ export const Calendar: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Estado</label>
+                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Status</label>
                     <select
                       value={newContentData.status}
                       onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
@@ -1200,14 +1200,14 @@ export const Calendar: React.FC = () => {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Tipo</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Type</label>
                   <div className="flex gap-1.5 flex-wrap">
                     {([
-                      { value: 'meeting', label: 'Reunión', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                      { value: 'call', label: 'Llamada', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
+                      { value: 'meeting', label: 'Meeting', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
+                      { value: 'call', label: 'Call', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
                       { value: 'deadline', label: 'Deadline', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
-                      { value: 'work-block', label: 'Bloque', color: 'bg-purple-500', activeBg: 'bg-purple-50 dark:bg-purple-500/15 border-purple-300 dark:border-purple-500/40 text-purple-700 dark:text-purple-400' },
-                      { value: 'note', label: 'Nota', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
+                      { value: 'work-block', label: 'Block', color: 'bg-purple-500', activeBg: 'bg-purple-50 dark:bg-purple-500/15 border-purple-300 dark:border-purple-500/40 text-purple-700 dark:text-purple-400' },
+                      { value: 'note', label: 'Note', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
                     ] as const).map(t => (
                       <button
                         key={t.value}
@@ -1229,10 +1229,10 @@ export const Calendar: React.FC = () => {
 
               {calendarMode !== 'content' && (
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Ubicación</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Location</label>
                   <input
                     type="text"
-                    placeholder="Zoom / Oficina / Link"
+                    placeholder="Zoom / Office / Link"
                     value={newEventData.location}
                     onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
                     className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
@@ -1255,7 +1255,7 @@ export const Calendar: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Fecha</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
                   <input
                     type="date"
                     value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
@@ -1267,7 +1267,7 @@ export const Calendar: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Hora</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
                   <input
                     type="time"
                     value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
@@ -1279,7 +1279,7 @@ export const Calendar: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duración</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
                   <input
                     type="number"
                     value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
@@ -1296,7 +1296,7 @@ export const Calendar: React.FC = () => {
 
               <input
                 type="text"
-                placeholder="Notas opcionales..."
+                placeholder="Optional notes..."
                 value={calendarMode === 'content' ? newContentData.description : newEventData.description}
                 onChange={(e) => calendarMode === 'content'
                   ? setNewContentData({ ...newContentData, description: e.target.value })
@@ -1307,14 +1307,14 @@ export const Calendar: React.FC = () => {
 
               {/* Actions */}
               <div className="flex items-center justify-between pt-0.5">
-                <p className="text-[10px] text-zinc-400">Enter para crear</p>
+                <p className="text-[10px] text-zinc-400">Enter to create</p>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => { setShowNewEventForm(false); }}
                     className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
-                    Cancelar
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -1323,7 +1323,7 @@ export const Calendar: React.FC = () => {
                     className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
                   >
                     <Icons.Calendar size={12} />
-                    {calendarMode === 'content' ? 'Crear' : 'Crear Evento'}
+                    {calendarMode === 'content' ? 'Create' : 'Create Event'}
                   </button>
                 </div>
               </div>
@@ -1333,7 +1333,7 @@ export const Calendar: React.FC = () => {
               {/* Title */}
               <input
                 type="text"
-                placeholder="¿Qué hay que hacer?"
+                placeholder="What needs to be done?"
                 value={newTaskData.title}
                 onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
@@ -1342,13 +1342,13 @@ export const Calendar: React.FC = () => {
 
               {/* Priority pills */}
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Prioridad</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Priority</label>
                 <div className="flex gap-1.5">
                   {([
-                    { value: 'low', label: 'Baja', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                    { value: 'medium', label: 'Media', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                    { value: 'high', label: 'Alta', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
-                    { value: 'urgent', label: 'Urgente', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
+                    { value: 'low', label: 'Low', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
+                    { value: 'medium', label: 'Medium', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
+                    { value: 'high', label: 'High', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
+                    { value: 'urgent', label: 'Urgent', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
                   ] as const).map(p => (
                     <button
                       key={p.value}
@@ -1370,7 +1370,7 @@ export const Calendar: React.FC = () => {
               {/* Date + Time + Duration row */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Fecha</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
                   <input
                     type="date"
                     value={newTaskData.start_date}
@@ -1379,7 +1379,7 @@ export const Calendar: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Hora</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
                   <input
                     type="time"
                     value={newTaskData.start_time}
@@ -1388,7 +1388,7 @@ export const Calendar: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duración</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
                   <select
                     value={newTaskData.duration}
                     onChange={(e) => setNewTaskData({ ...newTaskData, duration: parseInt(e.target.value) })}
@@ -1408,12 +1408,12 @@ export const Calendar: React.FC = () => {
 
               {/* Estado pills */}
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Estado</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Status</label>
                 <div className="flex gap-1.5">
                   {([
-                    { value: 'todo', label: 'Por hacer', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
-                    { value: 'in-progress', label: 'En progreso', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                    { value: 'done', label: 'Hecho', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
+                    { value: 'todo', label: 'To do', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
+                    { value: 'in-progress', label: 'In progress', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
+                    { value: 'done', label: 'Done', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
                   ] as const).map(s => (
                     <button
                       key={s.value}
@@ -1435,7 +1435,7 @@ export const Calendar: React.FC = () => {
               {/* Project + Assignee */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Proyecto</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Project</label>
                   <select
                     value={newTaskData.project_id}
                     onChange={(e) => {
@@ -1453,14 +1453,14 @@ export const Calendar: React.FC = () => {
                         : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                     }`}
                   >
-                    <option value="">Sin proyecto</option>
+                    <option value="">No project</option>
                     {projectOptions.map((project) => (
                       <option key={project.id} value={project.id}>{project.title}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Cliente</label>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Client</label>
                   <select
                     value={newTaskData.client_id}
                     onChange={(e) => setNewTaskData({ ...newTaskData, client_id: e.target.value })}
@@ -1470,7 +1470,7 @@ export const Calendar: React.FC = () => {
                         : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                     }`}
                   >
-                    <option value="">Sin cliente</option>
+                    <option value="">No client</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
@@ -1480,7 +1480,7 @@ export const Calendar: React.FC = () => {
 
               {/* Assignee */}
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Asignar a</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Assign to</label>
                 <select
                   value={newTaskData.assignee_id}
                   onChange={(e) => setNewTaskData({ ...newTaskData, assignee_id: e.target.value })}
@@ -1490,10 +1490,10 @@ export const Calendar: React.FC = () => {
                       : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
-                  <option value="">Sin asignar</option>
+                  <option value="">Unassigned</option>
                   {teamMembers.filter(m => m.status === 'active').map((member) => (
                     <option key={member.id} value={member.id}>
-                      {member.id === user?.id ? `${member.name || member.email} (Yo)` : (member.name || member.email)}
+                      {member.id === user?.id ? `${member.name || member.email} (Me)` : (member.name || member.email)}
                     </option>
                   ))}
                 </select>
@@ -1502,7 +1502,7 @@ export const Calendar: React.FC = () => {
               {/* Description */}
               <input
                 type="text"
-                placeholder="Notas opcionales..."
+                placeholder="Optional notes..."
                 value={newTaskData.description}
                 onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
                 className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-500 dark:text-zinc-400 placeholder:text-zinc-400 transition-all"
@@ -1510,14 +1510,14 @@ export const Calendar: React.FC = () => {
 
               {/* Actions */}
               <div className="flex items-center justify-between pt-0.5">
-                <p className="text-[10px] text-zinc-400">Enter para crear</p>
+                <p className="text-[10px] text-zinc-400">Enter to create</p>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => { setShowNewTaskForm(false); }}
                     className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
-                    Cancelar
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -1526,7 +1526,7 @@ export const Calendar: React.FC = () => {
                     className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
                   >
                     <Icons.Check size={12} />
-                    Crear Tarea
+                    Create Task
                   </button>
                 </div>
               </div>
@@ -1539,7 +1539,7 @@ export const Calendar: React.FC = () => {
       <SlidePanel
         isOpen={!!selectedTask}
         onClose={() => setSelectedTask(null)}
-        title="Detalle de Tarea"
+        title="Task Details"
         width="sm"
         footer={
           <div className="flex items-center justify-between">
@@ -1548,14 +1548,14 @@ export const Calendar: React.FC = () => {
               className="px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-1.5"
             >
               <Icons.Trash size={12} />
-              Eliminar
+              Delete
             </button>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSelectedTask(null)}
                 className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 onClick={handleSaveTaskEdit}
@@ -1563,7 +1563,7 @@ export const Calendar: React.FC = () => {
                 className="px-4 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 transition-all flex items-center gap-1.5"
               >
                 {savingTask ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Icons.Check size={13} />}
-                {savingTask ? 'Guardando...' : 'Guardar'}
+                {savingTask ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
@@ -1576,7 +1576,11 @@ export const Calendar: React.FC = () => {
               type="text"
               value={editingTask.title || ''}
               onChange={e => setEditingTask({ ...editingTask, title: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium text-zinc-900 dark:text-zinc-100 transition-all"
+              className={`w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium transition-all ${
+                selectedTask.completed
+                  ? 'line-through text-zinc-400 dark:text-zinc-500'
+                  : 'text-zinc-900 dark:text-zinc-100'
+              }`}
             />
 
             {/* Blocked banner */}
@@ -1591,10 +1595,10 @@ export const Calendar: React.FC = () => {
                       <Icons.Lock size={14} className="text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Bloqueada</span>
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Blocked</span>
                       {blocker && (
                         <p className="text-[11px] text-amber-600 dark:text-amber-400/80 truncate mt-0.5">
-                          Esperando: <span className="font-semibold">{blocker.title}</span>
+                          Waiting for: <span className="font-semibold">{blocker.title}</span>
                         </p>
                       )}
                     </div>
@@ -1611,12 +1615,12 @@ export const Calendar: React.FC = () => {
                             </div>
                           )}
                           <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                            <span className="font-semibold">{blockerOwner}</span> necesita completar esta tarea primero
+                            <span className="font-semibold">{blockerOwner}</span> needs to complete this task first
                           </span>
                         </>
                       ) : (
                         <span className="text-[10px] text-amber-600/80 dark:text-amber-400/60 italic">
-                          La tarea bloqueante no tiene asignado — asignala para destrabar el flujo
+                          The blocking task has no assignee — assign it to unblock the flow
                         </span>
                       )}
                     </div>
@@ -1646,22 +1650,22 @@ export const Calendar: React.FC = () => {
               <span className={`text-xs font-medium transition-all duration-300 ${selectedTask.completed ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
                 {selectedTask.completed ? (
                   <span className="flex items-center gap-1.5">
-                    <span className="line-through">Completada</span>
+                    <span className="line-through">Completed</span>
                     <Icons.CheckCircle size={12} className="text-emerald-500" />
                   </span>
-                ) : 'Marcar como completada'}
+                ) : 'Mark as completed'}
               </span>
             </button>
 
             {/* Priority pills */}
             <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Prioridad</label>
+              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Priority</label>
               <div className="flex gap-1.5">
                 {([
-                  { value: 'low', label: 'Baja', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'medium', label: 'Media', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                  { value: 'high', label: 'Alta', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
-                  { value: 'urgent', label: 'Urgente', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
+                  { value: 'low', label: 'Low', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
+                  { value: 'medium', label: 'Medium', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
+                  { value: 'high', label: 'High', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
+                  { value: 'urgent', label: 'Urgent', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
                 ] as const).map(p => (
                   <button
                     key={p.value}
@@ -1682,13 +1686,13 @@ export const Calendar: React.FC = () => {
 
             {/* Status pills */}
             <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Estado</label>
+              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Status</label>
               <div className="flex gap-1.5">
                 {([
-                  { value: 'todo', label: 'Por hacer', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
-                  { value: 'in-progress', label: 'En progreso', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                  { value: 'done', label: 'Hecho', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'cancelled', label: 'Cancelado', color: 'bg-red-400', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400' },
+                  { value: 'todo', label: 'To do', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
+                  { value: 'in-progress', label: 'In progress', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
+                  { value: 'done', label: 'Done', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
+                  { value: 'cancelled', label: 'Cancelled', color: 'bg-red-400', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400' },
                 ] as const).map(s => (
                   <button
                     key={s.value}
@@ -1710,7 +1714,7 @@ export const Calendar: React.FC = () => {
             {/* Date + Time + Duration */}
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Fecha</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
                 <input
                   type="date"
                   value={editingTask.start_date || ''}
@@ -1719,7 +1723,7 @@ export const Calendar: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Hora</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
                 <input
                   type="time"
                   value={editingTask.start_time || ''}
@@ -1728,7 +1732,7 @@ export const Calendar: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duración</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
                 <select
                   value={editingTask.duration || 60}
                   onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
@@ -1749,7 +1753,7 @@ export const Calendar: React.FC = () => {
             {/* Project + Assignee */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Proyecto</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Project</label>
                 <select
                   value={editingTask.project_id || ''}
                   onChange={e => setEditingTask({ ...editingTask, project_id: e.target.value })}
@@ -1759,12 +1763,12 @@ export const Calendar: React.FC = () => {
                       : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
-                  <option value="">Sin proyecto</option>
+                  <option value="">No project</option>
                   {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Asignar a</label>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Assign to</label>
                 <select
                   value={editingTask.assignee_id || ''}
                   onChange={e => setEditingTask({ ...editingTask, assignee_id: e.target.value })}
@@ -1774,9 +1778,9 @@ export const Calendar: React.FC = () => {
                       : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                   }`}
                 >
-                  <option value="">Sin asignar</option>
+                  <option value="">Unassigned</option>
                   {teamMembers.filter(m => m.status === 'active').map(m => (
-                    <option key={m.id} value={m.id}>{m.id === user?.id ? `${m.name || m.email} (Yo)` : (m.name || m.email)}</option>
+                    <option key={m.id} value={m.id}>{m.id === user?.id ? `${m.name || m.email} (Me)` : (m.name || m.email)}</option>
                   ))}
                 </select>
               </div>
@@ -1787,18 +1791,18 @@ export const Calendar: React.FC = () => {
               <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg">
                 <Icons.User size={12} className="text-emerald-500" />
                 <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  Cliente: {getClientLabel(selectedTask)}
+                  Client: {getClientLabel(selectedTask)}
                 </span>
               </div>
             )}
 
             {/* Description */}
             <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1">Descripción</label>
+              <label className="block text-[10px] font-medium text-zinc-400 mb-1">Description</label>
               <textarea
                 value={editingTask.description || ''}
                 onChange={e => setEditingTask({ ...editingTask, description: e.target.value })}
-                placeholder="Detalles, notas, contexto..."
+                placeholder="Details, notes, context..."
                 className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none transition-all"
                 rows={2}
               />
@@ -1807,7 +1811,7 @@ export const Calendar: React.FC = () => {
             {/* Subtasks */}
             <div>
               <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">
-                Subtareas ({subtasksForSelected.filter(s => s.completed).length}/{subtasksForSelected.length})
+                Subtasks ({subtasksForSelected.filter(s => s.completed).length}/{subtasksForSelected.length})
               </label>
               {subtasksForSelected.length > 0 && (
                 <div className="mb-2 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
@@ -1827,7 +1831,7 @@ export const Calendar: React.FC = () => {
                         }`}
                       >
                         {subBlocked ? (
-                          <div className="w-4 h-4 rounded border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center flex-shrink-0" title="Bloqueada por dependencia">
+                          <div className="w-4 h-4 rounded border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center flex-shrink-0" title="Blocked by dependency">
                             <Icons.Lock size={8} className="text-amber-500" />
                           </div>
                         ) : (
@@ -1849,7 +1853,7 @@ export const Calendar: React.FC = () => {
                           {sub.title}
                         </span>
                         {subBlocked && (
-                          <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">bloqueada</span>
+                          <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">blocked</span>
                         )}
                         <button
                           onClick={() => handleDeleteSubtask(sub.id)}
@@ -1867,7 +1871,7 @@ export const Calendar: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <input
                   type="text"
-                  placeholder="Agregar subtarea..."
+                  placeholder="Add subtask..."
                   value={newSubtaskTitle}
                   onChange={e => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
@@ -1898,7 +1902,7 @@ export const Calendar: React.FC = () => {
             <div className="space-y-2">
               <label className="text-[10px] font-medium text-zinc-400 mb-1 flex items-center gap-1">
                 <Icons.Link size={10} />
-                Dependencia
+                Dependency
               </label>
               <select
                 value={editingTask.blocked_by || ''}
@@ -1909,7 +1913,7 @@ export const Calendar: React.FC = () => {
                     : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
                 }`}
               >
-                <option value="">Sin dependencia</option>
+                <option value="">No dependency</option>
                 {tasks
                   .filter(t => t.id !== selectedTask.id && !t.parent_task_id)
                   .sort((a, b) => a.title.localeCompare(b.title))
@@ -1967,7 +1971,7 @@ export const Calendar: React.FC = () => {
                             </div>
                           )}
                           {!blockerOwner && (
-                            <span className="text-[10px] text-zinc-400 italic">Sin asignar</span>
+                            <span className="text-[10px] text-zinc-400 italic">Unassigned</span>
                           )}
                           <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
                             isResolved
@@ -1976,14 +1980,14 @@ export const Calendar: React.FC = () => {
                                 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
                                 : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
                           }`}>
-                            {isResolved ? 'Completada' : blocker.status === 'in-progress' ? 'En progreso' : 'Pendiente'}
+                            {isResolved ? 'Completed' : blocker.status === 'in-progress' ? 'In progress' : 'Pending'}
                           </span>
                         </div>
                         {!isResolved && (
                           <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-1">
                             {blockerOwner
-                              ? `${blockerOwner} necesita completar esta tarea primero`
-                              : 'Esta tarea debe completarse antes de avanzar'}
+                              ? `${blockerOwner} needs to complete this task first`
+                              : 'This task must be completed before proceeding'}
                           </p>
                         )}
                       </div>
@@ -2000,7 +2004,7 @@ export const Calendar: React.FC = () => {
                   <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
                     <div className="flex items-center gap-1.5 mb-2">
                       <Icons.ChevronRight size={10} className="text-zinc-400" />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Bloquea a {dependents.length} tarea{dependents.length > 1 ? 's' : ''}</span>
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Blocks {dependents.length} task{dependents.length > 1 ? 's' : ''}</span>
                     </div>
                     <div className="space-y-1.5">
                       {dependents.map(d => {
@@ -2026,7 +2030,7 @@ export const Calendar: React.FC = () => {
                               </div>
                             )}
                             {!depOwner && !d.completed && (
-                              <span className="text-[9px] text-zinc-400 italic flex-shrink-0">sin asignar</span>
+                              <span className="text-[9px] text-zinc-400 italic flex-shrink-0">unassigned</span>
                             )}
                           </div>
                         );
@@ -2034,7 +2038,7 @@ export const Calendar: React.FC = () => {
                     </div>
                     {!selectedTask.completed && dependents.some(d => !d.completed) && (
                       <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-2 pt-1.5 border-t border-zinc-200 dark:border-zinc-700">
-                        {dependents.filter(d => !d.completed).length} persona{dependents.filter(d => !d.completed).length > 1 ? 's esperan' : ' espera'} que completes esta tarea para avanzar
+                        {dependents.filter(d => !d.completed).length} task{dependents.filter(d => !d.completed).length > 1 ? 's are waiting' : ' is waiting'} for you to complete this task to proceed
                       </p>
                     )}
                   </div>
@@ -2045,7 +2049,7 @@ export const Calendar: React.FC = () => {
             {/* Meta info */}
             <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                <span>Creada: {new Date(selectedTask.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <span>Created: {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 <span className="font-mono text-zinc-300 dark:text-zinc-600">{selectedTask.id.slice(0, 8)}</span>
               </div>
             </div>
@@ -2097,7 +2101,7 @@ export const Calendar: React.FC = () => {
                   }`}
                 >
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                    {day.toLocaleDateString('es-ES', { weekday: 'short' })}
+                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
                   </div>
                   <div className={`text-lg font-semibold ${
                     isToday ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'
@@ -2122,7 +2126,7 @@ export const Calendar: React.FC = () => {
           {/* All-day / unscheduled tasks row */}
           <div className="grid grid-cols-8 border-b-2 border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/30">
             <div className="p-2 text-[10px] text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800 flex items-start justify-end pt-3">
-              Tareas
+              Tasks
             </div>
             {weekDays.map((day, dayIndex) => {
               const dateStr = day.toISOString().split('T')[0];
@@ -2148,7 +2152,7 @@ export const Calendar: React.FC = () => {
                         className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
                           task.completed ? 'opacity-60' : ''
                         } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                        title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOQUEADA' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
+                        title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
                         onClick={() => handleOpenTaskDetail(task)}
                       >
                         <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
@@ -2250,7 +2254,7 @@ export const Calendar: React.FC = () => {
                             } ${task.status === 'cancelled' ? 'opacity-50' : ''} ${
                               task.status === 'in-progress' ? 'border-l-[3px]' : ''
                             }`}
-                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOQUEADA — esperando: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d demorada` : ''}`}
+                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOCKED — waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
                             onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
                           >
                             <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
@@ -2285,7 +2289,7 @@ export const Calendar: React.FC = () => {
                                 const blOwner = bl?.assignee_id ? getMemberName(bl.assignee_id) : null;
                                 return (
                                   <span className="text-[8px] text-amber-600 dark:text-amber-400 font-medium truncate">
-                                    {blOwner ? `Esp. ${blOwner}` : `Esp: ${bl?.title?.slice(0, 20) || '?'}`}
+                                    {blOwner ? `Wait. ${blOwner}` : `Wait: ${bl?.title?.slice(0, 20) || '?'}`}
                                   </span>
                                 );
                               })()}
@@ -2312,7 +2316,7 @@ export const Calendar: React.FC = () => {
       {view === 'month' && (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
           <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800">
-            {['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'].map((day) => (
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
               <div key={day} className="p-3 text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                 {day}
               </div>
@@ -2402,7 +2406,7 @@ export const Calendar: React.FC = () => {
                       );
                     })}
                     {totalItems > maxVisible && (
-                      <div className="text-[10px] text-zinc-400 pl-1">+{totalItems - maxVisible} más</div>
+                      <div className="text-[10px] text-zinc-400 pl-1">+{totalItems - maxVisible} more</div>
                     )}
                   </div>
                 </div>
@@ -2416,8 +2420,8 @@ export const Calendar: React.FC = () => {
         <div className="mt-6">
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Planner por red social</h3>
-              <div className="text-xs text-zinc-500">Arrastrar para cambiar estado</div>
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Social media planner</h3>
+              <div className="text-xs text-zinc-500">Drag to change status</div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {CONTENT_STATUSES.map((status) => (
@@ -2466,7 +2470,7 @@ export const Calendar: React.FC = () => {
                         </div>
                       ))}
                     {contentEvents.filter((event) => (event as any).content_status === status.id).length === 0 && (
-                      <div className="text-xs text-zinc-400">Sin contenido</div>
+                      <div className="text-xs text-zinc-400">No content</div>
                     )}
                   </div>
                 </div>
@@ -2481,11 +2485,11 @@ export const Calendar: React.FC = () => {
         <div className="lg:col-span-2">
           <Card className="p-6">
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-              {new Date(selectedDate).toLocaleDateString('es-ES', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+              {new Date(selectedDate).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
               })}
             </h3>
             
@@ -2494,7 +2498,7 @@ export const Calendar: React.FC = () => {
               <div>
                 <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
                   <Icons.CalendarDays size={16} />
-                  {calendarMode === 'content' ? `Contenidos (${getDayEvents(selectedDate).length})` : `Eventos (${getDayEvents(selectedDate).length})`}
+                  {calendarMode === 'content' ? `Contents (${getDayEvents(selectedDate).length})` : `Events (${getDayEvents(selectedDate).length})`}
                 </h4>
                 <div className="space-y-2">
                   {getDayEvents(selectedDate).length > 0 ? (
@@ -2536,7 +2540,7 @@ export const Calendar: React.FC = () => {
                     ))
                   ) : (
                     <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                      {calendarMode === 'content' ? 'No hay contenidos para este día' : 'No hay eventos para este día'}
+                      {calendarMode === 'content' ? 'No contents for this day' : 'No events for this day'}
                     </div>
                   )}
                 </div>
@@ -2547,7 +2551,7 @@ export const Calendar: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
                     <Icons.Check size={16} />
-                    Tareas ({getDayTasks(selectedDate).length})
+                    Tasks ({getDayTasks(selectedDate).length})
                   </h4>
                   <div className="space-y-2">
                     {getDayTasks(selectedDate).length > 0 ? (
@@ -2616,7 +2620,7 @@ export const Calendar: React.FC = () => {
                       ))
                     ) : (
                       <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                        No hay tareas para este día
+                        No tasks for this day
                       </div>
                     )}
                   </div>
@@ -2629,11 +2633,11 @@ export const Calendar: React.FC = () => {
         {/* Panel de estadísticas */}
         <div className="space-y-6">
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Resumen</h3>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Summary</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {calendarMode === 'content' ? 'Contenidos totales' : 'Eventos totales'}
+                  {calendarMode === 'content' ? 'Total contents' : 'Total events'}
                 </span>
                 <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                   {calendarMode === 'content' ? filteredEvents.length : stats.totalEvents}
@@ -2642,26 +2646,26 @@ export const Calendar: React.FC = () => {
               {calendarMode === 'schedule' && (
                 <>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Tareas totales</span>
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Total tasks</span>
                     <span className="font-semibold text-zinc-900 dark:text-zinc-100">{stats.totalTasks}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Completadas</span>
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Completed</span>
                     <span className="font-semibold text-green-600 dark:text-green-400">{stats.completedTasks}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Pendientes</span>
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Pending</span>
                     <span className="font-semibold text-orange-600 dark:text-orange-400">{stats.pendingTasks}</span>
                   </div>
                   {stats.overdueTasks > 0 && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Atrasadas</span>
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Overdue</span>
                       <span className="font-semibold text-red-600 dark:text-red-400">{stats.overdueTasks}</span>
                     </div>
                   )}
                   <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Progreso</span>
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Progress</span>
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{stats.completionRate}%</span>
                     </div>
                     <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
@@ -2679,7 +2683,7 @@ export const Calendar: React.FC = () => {
           {/* Próximas tareas */}
           {calendarMode === 'schedule' && (
             <Card className="p-6">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Próximas tareas</h3>
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Upcoming tasks</h3>
               <div className="space-y-3">
                 {tasks
                   .filter(task => !task.completed && task.start_date)
@@ -2699,7 +2703,7 @@ export const Calendar: React.FC = () => {
                         </div>
                         {task.start_date && (
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                            {new Date(task.start_date).toLocaleDateString('es-ES')}
+                            {new Date(task.start_date).toLocaleDateString('en-US')}
                           </div>
                         )}
                       </div>
@@ -2723,7 +2727,7 @@ export const Calendar: React.FC = () => {
                   ))}
                 {tasks.filter(task => !task.completed && task.start_date).length === 0 && (
                   <div className="text-center py-4 text-zinc-500 dark:text-zinc-400 text-sm">
-                    No hay tareas pendientes
+                    No pending tasks
                   </div>
                 )}
               </div>

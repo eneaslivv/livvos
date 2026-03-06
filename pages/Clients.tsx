@@ -33,13 +33,13 @@ const getInitials = (name: string) => {
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—';
   const date = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
-  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 const fmtShortDate = (d: string | null | undefined) => {
   if (!d) return '—';
   const date = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
-  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 };
 
 const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
@@ -351,7 +351,7 @@ export const Clients: React.FC = () => {
       setSelectedClient(client);
     } catch (err: any) {
       errorLogger.error('Error creating client', err);
-      alert('Error creating client: ' + (err?.message || 'Error desconocido'));
+      alert('Error creating client: ' + (err?.message || 'Unknown error'));
     } finally {
       setCreatingClient(false);
     }
@@ -378,7 +378,7 @@ export const Clients: React.FC = () => {
       loadClientData(selectedClient.id);
     } catch (err: any) {
       errorLogger.error('Error assigning project', err);
-      alert('Error assigning project: ' + (err?.message || 'Error desconocido'));
+      alert('Error assigning project: ' + (err?.message || 'Unknown error'));
     } finally {
       setAssigningProject(false);
     }
@@ -430,14 +430,14 @@ export const Clients: React.FC = () => {
       try {
         const { data: roleData, error: roleError } = await withTimeout(
           supabase.from('roles').select('id').eq('name', 'client').maybeSingle(),
-          8000, 'buscar rol'
+          8000, 'search role'
         );
         if (!roleError && roleData) {
           roleId = roleData.id;
         } else if (!roleError && !roleData) {
           const { data: newRole } = await withTimeout(
             supabase.from('roles').insert({ name: 'client', description: 'Portal client access', is_system: true }).select('id').single(),
-            8000, 'crear rol'
+            8000, 'create role'
           );
           roleId = newRole?.id || null;
         }
@@ -588,7 +588,7 @@ export const Clients: React.FC = () => {
       setShowNewTaskInline(false);
     } catch (err: any) {
       errorLogger.error('Error creating task', err);
-      alert('Could not create task: ' + (err?.message || 'Error desconocido'));
+      alert('Could not create task: ' + (err?.message || 'Unknown error'));
     } finally {
       setCreatingTask(false);
     }
@@ -607,7 +607,7 @@ export const Clients: React.FC = () => {
       // Rollback
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t));
       errorLogger.error('Error updating task', err);
-      alert('Error updating task: ' + (err?.message || 'Error desconocido'));
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -621,7 +621,7 @@ export const Clients: React.FC = () => {
       // Rollback
       setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed, status: !completed ? 'done' : 'todo' } : t));
       errorLogger.error('Error updating task', err);
-      alert('Error updating task: ' + (err?.message || 'Error desconocido'));
+      alert('Error updating task: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -687,7 +687,7 @@ export const Clients: React.FC = () => {
       return true;
     } catch (err: any) {
       console.error('Error updating field:', err);
-      alert(`Error al guardar: ${err?.message || 'Error desconocido'}`);
+      alert(`Error saving: ${err?.message || 'Unknown error'}`);
       return false;
     }
   };
@@ -799,8 +799,8 @@ export const Clients: React.FC = () => {
     { id: 'info', label: 'Info', icon: Icons.Users },
     { id: 'finance', label: 'Finance', icon: Icons.DollarSign || Icons.Activity, badge: clientFinanceSummary.overdue },
     { id: 'messages', label: 'Chat', icon: Icons.Message, badge: messages.filter(m => m.sender_type === 'client' && !m.read_at).length },
-    { id: 'tasks', label: 'Tareas', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
-    { id: 'history', label: 'Historial', icon: Icons.Clock },
+    { id: 'tasks', label: 'Tasks', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
+    { id: 'history', label: 'History', icon: Icons.Clock },
   ];
 
   /* ─── Editable info field ─── */
@@ -906,7 +906,7 @@ export const Clients: React.FC = () => {
                         : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    {s === 'all' ? 'Todos' : statusConfig[s].label}
+                    {s === 'all' ? 'All' : statusConfig[s].label}
                   </button>
                 ))}
               </div>
@@ -1076,7 +1076,7 @@ export const Clients: React.FC = () => {
                           await deleteClient(selectedClient.id);
                           setSelectedClient(null);
                         } catch (err: any) {
-                          alert('Error deleting client: ' + (err?.message || 'Error desconocido'));
+                          alert('Error deleting client: ' + (err?.message || 'Unknown error'));
                         }
                       }}
                       className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
@@ -1124,7 +1124,7 @@ export const Clients: React.FC = () => {
                     </div>
                     {clientInviteStatus === 'accepted' && (
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                        <Icons.CheckCircle size={10} /> Activo
+                        <Icons.CheckCircle size={10} /> Active
                       </span>
                     )}
                     {clientInviteStatus === 'pending' && (
@@ -1139,8 +1139,8 @@ export const Clients: React.FC = () => {
                     <div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
                         {selectedClient.email
-                          ? 'Invitá al cliente para que pueda ver el progreso de sus proyectos, archivos y comunicarse.'
-                          : 'Agregá un email al cliente para poder invitarlo al portal.'}
+                          ? 'Invite the client so they can see their project progress, files and communicate.'
+                          : 'Add an email to the client to invite them to the portal.'}
                       </p>
                       <button
                         onClick={handleInvitePortal}
@@ -1148,9 +1148,9 @@ export const Clients: React.FC = () => {
                         className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                       >
                         {isInvitingPortal ? (
-                          <><Icons.Loader size={13} className="animate-spin" /> Generando invitación...</>
+                          <><Icons.Loader size={13} className="animate-spin" /> Generating invitation...</>
                         ) : (
-                          <><Icons.Send size={13} /> Invitar al portal</>
+                          <><Icons.Send size={13} /> Invite to portal</>
                         )}
                       </button>
                     </div>
@@ -1160,18 +1160,18 @@ export const Clients: React.FC = () => {
                   {clientInviteStatus === 'pending' && (
                     <div className="space-y-2.5">
                       <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
-                        Invitación enviada. El cliente aún no creó su cuenta.
+                        Invitation sent. The client hasn't created their account yet.
                       </p>
                       {emailSent === true && (
                         <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 rounded-lg">
                           <Icons.CheckCircle size={14} className="shrink-0" />
-                          <span>Email enviado a <strong>{selectedClient.email}</strong></span>
+                          <span>Email sent to <strong>{selectedClient.email}</strong></span>
                         </div>
                       )}
                       {emailSent === false && (
                         <div className="flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400 bg-rose-50/80 dark:bg-rose-500/10 px-3 py-2 rounded-lg">
                           <Icons.AlertCircle size={14} className="shrink-0" />
-                          <span>No se pudo enviar el email. Copiá el link manualmente.</span>
+                          <span>Could not send the email. Copy the link manually.</span>
                         </div>
                       )}
                       {portalInviteLink && (
@@ -1181,18 +1181,18 @@ export const Clients: React.FC = () => {
                             onClick={(e) => (e.target as HTMLInputElement).select()} />
                           <button onClick={() => navigator.clipboard.writeText(portalInviteLink)}
                             className="px-3 py-2 text-xs font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shrink-0">
-                            Copiar link
+                            Copy link
                           </button>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
                         <button onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors">
-                          <Icons.External size={12} /> Vista previa
+                          <Icons.External size={12} /> Preview
                         </button>
                         <button onClick={handleInvitePortal} disabled={isInvitingPortal}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40">
-                          {isInvitingPortal ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Send size={12} />} Reenviar
+                          {isInvitingPortal ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Send size={12} />} Resend
                         </button>
                       </div>
                     </div>
@@ -1202,17 +1202,17 @@ export const Clients: React.FC = () => {
                   {clientInviteStatus === 'accepted' && (
                     <div className="space-y-2.5">
                       <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
-                        El cliente tiene acceso al portal y puede ver sus proyectos, pagos y documentos.
+                        The client has portal access and can view their projects, payments and documents.
                       </p>
                       <div className="flex items-center gap-2">
                         <button onClick={() => window.open(`/?portal=client&clientId=${selectedClient.id}`, '_blank')}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
-                          <Icons.External size={12} /> Ver portal del cliente
+                          <Icons.External size={12} /> View client portal
                         </button>
                         {portalInviteLink && (
                           <button onClick={() => navigator.clipboard.writeText(portalInviteLink)}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                            <Icons.Link size={12} /> Copiar link
+                            <Icons.Link size={12} /> Copy link
                           </button>
                         )}
                       </div>
@@ -1266,16 +1266,16 @@ export const Clients: React.FC = () => {
                   {detailTab === 'info' && (
                     <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 mb-6">
-                        <EditableField field="email" label="Email" value={selectedClient.email} type="email" placeholder="email@ejemplo.com" />
-                        <EditableField field="phone" label="Teléfono" value={selectedClient.phone} placeholder="+54 11..." />
-                        <EditableField field="company" label="Empresa" value={selectedClient.company} />
-                        <EditableField field="industry" label="Industria" value={selectedClient.industry} />
-                        <EditableField field="address" label="Dirección" value={selectedClient.address} />
+                        <EditableField field="email" label="Email" value={selectedClient.email} type="email" placeholder="email@example.com" />
+                        <EditableField field="phone" label="Phone" value={selectedClient.phone} placeholder="+1 555..." />
+                        <EditableField field="company" label="Company" value={selectedClient.company} />
+                        <EditableField field="industry" label="Industry" value={selectedClient.industry} />
+                        <EditableField field="address" label="Address" value={selectedClient.address} />
                       </div>
 
                       {selectedClient.notes && (
                         <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-6">
-                          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Notas</p>
+                          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Notes</p>
                           <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{selectedClient.notes}</p>
                         </div>
                       )}
@@ -1283,7 +1283,7 @@ export const Clients: React.FC = () => {
                       {/* Projects assignment (multiple) */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Proyectos vinculados</p>
+                          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Linked projects</p>
                           {assignedProjects.length > 0 && (
                             <span className="text-[10px] font-semibold text-zinc-400">{assignedProjects.length}</span>
                           )}
@@ -1314,7 +1314,7 @@ export const Clients: React.FC = () => {
                                           : proj.status === 'Pending' ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
                                           : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
                                         }`}>
-                                          {proj.status || 'Activo'}
+                                          {proj.status || 'Active'}
                                         </span>
                                         {typeof proj.progress === 'number' && (
                                           <div className="flex items-center gap-1.5">
@@ -1330,7 +1330,7 @@ export const Clients: React.FC = () => {
                                   <button
                                     onClick={() => handleUnassignProject(proj.id)}
                                     className="p-1.5 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all shrink-0"
-                                    title="Desvincular"
+                                    title="Unlink"
                                   >
                                     <Icons.X size={13} />
                                   </button>
@@ -1347,7 +1347,7 @@ export const Clients: React.FC = () => {
                             onChange={(e) => setSelectedProjectId(e.target.value)}
                             className={inputClass + ' flex-1'}
                           >
-                            <option value="">Vincular proyecto...</option>
+                            <option value="">Link project...</option>
                             {availableProjects.filter(p => !p.client_id).map(p => (
                               <option key={p.id} value={p.id}>{p.title}</option>
                             ))}
@@ -1357,7 +1357,7 @@ export const Clients: React.FC = () => {
                             disabled={!selectedProjectId || assigningProject}
                             className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 text-xs font-semibold transition-all active:scale-[0.97]"
                           >
-                            {assigningProject ? '...' : 'Asignar'}
+                            {assigningProject ? '...' : 'Assign'}
                           </button>
                         </div>
                       </div>
@@ -1370,10 +1370,10 @@ export const Clients: React.FC = () => {
                       {/* New income form / toggle */}
                       {showNewIncomeForm ? (
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-4 space-y-3">
-                          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Nuevo ingreso</p>
+                          <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">New income</p>
                           <input
                             type="text"
-                            placeholder="Concepto (ej: Desarrollo web, Diseño UX...)"
+                            placeholder="Concept (e.g.: Web development, UX Design...)"
                             value={newIncomeData.concept}
                             onChange={e => setNewIncomeData({ ...newIncomeData, concept: e.target.value })}
                             className={inputClass}
@@ -1381,7 +1381,7 @@ export const Clients: React.FC = () => {
                           />
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className={labelClass}>Monto total *</label>
+                              <label className={labelClass}>Total amount *</label>
                               <input
                                 type="number"
                                 placeholder="0.00"
@@ -1393,7 +1393,7 @@ export const Clients: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className={labelClass}>Moneda</label>
+                              <label className={labelClass}>Currency</label>
                               <select
                                 value={newIncomeData.currency}
                                 onChange={e => setNewIncomeData({ ...newIncomeData, currency: e.target.value })}
@@ -1407,7 +1407,7 @@ export const Clients: React.FC = () => {
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className={labelClass}>Cuotas</label>
+                              <label className={labelClass}>Installments</label>
                               <input
                                 type="number"
                                 min="1"
@@ -1427,7 +1427,7 @@ export const Clients: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label className={labelClass}>Fecha primer vencimiento</label>
+                              <label className={labelClass}>First due date</label>
                               <input
                                 type="date"
                                 value={newIncomeData.due_date}
@@ -1448,7 +1448,7 @@ export const Clients: React.FC = () => {
                           {/* Per-installment date editors */}
                           {parseInt(newIncomeData.num_installments) > 1 && newIncomeData.installment_dates.length > 0 && (
                             <div className="space-y-1.5 p-3 bg-zinc-100/60 dark:bg-zinc-700/20 rounded-lg">
-                              <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Fechas por cuota</p>
+                              <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Dates per installment</p>
                               {newIncomeData.installment_dates.map((date, idx) => {
                                 const totalAmt = parseFloat(newIncomeData.total_amount) || 0;
                                 const n = parseInt(newIncomeData.num_installments) || 1;
@@ -1456,7 +1456,7 @@ export const Clients: React.FC = () => {
                                 const amt = idx === n - 1 ? Math.round((totalAmt - perInst * (n - 1)) * 100) / 100 : perInst;
                                 return (
                                   <div key={idx} className="flex items-center gap-2">
-                                    <span className="text-[10px] font-medium text-zinc-500 w-14 shrink-0">Cuota {idx + 1}</span>
+                                    <span className="text-[10px] font-medium text-zinc-500 w-14 shrink-0">Installment {idx + 1}</span>
                                     <input
                                       type="date"
                                       value={date}
@@ -1478,13 +1478,13 @@ export const Clients: React.FC = () => {
                           {/* Optional project link */}
                           {availableProjects.filter(p => p.client_id === selectedClient?.id || !p.client_id).length > 0 && (
                             <div>
-                              <label className={labelClass}>Proyecto (opcional)</label>
+                              <label className={labelClass}>Project (optional)</label>
                               <select
                                 value={newIncomeData.project_id}
                                 onChange={e => setNewIncomeData({ ...newIncomeData, project_id: e.target.value })}
                                 className={inputClass}
                               >
-                                <option value="">Sin proyecto</option>
+                                <option value="">No project</option>
                                 {availableProjects
                                   .filter(p => p.client_id === selectedClient?.id || !p.client_id)
                                   .map(p => <option key={p.id} value={p.id}>{p.title}</option>)
@@ -1503,13 +1503,13 @@ export const Clients: React.FC = () => {
                               ) : (
                                 <Icons.Plus size={13} />
                               )}
-                              {creatingIncome ? 'Creando...' : 'Crear Ingreso'}
+                              {creatingIncome ? 'Creating...' : 'Create Income'}
                             </button>
                             <button
                               onClick={() => { setShowNewIncomeForm(false); setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD', installment_dates: [] }); }}
                               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             >
-                              Cancelar
+                              Cancel
                             </button>
                           </div>
                         </div>
@@ -1519,7 +1519,7 @@ export const Clients: React.FC = () => {
                           className="w-full p-3 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors mb-4 flex items-center justify-center gap-1.5"
                         >
                           <Icons.Plus size={13} />
-                          Agregar ingreso
+                          Add income
                         </button>
                       )}
 
@@ -1529,7 +1529,7 @@ export const Clients: React.FC = () => {
                           {clientFinanceSummary.totalInvoiced > 0 && (
                             <div>
                               <div className="flex justify-between text-[10px] mb-1.5">
-                                <span className="text-zinc-400 font-medium">Progreso de cobro</span>
+                                <span className="text-zinc-400 font-medium">Collection progress</span>
                                 <span className="font-semibold text-zinc-500">
                                   {Math.round((clientFinanceSummary.totalPaid / clientFinanceSummary.totalInvoiced) * 100)}%
                                   <span className="text-zinc-300 font-normal ml-1">({clientFinanceSummary.paidCount}/{clientFinanceSummary.totalCount})</span>
@@ -1557,20 +1557,20 @@ export const Clients: React.FC = () => {
                                 <div className="p-4 flex items-center justify-between group">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{income.concept || 'Ingreso'}</p>
+                                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{income.concept || 'Income'}</p>
                                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                                         income.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700'
                                         : income.status === 'overdue' ? 'bg-red-100 dark:bg-red-500/20 text-red-600'
                                         : income.status === 'partial' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700'
                                         : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
                                       }`}>
-                                        {income.status === 'paid' ? 'Pagado' : income.status === 'overdue' ? 'Vencido' : income.status === 'partial' ? 'Parcial' : 'Pendiente'}
+                                        {income.status === 'paid' ? 'Paid' : income.status === 'overdue' ? 'Overdue' : income.status === 'partial' ? 'Partial' : 'Pending'}
                                       </span>
                                     </div>
                                     <p className="text-[10px] text-zinc-400 mt-0.5">
                                       {income.project_name && income.project_name !== 'General' ? `${income.project_name} · ` : ''}
-                                      {installments.length > 0 ? `${paidInst.length}/${installments.length} cuotas` : 'Pago único'}
-                                      {income.due_date ? ` · Vence ${fmtShortDate(income.due_date)}` : ''}
+                                      {installments.length > 0 ? `${paidInst.length}/${installments.length} installments` : 'Single payment'}
+                                      {income.due_date ? ` · Due ${fmtShortDate(income.due_date)}` : ''}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2 ml-4">
@@ -1579,7 +1579,7 @@ export const Clients: React.FC = () => {
                                       onClick={() => handleDeleteIncome(income.id)}
                                       disabled={isDeleting}
                                       className="p-1.5 text-zinc-300 hover:text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                      title="Eliminar ingreso"
+                                      title="Delete income"
                                     >
                                       <Icons.Trash size={13} />
                                     </button>
@@ -1613,10 +1613,10 @@ export const Clients: React.FC = () => {
                                           </button>
                                           <div className="flex-1 min-w-0">
                                             <p className={`text-xs font-medium ${isPaid ? 'text-emerald-700 dark:text-emerald-400 line-through' : isOverdue ? 'text-red-600' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                                              Cuota {inst.number}
+                                              Installment {inst.number}
                                             </p>
                                             <p className={`text-[10px] ${isPaid ? 'text-emerald-500 dark:text-emerald-500/60' : isOverdue ? 'text-red-400' : 'text-zinc-400'}`}>
-                                              {isPaid && inst.paid_date ? `Pagado ${fmtShortDate(inst.paid_date)}` : `Vence ${fmtShortDate(inst.due_date)}`}
+                                              {isPaid && inst.paid_date ? `Paid ${fmtShortDate(inst.paid_date)}` : `Due ${fmtShortDate(inst.due_date)}`}
                                             </p>
                                           </div>
                                           <p className={`text-xs font-bold ${isPaid ? 'text-emerald-600' : isOverdue ? 'text-red-600' : 'text-zinc-600 dark:text-zinc-400'}`}>
@@ -1636,9 +1636,9 @@ export const Clients: React.FC = () => {
                           <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
                             {Icons.DollarSign ? <Icons.DollarSign size={20} className="text-zinc-400" /> : <Icons.Activity size={20} className="text-zinc-400" />}
                           </div>
-                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin registros financieros</p>
+                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">No financial records</p>
                           <p className="text-[10px] text-zinc-400 mt-1 max-w-xs mx-auto">
-                            Usa el botón de arriba para agregar el primer ingreso de este cliente.
+                            Use the button above to add the first income for this client.
                           </p>
                         </div>
                       ) : null}
@@ -1685,15 +1685,15 @@ export const Clients: React.FC = () => {
                             <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
                               <Icons.Message size={18} className="text-zinc-400" />
                             </div>
-                            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin mensajes</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">Los mensajes se sincronizan con el portal del cliente</p>
+                            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">No messages</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">Messages sync with the client portal</p>
                           </div>
                         )}
                       </div>
                       <div className="flex gap-2 mt-auto sticky bottom-0 bg-white dark:bg-zinc-900 pt-2">
                         <input
                           type="text"
-                          placeholder="Escribe un mensaje..."
+                          placeholder="Write a message..."
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
@@ -1720,7 +1720,7 @@ export const Clients: React.FC = () => {
                             onClick={() => setTaskProjectFilter('all')}
                             className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors ${taskProjectFilter === 'all' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
                           >
-                            Todas
+                            All
                           </button>
                           <button
                             onClick={() => setTaskProjectFilter('general')}
@@ -1745,7 +1745,7 @@ export const Clients: React.FC = () => {
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl mb-4 space-y-3 border border-zinc-200/60 dark:border-zinc-700/60">
                           <input
                             type="text"
-                            placeholder="Título de la tarea..."
+                            placeholder="Task title..."
                             value={newTaskData.title}
                             onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
                             className={inputClass}
@@ -1753,7 +1753,7 @@ export const Clients: React.FC = () => {
                             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleCreateTask()}
                           />
                           <textarea
-                            placeholder="Descripción (opcional)..."
+                            placeholder="Description (optional)..."
                             value={newTaskData.description}
                             onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
                             className={`${inputClass} resize-none`}
@@ -1761,20 +1761,20 @@ export const Clients: React.FC = () => {
                           />
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className={labelClass}>Prioridad</label>
+                              <label className={labelClass}>Priority</label>
                               <select
                                 value={newTaskData.priority}
                                 onChange={(e) => setNewTaskData({ ...newTaskData, priority: e.target.value as any })}
                                 className={inputClass}
                               >
-                                <option value="low">Baja</option>
-                                <option value="medium">Media</option>
-                                <option value="high">Alta</option>
-                                <option value="urgent">Urgente</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
                               </select>
                             </div>
                             <div>
-                              <label className={labelClass}>Fecha</label>
+                              <label className={labelClass}>Date</label>
                               <input
                                 type="date"
                                 value={newTaskData.due_date}
@@ -1785,28 +1785,28 @@ export const Clients: React.FC = () => {
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className={labelClass}>Asignar a</label>
+                              <label className={labelClass}>Assign to</label>
                               <select
                                 value={newTaskData.assignee_id}
                                 onChange={(e) => setNewTaskData({ ...newTaskData, assignee_id: e.target.value })}
                                 className={inputClass}
                               >
-                                <option value="">Sin asignar</option>
+                                <option value="">Unassigned</option>
                                 {teamMembers.map(m => (
                                   <option key={m.id} value={m.id}>{m.name || m.email}</option>
                                 ))}
                               </select>
                             </div>
                             <div>
-                              <label className={labelClass}>Estado</label>
+                              <label className={labelClass}>Status</label>
                               <select
                                 value={newTaskData.status}
                                 onChange={(e) => setNewTaskData({ ...newTaskData, status: e.target.value as any })}
                                 className={inputClass}
                               >
-                                <option value="todo">Por hacer</option>
-                                <option value="in-progress">En progreso</option>
-                                <option value="done">Completada</option>
+                                <option value="todo">To do</option>
+                                <option value="in-progress">In progress</option>
+                                <option value="done">Completed</option>
                               </select>
                             </div>
                           </div>
@@ -1816,13 +1816,13 @@ export const Clients: React.FC = () => {
                               disabled={!newTaskData.title.trim() || creatingTask}
                               className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all"
                             >
-                              {creatingTask ? 'Creando...' : 'Crear Tarea'}
+                              {creatingTask ? 'Creating...' : 'Create Task'}
                             </button>
                             <button
                               onClick={() => { setShowNewTaskInline(false); setNewTaskData({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' }); }}
                               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             >
-                              Cancelar
+                              Cancel
                             </button>
                           </div>
                         </div>
@@ -1832,7 +1832,7 @@ export const Clients: React.FC = () => {
                           className="w-full p-3 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors mb-4 flex items-center justify-center gap-1.5"
                         >
                           <Icons.Plus size={13} />
-                          Nueva tarea
+                          New task
                         </button>
                       )}
 
@@ -1867,17 +1867,17 @@ export const Clients: React.FC = () => {
                         // Helper to get member name
                         const getMemberName = (id?: string) => {
                           if (!id) return null;
-                          if (id === user?.id) return 'Yo';
+                          if (id === user?.id) return 'Me';
                           const m = teamMembers.find(m => m.id === id);
                           return m?.name || m?.email || null;
                         };
 
                         // Status labels
                         const statusLabels: Record<string, { label: string; color: string }> = {
-                          'todo': { label: 'Por hacer', color: 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800' },
-                          'in-progress': { label: 'En progreso', color: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400' },
-                          'done': { label: 'Hecho', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400' },
-                          'cancelled': { label: 'Cancelada', color: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' },
+                          'todo': { label: 'To do', color: 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800' },
+                          'in-progress': { label: 'In progress', color: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400' },
+                          'done': { label: 'Done', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400' },
+                          'cancelled': { label: 'Cancelled', color: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' },
                         };
 
                         if (totalCount === 0) {
@@ -1886,10 +1886,10 @@ export const Clients: React.FC = () => {
                               <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
                                 <Icons.CheckCircle size={18} className="text-zinc-400" />
                               </div>
-                              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin tareas</p>
+                              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">No tasks</p>
                               {taskProjectFilter !== 'all' && (
                                 <button onClick={() => setTaskProjectFilter('all')} className="text-[10px] text-zinc-400 hover:text-zinc-600 mt-1">
-                                  Ver todas
+                                  View all
                                 </button>
                               )}
                             </div>
@@ -1914,7 +1914,7 @@ export const Clients: React.FC = () => {
                               <div className={`flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group ${isExpanded && !isCompleted ? 'bg-zinc-50 dark:bg-zinc-800/40' : ''} ${isBlocked && !isCompleted ? 'ring-1 ring-amber-300 dark:ring-amber-500/30 bg-amber-50/30 dark:bg-amber-500/5' : ''}`}>
                                 {/* Checkbox or lock icon */}
                                 {isBlocked && !isCompleted ? (
-                                  <div className="w-5 h-5 rounded-md border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title="Bloqueada por dependencia">
+                                  <div className="w-5 h-5 rounded-md border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title="Blocked by dependency">
                                     <Icons.Lock size={10} className="text-amber-500" />
                                   </div>
                                 ) : (
@@ -1937,7 +1937,7 @@ export const Clients: React.FC = () => {
                                     {isBlocked && !isCompleted && (
                                       <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-0.5">
                                         <Icons.Lock size={8} />
-                                        {blockerOwner ? `Esperando a ${blockerOwner}` : `Esperando: ${blockerTask?.title}`}
+                                        {blockerOwner ? `Waiting for ${blockerOwner}` : `Waiting: ${blockerTask?.title}`}
                                       </span>
                                     )}
                                     {task.project_name && taskProjectFilter === 'all' && (
@@ -1962,7 +1962,7 @@ export const Clients: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   {isBlocked && !isCompleted && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400">Bloqueada</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400">Blocked</span>
                                   )}
                                   {stLabel && !isCompleted && !isBlocked && (
                                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${stLabel.color}`}>{stLabel.label}</span>
@@ -1982,12 +1982,12 @@ export const Clients: React.FC = () => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 truncate">
-                                        Depende de: {blockerTask.title}
+                                        Depends on: {blockerTask.title}
                                       </p>
                                       <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60">
                                         {blockerOwner
-                                          ? `${blockerOwner} necesita completar esta tarea`
-                                          : 'Esta tarea no tiene asignado — necesita ser completada primero'}
+                                          ? `${blockerOwner} needs to complete this task`
+                                          : 'This task has no assignee — needs to be completed first'}
                                       </p>
                                     </div>
                                   </div>
@@ -2004,7 +2004,7 @@ export const Clients: React.FC = () => {
                                     return (
                                     <div key={sub.id} className={`flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors group/sub ${subBlocked ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''}`}>
                                       {subBlocked ? (
-                                        <div className="w-4 h-4 rounded border border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title={subBlockerOwner ? `Esperando a ${subBlockerOwner}` : 'Bloqueada'}>
+                                        <div className="w-4 h-4 rounded border border-amber-300 dark:border-amber-500/40 flex items-center justify-center shrink-0" title={subBlockerOwner ? `Waiting for ${subBlockerOwner}` : 'Blocked'}>
                                           <Icons.Lock size={8} className="text-amber-500" />
                                         </div>
                                       ) : (
@@ -2023,7 +2023,7 @@ export const Clients: React.FC = () => {
                                       </span>
                                       {subBlocked && (
                                         <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">
-                                          {subBlockerOwner ? `esp. ${subBlockerOwner}` : 'bloqueada'}
+                                          {subBlockerOwner ? `wait. ${subBlockerOwner}` : 'blocked'}
                                         </span>
                                       )}
                                     </div>
@@ -2034,7 +2034,7 @@ export const Clients: React.FC = () => {
                                     <div className="w-4 h-4 rounded border border-dashed border-zinc-300 dark:border-zinc-600 shrink-0" />
                                     <input
                                       type="text"
-                                      placeholder="Agregar subtarea..."
+                                      placeholder="Add subtask..."
                                       value={newSubtaskTitle}
                                       onChange={e => setNewSubtaskTitle(e.target.value)}
                                       onKeyDown={e => e.key === 'Enter' && handleAddSubtask(task.id)}
@@ -2046,7 +2046,7 @@ export const Clients: React.FC = () => {
                                         disabled={addingSubtask}
                                         className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 disabled:opacity-40"
                                       >
-                                        {addingSubtask ? '...' : 'Agregar'}
+                                        {addingSubtask ? '...' : 'Add'}
                                       </button>
                                     )}
                                   </div>
@@ -2074,7 +2074,7 @@ export const Clients: React.FC = () => {
                               <div className="mt-3 border-t border-zinc-100 dark:border-zinc-800 pt-3">
                                 <div className="flex items-center gap-2 px-3 pb-2">
                                   <Icons.CheckCircle size={12} className="text-emerald-500" />
-                                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completadas ({completed.length})</p>
+                                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed ({completed.length})</p>
                                 </div>
                                 {completed.map(task => renderTask(task, true))}
                               </div>
@@ -2119,8 +2119,8 @@ export const Clients: React.FC = () => {
                           <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3">
                             <Icons.Clock size={18} className="text-zinc-400" />
                           </div>
-                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sin historial</p>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">Las acciones aparecerán aquí</p>
+                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">No history</p>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Actions will appear here</p>
                         </div>
                       )}
                     </motion.div>
@@ -2133,9 +2133,9 @@ export const Clients: React.FC = () => {
               <div className="w-14 h-14 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
                 <Icons.Users size={24} className="text-zinc-400" />
               </div>
-              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Selecciona un cliente</h3>
+              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Select a client</h3>
               <p className="text-xs text-zinc-400 max-w-xs">
-                Elige un cliente de la lista o crea uno nuevo para ver sus detalles, mensajes y tareas.
+                Choose a client from the list or create a new one to see their details, messages and tasks.
               </p>
             </div>
           )}
@@ -2146,7 +2146,7 @@ export const Clients: React.FC = () => {
       <SlidePanel
         isOpen={showNewClientPanel}
         onClose={() => setShowNewClientPanel(false)}
-        title="Nuevo Cliente"
+        title="New Client"
         width="sm"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -2154,7 +2154,7 @@ export const Clients: React.FC = () => {
               onClick={() => setShowNewClientPanel(false)}
               className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
-              Cancelar
+              Cancel
             </button>
             <button
               onClick={handleCreateClient}
@@ -2166,17 +2166,17 @@ export const Clients: React.FC = () => {
               ) : (
                 <Icons.Plus size={14} />
               )}
-              {creatingClient ? 'Creando...' : 'Crear Cliente'}
+              {creatingClient ? 'Creating...' : 'Create Client'}
             </button>
           </div>
         }
       >
         <div className="p-5 space-y-4">
           <div>
-            <label className={labelClass}>Nombre *</label>
+            <label className={labelClass}>Name *</label>
             <input
               type="text"
-              placeholder="Nombre del cliente"
+              placeholder="Client name"
               value={newClientData.name}
               onChange={(e) => setNewClientData({ ...newClientData, name: e.target.value })}
               className={inputClass}
@@ -2189,17 +2189,17 @@ export const Clients: React.FC = () => {
               <label className={labelClass}>Email</label>
               <input
                 type="email"
-                placeholder="email@ejemplo.com"
+                placeholder="email@example.com"
                 value={newClientData.email}
                 onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })}
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Teléfono</label>
+              <label className={labelClass}>Phone</label>
               <input
                 type="text"
-                placeholder="+54 11 1234-5678"
+                placeholder="+1 555 123-4567"
                 value={newClientData.phone}
                 onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })}
                 className={inputClass}
@@ -2209,20 +2209,20 @@ export const Clients: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>Empresa</label>
+              <label className={labelClass}>Company</label>
               <input
                 type="text"
-                placeholder="Nombre de la empresa"
+                placeholder="Company name"
                 value={newClientData.company}
                 onChange={(e) => setNewClientData({ ...newClientData, company: e.target.value })}
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Industria</label>
+              <label className={labelClass}>Industry</label>
               <input
                 type="text"
-                placeholder="Tecnología, Salud..."
+                placeholder="Technology, Healthcare..."
                 value={newClientData.industry}
                 onChange={(e) => setNewClientData({ ...newClientData, industry: e.target.value })}
                 className={inputClass}
@@ -2231,22 +2231,22 @@ export const Clients: React.FC = () => {
           </div>
 
           <div>
-            <label className={labelClass}>Estado</label>
+            <label className={labelClass}>Status</label>
             <select
               value={newClientData.status}
               onChange={(e) => setNewClientData({ ...newClientData, status: e.target.value as any })}
               className={inputClass}
             >
-              <option value="prospect">Prospecto</option>
-              <option value="active">Activo</option>
-              <option value="inactive">Inactivo</option>
+              <option value="prospect">Prospect</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
 
           <div>
-            <label className={labelClass}>Notas</label>
+            <label className={labelClass}>Notes</label>
             <textarea
-              placeholder="Notas adicionales..."
+              placeholder="Additional notes..."
               value={newClientData.notes}
               onChange={(e) => setNewClientData({ ...newClientData, notes: e.target.value })}
               className={inputClass + ' resize-none'}

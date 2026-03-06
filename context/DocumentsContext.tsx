@@ -3,6 +3,18 @@ import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { useTenantId } from './TenantContext'
 
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timeout: ${label} tardó más de ${ms / 1000}s`)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 export interface Folder {
   id: string
   owner_id: string
@@ -86,7 +98,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         filesQuery = filesQuery.is('folder_id', null)
       }
 
-      const [foldersRes, filesRes] = await Promise.all([foldersQuery, filesQuery])
+      const [foldersRes, filesRes] = await withTimeout(
+        Promise.all([Promise.resolve(foldersQuery), Promise.resolve(filesQuery)]),
+        15000,
+        'cargar documentos'
+      )
 
       if (foldersRes.error) {
         if (foldersRes.error.code === 'PGRST116') setFolders([])
@@ -163,7 +179,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     console.log('Creating folder with payload:', insertPayload)
 
-    const { data, error: err } = await supabase.from('folders').insert(insertPayload).select().single()
+    const { data, error: err } = await withTimeout(
+      Promise.resolve(supabase.from('folders').insert(insertPayload).select().single()),
+      15000,
+      'crear carpeta'
+    )
 
     if (err) {
       console.error('Supabase folder insert error:', err)
@@ -186,7 +206,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const fileName = `${user.id}/${Date.now()}_${file.name}`
     console.log('Attempting storage upload:', fileName);
 
-    const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file)
+    const { error: uploadError } = await withTimeout(
+      supabase.storage.from('documents').upload(fileName, file),
+      30000,
+      'subir archivo a storage'
+    )
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
       throw new Error(`Storage Error: ${uploadError.message} (Code: ${uploadError.name})`);
@@ -196,17 +220,21 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const { clientId = null, projectId = null } = options || {}
 
-    const { data: fileData, error: dbError } = await supabase.from('files').insert({
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      url: urlData.publicUrl,
-      folder_id: currentFolderId,
-      owner_id: user.id,
-      tenant_id: tenantId,
-      client_id: clientId,
-      project_id: projectId
-    }).select().single()
+    const { data: fileData, error: dbError } = await withTimeout(
+      Promise.resolve(supabase.from('files').insert({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: urlData.publicUrl,
+        folder_id: currentFolderId,
+        owner_id: user.id,
+        tenant_id: tenantId,
+        client_id: clientId,
+        project_id: projectId
+      }).select().single()),
+      15000,
+      'insertar archivo en DB'
+    )
 
     if (dbError) {
       console.error('Database insert error:', dbError);

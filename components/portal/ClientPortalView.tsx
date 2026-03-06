@@ -73,7 +73,7 @@ type FileRecord = {
 };
 
 export const ClientPortalView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>('CLIENT PORTAL');
@@ -83,6 +83,19 @@ export const ClientPortalView: React.FC = () => {
   const [clientId, setClientId] = useState<string | undefined>();
   const [clientName, setClientName] = useState<string | undefined>();
   const [clientEmail, setClientEmail] = useState<string | undefined>();
+
+  // Auth timeout: if user isn't available after 6s, stop waiting
+  useEffect(() => {
+    if (user) return; // user available, no timeout needed
+    const timer = setTimeout(() => {
+      if (!user) {
+        console.warn('[Portal] Auth timeout — user not available');
+        setLoading(false);
+        setError('Could not verify your session. Please try reloading the page.');
+      }
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [user]);
 
   const handleLogout = async () => {
     // If admin is previewing the portal, just go back to the app (no signout)
@@ -166,7 +179,7 @@ export const ClientPortalView: React.FC = () => {
         }
 
         if (!client) {
-          setError('No se encontró tu registro de cliente. Es posible que tu cuenta aún se esté configurando. Intentá de nuevo en unos segundos.');
+          setError('Could not find your client record. Your account may still be setting up. Please try again in a few seconds.');
           setLoading(false);
           return;
         }
@@ -238,16 +251,16 @@ export const ClientPortalView: React.FC = () => {
           }
 
           const completedAt = task.completed_at
-            ? new Date(task.completed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+            ? new Date(task.completed_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
             : undefined;
 
           const eta = task.due_date
-            ? new Date(task.due_date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+            ? new Date(task.due_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
             : undefined;
 
           return {
             id: task.id,
-            title: task.title || `Tarea ${index + 1}`,
+            title: task.title || `Task ${index + 1}`,
             description: task.group_name || '',
             status,
             eta,
@@ -304,7 +317,7 @@ export const ClientPortalView: React.FC = () => {
               if (isPaid) paidFromInstallments += Number(inst.amount || 0);
               payments.push({
                 id: inst.id,
-                concept: `${inc.concept || 'Pago'} — Cuota ${inst.number || 1}`,
+                concept: `${inc.concept || 'Payment'} — Installment ${inst.number || 1}`,
                 amount: Number(inst.amount || 0),
                 dueDate: inst.due_date || inc.due_date || '',
                 paidDate: inst.paid_date || undefined,
@@ -317,7 +330,7 @@ export const ClientPortalView: React.FC = () => {
             if (isPaid) paidFromInstallments += Number(inc.total_amount || 0);
             payments.push({
               id: inc.id,
-              concept: inc.concept || 'Pago',
+              concept: inc.concept || 'Payment',
               amount: Number(inc.total_amount || 0),
               dueDate: inc.due_date || '',
               status: inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending',
@@ -348,7 +361,7 @@ export const ClientPortalView: React.FC = () => {
             payments,
           },
           milestones: milestones.length ? milestones : [
-            { id: 'm1', title: 'Inicio del proyecto', description: 'Configuración inicial', status: 'current' }
+            { id: 'm1', title: 'Project Start', description: 'Initial setup', status: 'current' }
           ],
           logs: logs.length ? logs : [
             { id: 'l1', timestamp: 'Today', message: 'Portal connected to live project data.' }
@@ -372,7 +385,7 @@ export const ClientPortalView: React.FC = () => {
   }, [user, clientIdParam, projectIdParam]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-zinc-500">Cargando portal...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading portal...</div>;
   }
 
   if (error || !data) {
@@ -382,20 +395,20 @@ export const ClientPortalView: React.FC = () => {
           <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">!</span>
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Portal no disponible</h2>
-          <p className="text-sm text-zinc-500 mb-6">{error || 'No se encontraron datos del portal.'}</p>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Portal Unavailable</h2>
+          <p className="text-sm text-zinc-500 mb-6">{error || 'No portal data found.'}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-[#2C0405] text-white rounded-xl text-sm font-medium hover:bg-[#1a0203] transition-colors"
             >
-              Reintentar
+              Retry
             </button>
             <button
               onClick={handleLogout}
               className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
             >
-              Cerrar sesión
+              Sign Out
             </button>
           </div>
         </div>
