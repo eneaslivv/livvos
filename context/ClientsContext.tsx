@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 
@@ -15,6 +15,7 @@ export interface Client {
   notes?: string
   address?: string
   industry?: string
+  color?: string | null
   created_at: string
   updated_at: string
 }
@@ -218,16 +219,14 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }
 
   const deleteClient = async (id: string) => {
-    try {
-      const { error: err } = await supabase
-        .from('clients')
-        .delete()
-        .eq('id', id)
-      
-      if (err) throw err
-    } catch (err) {
-      throw err
-    }
+    const { error: err } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', id)
+
+    if (err) throw err
+    // Always remove from local state (Realtime may not fire if row didn't exist)
+    setClients(prev => prev.filter(c => c.id !== id))
   }
 
   // Funciones auxiliares (no modifican estado global de clients, son bajo demanda)
@@ -335,23 +334,29 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return data
   }
 
+  const refreshClients = useCallback(() => fetchClients(true), [fetchClients])
+
+  const value = useMemo(() => ({
+    clients,
+    loading,
+    error,
+    createClient,
+    updateClient,
+    deleteClient,
+    getClientMessages,
+    sendMessage,
+    getClientTasks,
+    createTask,
+    updateTask,
+    getClientHistory,
+    addHistoryEntry,
+    refreshClients
+  }), [clients, loading, error, createClient, updateClient, deleteClient,
+    getClientMessages, sendMessage, getClientTasks, createTask, updateTask,
+    getClientHistory, addHistoryEntry, refreshClients])
+
   return (
-    <ClientsContext.Provider value={{
-      clients,
-      loading,
-      error,
-      createClient,
-      updateClient,
-      deleteClient,
-      getClientMessages,
-      sendMessage,
-      getClientTasks,
-      createTask,
-      updateTask,
-      getClientHistory,
-      addHistoryEntry,
-      refreshClients: () => fetchClients(true)
-    }}>
+    <ClientsContext.Provider value={value}>
       {children}
     </ClientsContext.Provider>
   )
