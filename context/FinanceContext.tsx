@@ -114,6 +114,27 @@ export interface CreateExpenseData {
   status?: 'paid' | 'pending'
 }
 
+export interface TimeEntry {
+  id: string
+  tenant_id: string
+  project_id: string
+  user_id: string
+  description: string
+  hours: number
+  date: string
+  hourly_rate: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateTimeEntryData {
+  project_id: string
+  description: string
+  hours: number
+  date: string
+  hourly_rate?: number | null
+}
+
 // ─── Context Type ─────────────────────────────────────────────────
 
 interface FinanceContextType {
@@ -146,6 +167,13 @@ interface FinanceContextType {
   updateExpense: (id: string, updates: Partial<ExpenseEntry>) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
   refreshExpenses: () => Promise<void>
+
+  // Time entry operations
+  timeEntries: TimeEntry[]
+  timeEntriesLoading: boolean
+  createTimeEntry: (data: CreateTimeEntryData) => Promise<TimeEntry | null>
+  deleteTimeEntry: (id: string) => Promise<void>
+  refreshTimeEntries: () => Promise<void>
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -185,6 +213,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   // Expense state
   const [expenses, setExpenses] = useState<ExpenseEntry[]>([])
   const [expensesLoading, setExpensesLoading] = useState(false)
+
+  // Time entry state
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [timeEntriesLoading, setTimeEntriesLoading] = useState(false)
+  const hasLoadedTimeEntriesRef = useRef(false)
 
   // ─── Permissions ────────────────────────────────────────────
 
@@ -377,6 +410,55 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadExpenses])
+
+  // ─── Time Entries Load + Realtime ──────────────────────────
+
+  const loadTimeEntries = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setTimeEntries([])
+      setTimeEntriesLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedTimeEntriesRef.current) {
+        setTimeEntriesLoading(true)
+      }
+
+      const timeout = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timed out' } }), 8000)
+      )
+
+      const query = supabase
+        .from('time_entries')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('date', { ascending: false })
+
+      const { data, error: err } = await Promise.race([query, timeout])
+
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Time entries load issue:', err.code, err.message)
+        setTimeEntries([])
+        return
+      }
+      setTimeEntries(data || [])
+      hasLoadedTimeEntriesRef.current = true
+    } catch (err) {
+      console.error('Error loading time entries:', err)
+      setTimeEntries([])
+    } finally {
+      setTimeEntriesLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadTimeEntries()
+    const channel = supabase
+      .channel('time-entries-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => { loadTimeEntries() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadTimeEntries])
 
   // ─── Legacy Finance CRUD ────────────────────────────────────
 
@@ -654,6 +736,47 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   }, [])
 
+  // ─── Time Entry CRUD ───────────────────────────────────────
+
+  const createTimeEntry = useCallback(async (data: CreateTimeEntryData): Promise<TimeEntry | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    try {
+      const { data: entry, error: err } = await supabase
+        .from('time_entries')
+        .insert({
+          tenant_id: currentTenant.id,
+          user_id: user.id,
+          project_id: data.project_id,
+          description: data.description,
+          hours: data.hours,
+          date: data.date,
+          hourly_rate: data.hourly_rate || null,
+        })
+        .select()
+        .single()
+      if (err) {
+        console.error('[FinanceContext] Time entry insert error:', err)
+        throw new Error(err.message || 'Error creating time entry.')
+      }
+      setTimeEntries(prev => [entry, ...prev])
+      return entry
+    } catch (err) {
+      console.error('[FinanceContext] createTimeEntry failed:', err)
+      throw err
+    }
+  }, [user, currentTenant?.id])
+
+  const deleteTimeEntry = useCallback(async (id: string): Promise<void> => {
+    try {
+      const { error: err } = await supabase.from('time_entries').delete().eq('id', id)
+      if (err) throw err
+      setTimeEntries(prev => prev.filter(e => e.id !== id))
+    } catch (err) {
+      console.error('Error deleting time entry:', err)
+      throw err
+    }
+  }, [])
+
   // ─── Value ──────────────────────────────────────────────────
 
   const value: FinanceContextType = useMemo(() => ({
@@ -667,12 +790,16 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     expenses, expensesLoading,
     createExpense, updateExpense, deleteExpense,
     refreshExpenses: loadExpenses,
+    timeEntries, timeEntriesLoading,
+    createTimeEntry, deleteTimeEntry,
+    refreshTimeEntries: loadTimeEntries,
   }), [finances, loading, error, canViewFinances, canEditFinances,
     createFinance, updateFinance, deleteFinance,
     getFinanceByProject, getFinancialSummary,
     getTenantFinancials, updateProjectFinancials,
     incomes, incomesLoading, createIncome, updateInstallment, deleteIncome, loadIncomes,
-    expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses])
+    expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses,
+    timeEntries, timeEntriesLoading, createTimeEntry, deleteTimeEntry, loadTimeEntries])
 
   return (
     <FinanceContext.Provider value={value}>

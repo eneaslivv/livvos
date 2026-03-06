@@ -2,16 +2,16 @@ import React from 'react'
 import { X } from 'lucide-react'
 
 export const COLOR_PRESETS = [
-  '#6366f1', // indigo
-  '#3b82f6', // blue
-  '#06b6d4', // cyan
-  '#10b981', // emerald
-  '#84cc16', // lime
-  '#eab308', // yellow
-  '#f97316', // orange
-  '#ef4444', // red
-  '#ec4899', // pink
-  '#8b5cf6', // violet
+  '#2C0405', // noir
+  '#7A2E3B', // berry
+  '#C45B3E', // terracotta
+  '#D4956A', // apricot
+  '#E8C87A', // gold
+  '#6B7A3D', // olive
+  '#3D6B5C', // forest
+  '#4A5D7A', // slate
+  '#8B6B8A', // mauve
+  '#A08070', // taupe
 ] as const
 
 export const colorToBg = (hex: string, alpha = 0.12): string => {

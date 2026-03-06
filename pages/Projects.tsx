@@ -323,7 +323,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const { members } = useTeam();
   const { user: currentUser } = useAuth();
   const { currentTenant } = useTenant();
-  const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense } = useFinance();
+  const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense, deleteExpense, timeEntries, createTimeEntry, deleteTimeEntry } = useFinance();
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
@@ -394,6 +394,8 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const [expenseFormData, setExpenseFormData] = useState({ concept: '', amount: '', category: 'Software', date: new Date().toISOString().split('T')[0] });
   const [isSubmittingFinance, setIsSubmittingFinance] = useState(false);
   const [expandedIncomeId, setExpandedIncomeId] = useState<string | null>(null);
+  const [showTimeForm, setShowTimeForm] = useState(false);
+  const [timeFormData, setTimeFormData] = useState({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
 
   const selectedProject = projects.find(p => p.id === selectedId) || projects[0];
   const allProjectTasks = selectedProject
@@ -487,19 +489,22 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
   /* ─── Project financials from incomes/expenses ─── */
   const projectFinancials = useMemo(() => {
-    if (!selectedProject) return { totalIncome: 0, totalCollected: 0, totalExpenses: 0, profit: 0, pendingAmount: 0, incomeEntries: [] as typeof incomes, expenseEntries: [] as typeof expenses };
+    if (!selectedProject) return { totalIncome: 0, totalCollected: 0, totalExpenses: 0, profit: 0, pendingAmount: 0, incomeEntries: [] as typeof incomes, expenseEntries: [] as typeof expenses, projectTimeEntries: [] as typeof timeEntries, totalHours: 0, timeCost: 0 };
     const incomeEntries = incomes.filter(i => i.project_id === selectedProject.id);
     const expenseEntries = expenses.filter(e => e.project_id === selectedProject.id);
+    const projectTimeEntries = timeEntries.filter(t => t.project_id === selectedProject.id);
     const totalIncome = incomeEntries.reduce((sum, i) => sum + i.total_amount, 0);
     const totalCollected = incomeEntries.reduce((sum, i) => {
       const paid = (i.installments || []).filter(inst => inst.status === 'paid').reduce((s, inst) => s + inst.amount, 0);
       return sum + paid;
     }, 0);
     const totalExpenses = expenseEntries.reduce((sum, e) => sum + e.amount, 0);
-    const profit = totalCollected - totalExpenses;
+    const totalHours = projectTimeEntries.reduce((sum, t) => sum + Number(t.hours), 0);
+    const timeCost = projectTimeEntries.reduce((sum, t) => sum + (Number(t.hours) * Number(t.hourly_rate || 0)), 0);
+    const profit = totalCollected - totalExpenses - timeCost;
     const pendingAmount = totalIncome - totalCollected;
-    return { totalIncome, totalCollected, totalExpenses, profit, pendingAmount, incomeEntries, expenseEntries };
-  }, [selectedProject, incomes, expenses]);
+    return { totalIncome, totalCollected, totalExpenses, profit, pendingAmount, incomeEntries, expenseEntries, projectTimeEntries, totalHours, timeCost };
+  }, [selectedProject, incomes, expenses, timeEntries]);
 
   useEffect(() => {
     errorLogger.log('Projects data updated', { projectsCount: projects.length, selectedProject: selectedProject?.id, activeTab });
@@ -937,6 +942,34 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     } finally {
       setIsSubmittingFinance(false);
     }
+  };
+
+  const handleCreateTimeEntry = async () => {
+    if (!selectedProject) return;
+    setIsSubmittingFinance(true);
+    try {
+      await createTimeEntry({
+        project_id: selectedProject.id,
+        description: timeFormData.description.trim(),
+        hours: Number(timeFormData.hours),
+        date: timeFormData.date || new Date().toISOString().split('T')[0],
+        hourly_rate: timeFormData.hourlyRate ? Number(timeFormData.hourlyRate) : null,
+      });
+      setShowTimeForm(false);
+      setTimeFormData({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
+    } catch (err) {
+      errorLogger.error('Error creating time entry', err);
+    } finally {
+      setIsSubmittingFinance(false);
+    }
+  };
+
+  const handleDeleteExpenseEntry = async (id: string) => {
+    try { await deleteExpense(id); } catch (err) { errorLogger.error('Error deleting expense', err); }
+  };
+
+  const handleDeleteTimeEntry = async (id: string) => {
+    try { await deleteTimeEntry(id); } catch (err) { errorLogger.error('Error deleting time entry', err); }
   };
 
   /* ─── Tab definitions ─── */
@@ -1419,6 +1452,13 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     onUpdateInstallment={updateInstallment}
                     onDeleteIncome={deleteIncome}
                     errorLogger={errorLogger}
+                    showTimeForm={showTimeForm}
+                    onShowTimeForm={setShowTimeForm}
+                    timeFormData={timeFormData}
+                    onTimeFormChange={setTimeFormData}
+                    onCreateTimeEntry={handleCreateTimeEntry}
+                    onDeleteTimeEntry={handleDeleteTimeEntry}
+                    onDeleteExpense={handleDeleteExpenseEntry}
                   />
                 )}
 

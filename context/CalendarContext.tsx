@@ -258,7 +258,13 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (colMatch?.[1]) return colMatch[1]
     // Match "invalid input" errors for specific columns (e.g. empty string for TIMESTAMPTZ)
     const valMatch = message.match(/invalid input.*for.*column\s+"([^"]+)"/i)
-    return valMatch?.[1] || null
+    if (valMatch?.[1]) return valMatch[1]
+    // Match PL/pgSQL trigger errors: record "new" has no field "X"
+    const triggerMatch = message.match(/has no field\s+"([^"]+)"/i)
+    if (triggerMatch?.[1]) return triggerMatch[1]
+    // Match "Could not find" or "unknown column" patterns
+    const unknownMatch = message.match(/(?:unknown|undefined)\s+column\s+"([^"]+)"/i)
+    return unknownMatch?.[1] || null
   }
 
   // ─── EVENTS: optimistic create / update / delete ───
@@ -276,7 +282,9 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setEvents(prev => [...prev, optimistic])
 
     try {
-      const { data, error: err } = await supabase.from('calendar_events').insert(eventData).select().single()
+      const tenantId = await resolveTenantId()
+      const insertData = { ...eventData, ...(tenantId && { tenant_id: tenantId }) }
+      const { data, error: err } = await supabase.from('calendar_events').insert(insertData).select().single()
       if (err) throw err
       // Replace temp with real data
       setEvents(prev => prev.map(e => e.id === tempId ? data : e))
@@ -415,14 +423,64 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       let currentPayload = { ...payload }
+      if (import.meta.env.DEV) console.log('[updateTask] payload:', JSON.stringify(currentPayload, null, 2))
       for (let attempt = 0; attempt < 8; attempt++) {
         const { data, error: err } = await supabase.from('tasks').update(currentPayload).eq('id', id).select().single()
         if (!err) {
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === id ? normalized : t))
+
+          // Notify assignee when task is assigned to someone new
+          const newAssignee = updates.assignee_id
+          const oldAssignee = backup?.assignee_id
+          if (newAssignee && newAssignee !== oldAssignee) {
+            const tenantId = cachedTenantIdRef.current
+            if (tenantId) {
+              supabase.from('notifications').insert({
+                user_id: newAssignee,
+                tenant_id: tenantId,
+                type: 'task',
+                title: `Task assigned: ${normalized.title}`,
+                message: `You have been assigned a new task`,
+                priority: normalized.priority === 'urgent' ? 'urgent' : normalized.priority === 'high' ? 'high' : 'medium',
+                read: false,
+                action_required: true,
+                category: 'task',
+                metadata: { task_id: id },
+              }).then(({ error: nErr }) => {
+                if (nErr && import.meta.env.DEV) console.warn('Failed to create assignment notification:', nErr.message)
+              })
+            }
+          }
+
+          // Notify assignee when task status changes (completed/cancelled)
+          if (backup?.assignee_id && updates.status && updates.status !== backup.status) {
+            const statusMsg = updates.status === 'done' ? 'completed' : updates.status === 'cancelled' ? 'cancelled' : null
+            if (statusMsg && backup.assignee_id !== backup.owner_id) {
+              const tenantId = cachedTenantIdRef.current
+              if (tenantId) {
+                supabase.from('notifications').insert({
+                  user_id: backup.assignee_id,
+                  tenant_id: tenantId,
+                  type: 'task',
+                  title: `Task ${statusMsg}: ${normalized.title}`,
+                  message: `A task assigned to you has been ${statusMsg}`,
+                  priority: 'low',
+                  read: false,
+                  action_required: false,
+                  category: 'task',
+                  metadata: { task_id: id, status: updates.status },
+                }).then(({ error: nErr }) => {
+                  if (nErr && import.meta.env.DEV) console.warn('Failed to create status notification:', nErr.message)
+                })
+              }
+            }
+          }
+
           return normalized
         }
         const missingColumn = getMissingColumn(err.message || '')
+        if (import.meta.env.DEV) console.warn(`[updateTask] attempt ${attempt} error:`, err.message, missingColumn ? `→ stripping "${missingColumn}"` : '→ no match, throwing')
         if (missingColumn && Object.prototype.hasOwnProperty.call(currentPayload, missingColumn)) {
           const { [missingColumn]: _omitted, ...rest } = currentPayload
           currentPayload = rest

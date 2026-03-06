@@ -19,6 +19,9 @@ export interface OverviewTabProps {
     pendingAmount: number;
     incomeEntries: any[];
     expenseEntries: any[];
+    projectTimeEntries: any[];
+    totalHours: number;
+    timeCost: number;
   };
   expandedIncomeId: string | null;
   onExpandIncome: (id: string | null) => void;
@@ -41,6 +44,14 @@ export interface OverviewTabProps {
   onUpdateInstallment: (id: string, updates: any) => Promise<void>;
   onDeleteIncome: (id: string) => Promise<void>;
   errorLogger: any;
+  // Time tracking
+  showTimeForm: boolean;
+  onShowTimeForm: (val: boolean) => void;
+  timeFormData: { description: string; hours: string; date: string; hourlyRate: string };
+  onTimeFormChange: (data: { description: string; hours: string; date: string; hourlyRate: string }) => void;
+  onCreateTimeEntry: () => void;
+  onDeleteTimeEntry: (id: string) => Promise<void>;
+  onDeleteExpense: (id: string) => Promise<void>;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -70,6 +81,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onUpdateInstallment,
   onDeleteIncome,
   errorLogger,
+  showTimeForm,
+  onShowTimeForm,
+  timeFormData,
+  onTimeFormChange,
+  onCreateTimeEntry,
+  onDeleteTimeEntry,
+  onDeleteExpense,
 }) => {
   return (
     <div className="grid grid-cols-3 gap-6">
@@ -262,7 +280,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </span>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
             <div>
               <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Invoiced</div>
               <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
@@ -279,6 +297,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Expenses</div>
               <div className="text-lg font-bold text-red-500 dark:text-red-400 tabular-nums">
                 ${projectFinancials.totalExpenses.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Hours</div>
+              <div className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                {projectFinancials.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Time Cost</div>
+              <div className="text-lg font-bold text-orange-500 dark:text-orange-400 tabular-nums">
+                ${projectFinancials.timeCost.toLocaleString()}
               </div>
             </div>
             <div>
@@ -423,18 +453,73 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           )}
 
-          {/* Expense entries (compact) */}
+          {/* Expense entries (full list with delete) */}
           {projectFinancials.expenseEntries.length > 0 && (
             <div className="space-y-1 mb-3">
-              <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Expenses</div>
-              {projectFinancials.expenseEntries.slice(0, 3).map((exp: any) => (
-                <div key={exp.id} className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30">
+              <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                Expenses ({projectFinancials.expenseEntries.length})
+              </div>
+              {projectFinancials.expenseEntries.map((exp: any) => (
+                <div key={exp.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 group">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
                     <span className="text-xs text-zinc-600 dark:text-zinc-400 truncate">{exp.concept}</span>
                     <span className="text-[9px] text-zinc-400 shrink-0">{exp.category}</span>
+                    {exp.date && (
+                      <span className="text-[9px] text-zinc-300 dark:text-zinc-600 shrink-0">
+                        {new Date(exp.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-xs font-semibold text-red-500 dark:text-red-400 tabular-nums shrink-0">-${exp.amount.toLocaleString()}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-red-500 dark:text-red-400 tabular-nums">-${exp.amount.toLocaleString()}</span>
+                    <button
+                      onClick={() => { if (confirm('Delete this expense?')) onDeleteExpense(exp.id); }}
+                      className="p-0.5 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      title="Delete expense"
+                    >
+                      <Icons.X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Time entries list */}
+          {projectFinancials.projectTimeEntries.length > 0 && (
+            <div className="space-y-1 mb-3">
+              <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                Time Logged ({projectFinancials.projectTimeEntries.length})
+              </div>
+              {projectFinancials.projectTimeEntries.map((entry: any) => (
+                <div key={entry.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 group">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Icons.Clock size={12} className="text-blue-400 shrink-0" />
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400 truncate">{entry.description || 'Time entry'}</span>
+                    {entry.date && (
+                      <span className="text-[9px] text-zinc-300 dark:text-zinc-600 shrink-0">
+                        {new Date(entry.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
+                      {Number(entry.hours).toLocaleString(undefined, { maximumFractionDigits: 1 })}h
+                    </span>
+                    {entry.hourly_rate && (
+                      <span className="text-[9px] text-zinc-400 tabular-nums">
+                        ${(Number(entry.hours) * Number(entry.hourly_rate)).toLocaleString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => { if (confirm('Delete this time entry?')) onDeleteTimeEntry(entry.id); }}
+                      className="p-0.5 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      title="Delete time entry"
+                    >
+                      <Icons.X size={12} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -605,6 +690,92 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             )}
           </AnimatePresence>
 
+          {/* Inline Time Entry Form */}
+          <AnimatePresence>
+            {showTimeForm && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="overflow-hidden"
+              >
+                <div className="p-3 mb-3 bg-blue-50/50 dark:bg-blue-500/5 rounded-lg border border-blue-200/60 dark:border-blue-800/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Log Time</span>
+                    <button onClick={() => { onShowTimeForm(false); onTimeFormChange({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' }); }}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                      <Icons.X size={14} />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="What did you work on?"
+                    value={timeFormData.description}
+                    onChange={e => onTimeFormChange({ ...timeFormData, description: e.target.value })}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    autoFocus
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">Hours</label>
+                      <input
+                        type="number" min="0.25" step="0.25" placeholder="0"
+                        value={timeFormData.hours}
+                        onChange={e => onTimeFormChange({ ...timeFormData, hours: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">Rate/hr (opt)</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400">$</span>
+                        <input
+                          type="number" min="0" step="1" placeholder="—"
+                          value={timeFormData.hourlyRate}
+                          onChange={e => onTimeFormChange({ ...timeFormData, hourlyRate: e.target.value })}
+                          className="w-full pl-6 pr-2 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">Date</label>
+                      <input
+                        type="date"
+                        value={timeFormData.date}
+                        onChange={e => onTimeFormChange({ ...timeFormData, date: e.target.value })}
+                        className="w-full px-2 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      />
+                    </div>
+                  </div>
+                  {timeFormData.hours && timeFormData.hourlyRate && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-100/60 dark:bg-blue-500/10 rounded-md">
+                      <Icons.Clock size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="text-[10px] text-blue-700 dark:text-blue-300 font-medium">
+                        {timeFormData.hours}h × ${Number(timeFormData.hourlyRate).toLocaleString()}/hr = ${(Number(timeFormData.hours) * Number(timeFormData.hourlyRate)).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => { onShowTimeForm(false); onTimeFormChange({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' }); }}
+                      className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={isSubmittingFinance || !timeFormData.hours || Number(timeFormData.hours) <= 0}
+                      onClick={onCreateTimeEntry}
+                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg shadow-sm transition-all"
+                    >
+                      {isSubmittingFinance ? 'Saving...' : 'Log Time'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Budget input + Action buttons */}
           <div className="flex items-center gap-2">
             {!project.budget && (
@@ -626,18 +797,25 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </div>
             )}
             <button
-              onClick={() => { onShowIncomeForm(true); onShowExpenseForm(false); }}
+              onClick={() => { onShowIncomeForm(true); onShowExpenseForm(false); onShowTimeForm(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors"
             >
               <Icons.Plus size={12} />
               Income
             </button>
             <button
-              onClick={() => { onShowExpenseForm(true); onShowIncomeForm(false); }}
+              onClick={() => { onShowExpenseForm(true); onShowIncomeForm(false); onShowTimeForm(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
             >
               <Icons.Plus size={12} />
               Expense
+            </button>
+            <button
+              onClick={() => { onShowTimeForm(true); onShowIncomeForm(false); onShowExpenseForm(false); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+            >
+              <Icons.Plus size={12} />
+              Time
             </button>
           </div>
         </div>

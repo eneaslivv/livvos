@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons } from '../components/ui/Icons';
-import { Card } from '../components/ui/Card';
 import { useDocuments, File as DocFile } from '../hooks/useDocuments';
 import { useClients } from '../hooks/useClients';
 import { useProjects } from '../context/ProjectsContext';
@@ -12,6 +11,7 @@ export const Docs: React.FC = () => {
   const {
     folders,
     files,
+    allFolders,
     breadcrumbs,
     currentFolderId,
     loading,
@@ -19,6 +19,8 @@ export const Docs: React.FC = () => {
     setCurrentFolderId,
     createFolder,
     uploadFile,
+    updateFile,
+    updateFolder,
     deleteFolder,
     deleteFile
   } = useDocuments();
@@ -44,16 +46,89 @@ export const Docs: React.FC = () => {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [linkType, setLinkType] = useState<'none' | 'client' | 'project'>('none');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [folderError, setFolderError] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Action menu state (Move / Assign / Delete)
+  const [actionMenu, setActionMenu] = useState<{ type: 'file' | 'folder'; id: string; name: string; url?: string; currentFolderId?: string | null; clientId?: string | null; projectId?: string | null } | null>(null);
+  const [actionView, setActionView] = useState<'menu' | 'move' | 'assign'>('menu');
+  const [assignType, setAssignType] = useState<'none' | 'client' | 'project'>('none');
+  const [assignClientId, setAssignClientId] = useState('');
+  const [assignProjectId, setAssignProjectId] = useState('');
+
+  const openActionMenu = (type: 'file' | 'folder', item: any) => {
+    setActionMenu({
+      type,
+      id: item.id,
+      name: item.name,
+      url: item.url,
+      currentFolderId: type === 'file' ? item.folder_id : item.parent_id,
+      clientId: item.client_id || null,
+      projectId: item.project_id || null,
+    });
+    setActionView('menu');
+    // Pre-fill assign state
+    if (item.client_id) { setAssignType('client'); setAssignClientId(item.client_id); setAssignProjectId(''); }
+    else if (item.project_id) { setAssignType('project'); setAssignProjectId(item.project_id); setAssignClientId(''); }
+    else { setAssignType('none'); setAssignClientId(''); setAssignProjectId(''); }
+  };
+
+  const closeActionMenu = () => { setActionMenu(null); setActionView('menu'); };
+
+  const handleMove = async (targetFolderId: string | null) => {
+    if (!actionMenu) return;
+    try {
+      if (actionMenu.type === 'file') {
+        await updateFile(actionMenu.id, { folder_id: targetFolderId });
+      } else {
+        await updateFolder(actionMenu.id, { parent_id: targetFolderId });
+      }
+      closeActionMenu();
+    } catch (err: any) {
+      alert(`Error moving: ${err.message}`);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!actionMenu) return;
+    const updates = {
+      client_id: assignType === 'client' && assignClientId ? assignClientId : null,
+      project_id: assignType === 'project' && assignProjectId ? assignProjectId : null,
+    };
+    try {
+      if (actionMenu.type === 'file') {
+        await updateFile(actionMenu.id, updates);
+      } else {
+        await updateFolder(actionMenu.id, updates);
+      }
+      closeActionMenu();
+    } catch (err: any) {
+      alert(`Error assigning: ${err.message}`);
+    }
+  };
 
   const currentLinkOptions = {
     clientId: linkType === 'client' && selectedClientId ? selectedClientId : null,
     projectId: linkType === 'project' && selectedProjectId ? selectedProjectId : null
   };
+
+  // Navigate back to parent folder
+  const handleBack = useCallback(() => {
+    if (breadcrumbs.length >= 2) {
+      setCurrentFolderId(breadcrumbs[breadcrumbs.length - 2].id);
+    } else {
+      setCurrentFolderId(null);
+    }
+  }, [breadcrumbs, setCurrentFolderId]);
+
+  const currentFolderName = breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].name : 'Documents';
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
@@ -71,20 +146,70 @@ export const Docs: React.FC = () => {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+  // Multi-file upload handler
+  const handleFilesUpload = async (fileList: FileList | File[]) => {
+    const filesToUpload = Array.from(fileList);
+    if (filesToUpload.length === 0) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
+    let uploaded = 0;
+
     try {
-      const file = e.target.files[0];
-      await uploadFile(file as any, currentLinkOptions);
+      for (const file of filesToUpload) {
+        await uploadFile(file as any, currentLinkOptions);
+        uploaded++;
+        setUploadProgress(Math.round((uploaded / filesToUpload.length) * 100));
+      }
     } catch (err: any) {
-      console.error('Full upload error:', err);
+      console.error('Upload error:', err);
       alert(`Error uploading file: ${err.message || JSON.stringify(err)}`);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFilesUpload(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  // Drag & drop
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesUpload(e.dataTransfer.files);
+    }
+  }, [currentLinkOptions]);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -94,11 +219,28 @@ export const Docs: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const getFileIcon = (type: string) => {
+  const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+    catch { return ''; }
+  };
+
+  const isImageType = (type: string) => type.includes('image');
+
+  const getFileIcon = (type: string, name: string) => {
     if (type.includes('image')) return <Icons.Image className="text-violet-500" size={22} />;
+    if (type.includes('video')) return <Icons.Video className="text-purple-500" size={22} />;
+    if (type.includes('audio')) return <Icons.Video className="text-pink-500" size={22} />;
     if (type.includes('pdf')) return <Icons.File className="text-rose-500" size={22} />;
-    if (type.includes('sheet') || type.includes('excel')) return <Icons.FileSheet className="text-emerald-500" size={22} />;
-    if (type.includes('code') || type.includes('json')) return <Icons.FileCode className="text-sky-500" size={22} />;
+    if (type.includes('sheet') || type.includes('excel') || type.includes('csv')) return <Icons.FileSheet className="text-emerald-500" size={22} />;
+    if (type.includes('zip') || type.includes('rar') || type.includes('7z') || type.includes('tar') || type.includes('gz')) return <Icons.Archive className="text-amber-500" size={22} />;
+    if (type.includes('code') || type.includes('json') || type.includes('javascript') || type.includes('typescript') || type.includes('html') || type.includes('css')) return <Icons.FileCode className="text-sky-500" size={22} />;
+    if (type.includes('word') || type.includes('document')) return <Icons.File className="text-blue-500" size={22} />;
+    if (type.includes('presentation') || type.includes('powerpoint')) return <Icons.File className="text-orange-500" size={22} />;
+    // Check by extension
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return <Icons.Video className="text-purple-500" size={22} />;
+    if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext)) return <Icons.Video className="text-pink-500" size={22} />;
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <Icons.Archive className="text-amber-500" size={22} />;
     return <Icons.Docs className="text-zinc-400" size={22} />;
   };
 
@@ -126,21 +268,40 @@ export const Docs: React.FC = () => {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Documents</h1>
-            {activeTab === 'documents' && (
-              <div className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
+            {/* Back button + Title */}
+            <div className="flex items-center gap-3">
+              {activeTab === 'documents' && currentFolderId && (
+                <button
+                  onClick={handleBack}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 shadow-sm"
+                >
+                  <Icons.ChevronLeft size={16} />
+                </button>
+              )}
+              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                {activeTab === 'documents' && currentFolderId ? currentFolderName : 'Documents'}
+              </h1>
+            </div>
+
+            {/* Breadcrumbs */}
+            {activeTab === 'documents' && breadcrumbs.length > 0 && (
+              <div className="flex items-center gap-1.5 text-sm mt-2 ml-0.5">
                 <button
                   onClick={() => setCurrentFolderId(null)}
-                  className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium"
+                  className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium"
                 >
                   Home
                 </button>
-                {breadcrumbs.map((folder) => (
+                {breadcrumbs.map((folder, i) => (
                   <React.Fragment key={folder.id}>
-                    <Icons.ChevronRight size={12} className="text-zinc-300 dark:text-zinc-600" />
+                    <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600" />
                     <button
                       onClick={() => setCurrentFolderId(folder.id)}
-                      className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                      className={`transition-colors ${
+                        i === breadcrumbs.length - 1
+                          ? 'text-zinc-900 dark:text-zinc-100 font-semibold'
+                          : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                      }`}
                     >
                       {folder.name}
                     </button>
@@ -163,12 +324,14 @@ export const Docs: React.FC = () => {
 
               <label className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
                 <Icons.Upload size={15} />
-                {isUploading ? 'Uploading...' : 'Upload File'}
+                {isUploading ? `Uploading${uploadProgress > 0 ? ` ${uploadProgress}%` : '...'}` : 'Upload'}
                 <input
+                  ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  onChange={handleFileUpload}
+                  onChange={handleFileInputChange}
                   disabled={isUploading}
+                  multiple
                 />
               </label>
             </div>
@@ -311,139 +474,390 @@ export const Docs: React.FC = () => {
         <BlogPanel />
       ) : activeTab === 'passwords' ? (
         <PasswordsPanel />
-      ) : folders.length === 0 && files.length === 0 ? (
-        /* Empty state */
-        <div className="text-center py-16">
-          <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-5">
-            <Icons.Folder size={28} className="text-zinc-400 dark:text-zinc-500" />
-          </div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">Empty folder</h3>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            No files or folders in this location. Upload a file or create a folder to get started.
-          </p>
-        </div>
       ) : (
-        /* Documents grid / list */
-        <div className={
-          view === 'grid'
-            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
-            : 'space-y-1.5'
-        }>
-          {/* Folders */}
-          {folders.map((folder) => (
-            view === 'grid' ? (
-              <div
-                key={folder.id}
-                onClick={() => setCurrentFolderId(folder.id)}
-                className="group cursor-pointer bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-all"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                    <Icons.Folder size={20} className="text-blue-500" />
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm('Delete folder?')) deleteFolder(folder.id);
-                    }}
-                    className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1"
-                  >
-                    <Icons.Trash size={14} />
-                  </button>
+        /* Documents content area — with drag & drop */
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className="relative"
+        >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 z-20 bg-blue-50/90 dark:bg-blue-950/90 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-2xl flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/40 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <Icons.Upload size={28} className="text-blue-500" />
                 </div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">Folder</p>
+                <p className="text-base font-semibold text-blue-700 dark:text-blue-300">Drop files to upload</p>
+                <p className="text-sm text-blue-500 dark:text-blue-400 mt-1">
+                  {currentFolderId ? `Into "${currentFolderName}"` : 'Into root folder'}
+                </p>
               </div>
-            ) : (
-              <div
-                key={folder.id}
-                onClick={() => setCurrentFolderId(folder.id)}
-                className="group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
-              >
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
-                  <Icons.Folder size={16} className="text-blue-500" />
-                </div>
-                <span className="flex-1 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</span>
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 mr-2">Folder</span>
+            </div>
+          )}
+
+          {/* Upload progress bar */}
+          {isUploading && uploadProgress > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Uploading files...</span>
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
+
+          {folders.length === 0 && files.length === 0 ? (
+            /* Empty state with action buttons */
+            <div className="text-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+              <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <Icons.Folder size={28} className="text-zinc-400 dark:text-zinc-500" />
+              </div>
+              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">
+                {currentFolderId ? 'Empty folder' : 'No documents yet'}
+              </h3>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto mb-6">
+                {currentFolderId
+                  ? 'Upload files or create a subfolder to organize your content.'
+                  : 'Start by uploading a file or creating a folder.'}
+              </p>
+              <div className="flex items-center gap-3 justify-center">
+                <label className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
+                  <Icons.Upload size={15} />
+                  Upload Files
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileInputChange}
+                    disabled={isUploading}
+                    multiple
+                  />
+                </label>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('Delete folder?')) deleteFolder(folder.id);
-                  }}
-                  className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1"
+                  onClick={() => setShowNewFolderInput(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
                 >
-                  <Icons.Trash size={14} />
+                  <Icons.Folder size={15} />
+                  New Folder
                 </button>
               </div>
-            )
-          ))}
-
-          {/* Files */}
-          {files.map((file) => (
-            view === 'grid' ? (
-              <div
-                key={file.id}
-                className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-all"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center">
-                    {getFileIcon(file.type)}
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-6">or drag and drop files here</p>
+            </div>
+          ) : (
+            /* Documents grid / list */
+            <div className={
+              view === 'grid'
+                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
+                : 'space-y-1.5'
+            }>
+              {/* Folders */}
+              {folders.map((folder) => (
+                view === 'grid' ? (
+                  <div
+                    key={folder.id}
+                    onClick={() => setCurrentFolderId(folder.id)}
+                    className="group cursor-pointer bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                        <Icons.Folder size={24} className="text-blue-500" />
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
+                        className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
+                      >
+                        <Icons.MoreVert size={16} />
+                      </button>
+                    </div>
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
+                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{fmtDate(folder.created_at)}</p>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-zinc-300 dark:text-zinc-600 hover:text-blue-500 dark:hover:text-blue-400 p-1"
-                    >
-                      <Icons.External size={13} />
-                    </a>
+                ) : (
+                  <div
+                    key={folder.id}
+                    onClick={() => setCurrentFolderId(folder.id)}
+                    className="group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-all"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                      <Icons.Folder size={18} className="text-blue-500" />
+                    </div>
+                    <span className="flex-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</span>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 mr-2">{fmtDate(folder.created_at)}</span>
                     <button
-                      onClick={() => {
-                        if (confirm('Delete file?')) deleteFile(file.id, file.url);
-                      }}
-                      className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 p-1"
+                      onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
+                      className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
                     >
-                      <Icons.Trash size={13} />
+                      <Icons.MoreVert size={16} />
                     </button>
+                    <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600 group-hover:text-blue-400 transition-colors" />
                   </div>
-                </div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
-                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{formatSize(file.size)}</p>
+                )
+              ))}
+
+              {/* Files */}
+              {files.map((file) => (
+                view === 'grid' ? (
+                  <div
+                    key={file.id}
+                    className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-all"
+                  >
+                    {/* Image thumbnail or icon */}
+                    {isImageType(file.type) && file.url ? (
+                      <div className="relative w-full h-28 bg-zinc-100 dark:bg-zinc-800">
+                        <img
+                          src={file.url}
+                          alt={file.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-blue-500 p-1.5 rounded-lg shadow-sm"
+                          >
+                            <Icons.External size={12} />
+                          </a>
+                          <button
+                            onClick={() => openActionMenu('file', file)}
+                            className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 p-1.5 rounded-lg shadow-sm"
+                          >
+                            <Icons.MoreVert size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 pb-0">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="w-12 h-12 rounded-xl bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center">
+                            {getFileIcon(file.type, file.name)}
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <a
+                              href={file.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-zinc-300 dark:text-zinc-600 hover:text-blue-500 dark:hover:text-blue-400 p-1"
+                            >
+                              <Icons.External size={13} />
+                            </a>
+                            <button
+                              onClick={() => openActionMenu('file', file)}
+                              className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 p-1"
+                            >
+                              <Icons.MoreVert size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="px-4 py-3">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{formatSize(file.size)}</span>
+                        {file.created_at && (
+                          <>
+                            <span className="text-zinc-200 dark:text-zinc-700 text-[10px]">|</span>
+                            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{fmtDate(file.created_at)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={file.id}
+                    className="group flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
+                  >
+                    {isImageType(file.type) && file.url ? (
+                      <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        {getFileIcon(file.type, file.name)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
+                    </div>
+                    {file.created_at && (
+                      <span className="text-[11px] text-zinc-400 dark:text-zinc-500 flex-shrink-0 hidden sm:inline">{fmtDate(file.created_at)}</span>
+                    )}
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">{formatSize(file.size)}</span>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-zinc-300 dark:text-zinc-600 hover:text-blue-500 dark:hover:text-blue-400 p-1"
+                      >
+                        <Icons.External size={13} />
+                      </a>
+                      <button
+                        onClick={() => openActionMenu('file', file)}
+                        className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 p-1"
+                      >
+                        <Icons.MoreVert size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action Modal */}
+      {actionMenu && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeActionMenu}>
+          <div className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+              <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                {actionMenu.type === 'folder'
+                  ? <Icons.Folder size={18} className="text-blue-500" />
+                  : <Icons.File size={18} className="text-zinc-400" />
+                }
               </div>
-            ) : (
-              <div
-                key={file.id}
-                className="group flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
-              >
-                <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                  {getFileIcon(file.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
-                </div>
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">{formatSize(file.size)}</span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-300 dark:text-zinc-600 hover:text-blue-500 dark:hover:text-blue-400 p-1"
-                  >
-                    <Icons.External size={13} />
-                  </a>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{actionMenu.name}</p>
+                <p className="text-[11px] text-zinc-400">{actionMenu.type === 'folder' ? 'Folder' : 'File'}</p>
+              </div>
+              <button onClick={closeActionMenu} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1">
+                <Icons.X size={16} />
+              </button>
+            </div>
+
+            {actionView === 'menu' && (
+              <div className="px-3 pb-3 space-y-0.5">
+                <button
+                  onClick={() => setActionView('move')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <Icons.Folder size={16} className="text-blue-500" />
+                  Move to...
+                </button>
+                <button
+                  onClick={() => setActionView('assign')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <Icons.Users size={16} className="text-violet-500" />
+                  Assign to...
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete ${actionMenu.type === 'folder' ? 'folder' : 'file'} "${actionMenu.name}"?`)) {
+                      if (actionMenu.type === 'file') deleteFile(actionMenu.id, actionMenu.url || '');
+                      else deleteFolder(actionMenu.id);
+                      closeActionMenu();
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                >
+                  <Icons.Trash size={16} />
+                  Delete
+                </button>
+              </div>
+            )}
+
+            {actionView === 'move' && (
+              <div className="px-3 pb-3">
+                <button onClick={() => setActionView('menu')} className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 mb-2 px-1">
+                  <Icons.ChevronLeft size={12} /> Back
+                </button>
+                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 px-1 mb-2">Move to folder</p>
+                <div className="max-h-64 overflow-y-auto space-y-0.5">
+                  {/* Root option */}
                   <button
-                    onClick={() => {
-                      if (confirm('Delete file?')) deleteFile(file.id, file.url);
-                    }}
-                    className="text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 p-1"
+                    onClick={() => handleMove(null)}
+                    disabled={actionMenu.currentFolderId === null}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-zinc-700 dark:text-zinc-300"
                   >
-                    <Icons.Trash size={13} />
+                    <Icons.Home size={15} className="text-zinc-400" />
+                    Root (Home)
+                  </button>
+                  {allFolders
+                    .filter(f => f.id !== actionMenu.id) // Can't move into itself
+                    .map(folder => (
+                      <button
+                        key={folder.id}
+                        onClick={() => handleMove(folder.id)}
+                        disabled={
+                          (actionMenu.type === 'file' && actionMenu.currentFolderId === folder.id) ||
+                          (actionMenu.type === 'folder' && actionMenu.currentFolderId === folder.id)
+                        }
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-zinc-700 dark:text-zinc-300"
+                      >
+                        <Icons.Folder size={15} className="text-blue-500" />
+                        <span className="truncate">{folder.name}</span>
+                      </button>
+                    ))
+                  }
+                  {allFolders.length === 0 && (
+                    <p className="text-xs text-zinc-400 text-center py-4">No folders available</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {actionView === 'assign' && (
+              <div className="px-4 pb-4">
+                <button onClick={() => setActionView('menu')} className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 mb-3">
+                  <Icons.ChevronLeft size={12} /> Back
+                </button>
+                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-3">Assign to client or project</p>
+                <div className="space-y-3">
+                  <select
+                    value={assignType}
+                    onChange={(e) => {
+                      const v = e.target.value as 'none' | 'client' | 'project';
+                      setAssignType(v);
+                      if (v !== 'client') setAssignClientId('');
+                      if (v !== 'project') setAssignProjectId('');
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="none">Unassigned</option>
+                    <option value="client">Client</option>
+                    <option value="project">Project</option>
+                  </select>
+                  {assignType === 'client' && (
+                    <select
+                      value={assignClientId}
+                      onChange={(e) => setAssignClientId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Select client...</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  )}
+                  {assignType === 'project' && (
+                    <select
+                      value={assignProjectId}
+                      onChange={(e) => setAssignProjectId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Select project...</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                    </select>
+                  )}
+                  <button
+                    onClick={handleAssign}
+                    className="w-full py-2 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors"
+                  >
+                    Save
                   </button>
                 </div>
               </div>
-            )
-          ))}
+            )}
+          </div>
         </div>
       )}
     </div>

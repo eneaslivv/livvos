@@ -8,10 +8,10 @@ export interface SlidePanelProps {
   title?: string;
   subtitle?: string;
   description?: string;
-  /** 'sm' ~384px | 'md' ~448px | 'lg' ~512px | 'xl' ~640px | 'full' ~100% */
-  width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  /** 'sm' ~384px | 'md' ~448px | 'lg' ~512px | 'xl' ~640px | '2xl' ~672px | 'full' ~100% */
+  width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   /** Alias for width */
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   /** Optional footer (action buttons, etc.) */
   footer?: React.ReactNode;
   /** Optional header-right element (extra buttons, badges) */
@@ -24,7 +24,8 @@ const widthClasses: Record<string, string> = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
-  full: 'max-w-2xl',
+  '2xl': 'max-w-2xl',
+  full: 'max-w-full',
 };
 
 export const SlidePanel: React.FC<SlidePanelProps> = ({

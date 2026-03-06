@@ -89,6 +89,14 @@ export const AcceptInvite: React.FC = () => {
           if (import.meta.env.DEV) console.warn('Profile not found after signup — trigger may still be running');
         }
 
+        // Mark invitation as accepted
+        if (token) {
+          await supabase
+            .from('invitations')
+            .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+            .eq('token', token);
+        }
+
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/';
       } else if (authData.user && !authData.session) {
         // Email confirmation required

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
-import { Status, PageView, Priority, Task } from '../types';
+import { Status, PageView } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
 import { supabaseAdmin } from '../lib/supabase';
 import { useRBAC } from '../context/RBACContext';
@@ -35,7 +35,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const { user, roles } = useRBAC();
     const { incomes, expenses } = useFinance();
     const { currentTenant, updateTenant } = useTenant();
-    const { events: calendarEvents, tasks: calendarTasks } = useCalendar();
+    const { events: calendarEvents, tasks: calendarTasks, createTask: calCreateTask, updateTask: calUpdateTask } = useCalendar();
     const [showFinancials, setShowFinancials] = useState(false);
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
     const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -67,7 +67,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const userName = user?.name || 'there';
     const userRole = roles[0]?.name || 'Guest';
 
-    const { data: tasks, update: updateTask } = useSupabase<Task>('tasks', { subscribe: false });
+    const tasks = calendarTasks as any[];  // CalendarContext is the single source of truth for tasks
     const { data: projectsRaw } = useSupabase<DbProject>('projects', { subscribe: false });
 
     const projects = projectsRaw.slice(0, 4).map(p => ({
@@ -122,11 +122,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const toggleTask = (id: string) => {
         const t = tasks.find(t => t.id === id);
         if (!t) return;
-        updateTask(id, { completed: !t.completed });
+        const nowCompleting = !t.completed;
+        calUpdateTask(id, {
+            completed: nowCompleting,
+            status: nowCompleting ? 'done' : 'todo',
+            completed_at: nowCompleting ? new Date().toISOString() : null,
+        } as any);
     };
 
     // Quick task creation
-    const { add: addTask } = useSupabase<Task>('tasks', { subscribe: false });
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [isAddingTask, setIsAddingTask] = useState(false);
     const [showCompleted, setShowCompleted] = useState(false);
@@ -137,7 +141,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         if (!title || isAddingTask) return;
         setIsAddingTask(true);
         try {
-            await addTask({ title, completed: false, priority: Priority.Medium } as any);
+            const todayStr = new Date().toISOString().split('T')[0];
+            await calCreateTask({
+                title,
+                completed: false,
+                priority: 'medium',
+                status: 'todo',
+                start_date: todayStr,
+                owner_id: user?.id || '',
+            } as any);
             setQuickTaskTitle('');
             setTimeout(() => quickInputRef.current?.focus(), 50);
         } catch (err) {
@@ -147,15 +159,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         }
     };
 
-    // Filter: today's tasks = incomplete (carry over) + completed today
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Filter: today's tasks = incomplete (carry over) + completed today (user timezone)
+    const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in user's timezone
     const todayTasks = tasks.filter(t => {
         if (!t.completed) return true; // all pending tasks always show
-        // completed tasks: only show if updated today (completed today)
-        const updated = (t as any).updated_at;
-        if (!updated) return true; // if no timestamp, show it
-        return new Date(updated) >= todayStart;
+        // completed tasks: only show if completed_at is today (user's local date)
+        const completedAt = (t as any).completed_at;
+        if (!completedAt) return false; // no completion timestamp → hide (old completed task)
+        const completedDate = new Date(completedAt).toLocaleDateString('en-CA');
+        return completedDate === todayLocal;
     });
 
     // ─── Calendar: today's events + overdue tasks ───
@@ -209,7 +221,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         }
 
         const pendingTasks = tasks.filter(t => !t.completed);
-        const highPriority = pendingTasks.filter(t => t.priority === Priority.High);
+        const highPriority = pendingTasks.filter(t => t.priority === 'high' || t.priority === 'urgent');
         if (highPriority.length > 0) {
             badges.push({ label: `${highPriority.length} urgent`, color: 'text-rose-600 dark:text-rose-400' });
             tips.push(`You have ${highPriority.length} high priority task${highPriority.length > 1 ? 's' : ''}. Focus there first.`);
@@ -430,7 +442,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                                     </div>
                                                 </div>
                                                 {task.priority && (
-                                                    <span className={`text-[9px] font-semibold uppercase tracking-wider ${task.priority === Priority.High ? 'text-rose-500' : task.priority === Priority.Medium ? 'text-amber-500' : 'text-zinc-400'}`}>
+                                                    <span className={`text-[9px] font-semibold uppercase tracking-wider ${
+                                                        task.priority === 'urgent' ? 'text-rose-500' : task.priority === 'high' ? 'text-amber-500' : task.priority === 'medium' ? 'text-blue-500' : 'text-zinc-400'
+                                                    }`}>
                                                         {task.priority}
                                                     </span>
                                                 )}

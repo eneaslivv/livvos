@@ -7,6 +7,7 @@ import { Icons } from '../ui/Icons';
 import { supabase, supabaseAdmin } from '../../lib/supabase';
 import { Role } from '../../types/rbac';
 import { SCREEN_PERMISSIONS, OS_SCREENS, SALES_SCREENS, ALL_SCREEN_IDS } from '../../lib/screenPermissions';
+import { sendInviteEmail } from '../../lib/sendInviteEmail';
 
 interface Invitation {
   id: string;
@@ -262,6 +263,19 @@ export const UserManagement: React.FC = () => {
       const link = `${window.location.origin}/accept-invite?token=${data.token}`;
       setInviteLink(link);
       setInvitations(prev => [...prev, data]);
+
+      // Send invite email via Edge Function
+      try {
+        await sendInviteEmail({
+          clientName: inviteEmail.split('@')[0],
+          clientEmail: inviteEmail,
+          inviteLink: link,
+          tenantName: currentTenant?.name || undefined,
+        });
+      } catch (emailErr) {
+        if (import.meta.env.DEV) console.warn('Invite email send failed (link still valid):', emailErr);
+      }
+
       setInviteEmail('');
     } catch (err: any) {
       console.error('Error creating invitation:', err);

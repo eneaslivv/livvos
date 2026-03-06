@@ -50,6 +50,7 @@ export interface File {
 interface DocumentsContextType {
   folders: Folder[]
   files: File[]
+  allFolders: Folder[]
   breadcrumbs: Folder[]
   currentFolderId: string | null
   loading: boolean
@@ -58,6 +59,8 @@ interface DocumentsContextType {
   setCurrentFolderId: (id: string | null) => void
   createFolder: (name: string, color?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Folder>
   uploadFile: (file: any, options?: { clientId?: string | null; projectId?: string | null }) => Promise<File>
+  updateFile: (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
+  updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
   refresh: () => Promise<void>
@@ -70,6 +73,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const tenantId = currentTenant?.id
   const [folders, setFolders] = useState<Folder[]>([])
   const [files, setFiles] = useState<File[]>([])
+  const [allFolders, setAllFolders] = useState<Folder[]>([])
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
@@ -203,6 +207,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       throw new Error('Folder was not created. Possible permissions issue (RLS). Verify that the folders migration has been run.')
     }
     setFolders(prev => [...prev, data])
+    setAllFolders(prev => [...prev, data])
     return data
   }
 
@@ -262,10 +267,43 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return fileData
   }
 
+  // Load all folders for the "Move to" picker
+  const loadAllFolders = useCallback(async () => {
+    if (!tenantId) return
+    const { data } = await supabase.from('folders').select('*').eq('tenant_id', tenantId).order('name')
+    setAllFolders(data || [])
+  }, [tenantId])
+
+  useEffect(() => { loadAllFolders() }, [loadAllFolders])
+
+  const updateFile = async (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null }) => {
+    const { error: err } = await supabase.from('files').update(updates).eq('id', id)
+    if (err) throw err
+    // If folder changed, remove from current view
+    if ('folder_id' in updates && updates.folder_id !== currentFolderId) {
+      setFiles(prev => prev.filter(f => f.id !== id))
+    } else {
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    }
+  }
+
+  const updateFolder = async (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => {
+    const { error: err } = await supabase.from('folders').update(updates).eq('id', id)
+    if (err) throw err
+    // If parent changed, remove from current view
+    if ('parent_id' in updates && updates.parent_id !== currentFolderId) {
+      setFolders(prev => prev.filter(f => f.id !== id))
+      loadAllFolders()
+    } else {
+      setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    }
+  }
+
   const deleteFolder = async (id: string) => {
     const { error: err } = await supabase.from('folders').delete().eq('id', id)
     if (err) throw err
     setFolders(prev => prev.filter(f => f.id !== id))
+    setAllFolders(prev => prev.filter(f => f.id !== id))
   }
 
   const deleteFile = async (id: string, url: string) => {
@@ -280,8 +318,8 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   return (
     <DocumentsContext.Provider value={{
-      folders, files, breadcrumbs, currentFolderId, loading, error, isInitialized,
-      setCurrentFolderId, createFolder, uploadFile, deleteFolder, deleteFile,
+      folders, files, allFolders, breadcrumbs, currentFolderId, loading, error, isInitialized,
+      setCurrentFolderId, createFolder, uploadFile, updateFile, updateFolder, deleteFolder, deleteFile,
       refresh: async () => loadDocuments()
     }}>
       {children}

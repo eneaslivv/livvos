@@ -308,9 +308,12 @@ export const Calendar: React.FC = () => {
     });
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleSaveTaskEdit = async () => {
     if (!selectedTask || savingTask) return;
     setSavingTask(true);
+    setSaveError(null);
     try {
       const updates: Partial<CalendarTask> = { ...editingTask };
       // Sync completed <-> status
@@ -321,10 +324,15 @@ export const Calendar: React.FC = () => {
       if ('blocked_by' in updates && !updates.blocked_by) (updates as any).blocked_by = null;
       if ('project_id' in updates && !updates.project_id) (updates as any).project_id = null;
       if ('client_id' in updates && !(updates as any).client_id) (updates as any).client_id = null;
+      if ('assignee_id' in updates && !updates.assignee_id) (updates as any).assignee_id = null;
+      if (import.meta.env.DEV) console.log('[TaskEdit] saving:', JSON.stringify(updates, null, 2));
       await updateTask(selectedTask.id, updates);
       setSelectedTask(null);
     } catch (err) {
+      const msg = (err as Error).message || 'Unknown error';
       errorLogger.error('Error actualizando tarea', err);
+      setSaveError(msg);
+      if (import.meta.env.DEV) console.error('[TaskEdit] save failed:', msg);
     } finally {
       setSavingTask(false);
     }
@@ -850,8 +858,9 @@ export const Calendar: React.FC = () => {
         editingTask={editingTask}
         setEditingTask={setEditingTask}
         savingTask={savingTask}
+        saveError={saveError}
         onSave={handleSaveTaskEdit}
-        onClose={() => setSelectedTask(null)}
+        onClose={() => { setSelectedTask(null); setSaveError(null); }}
         onDelete={handleDeleteTask}
         onToggleComplete={toggleTaskComplete}
         subtasksForSelected={subtasksForSelected}
