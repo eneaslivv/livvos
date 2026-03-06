@@ -56,13 +56,10 @@ export const useLeadToProject = () => {
             const newProject = await createProject({
                 title: projectName,
                 description,
-                status: options.status || 'planning',
-                client_id: null, // Could be linked to a client if we create one from the lead
+                status: options.status || ProjectStatus.Pending,
+                client_id: null,
                 deadline: null,
                 progress: 0,
-                tasks: [],
-                members: [],
-                files: [],
             });
 
             if (!newProject?.id) {
@@ -86,7 +83,7 @@ export const useLeadToProject = () => {
                     .eq('id', newProject.id);
             } catch (e) {
                 // Metadata update is optional, continue if fails
-                console.warn('Could not update project metadata:', e);
+                if (import.meta.env.DEV) console.warn('Could not update project metadata:', e);
             }
 
             // 5. Mark lead as closed/won if requested
@@ -102,7 +99,7 @@ export const useLeadToProject = () => {
                         .eq('id', lead.id);
                 } catch (e) {
                     // Lead update is optional, continue if fails
-                    console.warn('Could not update lead status:', e);
+                    if (import.meta.env.DEV) console.warn('Could not update lead status:', e);
                 }
             }
 
@@ -121,7 +118,7 @@ export const useLeadToProject = () => {
                 }
             } catch (e) {
                 // Notification is optional
-                console.warn('Could not create conversion notification:', e);
+                if (import.meta.env.DEV) console.warn('Could not create conversion notification:', e);
             }
 
             const result: ConversionResult = {

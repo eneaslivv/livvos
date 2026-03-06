@@ -1,8 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Icons } from '../components/ui/Icons';
-import { Card } from '../components/ui/Card';
-import { SlidePanel } from '../components/ui/SlidePanel';
+import React, { useState, useEffect, useRef } from 'react';
 import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -13,55 +9,15 @@ import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
 import { generateWeeklySummaryFromAI } from '../lib/ai';
-
-/* ─── Animated Toggle Group ─── */
-const ToggleGroup = <T extends string>({ options, value, onChange }: {
-  options: { id: T; label: string; icon?: React.ElementType }[];
-  value: T;
-  onChange: (v: T) => void;
-}) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
-
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const activeBtn = container.querySelector(`[data-toggle="${value}"]`) as HTMLButtonElement;
-    if (activeBtn) {
-      setIndicator({ left: activeBtn.offsetLeft, width: activeBtn.offsetWidth });
-    }
-  }, [value]);
-
-  return (
-    <div ref={containerRef} className="relative flex items-center gap-0.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-      <motion.div
-        className="absolute top-1 bottom-1 bg-white dark:bg-zinc-700 rounded-lg shadow-sm"
-        initial={false}
-        animate={{ left: indicator.left, width: indicator.width }}
-        transition={{ type: 'tween', duration: 0.15, ease: 'easeOut' }}
-      />
-      {options.map(opt => {
-        const Icon = opt.icon;
-        const isActive = value === opt.id;
-        return (
-          <button
-            key={opt.id}
-            data-toggle={opt.id}
-            onClick={() => onChange(opt.id)}
-            className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 ${
-              isActive
-                ? 'text-zinc-900 dark:text-zinc-100'
-                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-            }`}
-          >
-            {Icon && <Icon size={13} />}
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-};
+import { CalendarHeader } from '../components/calendar/CalendarHeader';
+import { AiWeeklySummary } from '../components/calendar/AiWeeklySummary';
+import { EventTaskFormPanel } from '../components/calendar/EventTaskFormPanel';
+import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
+import { WeekView } from '../components/calendar/WeekView';
+import { MonthView } from '../components/calendar/MonthView';
+import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
+import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
+import { Icons } from '../components/ui/Icons';
 
 export const Calendar: React.FC = () => {
   const { user } = useAuth();
@@ -99,10 +55,10 @@ export const Calendar: React.FC = () => {
     setLoadingTimedOut(false);
   }, [loading]);
 
-  // 'all' = ver todo, 'me' = solo mis tareas, uuid = miembro específico
+  // 'all' = see all, 'me' = only my tasks, uuid = specific member
   const [taskFilter, setTaskFilter] = useState<'all' | 'me' | string>('all');
 
-  // Mapa rápido de miembros para resolver nombres/avatars
+  // Quick member map for resolving names/avatars
   const memberMap = teamMembers.reduce<Record<string, { name: string | null; avatar_url: string | null }>>((acc, m) => {
     acc[m.id] = { name: m.name, avatar_url: m.avatar_url };
     return acc;
@@ -179,14 +135,14 @@ export const Calendar: React.FC = () => {
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
   const [calendarMode, setCalendarMode] = useState<'schedule' | 'content'>('schedule');
-  
+
   const [newEventData, setNewEventData] = useState({
     title: '',
     description: '',
     start_date: '',
     start_time: '',
     duration: 60,
-    type: 'meeting' as const,
+    type: 'meeting' as CalendarEvent['type'],
     color: '#3b82f6',
     location: ''
   });
@@ -344,6 +300,7 @@ export const Calendar: React.FC = () => {
       start_time: task.start_time || '',
       duration: task.duration || 60,
       project_id: task.project_id || '',
+      client_id: task.client_id || '',
       assignee_id: task.assignee_id || '',
       blocked_by: task.blocked_by || '',
     });
@@ -354,11 +311,11 @@ export const Calendar: React.FC = () => {
     setSavingTask(true);
     try {
       const updates: Partial<CalendarTask> = { ...editingTask };
-      // Sync completed ↔ status
+      // Sync completed <-> status
       if (updates.status === 'done') updates.completed = true;
       else if (updates.status === 'cancelled') updates.completed = false;
       else if (updates.status) updates.completed = false;
-      // Normalize FK fields: empty string → null for DB
+      // Normalize FK fields: empty string -> null for DB
       if ('blocked_by' in updates && !updates.blocked_by) (updates as any).blocked_by = null;
       if ('project_id' in updates && !updates.project_id) (updates as any).project_id = null;
       if ('client_id' in updates && !(updates as any).client_id) (updates as any).client_id = null;
@@ -381,7 +338,7 @@ export const Calendar: React.FC = () => {
     }
   };
 
-  // ─── Subtask CRUD ───
+  // Subtask CRUD
   const handleAddSubtask = async () => {
     if (!selectedTask || !newSubtaskTitle.trim() || addingSubtask) return;
     setAddingSubtask(true);
@@ -423,7 +380,7 @@ export const Calendar: React.FC = () => {
     }
   };
 
-  // Obtener semana actual
+  // Get current week
   const getWeekDays = () => {
     const ref = new Date(currentDate);
     const startOfWeek = new Date(ref);
@@ -481,16 +438,7 @@ export const Calendar: React.FC = () => {
     return days;
   };
 
-  // Formatear fecha para mostrar
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short'
-    });
-  };
-
-  // Obtener horas del día
+  // Get hours of the day
   const getHours = () => {
     const hours = [];
     for (let i = 8; i <= 20; i++) {
@@ -499,7 +447,7 @@ export const Calendar: React.FC = () => {
     return hours;
   };
 
-  // Crear evento
+  // Create event
   const handleCreateEvent = async () => {
     if (!newEventData.title.trim()) return;
 
@@ -524,7 +472,6 @@ export const Calendar: React.FC = () => {
       setShowNewEventForm(false);
     } catch (err) {
       errorLogger.error('Error creando evento', err);
-      // Mostrar mensaje de error al usuario
       alert('Error creating event: ' + (err as Error).message);
     }
   };
@@ -567,7 +514,7 @@ export const Calendar: React.FC = () => {
     }
   };
 
-  // Crear tarea
+  // Create task
   const handleCreateTask = async () => {
     if (!newTaskData.title.trim()) return;
 
@@ -603,7 +550,7 @@ export const Calendar: React.FC = () => {
     }
   };
 
-  // Alternar completado de tarea (sync status ↔ completed)
+  // Toggle task complete (sync status <-> completed)
   const toggleTaskComplete = async (taskId: string, completed: boolean) => {
     try {
       const completedAt = completed ? new Date().toISOString() : null;
@@ -622,7 +569,7 @@ export const Calendar: React.FC = () => {
     }
   };
 
-  // Handler para click-to-create desde time slot
+  // Handler for click-to-create from time slot
   const handleSlotSelect = (type: 'event' | 'task' | 'block' | 'content') => {
     if (!slotPopover) return;
     const timeStr = `${slotPopover.hour.toString().padStart(2, '0')}:00`;
@@ -668,26 +615,28 @@ export const Calendar: React.FC = () => {
     setSlotPopover(null);
   };
 
-  // Obtener eventos y tareas para una fecha específica
   // Generate AI weekly summary
   const handleGenerateAiSummary = async (customExtra?: string) => {
     setAiSummaryLoading(true);
     setAiSummaryError(null);
     try {
-      // Build context from current week events and tasks
       const weekDaysList = getWeekDays();
       const weekEvents: string[] = [];
       const weekTasks: string[] = [];
 
       weekDaysList.forEach(day => {
-        const dayEvents = events.filter(e => e.start_date?.slice(0, 10) === day.dateStr);
-        const dayTasks = getTasksByDate(day.dateStr);
-        dayEvents.forEach(e => weekEvents.push(`${day.dateStr}: ${e.title} (${e.type})`));
-        dayTasks.forEach(t => weekTasks.push(`${day.dateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completed)' : '(pending)'}`));
+        const dayDateStr = day.toISOString().split('T')[0];
+        const dayEvents = events.filter(e => e.start_date?.slice(0, 10) === dayDateStr);
+        const dayTasks = getTasksByDate(dayDateStr);
+        dayEvents.forEach(e => weekEvents.push(`${dayDateStr}: ${e.title} (${e.type})`));
+        dayTasks.forEach(t => weekTasks.push(`${dayDateStr}: ${t.title} [${t.priority}] ${t.completed ? '(completed)' : '(pending)'}`));
       });
 
+      const firstDateStr = weekDaysList[0]?.toISOString().split('T')[0] || '';
+      const lastDateStr = weekDaysList[6]?.toISOString().split('T')[0] || '';
+
       const contextParts = [
-        `Week from ${weekDaysList[0]?.dateStr || ''} to ${weekDaysList[6]?.dateStr || ''}`,
+        `Week from ${firstDateStr} to ${lastDateStr}`,
         weekEvents.length > 0 ? `Events of the week:\n${weekEvents.join('\n')}` : 'No events scheduled this week.',
         weekTasks.length > 0 ? `Tasks of the week:\n${weekTasks.join('\n')}` : 'No tasks assigned this week.',
       ];
@@ -773,10 +722,8 @@ export const Calendar: React.FC = () => {
     return diff;
   };
 
-  // Estadísticas del calendario
+  // Calendar stats
   const stats = getCalendarStats();
-
-  // Siempre mostramos el calendario con placeholders cuando no hay datos
 
   if (loading && !loadingTimedOut) {
     return (
@@ -791,329 +738,53 @@ export const Calendar: React.FC = () => {
     );
   }
 
-  // Nunca mostramos bloque de error: la UI siempre se renderiza con placeholders
-
   const weekDays = getWeekDays();
   const hours = getHours();
 
   return (
     <div className="max-w-[1600px] mx-auto pt-4 pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendar</h1>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-            {calendarMode === 'content'
-              ? `${filteredEvents.length} scheduled contents`
-              : `${stats.totalEvents} events · ${stats.totalTasks} tasks · ${stats.completedTasks} completed`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Mode toggle: Agenda / Contenido */}
-          <ToggleGroup
-            options={[
-              { id: 'schedule' as const, label: 'Schedule', icon: Icons.Calendar },
-              { id: 'content' as const, label: 'Content', icon: Icons.Layers },
-            ]}
-            value={calendarMode}
-            onChange={setCalendarMode}
-          />
-
-          {/* Platform filter dropdown (content mode) */}
-          {calendarMode === 'content' && (
-            <div ref={platformDropdownRef} className="relative">
-              <button
-                onClick={() => setPlatformDropdownOpen(prev => !prev)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-              >
-                <Icons.Filter size={13} />
-                Networks
-                {selectedPlatforms.length < Object.keys(CONTENT_PLATFORMS).length && (
-                  <span className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[9px] font-bold">
-                    {selectedPlatforms.length}
-                  </span>
-                )}
-              </button>
-              {platformDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                  {/* Select all / none */}
-                  <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Platforms</span>
-                    <button
-                      onClick={() => setSelectedPlatforms(prev =>
-                        prev.length === Object.keys(CONTENT_PLATFORMS).length ? [] : Object.keys(CONTENT_PLATFORMS)
-                      )}
-                      className="text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      {selectedPlatforms.length === Object.keys(CONTENT_PLATFORMS).length ? 'None' : 'All'}
-                    </button>
-                  </div>
-                  {Object.entries(CONTENT_PLATFORMS).map(([key, plat]) => {
-                    const isSelected = selectedPlatforms.includes(key);
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => setSelectedPlatforms(prev =>
-                          prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-                        )}
-                        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        <div
-                          className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors ${
-                            isSelected
-                              ? 'border-transparent'
-                              : 'border-zinc-300 dark:border-zinc-600'
-                          }`}
-                          style={isSelected ? { backgroundColor: plat.color } : undefined}
-                        >
-                          {isSelected && (
-                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          )}
-                        </div>
-                        <span className={`font-medium ${isSelected ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'}`}>
-                          {plat.label}
-                        </span>
-                        <div className="ml-auto w-2 h-2 rounded-full" style={{ backgroundColor: plat.color }} />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* View toggle: Semana / Mes */}
-          <ToggleGroup
-            options={[
-              { id: 'week' as const, label: 'Week' },
-              { id: 'month' as const, label: 'Month' },
-            ]}
-            value={view}
-            onChange={setView}
-          />
-
-          {/* Navigation */}
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => navigateCalendar(-1)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
-              <Icons.ChevronLeft size={16} />
-            </button>
-            <button onClick={goToToday} className="px-2.5 py-1 text-[11px] font-medium rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 transition-colors">
-              Today
-            </button>
-            <button onClick={() => navigateCalendar(1)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
-              <Icons.ChevronRight size={16} />
-            </button>
-            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300 ml-1 min-w-[140px]">{getPeriodLabel()}</span>
-          </div>
-
-          {/* Separator */}
-          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
-
-          {/* Action buttons */}
-          <button
-            onClick={() => setShowNewEventForm(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors active:scale-[0.97]"
-          >
-            <Icons.Plus size={14} />
-            {calendarMode === 'content' ? 'Content' : 'Event'}
-          </button>
-          {calendarMode === 'schedule' && (
-            <button
-              onClick={() => setShowNewTaskForm(true)}
-              className="flex items-center gap-1.5 px-4 py-2 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-[0.97]"
-            >
-              <Icons.Check size={14} />
-              Task
-            </button>
-          )}
-
-          {/* Google Calendar sync controls */}
-          {googleConnected && (
-            <button
-              onClick={() => syncGoogle().catch(() => {})}
-              disabled={googleSyncing}
-              className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
-              title="Sync Google Calendar"
-            >
-              <Icons.RefreshCw size={14} className={googleSyncing ? 'animate-spin' : ''} />
-            </button>
-          )}
-          <button
-            onClick={() => setShowGoogleSettings(prev => !prev)}
-            className="flex items-center gap-1.5 px-2.5 py-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl transition-colors"
-            title="Calendar integrations"
-          >
-            <Icons.Settings size={14} />
-          </button>
-        </div>
-      </div>
+      <CalendarHeader
+        calendarMode={calendarMode}
+        setCalendarMode={setCalendarMode}
+        view={view}
+        setView={setView}
+        stats={stats}
+        filteredEventsCount={filteredEvents.length}
+        navigateCalendar={navigateCalendar}
+        goToToday={goToToday}
+        periodLabel={getPeriodLabel()}
+        onNewEvent={() => setShowNewEventForm(true)}
+        onNewTask={() => setShowNewTaskForm(true)}
+        contentPlatforms={CONTENT_PLATFORMS}
+        selectedPlatforms={selectedPlatforms}
+        setSelectedPlatforms={setSelectedPlatforms}
+        platformDropdownOpen={platformDropdownOpen}
+        setPlatformDropdownOpen={setPlatformDropdownOpen}
+        platformDropdownRef={platformDropdownRef}
+        googleConnected={googleConnected}
+        googleSyncing={googleSyncing}
+        syncGoogle={syncGoogle}
+        showGoogleSettings={showGoogleSettings}
+        setShowGoogleSettings={setShowGoogleSettings}
+      />
 
       {/* AI Weekly Summary */}
-      <div className="mb-4">
-        {!aiSummary && !aiSummaryLoading && (
-          <button
-            onClick={() => handleGenerateAiSummary()}
-            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-indigo-300 dark:hover:border-indigo-600/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all duration-200"
-          >
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-              <Icons.Sparkles size={12} className="text-white" />
-            </div>
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-              Generate weekly summary with AI
-            </span>
-          </button>
-        )}
+      <AiWeeklySummary
+        aiSummary={aiSummary}
+        aiSummaryLoading={aiSummaryLoading}
+        aiSummaryError={aiSummaryError}
+        aiSummaryExpanded={aiSummaryExpanded}
+        setAiSummaryExpanded={setAiSummaryExpanded}
+        showAiPromptInput={showAiPromptInput}
+        setShowAiPromptInput={setShowAiPromptInput}
+        aiCustomPrompt={aiCustomPrompt}
+        setAiCustomPrompt={setAiCustomPrompt}
+        onGenerate={handleGenerateAiSummary}
+        onClearError={() => setAiSummaryError(null)}
+      />
 
-        {aiSummaryLoading && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center animate-pulse">
-              <Icons.Sparkles size={12} className="text-white" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <div className="h-1.5 w-24 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
-                  <div className="h-full w-1/2 bg-indigo-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
-                </div>
-                <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400">Analyzing your week...</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {aiSummaryError && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 mb-2">
-            <Icons.AlertCircle size={14} className="text-red-500 shrink-0" />
-            <span className="text-xs text-red-600 dark:text-red-400">{aiSummaryError}</span>
-            <button onClick={() => { setAiSummaryError(null); handleGenerateAiSummary(); }} className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors">
-              Retry
-            </button>
-          </div>
-        )}
-
-        {aiSummary && !aiSummaryLoading && (
-          <div className="rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 overflow-hidden">
-            {/* Summary header — always visible */}
-            <button
-              onClick={() => setAiSummaryExpanded(!aiSummaryExpanded)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors"
-            >
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0">
-                <Icons.Sparkles size={12} className="text-white" />
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">AI Weekly Summary</span>
-                <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">
-                  {aiSummary.objectives.length} objectives · {aiSummary.focus_tasks.length} key tasks · {aiSummary.recommendations.length} recommendations
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowAiPromptInput(!showAiPromptInput); }}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-                  title="Add custom context"
-                >
-                  <Icons.Message size={13} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleGenerateAiSummary(); }}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-                  title="Regenerate summary"
-                >
-                  <Icons.RefreshCw size={13} />
-                </button>
-                <Icons.ChevronDown size={14} className={`text-zinc-400 transition-transform duration-200 ${aiSummaryExpanded ? 'rotate-180' : ''}`} />
-              </div>
-            </button>
-
-            {/* Custom prompt input */}
-            {showAiPromptInput && (
-              <div className="px-4 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
-                <div className="flex items-center gap-2 mt-3">
-                  <input
-                    type="text"
-                    value={aiCustomPrompt}
-                    onChange={(e) => setAiCustomPrompt(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && aiCustomPrompt.trim()) handleGenerateAiSummary(aiCustomPrompt); }}
-                    placeholder="E.g.: Focus on client X deliverables, prioritize design..."
-                    className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 dark:focus:border-indigo-600 placeholder-zinc-400"
-                  />
-                  <button
-                    onClick={() => handleGenerateAiSummary(aiCustomPrompt)}
-                    disabled={!aiCustomPrompt.trim()}
-                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Generate
-                  </button>
-                </div>
-                <p className="text-[10px] text-zinc-400 mt-1.5">Add extra context to customize the summary</p>
-              </div>
-            )}
-
-            {/* Expanded content */}
-            {aiSummaryExpanded && (
-              <div className="px-4 pb-4 border-t border-zinc-100 dark:border-zinc-800/60">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  {/* Objectives */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-2.5">
-                      <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                        <Icons.Target size={10} className="text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Objectives</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {aiSummary.objectives.map((obj, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                          <span className="w-4 h-4 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-500">{i + 1}</span>
-                          {obj}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Focus Tasks */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-2.5">
-                      <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                        <Icons.Zap size={10} className="text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Key Tasks</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {aiSummary.focus_tasks.map((task, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 dark:bg-amber-500 shrink-0 mt-1.5" />
-                          {task}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Recommendations */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-2.5">
-                      <div className="w-4 h-4 rounded bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                        <Icons.Lightbulb size={10} className="text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Recommendations</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {aiSummary.recommendations.map((rec, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 shrink-0 mt-1.5" />
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Filtro por miembro del equipo */}
+      {/* Team member filter */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
           <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filter:</span>
@@ -1147,941 +818,61 @@ export const Calendar: React.FC = () => {
         </div>
       )}
 
-      {/* Side panel de creación */}
-      <SlidePanel
+      {/* Event/Task creation panel */}
+      <EventTaskFormPanel
         isOpen={showNewEventForm || showNewTaskForm}
         onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
-        title={showNewEventForm ? (calendarMode === 'content' ? 'New Content' : 'New Event') : 'New Task'}
-        width="sm"
-      >
-        <div className="p-5">
-          {showNewEventForm ? (
-            <div className="space-y-2.5" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { const title = calendarMode === 'content' ? newContentData.title : newEventData.title; if (title.trim()) { e.preventDefault(); calendarMode === 'content' ? handleCreateContent() : handleCreateEvent(); } } }}>
-              {/* Title */}
-              <input
-                type="text"
-                placeholder={calendarMode === 'content' ? 'Content name...' : 'Event name...'}
-                value={calendarMode === 'content' ? newContentData.title : newEventData.title}
-                onChange={(e) => calendarMode === 'content'
-                  ? setNewContentData({ ...newContentData, title: e.target.value })
-                  : setNewEventData({ ...newEventData, title: e.target.value })
-                }
-                className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
-                autoFocus
-              />
-
-              {calendarMode === 'content' ? (
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Platform</label>
-                    <select
-                      value={newContentData.platform}
-                      onChange={(e) => setNewContentData({ ...newContentData, platform: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                    >
-                      {Object.entries(CONTENT_PLATFORMS).map(([key, value]) => (
-                        <option key={key} value={key}>{value.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Channel</label>
-                    <select
-                      value={newContentData.channel}
-                      onChange={(e) => setNewContentData({ ...newContentData, channel: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                    >
-                      <option value="feed">Feed</option>
-                      <option value="stories">Stories</option>
-                      <option value="reels">Reels</option>
-                      <option value="shorts">Shorts</option>
-                      <option value="post">Post</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-medium text-zinc-400 mb-1">Status</label>
-                    <select
-                      value={newContentData.status}
-                      onChange={(e) => setNewContentData({ ...newContentData, status: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                    >
-                      {CONTENT_STATUSES.map((s) => (
-                        <option key={s.id} value={s.id}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Type</label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {([
-                      { value: 'meeting', label: 'Meeting', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                      { value: 'call', label: 'Call', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                      { value: 'deadline', label: 'Deadline', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
-                      { value: 'work-block', label: 'Block', color: 'bg-purple-500', activeBg: 'bg-purple-50 dark:bg-purple-500/15 border-purple-300 dark:border-purple-500/40 text-purple-700 dark:text-purple-400' },
-                      { value: 'note', label: 'Note', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
-                    ] as const).map(t => (
-                      <button
-                        key={t.value}
-                        type="button"
-                        onClick={() => setNewEventData({ ...newEventData, type: t.value })}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                          newEventData.type === t.value
-                            ? t.activeBg
-                            : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${t.color}`} />
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {calendarMode !== 'content' && (
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Location</label>
-                  <input
-                    type="text"
-                    placeholder="Zoom / Office / Link"
-                    value={newEventData.location}
-                    onChange={(e) => setNewEventData({ ...newEventData, location: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
-                  />
-                </div>
-              )}
-
-              {calendarMode === 'content' && (
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Asset</label>
-                  <input
-                    type="text"
-                    placeholder="Carousel / Video / Copy"
-                    value={newContentData.asset_type}
-                    onChange={(e) => setNewContentData({ ...newContentData, asset_type: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={calendarMode === 'content' ? newContentData.start_date : newEventData.start_date}
-                    onChange={(e) => calendarMode === 'content'
-                      ? setNewContentData({ ...newContentData, start_date: e.target.value })
-                      : setNewEventData({ ...newEventData, start_date: e.target.value })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={calendarMode === 'content' ? newContentData.start_time : newEventData.start_time}
-                    onChange={(e) => calendarMode === 'content'
-                      ? setNewContentData({ ...newContentData, start_time: e.target.value })
-                      : setNewEventData({ ...newEventData, start_time: e.target.value })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
-                  <input
-                    type="number"
-                    value={calendarMode === 'content' ? newContentData.duration : newEventData.duration}
-                    onChange={(e) => calendarMode === 'content'
-                      ? setNewContentData({ ...newContentData, duration: parseInt(e.target.value) })
-                      : setNewEventData({ ...newEventData, duration: parseInt(e.target.value) })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                    min="15"
-                    step="15"
-                  />
-                </div>
-              </div>
-
-              <input
-                type="text"
-                placeholder="Optional notes..."
-                value={calendarMode === 'content' ? newContentData.description : newEventData.description}
-                onChange={(e) => calendarMode === 'content'
-                  ? setNewContentData({ ...newContentData, description: e.target.value })
-                  : setNewEventData({ ...newEventData, description: e.target.value })
-                }
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-500 dark:text-zinc-400 placeholder:text-zinc-400 transition-all"
-              />
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-0.5">
-                <p className="text-[10px] text-zinc-400">Enter to create</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setShowNewEventForm(false); }}
-                    className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={calendarMode === 'content' ? handleCreateContent : handleCreateEvent}
-                    disabled={calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()}
-                    className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
-                  >
-                    <Icons.Calendar size={12} />
-                    {calendarMode === 'content' ? 'Create' : 'Create Event'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2.5" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTaskData.title.trim()) { e.preventDefault(); handleCreateTask(); } }}>
-              {/* Title */}
-              <input
-                type="text"
-                placeholder="What needs to be done?"
-                value={newTaskData.title}
-                onChange={(e) => setNewTaskData({ ...newTaskData, title: e.target.value })}
-                className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
-                autoFocus
-              />
-
-              {/* Priority pills */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Priority</label>
-                <div className="flex gap-1.5">
-                  {([
-                    { value: 'low', label: 'Low', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                    { value: 'medium', label: 'Medium', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                    { value: 'high', label: 'High', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
-                    { value: 'urgent', label: 'Urgent', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
-                  ] as const).map(p => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setNewTaskData({ ...newTaskData, priority: p.value })}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                        newTaskData.priority === p.value
-                          ? p.activeBg
-                          : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${p.color}`} />
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Date + Time + Duration row */}
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={newTaskData.start_date}
-                    onChange={(e) => setNewTaskData({ ...newTaskData, start_date: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={newTaskData.start_time}
-                    onChange={(e) => setNewTaskData({ ...newTaskData, start_time: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
-                  <select
-                    value={newTaskData.duration}
-                    onChange={(e) => setNewTaskData({ ...newTaskData, duration: parseInt(e.target.value) })}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                  >
-                    <option value="15">15 min</option>
-                    <option value="30">30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">1h</option>
-                    <option value="90">1.5h</option>
-                    <option value="120">2h</option>
-                    <option value="180">3h</option>
-                    <option value="240">4h</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Estado pills */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Status</label>
-                <div className="flex gap-1.5">
-                  {([
-                    { value: 'todo', label: 'To do', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
-                    { value: 'in-progress', label: 'In progress', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                    { value: 'done', label: 'Done', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                  ] as const).map(s => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => setNewTaskData({ ...newTaskData, status: s.value })}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                        newTaskData.status === s.value
-                          ? s.activeBg
-                          : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.color}`} />
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Project + Assignee */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Project</label>
-                  <select
-                    value={newTaskData.project_id}
-                    onChange={(e) => {
-                      const pid = e.target.value;
-                      const proj = projectOptions.find(p => p.id === pid) as any;
-                      setNewTaskData(prev => ({
-                        ...prev,
-                        project_id: pid,
-                        client_id: prev.client_id || proj?.client_id || ''
-                      }));
-                    }}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                      newTaskData.project_id
-                        ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-400'
-                        : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                    }`}
-                  >
-                    <option value="">No project</option>
-                    {projectOptions.map((project) => (
-                      <option key={project.id} value={project.id}>{project.title}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Client</label>
-                  <select
-                    value={newTaskData.client_id}
-                    onChange={(e) => setNewTaskData({ ...newTaskData, client_id: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                      newTaskData.client_id
-                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                    }`}
-                  >
-                    <option value="">No client</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Assignee */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Assign to</label>
-                <select
-                  value={newTaskData.assignee_id}
-                  onChange={(e) => setNewTaskData({ ...newTaskData, assignee_id: e.target.value })}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                    newTaskData.assignee_id
-                      ? 'bg-sky-50 dark:bg-sky-500/10 border-sky-300 dark:border-sky-500/40 text-sky-700 dark:text-sky-400'
-                      : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                  }`}
-                >
-                  <option value="">Unassigned</option>
-                  {teamMembers.filter(m => m.status === 'active').map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.id === user?.id ? `${member.name || member.email} (Me)` : (member.name || member.email)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Description */}
-              <input
-                type="text"
-                placeholder="Optional notes..."
-                value={newTaskData.description}
-                onChange={(e) => setNewTaskData({ ...newTaskData, description: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-500 dark:text-zinc-400 placeholder:text-zinc-400 transition-all"
-              />
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-0.5">
-                <p className="text-[10px] text-zinc-400">Enter to create</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setShowNewTaskForm(false); }}
-                    className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCreateTask}
-                    disabled={!newTaskData.title.trim()}
-                    className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
-                  >
-                    <Icons.Check size={12} />
-                    Create Task
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </SlidePanel>
+        showNewEventForm={showNewEventForm}
+        showNewTaskForm={showNewTaskForm}
+        calendarMode={calendarMode}
+        newEventData={newEventData}
+        setNewEventData={setNewEventData}
+        newContentData={newContentData}
+        setNewContentData={setNewContentData}
+        newTaskData={newTaskData}
+        setNewTaskData={setNewTaskData}
+        onCreateEvent={handleCreateEvent}
+        onCreateContent={handleCreateContent}
+        onCreateTask={handleCreateTask}
+        contentPlatforms={CONTENT_PLATFORMS}
+        contentStatuses={CONTENT_STATUSES}
+        projectOptions={projectOptions}
+        clients={clients}
+        teamMembers={teamMembers}
+        userId={user?.id}
+      />
 
       {/* Task Detail / Edit Panel */}
-      <SlidePanel
-        isOpen={!!selectedTask}
+      <TaskDetailPanel
+        selectedTask={selectedTask}
+        editingTask={editingTask}
+        setEditingTask={setEditingTask}
+        savingTask={savingTask}
+        onSave={handleSaveTaskEdit}
         onClose={() => setSelectedTask(null)}
-        title="Task Details"
-        width="sm"
-        footer={
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => selectedTask && handleDeleteTask(selectedTask.id)}
-              className="px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-1.5"
-            >
-              <Icons.Trash size={12} />
-              Delete
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSelectedTask(null)}
-                className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveTaskEdit}
-                disabled={savingTask}
-                className="px-4 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 transition-all flex items-center gap-1.5"
-              >
-                {savingTask ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Icons.Check size={13} />}
-                {savingTask ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        }
-      >
-        {selectedTask && (
-          <div className="p-5 space-y-3">
-            {/* Title */}
-            <input
-              type="text"
-              value={editingTask.title || ''}
-              onChange={e => setEditingTask({ ...editingTask, title: e.target.value })}
-              className={`w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-sm font-medium transition-all ${
-                selectedTask.completed
-                  ? 'line-through text-zinc-400 dark:text-zinc-500'
-                  : 'text-zinc-900 dark:text-zinc-100'
-              }`}
-            />
-
-            {/* Blocked banner */}
-            {isTaskBlocked(selectedTask) && (() => {
-              const blocker = getBlockerTask(selectedTask);
-              const blockerOwner = blocker?.assignee_id ? getMemberName(blocker.assignee_id) : null;
-              const blockerAvatar = blocker?.assignee_id ? getMemberAvatar(blocker.assignee_id) : null;
-              return (
-                <div className="px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
-                      <Icons.Lock size={14} className="text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Blocked</span>
-                      {blocker && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-400/80 truncate mt-0.5">
-                          Waiting for: <span className="font-semibold">{blocker.title}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {blocker && (
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-amber-200 dark:border-amber-500/20">
-                      {blockerOwner ? (
-                        <>
-                          {blockerAvatar ? (
-                            <img src={blockerAvatar} alt="" className="w-5 h-5 rounded-full" />
-                          ) : (
-                            <div className="w-5 h-5 rounded-full bg-amber-200 dark:bg-amber-500/20 flex items-center justify-center text-[9px] font-bold text-amber-700 dark:text-amber-300">
-                              {(blockerOwner || '?')[0]?.toUpperCase()}
-                            </div>
-                          )}
-                          <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                            <span className="font-semibold">{blockerOwner}</span> needs to complete this task first
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[10px] text-amber-600/80 dark:text-amber-400/60 italic">
-                          The blocking task has no assignee — assign it to unblock the flow
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Completed toggle */}
-            <button
-              onClick={() => toggleTaskComplete(selectedTask.id, !selectedTask.completed)}
-              className={`flex items-center gap-2.5 w-full px-3.5 py-2.5 rounded-xl border transition-all duration-300 ${
-                selectedTask.completed
-                  ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30'
-                  : 'bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5'
-              }`}
-            >
-              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-300 ${
-                selectedTask.completed ? 'bg-emerald-500 border-emerald-500 scale-110' : 'border-zinc-300 dark:border-zinc-600'
-              }`}>
-                {selectedTask.completed && (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
-                    <Icons.Check size={12} className="text-white" />
-                  </motion.div>
-                )}
-              </div>
-              <span className={`text-xs font-medium transition-all duration-300 ${selectedTask.completed ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                {selectedTask.completed ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="line-through">Completed</span>
-                    <Icons.CheckCircle size={12} className="text-emerald-500" />
-                    {getElapsedDays(selectedTask) !== null && (
-                      <span className="no-underline text-[10px] font-semibold text-emerald-500 bg-emerald-100 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded-full">
-                        {getElapsedDays(selectedTask)}d
-                      </span>
-                    )}
-                  </span>
-                ) : 'Mark as completed'}
-              </span>
-            </button>
-
-            {/* Priority pills */}
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Priority</label>
-              <div className="flex gap-1.5">
-                {([
-                  { value: 'low', label: 'Low', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'medium', label: 'Medium', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                  { value: 'high', label: 'High', color: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400' },
-                  { value: 'urgent', label: 'Urgent', color: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400' },
-                ] as const).map(p => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setEditingTask({ ...editingTask, priority: p.value })}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                      editingTask.priority === p.value
-                        ? p.activeBg
-                        : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${p.color}`} />
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Status pills */}
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">Status</label>
-              <div className="flex gap-1.5">
-                {([
-                  { value: 'todo', label: 'To do', color: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-700/50 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
-                  { value: 'in-progress', label: 'In progress', color: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-400' },
-                  { value: 'done', label: 'Done', color: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'cancelled', label: 'Cancelled', color: 'bg-red-400', activeBg: 'bg-red-50 dark:bg-red-500/15 border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400' },
-                ] as const).map(s => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => setEditingTask({ ...editingTask, status: s.value })}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                      editingTask.status === s.value
-                        ? s.activeBg
-                        : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.color}`} />
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Date + Time + Duration */}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={editingTask.start_date || ''}
-                  onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={editingTask.start_time || ''}
-                  onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Duration</label>
-                <select
-                  value={editingTask.duration || 60}
-                  onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
-                  className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 transition-all"
-                >
-                  <option value="15">15 min</option>
-                  <option value="30">30 min</option>
-                  <option value="45">45 min</option>
-                  <option value="60">1h</option>
-                  <option value="90">1.5h</option>
-                  <option value="120">2h</option>
-                  <option value="180">3h</option>
-                  <option value="240">4h</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Project + Assignee */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Project</label>
-                <select
-                  value={editingTask.project_id || ''}
-                  onChange={e => {
-                    const pid = e.target.value;
-                    const proj = projectOptions.find(p => p.id === pid);
-                    setEditingTask({
-                      ...editingTask,
-                      project_id: pid,
-                      client_id: proj?.client_id || editingTask.client_id || '',
-                    });
-                  }}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                    editingTask.project_id
-                      ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-400'
-                      : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                  }`}
-                >
-                  <option value="">No project</option>
-                  {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Assign to</label>
-                <select
-                  value={editingTask.assignee_id || ''}
-                  onChange={e => setEditingTask({ ...editingTask, assignee_id: e.target.value })}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                    editingTask.assignee_id
-                      ? 'bg-sky-50 dark:bg-sky-500/10 border-sky-300 dark:border-sky-500/40 text-sky-700 dark:text-sky-400'
-                      : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                  }`}
-                >
-                  <option value="">Unassigned</option>
-                  {teamMembers.filter(m => m.status === 'active').map(m => (
-                    <option key={m.id} value={m.id}>{m.id === user?.id ? `${m.name || m.email} (Me)` : (m.name || m.email)}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Client indicator */}
-            {selectedTask?.client_id && getClientLabel(selectedTask) && (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg">
-                <Icons.User size={12} className="text-emerald-500" />
-                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  Client: {getClientLabel(selectedTask)}
-                </span>
-              </div>
-            )}
-
-            {/* Description */}
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1">Description</label>
-              <textarea
-                value={editingTask.description || ''}
-                onChange={e => setEditingTask({ ...editingTask, description: e.target.value })}
-                placeholder="Details, notes, context..."
-                className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none transition-all"
-                rows={2}
-              />
-            </div>
-
-            {/* Subtasks */}
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">
-                Subtasks ({subtasksForSelected.filter(s => s.completed).length}/{subtasksForSelected.length})
-              </label>
-              {subtasksForSelected.length > 0 && (
-                <div className="mb-2 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                  <AnimatePresence initial={false}>
-                    {subtasksForSelected
-                      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
-                      .map((sub) => {
-                        const subBlocked = isTaskBlocked(sub);
-                        return (
-                      <motion.div
-                        key={sub.id}
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className={`flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 last:border-b-0 group ${
-                          subBlocked ? 'bg-amber-50/50 dark:bg-amber-500/5' : ''
-                        }`}
-                      >
-                        {subBlocked ? (
-                          <div className="w-4 h-4 rounded border-2 border-amber-300 dark:border-amber-500/40 flex items-center justify-center flex-shrink-0" title="Blocked by dependency">
-                            <Icons.Lock size={8} className="text-amber-500" />
-                          </div>
-                        ) : (
-                        <button
-                          onClick={() => handleToggleSubtask(sub.id, !sub.completed)}
-                          className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                            sub.completed
-                              ? 'bg-emerald-500 border-emerald-500'
-                              : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400'
-                          }`}
-                        >
-                          {sub.completed && <Icons.Check size={10} className="text-white" />}
-                        </button>
-                        )}
-                        <span className={`flex-1 text-xs truncate ${
-                          subBlocked ? 'text-amber-600 dark:text-amber-400/70' :
-                          sub.completed ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'
-                        }`}>
-                          {sub.title}
-                        </span>
-                        {subBlocked && (
-                          <span className="text-[9px] text-amber-500 font-medium flex-shrink-0">blocked</span>
-                        )}
-                        <button
-                          onClick={() => handleDeleteSubtask(sub.id)}
-                          className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition-all p-0.5"
-                        >
-                          <Icons.X size={10} />
-                        </button>
-                      </motion.div>
-                        );
-                    })}
-                  </AnimatePresence>
-                </div>
-              )}
-              {/* Add subtask inline */}
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  placeholder="Add subtask..."
-                  value={newSubtaskTitle}
-                  onChange={e => setNewSubtaskTitle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
-                  className="flex-1 px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 transition-all"
-                />
-                {newSubtaskTitle.trim() && (
-                  <button
-                    onClick={handleAddSubtask}
-                    disabled={addingSubtask}
-                    className="px-2 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[10px] font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-40 transition-all"
-                  >
-                    {addingSubtask ? '...' : '+'}
-                  </button>
-                )}
-              </div>
-              {/* Subtask progress bar */}
-              {subtasksForSelected.length > 0 && (
-                <div className="mt-1.5 w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-1">
-                  <div
-                    className="bg-emerald-500 h-1 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round((subtasksForSelected.filter(s => s.completed).length / subtasksForSelected.length) * 100)}%` }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Dependency selector */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-medium text-zinc-400 mb-1 flex items-center gap-1">
-                <Icons.Link size={10} />
-                Dependency
-              </label>
-              <select
-                value={editingTask.blocked_by || ''}
-                onChange={e => setEditingTask({ ...editingTask, blocked_by: e.target.value || undefined })}
-                className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                  editingTask.blocked_by
-                    ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400'
-                    : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                }`}
-              >
-                <option value="">No dependency</option>
-                {tasks
-                  .filter(t => t.id !== selectedTask.id && !t.parent_task_id)
-                  .sort((a, b) => a.title.localeCompare(b.title))
-                  .map(t => {
-                    const owner = t.assignee_id ? getMemberName(t.assignee_id) : null;
-                    return (
-                      <option key={t.id} value={t.id}>
-                        {t.completed ? '\u2713 ' : '\u25CB '}{t.title}{owner ? ` — ${owner}` : ''}
-                      </option>
-                    );
-                  })}
-              </select>
-
-              {/* Active dependency detail card */}
-              {editingTask.blocked_by && (() => {
-                const blocker = tasks.find(t => t.id === editingTask.blocked_by);
-                if (!blocker) return null;
-                const blockerOwner = blocker.assignee_id ? getMemberName(blocker.assignee_id) : null;
-                const blockerAvatar = blocker.assignee_id ? getMemberAvatar(blocker.assignee_id) : null;
-                const isResolved = blocker.completed;
-                return (
-                  <div className={`p-2.5 rounded-lg border ${
-                    isResolved
-                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
-                      : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'
-                  }`}>
-                    <div className="flex items-start gap-2">
-                      <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                        isResolved ? 'bg-emerald-500' : 'bg-amber-400'
-                      }`}>
-                        {isResolved
-                          ? <Icons.Check size={11} className="text-white" />
-                          : <Icons.Lock size={10} className="text-white" />
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-semibold ${
-                          isResolved ? 'text-emerald-700 dark:text-emerald-400 line-through' : 'text-amber-700 dark:text-amber-400'
-                        }`}>
-                          {blocker.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {blockerOwner && (
-                            <div className="flex items-center gap-1">
-                              {blockerAvatar ? (
-                                <img src={blockerAvatar} alt="" className="w-3.5 h-3.5 rounded-full" />
-                              ) : (
-                                <div className="w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[7px] font-bold text-violet-700 dark:text-violet-300">
-                                  {(blockerOwner || '?')[0]?.toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-400">
-                                {blockerOwner}
-                              </span>
-                            </div>
-                          )}
-                          {!blockerOwner && (
-                            <span className="text-[10px] text-zinc-400 italic">Unassigned</span>
-                          )}
-                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                            isResolved
-                              ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                              : blocker.status === 'in-progress'
-                                ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                                : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
-                          }`}>
-                            {isResolved ? 'Completed' : blocker.status === 'in-progress' ? 'In progress' : 'Pending'}
-                          </span>
-                        </div>
-                        {!isResolved && (
-                          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-1">
-                            {blockerOwner
-                              ? `${blockerOwner} needs to complete this task first`
-                              : 'This task must be completed before proceeding'}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Dependent tasks (reverse: tasks blocked by this one) */}
-              {(() => {
-                const dependents = getDependentTasks(selectedTask.id);
-                if (dependents.length === 0) return null;
-                return (
-                  <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Icons.ChevronRight size={10} className="text-zinc-400" />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Blocks {dependents.length} task{dependents.length > 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {dependents.map(d => {
-                        const depOwner = d.assignee_id ? getMemberName(d.assignee_id) : null;
-                        const depAvatar = d.assignee_id ? getMemberAvatar(d.assignee_id) : null;
-                        return (
-                          <div key={d.id} className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700/40 transition-colors cursor-pointer"
-                            onClick={() => handleOpenTaskDetail(d)}>
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${d.completed ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
-                            <span className={`text-[11px] flex-1 truncate ${d.completed ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                              {d.title}
-                            </span>
-                            {depOwner && (
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                {depAvatar ? (
-                                  <img src={depAvatar} alt="" className="w-3.5 h-3.5 rounded-full" />
-                                ) : (
-                                  <div className="w-3.5 h-3.5 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[7px] font-bold text-violet-700 dark:text-violet-300">
-                                    {(depOwner || '?')[0]?.toUpperCase()}
-                                  </div>
-                                )}
-                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{depOwner}</span>
-                              </div>
-                            )}
-                            {!depOwner && !d.completed && (
-                              <span className="text-[9px] text-zinc-400 italic flex-shrink-0">unassigned</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {!selectedTask.completed && dependents.some(d => !d.completed) && (
-                      <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-2 pt-1.5 border-t border-zinc-200 dark:border-zinc-700">
-                        {dependents.filter(d => !d.completed).length} task{dependents.filter(d => !d.completed).length > 1 ? 's are waiting' : ' is waiting'} for you to complete this task to proceed
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Meta info */}
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                <span>Created: {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                <span className="font-mono text-zinc-300 dark:text-zinc-600">{selectedTask.id.slice(0, 8)}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </SlidePanel>
+        onDelete={handleDeleteTask}
+        onToggleComplete={toggleTaskComplete}
+        subtasksForSelected={subtasksForSelected}
+        newSubtaskTitle={newSubtaskTitle}
+        setNewSubtaskTitle={setNewSubtaskTitle}
+        addingSubtask={addingSubtask}
+        onAddSubtask={handleAddSubtask}
+        onToggleSubtask={handleToggleSubtask}
+        onDeleteSubtask={handleDeleteSubtask}
+        isTaskBlocked={isTaskBlocked}
+        getBlockerTask={getBlockerTask}
+        getDependentTasks={getDependentTasks}
+        getElapsedDays={getElapsedDays}
+        tasks={tasks}
+        teamMembers={teamMembers}
+        projectOptions={projectOptions}
+        clients={clients}
+        userId={user?.id}
+        getMemberName={getMemberName}
+        getMemberAvatar={getMemberAvatar}
+        getClientLabel={getClientLabel}
+        onOpenTaskDetail={handleOpenTaskDetail}
+      />
 
       {/* Google Calendar Settings Panel */}
       {showGoogleSettings && (
@@ -2090,7 +881,7 @@ export const Calendar: React.FC = () => {
         </div>
       )}
 
-      {/* Popover de click-to-create */}
+      {/* Click-to-create popover */}
       {slotPopover && (
         <TimeSlotPopover
           clickX={slotPopover.clickX}
@@ -2103,673 +894,100 @@ export const Calendar: React.FC = () => {
         />
       )}
 
-      {/* Vista de Semana */}
+      {/* Week View */}
       {view === 'week' && (
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-          {/* Encabezado de días */}
-          <div className="grid grid-cols-8 border-b border-zinc-200 dark:border-zinc-800">
-            <div className="p-4 border-r border-zinc-200 dark:border-zinc-800"></div>
-            {weekDays.map((day, index) => {
-              const dateStr = day.toISOString().split('T')[0];
-              const isToday = dateStr === new Date().toISOString().split('T')[0];
-              const isSelected = dateStr === selectedDate;
-              
-              return (
-                <div
-                  key={index}
-                  onClick={() => setSelectedDate(dateStr)}
-                  className={`p-4 text-center cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-500'
-                      : isToday
-                      ? 'bg-zinc-50 dark:bg-zinc-800'
-                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                  </div>
-                  <div className={`text-lg font-semibold ${
-                    isToday ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'
-                  }`}>
-                    {day.getDate()}
-                  </div>
-                  {getDayTasks(dateStr).length > 0 && (
-                    <div className="flex items-center justify-center gap-0.5 mt-1">
-                      {getDayTasks(dateStr).slice(0, 5).map(t => (
-                        <span key={t.id} className={`w-1.5 h-1.5 rounded-full ${getTaskColor(t).dot}`} />
-                      ))}
-                      {getDayTasks(dateStr).length > 5 && (
-                        <span className="text-[8px] text-zinc-400 ml-0.5">+{getDayTasks(dateStr).length - 5}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* All-day / unscheduled tasks row */}
-          <div className="grid grid-cols-8 border-b-2 border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/30">
-            <div className="p-2 text-[10px] text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800 flex items-start justify-end pt-3">
-              Tasks
-            </div>
-            {weekDays.map((day, dayIndex) => {
-              const dateStr = day.toISOString().split('T')[0];
-              const unscheduledTasks = getDayTasks(dateStr).filter(t => !t.start_time);
-              return (
-                <div
-                  key={dayIndex}
-                  className={`p-1.5 min-h-[44px] border-r border-zinc-100 dark:border-zinc-700 transition-colors ${
-                    draggingTaskId ? 'bg-blue-50/30 dark:bg-blue-900/5' : ''
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleTaskDrop(e, dateStr)}
-                >
-                  {unscheduledTasks.map(task => {
-                    const tc = getTaskColor(task);
-                    const overdue = getOverdueDays(task);
-                    return (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={(e) => handleTaskDragStart(e, task.id)}
-                        onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-[10px] px-1.5 py-1 rounded mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                        title={`${task.title}${isTaskBlocked(task) ? ' ⚠ BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
-                        onClick={() => handleOpenTaskDetail(task)}
-                      >
-                        <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                          {task.completed ? (
-                            <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
-                          ) : isTaskBlocked(task) ? (
-                            <Icons.Lock size={8} className="text-amber-500 shrink-0" />
-                          ) : (
-                            <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
-                          )}
-                          <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
-                          {overdue > 0 && (
-                            <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
-                              +{overdue}d
-                            </span>
-                          )}
-                          {task.completed && getElapsedDays(task) !== null && (
-                            <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Cuerpo del calendario (horas) */}
-          <div className="max-h-[420px] overflow-y-auto">
-            {hours.map((hour) => (
-              <div key={hour} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800">
-                <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800">
-                  {hour.toString().padStart(2, '0')}:00
-                </div>
-                {weekDays.map((day, dayIndex) => {
-                  const dateStr = day.toISOString().split('T')[0];
-                  const dayEvents = getDayEvents(dateStr).filter(e => {
-                    if (!e.start_time) return false;
-                    const eventHour = parseInt(e.start_time.split(':')[0]);
-                    return eventHour === hour;
-                  });
-                  const hourTasks = getDayTasks(dateStr).filter(t => {
-                    if (!t.start_time) return false;
-                    const taskHour = parseInt(t.start_time.split(':')[0]);
-                    return taskHour === hour;
-                  });
-
-                  const isSelected = slotPopover?.date === dateStr && slotPopover?.hour === hour;
-                  const isDragTarget = draggingTaskId !== null;
-
-                  return (
-                    <div
-                      key={dayIndex}
-                      className={`p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer ${
-                        isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-500/10' : ''
-                      } ${isDragTarget ? 'hover:bg-blue-50/50 dark:hover:bg-blue-900/10' : ''}`}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleTaskDrop(e, dateStr, hour)}
-                      onClick={(e) => {
-                        if (e.target !== e.currentTarget) return;
-                        setSlotPopover({
-                          clickX: e.clientX,
-                          clickY: e.clientY,
-                          date: dateStr,
-                          hour: hour,
-                        });
-                      }}
-                    >
-                      {dayEvents.map((event) => (
-                        <div
-                          key={event.id}
-                          className="text-xs p-2 rounded mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity"
-                          style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
-                          title={event.title}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="font-medium flex items-center gap-1">
-                            {event.source === 'google' && (
-                              <span className="opacity-75 text-[10px] flex-shrink-0">G</span>
-                            )}
-                            {event.title}
-                          </div>
-                          {event.location && (
-                            <div className="opacity-75">
-                              {CONTENT_PLATFORMS[event.location]?.label || event.location}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {hourTasks.map((task) => {
-                        const tc = getTaskColor(task);
-                        const overdue = getOverdueDays(task);
-                        return (
-                          <div
-                            key={task.id}
-                            draggable
-                            onDragStart={(e) => handleTaskDragStart(e, task.id)}
-                            onDragEnd={() => setDraggingTaskId(null)}
-                            className={`text-xs p-1.5 rounded mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
-                              task.status === 'cancelled' ? 'opacity-50' : ''
-                            } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                            title={`${task.title}${task.assignee_id ? ` — ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` · ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` ⚠ BLOCKED — waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` — ${overdue}d overdue` : ''}`}
-                            onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
-                          >
-                            <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                              {task.completed ? (
-                                <Icons.CheckCircle size={9} className="text-emerald-500 shrink-0" />
-                              ) : isTaskBlocked(task) ? (
-                                <Icons.Lock size={9} className="text-amber-500 shrink-0" />
-                              ) : (
-                                <span className={`w-1.5 h-1.5 rounded-full ${tc.dot} shrink-0`} />
-                              )}
-                              <span className={task.completed ? 'line-through' : ''}>{task.title}</span>
-                              {overdue > 0 && (
-                                <span className="text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
-                                  +{overdue}d
-                                </span>
-                              )}
-                              {task.assignee_id && (
-                                getMemberAvatar(task.assignee_id) ? (
-                                  <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-3.5 h-3.5 rounded-full shrink-0 ml-auto" />
-                                ) : (
-                                  <div className="w-3.5 h-3.5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[7px] font-bold text-blue-700 dark:text-blue-300 shrink-0 ml-auto">
-                                    {(getMemberName(task.assignee_id) || '?')[0]?.toUpperCase()}
-                                </div>
-                              )
-                            )}
-                          </div>
-                          {/* Blocked line + client tag */}
-                          {(isTaskBlocked(task) || getClientLabel(task)) && (
-                            <div className="flex items-center gap-1 mt-0.5 truncate">
-                              {isTaskBlocked(task) && (() => {
-                                const bl = getBlockerTask(task);
-                                const blOwner = bl?.assignee_id ? getMemberName(bl.assignee_id) : null;
-                                return (
-                                  <span className="text-[8px] text-amber-600 dark:text-amber-400 font-medium truncate">
-                                    {blOwner ? `Wait. ${blOwner}` : `Wait: ${bl?.title?.slice(0, 20) || '?'}`}
-                                  </span>
-                                );
-                              })()}
-                              {getClientLabel(task) && (
-                                <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto truncate">
-                                  {getClientLabel(task)}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
+        <WeekView
+          weekDays={weekDays}
+          hours={hours}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          getDayEvents={getDayEvents}
+          getDayTasks={getDayTasks}
+          getTaskColor={getTaskColor}
+          getOverdueDays={getOverdueDays}
+          getElapsedDays={getElapsedDays}
+          isTaskBlocked={isTaskBlocked}
+          getBlockerTask={getBlockerTask}
+          getMemberName={getMemberName}
+          getMemberAvatar={getMemberAvatar}
+          getClientLabel={getClientLabel}
+          contentPlatforms={CONTENT_PLATFORMS}
+          draggingTaskId={draggingTaskId}
+          setDraggingTaskId={setDraggingTaskId}
+          onTaskDragStart={handleTaskDragStart}
+          onTaskDrop={handleTaskDrop}
+          onDragOver={handleDragOver}
+          slotPopover={slotPopover}
+          onSlotClick={(e, dateStr, hour) => {
+            setSlotPopover({
+              clickX: e.clientX,
+              clickY: e.clientY,
+              date: dateStr,
+              hour: hour,
+            });
+          }}
+          onOpenTaskDetail={handleOpenTaskDetail}
+        />
       )}
 
-      {/* Vista de Mes */}
+      {/* Month View */}
       {view === 'month' && (
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-              <div key={day} className="p-3 text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                {day}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7">
-            {getMonthDays().map((day, idx) => {
-              const dateStr = day.toISOString().split('T')[0];
-              const isCurrentMonth = day.getMonth() === currentDate.getMonth();
-              const isToday = dateStr === new Date().toISOString().split('T')[0];
-              const isSelected = dateStr === selectedDate;
-              const dayEvents = getDayEvents(dateStr);
-              const dayTasks = getDayTasks(dateStr);
-              const totalItems = dayEvents.length + dayTasks.length;
-              const maxVisible = 3;
-              return (
-                <div
-                  key={`${dateStr}-${idx}`}
-                  onClick={() => setSelectedDate(dateStr)}
-                  onDoubleClick={(e) => {
-                    setSlotPopover({
-                      clickX: e.clientX,
-                      clickY: e.clientY,
-                      date: dateStr,
-                      hour: 9,
-                    });
-                  }}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleTaskDrop(e, dateStr)}
-                  className={`min-h-[120px] p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                    isSelected
-                      ? 'bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
-                      : isCurrentMonth ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/40'
-                  } ${draggingTaskId ? 'hover:bg-blue-50/40 dark:hover:bg-blue-900/10' : ''}`}
-                >
-                  <div className={`text-xs font-semibold flex items-center gap-1 ${
-                    isToday
-                      ? 'text-white'
-                      : isCurrentMonth ? 'text-zinc-600 dark:text-zinc-400' : 'text-zinc-400 dark:text-zinc-600'
-                  }`}>
-                    {isToday ? (
-                      <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px]">
-                        {day.getDate()}
-                      </span>
-                    ) : (
-                      day.getDate()
-                    )}
-                    {dayTasks.length > 0 && (
-                      <div className="flex items-center gap-0.5 ml-auto">
-                        {dayTasks.slice(0, 4).map(t => (
-                          <span key={t.id} className={`w-1 h-1 rounded-full ${getTaskColor(t).dot}`} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-1.5 space-y-0.5">
-                    {dayEvents.slice(0, maxVisible).map((event) => (
-                      <div
-                        key={event.id}
-                        className="text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-0.5"
-                        style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
-                      >
-                        {event.source === 'google' && <span className="opacity-75">G</span>}
-                        {event.title}
-                      </div>
-                    ))}
-                    {dayTasks.slice(0, Math.max(0, maxVisible - dayEvents.length)).map((task) => {
-                      const tc = getTaskColor(task);
-                      const overdue = getOverdueDays(task);
-                      return (
-                        <div
-                          key={task.id}
-                          draggable
-                          onDragStart={(e) => handleTaskDragStart(e, task.id)}
-                          onDragEnd={() => setDraggingTaskId(null)}
-                          className={`text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 border cursor-grab active:cursor-grabbing transition-opacity duration-300 ${tc.bg} ${tc.border}`}
-                          onClick={(e) => { e.stopPropagation(); handleOpenTaskDetail(task); }}
-                        >
-                          {task.completed ? (
-                            <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
-                          ) : (
-                            <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
-                          )}
-                          <span className={`${tc.text} truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
-                          {overdue > 0 && (
-                            <span className="ml-auto text-[8px] font-bold text-red-500 shrink-0">+{overdue}d</span>
-                          )}
-                          {task.completed && getElapsedDays(task) !== null && (
-                            <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {totalItems > maxVisible && (
-                      <div className="text-[10px] text-zinc-400 pl-1">+{totalItems - maxVisible} more</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <MonthView
+          currentDate={currentDate}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          getMonthDays={getMonthDays}
+          getDayEvents={getDayEvents}
+          getDayTasks={getDayTasks}
+          getTaskColor={getTaskColor}
+          getOverdueDays={getOverdueDays}
+          getElapsedDays={getElapsedDays}
+          getClientLabel={getClientLabel}
+          draggingTaskId={draggingTaskId}
+          setDraggingTaskId={setDraggingTaskId}
+          onTaskDragStart={handleTaskDragStart}
+          onTaskDrop={handleTaskDrop}
+          onDragOver={handleDragOver}
+          onSlotDoubleClick={(e, dateStr) => {
+            setSlotPopover({
+              clickX: e.clientX,
+              clickY: e.clientY,
+              date: dateStr,
+              hour: 9,
+            });
+          }}
+          onOpenTaskDetail={handleOpenTaskDetail}
+        />
       )}
 
+      {/* Content Planner Board */}
       {calendarMode === 'content' && (
-        <div className="mt-6">
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Social media planner</h3>
-              <div className="text-xs text-zinc-500">Drag to change status</div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {CONTENT_STATUSES.map((status) => (
-                <div
-                  key={status.id}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    const eventId = e.dataTransfer.getData('contentEventId');
-                    if (eventId) {
-                      updateEvent(eventId, { content_status: status.id as any });
-                    }
-                  }}
-                  className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 min-h-[220px]"
-                >
-                  <div className={`inline-flex px-2 py-1 rounded-full text-[10px] font-semibold ${status.color}`}>
-                    {status.label}
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {contentEvents
-                      .filter((event) => (event as any).content_status === status.id)
-                      .map((event) => (
-                        <div
-                          key={event.id}
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData('contentEventId', event.id)}
-                          className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs cursor-grab"
-                        >
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">{event.title}</div>
-                          <div className="text-[10px] text-zinc-500 mt-1">
-                            {CONTENT_PLATFORMS[event.location || '']?.label || event.location}
-                          </div>
-                          {event.start_date && (
-                            <div className="text-[10px] text-zinc-400 mt-1">{event.start_date}</div>
-                          )}
-                          <div className="flex gap-1 mt-2">
-                            {CONTENT_STATUSES.filter(s => s.id !== status.id).map((target) => (
-                              <button
-                                key={target.id}
-                                onClick={() => updateEvent(event.id, { content_status: target.id as any })}
-                                className="text-[10px] px-2 py-0.5 rounded-full border border-zinc-200 text-zinc-500"
-                              >
-                                {target.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    {contentEvents.filter((event) => (event as any).content_status === status.id).length === 0 && (
-                      <div className="text-xs text-zinc-400">No content</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
+        <ContentPlannerBoard
+          contentStatuses={CONTENT_STATUSES}
+          contentEvents={contentEvents}
+          contentPlatforms={CONTENT_PLATFORMS}
+          updateEvent={async (id, data) => { await updateEvent(id, data); }}
+        />
       )}
 
-      {/* Panel lateral de fecha seleccionada */}
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-              {new Date(selectedDate).toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </h3>
-            
-            <div className="space-y-6">
-              {/* Eventos del día */}
-              <div>
-                <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
-                  <Icons.CalendarDays size={16} />
-                  {calendarMode === 'content' ? `Contents (${getDayEvents(selectedDate).length})` : `Events (${getDayEvents(selectedDate).length})`}
-                </h4>
-                <div className="space-y-2">
-                  {getDayEvents(selectedDate).length > 0 ? (
-                    getDayEvents(selectedDate).map((event) => (
-                      <div
-                        key={event.id}
-                        className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg"
-                      >
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: event.color || '#3b82f6' }}
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                            {event.title}
-                            {event.source === 'google' && (
-                              <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                Google
-                              </span>
-                            )}
-                          </div>
-                          {event.start_time && (
-                            <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                              {event.start_time} - {event.duration || 60} min
-                            </div>
-                          )}
-                          {event.location && (
-                            <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                              📍 {event.location}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
-                          {event.type === 'content'
-                            ? (CONTENT_PLATFORMS[event.location || '']?.label || event.location || 'content')
-                            : event.type}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                      {calendarMode === 'content' ? 'No contents for this day' : 'No events for this day'}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tareas del día */}
-              {calendarMode === 'schedule' && (
-                <div>
-                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
-                    <Icons.Check size={16} />
-                    Tasks ({getDayTasks(selectedDate).length})
-                  </h4>
-                  <div className="space-y-2">
-                    {getDayTasks(selectedDate).length > 0 ? (
-                      getDayTasks(selectedDate).map((task) => (
-                        <div
-                          key={task.id}
-                          className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
-                          onClick={() => handleOpenTaskDetail(task)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={task.completed}
-                            onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
-                            className="rounded border-zinc-300"
-                          />
-                          <div className="flex-1">
-                            <div className={`font-medium ${
-                              task.completed 
-                                ? 'text-zinc-500 dark:text-zinc-400 line-through' 
-                                : 'text-zinc-900 dark:text-zinc-100'
-                            }`}>
-                              {task.title}
-                            </div>
-                            {task.description && (
-                              <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                                {task.description}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {task.assignee_id && (
-                              <div className="flex items-center gap-1" title={getMemberName(task.assignee_id) || ''}>
-                                {getMemberAvatar(task.assignee_id) ? (
-                                  <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-5 h-5 rounded-full" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[9px] font-bold text-blue-700 dark:text-blue-300">
-                                    {(getMemberName(task.assignee_id) || '?')[0]?.toUpperCase()}
-                                  </div>
-                                )}
-                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden sm:inline">
-                                  {getMemberName(task.assignee_id)}
-                                </span>
-                              </div>
-                            )}
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                              task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
-                              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                              'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                            }`}>
-                              {task.priority}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
-                              {getProjectLabel(task)}
-                            </span>
-                            {getClientLabel(task) && (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5">
-                                {getClientLabel(task)}
-                              </span>
-                            )}
-                            <span className="text-xs text-zinc-400 dark:text-zinc-500 capitalize">
-                              {task.status}
-                            </span>
-                            {task.completed && getElapsedDays(task) !== null && (
-                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                                {getElapsedDays(task)}d
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
-                        No tasks for this day
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Panel de estadísticas */}
-        <div className="space-y-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Summary</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {calendarMode === 'content' ? 'Total contents' : 'Total events'}
-                </span>
-                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  {calendarMode === 'content' ? filteredEvents.length : stats.totalEvents}
-                </span>
-              </div>
-              {calendarMode === 'schedule' && (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Total tasks</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{stats.totalTasks}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Completed</span>
-                    <span className="font-semibold text-green-600 dark:text-green-400">{stats.completedTasks}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">Pending</span>
-                    <span className="font-semibold text-orange-600 dark:text-orange-400">{stats.pendingTasks}</span>
-                  </div>
-                  {stats.overdueTasks > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Overdue</span>
-                      <span className="font-semibold text-red-600 dark:text-red-400">{stats.overdueTasks}</span>
-                    </div>
-                  )}
-                  <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">Progress</span>
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{stats.completionRate}%</span>
-                    </div>
-                    <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
-                      <div
-                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${stats.completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </Card>
-
-          {/* Próximas tareas */}
-          {calendarMode === 'schedule' && (
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Upcoming tasks</h3>
-              <div className="space-y-3">
-                {tasks
-                  .filter(task => !task.completed && task.start_date)
-                  .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-                  .slice(0, 5)
-                  .map((task) => (
-                    <div key={task.id} className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={task.completed}
-                        onChange={(e) => toggleTaskComplete(task.id, e.target.checked)}
-                        className="rounded border-zinc-300"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                          {task.title}
-                        </div>
-                        {task.start_date && (
-                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                            {new Date(task.start_date).toLocaleDateString('en-US')}
-                          </div>
-                        )}
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        task.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' :
-                        task.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400' :
-                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                        'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                      }`}>
-                        {task.priority}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5">
-                        {getProjectLabel(task)}
-                      </span>
-                      {getClientLabel(task) && (
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5">
-                          {getClientLabel(task)}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                {tasks.filter(task => !task.completed && task.start_date).length === 0 && (
-                  <div className="text-center py-4 text-zinc-500 dark:text-zinc-400 text-sm">
-                    No pending tasks
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
+      {/* Selected Date Panel + Stats */}
+      <SelectedDatePanel
+        selectedDate={selectedDate}
+        calendarMode={calendarMode}
+        getDayEvents={getDayEvents}
+        getDayTasks={getDayTasks}
+        contentPlatforms={CONTENT_PLATFORMS}
+        stats={stats}
+        filteredEventsCount={filteredEvents.length}
+        toggleTaskComplete={toggleTaskComplete}
+        onOpenTaskDetail={handleOpenTaskDetail}
+        getMemberName={getMemberName}
+        getMemberAvatar={getMemberAvatar}
+        getProjectLabel={getProjectLabel}
+        getClientLabel={getClientLabel}
+        getElapsedDays={getElapsedDays}
+        tasks={tasks}
+      />
     </div>
   );
 };

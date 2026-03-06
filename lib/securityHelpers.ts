@@ -368,7 +368,7 @@ export async function canPerformAction(
 
     const requiredPermission = permissionMap[resource]?.[action]
     if (!requiredPermission) {
-      console.warn(`Security: Unknown permission mapping for ${resource}.${action}`)
+      if (import.meta.env.DEV) console.warn(`Security: Unknown permission mapping for ${resource}.${action}`)
       return false
     }
 

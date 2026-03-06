@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from './TenantContext'
+import { ResourceLimitError } from '../lib/ResourceLimitError'
 
 export enum ProjectStatus {
   Active = 'Active',
@@ -81,7 +82,7 @@ const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined
 
 export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth()
-  const { currentTenant } = useTenant()
+  const { currentTenant, isWithinResourceLimit, getResourceUsage, refreshUsage } = useTenant()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -197,8 +198,35 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           throw err
         }
       } else {
-        const normalized = (data || []).map(normalizeProject)
-        setProjects(normalized)
+        const dbProjects = (data || []).map(normalizeProject)
+
+        // If DB is empty but we have local projects, persist them to DB
+        if (dbProjects.length === 0 && projects.length > 0) {
+          errorLogger.log(`[ProjectsContext] DB empty but ${projects.length} local projects found — syncing to DB`)
+          const toSync = projects.map(p => {
+            const payload = toDbPayload(p)
+            payload.id = p.id
+            payload.tenant_id = tenantId
+            payload.owner_id = user?.id || payload.owner_id
+            if (payload.client_id === undefined) payload.client_id = null
+            return payload
+          })
+
+          const { data: synced, error: syncErr } = await supabase
+            .from('projects')
+            .upsert(toSync, { onConflict: 'id' })
+            .select()
+
+          if (syncErr) {
+            errorLogger.warn('[ProjectsContext] Sync failed, keeping local state:', syncErr.message)
+            // Don't wipe local projects if sync fails
+          } else {
+            const normalized = (synced || []).map(normalizeProject)
+            setProjects(normalized.length > 0 ? normalized : projects)
+          }
+        } else {
+          setProjects(dbProjects)
+        }
       }
       hasLoadedRef.current = true
       setIsInitialized(true)
@@ -236,6 +264,13 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       throw new Error('Could not determine tenant. Reload the page.')
     }
 
+    // Enforce resource limit before creating
+    await refreshUsage()
+    if (!isWithinResourceLimit('max_projects')) {
+      const usage = getResourceUsage('max_projects')
+      throw new ResourceLimitError('max_projects', usage.used, usage.limit)
+    }
+
     try {
       const payload = toDbPayload(projectData)
       payload.tenant_id = tenantId
@@ -271,8 +306,47 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         .eq('id', id)
         .select()
         .single()
-      
-      if (err) throw err
+
+      if (err) {
+        // Project doesn't exist in DB yet — persist it via upsert
+        const localProject = projects.find(p => p.id === id)
+        if (localProject) {
+          const tenantId = await resolveTenantId()
+          const fullPayload = toDbPayload({ ...localProject, ...updates })
+          fullPayload.id = id
+          fullPayload.tenant_id = tenantId
+          fullPayload.owner_id = user?.id
+          if (!fullPayload.title) fullPayload.title = localProject.title || 'Untitled'
+          if (fullPayload.client_id === undefined) fullPayload.client_id = null
+
+          const { data: upsertData, error: upsertErr } = await supabase
+            .from('projects')
+            .upsert(fullPayload, { onConflict: 'id' })
+            .select()
+            .single()
+
+          if (upsertErr) {
+            // FK violation on client_id — retry without it
+            if (upsertErr.code === '23503' && upsertErr.message?.includes('client_id')) {
+              fullPayload.client_id = null
+              const { data: retryData, error: retryErr } = await supabase
+                .from('projects')
+                .upsert(fullPayload, { onConflict: 'id' })
+                .select()
+                .single()
+              if (retryErr) throw retryErr
+              const saved = normalizeProject(retryData)
+              setProjects(prev => prev.map(p => p.id === id ? saved : p))
+              return saved
+            }
+            throw upsertErr
+          }
+          const saved = normalizeProject(upsertData)
+          setProjects(prev => prev.map(p => p.id === id ? saved : p))
+          return saved
+        }
+        throw err
+      }
       const updatedProject = normalizeProject(data)
       setProjects(prev => prev.map(p => p.id === id ? updatedProject : p))
       return updatedProject
@@ -295,17 +369,21 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }
 
+  const refreshProjects = useCallback(() => fetchProjects(true), [fetchProjects])
+
+  const value = useMemo(() => ({
+    projects,
+    loading,
+    error,
+    isInitialized,
+    createProject,
+    updateProject,
+    deleteProject,
+    refreshProjects
+  }), [projects, loading, error, isInitialized, createProject, updateProject, deleteProject, refreshProjects])
+
   return (
-    <ProjectsContext.Provider value={{
-      projects,
-      loading,
-      error,
-      isInitialized,
-      createProject,
-      updateProject,
-      deleteProject,
-      refreshProjects: () => fetchProjects(true)
-    }}>
+    <ProjectsContext.Provider value={value}>
       {children}
     </ProjectsContext.Provider>
   )

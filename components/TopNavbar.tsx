@@ -17,14 +17,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
     const [isConfigOpen, setIsConfigOpen] = useState(false);
 
     return (
-        <header className="sticky top-0 z-40 w-full px-4 md:px-8 bg-zinc-50/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/40 dark:border-zinc-800/40">
-            <div className="flex items-center justify-between h-14 max-w-[1600px] mx-auto w-full">
+        <header className="w-full px-4 md:px-5 bg-zinc-50/60 dark:bg-black/60 backdrop-blur-2xl rounded-full">
+            <div className="flex items-center justify-between h-11 w-full">
 
                 {/* Left: Search Bar */}
                 <div className="flex items-center gap-4 min-w-0">
                     <div
                         onClick={onOpenSearch}
-                        className="group relative flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg cursor-text transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-56"
+                        className="group relative flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full cursor-text transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-56"
                     >
                         <Icons.Search size={13} className="text-zinc-400 shrink-0" />
                         <span className="text-xs text-zinc-400 font-medium">Search...</span>

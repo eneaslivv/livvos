@@ -228,12 +228,12 @@ export function getEncryptionMasterKey(): string {
   const masterKey = import.meta.env.VITE_ENCRYPTION_MASTER_KEY;
 
   if (!masterKey) {
-    console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY is not set. Credential encryption will not work.');
+    if (import.meta.env.DEV) console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY is not set. Credential encryption will not work.');
     return '';
   }
 
   if (masterKey.length < 32) {
-    console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY must be at least 32 characters for AES-256.');
+    if (import.meta.env.DEV) console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY must be at least 32 characters for AES-256.');
     return '';
   }
 

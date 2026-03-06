@@ -1,7 +1,7 @@
 // Logger de errores para debugging
 export const errorLogger = {
   log: (message: string, data?: any) => {
-    console.log(`[${new Date().toISOString()}] 📝 ${message}`, data || '');
+    if (import.meta.env.DEV) console.log(`[${new Date().toISOString()}] ${message}`, data || '');
   },
   
   error: (message: string, error?: any) => {
@@ -9,7 +9,7 @@ export const errorLogger = {
   },
   
   warn: (message: string, data?: any) => {
-    console.warn(`[${new Date().toISOString()}] ⚠️  ${message}`, data || '');
+    if (import.meta.env.DEV) console.warn(`[${new Date().toISOString()}] ${message}`, data || '');
   },
   
   info: (message: string, data?: any) => {
@@ -19,7 +19,7 @@ export const errorLogger = {
   // Logger específico para Supabase
   supabase: {
     query: (table: string, operation: string, data?: any) => {
-      console.log(`[${new Date().toISOString()}] 🗄️  Supabase: ${operation} ${table}`, data || '');
+      if (import.meta.env.DEV) console.log(`[${new Date().toISOString()}] Supabase: ${operation} ${table}`, data || '');
     },
     
     error: (table: string, operation: string, error: any) => {
@@ -27,7 +27,7 @@ export const errorLogger = {
     },
     
     subscription: (table: string, event: string, data?: any) => {
-      console.log(`[${new Date().toISOString()}] 📡 Supabase Subscription: ${event} ${table}`, data || '');
+      if (import.meta.env.DEV) console.log(`[${new Date().toISOString()}] Supabase Subscription: ${event} ${table}`, data || '');
     }
   }
 };

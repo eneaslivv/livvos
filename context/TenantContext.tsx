@@ -226,7 +226,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
     // Fetch tenant data for current user
     const fetchTenantData = useCallback(async () => {
-        console.log('[TenantContext] fetchTenantData triggered. User:', user?.id);
+        if (import.meta.env.DEV) console.log('[TenantContext] fetchTenantData triggered. User:', user?.id);
         if (!user) {
             setCurrentTenant(null);
             setTenantConfig(null);
@@ -252,7 +252,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             let tenantId = profile?.tenant_id;
 
             if (profileError || !tenantId) {
-                console.warn('Profile/tenant not found, auto-provisioning...');
+                if (import.meta.env.DEV) console.warn('Profile/tenant not found, auto-provisioning...');
                 await ensureTenantAssignment(profile || null);
                 // Only re-fetch if we had to provision
                 const { data: updatedProfile } = await supabase
@@ -279,7 +279,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
             setCurrentTenant(tenantResult.data);
             hasLoadedRef.current = true;
-            console.log('[TenantContext] Tenant loaded:', tenantResult.data.id);
+            if (import.meta.env.DEV) console.log('[TenantContext] Tenant loaded:', tenantResult.data.id);
 
             if (configResult.data && !configResult.error) {
                 const parsedConfig = {

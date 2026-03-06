@@ -267,15 +267,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                             try {
                                 const ext = file.name.split('.').pop();
                                 const path = `banners/${currentTenant.id}.${ext}`;
-                                console.log('[Banner] uploading to', path, 'tenant:', currentTenant.id);
+                                if (import.meta.env.DEV) console.log('[Banner] uploading to', path, 'tenant:', currentTenant.id);
                                 const { error: rmErr } = await supabaseAdmin.storage.from('documents').remove([path]);
-                                if (rmErr) console.warn('[Banner] remove error (non-fatal):', rmErr.message);
+                                if (rmErr && import.meta.env.DEV) console.warn('[Banner] remove error (non-fatal):', rmErr.message);
                                 const { error: upErr } = await supabaseAdmin.storage.from('documents').upload(path, file, { upsert: true });
                                 if (upErr) { console.error('[Banner] upload error:', upErr); throw upErr; }
                                 const { data: urlData } = supabaseAdmin.storage.from('documents').getPublicUrl(path);
-                                console.log('[Banner] public URL:', urlData.publicUrl);
+                                if (import.meta.env.DEV) console.log('[Banner] public URL:', urlData.publicUrl);
                                 await updateTenant({ banner_url: `${urlData.publicUrl}?v=${Date.now()}` });
-                                console.log('[Banner] tenant updated OK');
+                                if (import.meta.env.DEV) console.log('[Banner] tenant updated OK');
                             } catch (err: any) {
                                 console.error('[Banner] full error:', err);
                                 setUploadError(err?.message || 'Error al subir imagen');

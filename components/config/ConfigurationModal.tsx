@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons } from '../ui/Icons';
 import { Modal } from '../ui/Modal';
 import { GeneralSettings } from './GeneralSettings';
@@ -14,19 +14,33 @@ interface ConfigurationModalProps {
     onClose: () => void;
 }
 
-type Tab = 'general' | 'services' | 'billing' | 'users' | 'content';
+type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles';
 
 export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
-    const { user, roles } = useRBAC();
+    const { user, roles, hasPermission, isAdmin } = useRBAC();
 
-    const TABS: { id: Tab; label: string; icon: any }[] = [
+    const ALL_TABS: { id: Tab; label: string; icon: any; requireAdmin?: boolean; permission?: { module: any; action: any } }[] = [
         { id: 'general', label: 'General', icon: Icons.Settings },
-        { id: 'services', label: 'Services', icon: Icons.Grid },
-        { id: 'content', label: 'Content', icon: Icons.File },
-        { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
-        { id: 'users', label: 'Members', icon: Icons.Users },
+        { id: 'services', label: 'Services', icon: Icons.Grid, requireAdmin: true },
+        { id: 'content', label: 'Content', icon: Icons.File, requireAdmin: true },
+        { id: 'billing', label: 'Billing', icon: Icons.CreditCard, permission: { module: 'finance', action: 'view' } },
+        { id: 'users', label: 'Members', icon: Icons.Users, requireAdmin: true },
+        { id: 'roles', label: 'Roles', icon: Icons.Shield, requireAdmin: true },
     ];
+
+    const TABS = ALL_TABS.filter(tab => {
+        if (tab.requireAdmin) return isAdmin();
+        if (tab.permission) return hasPermission(tab.permission.module, tab.permission.action);
+        return true;
+    });
+
+    // Reset to first visible tab if current tab got filtered out
+    useEffect(() => {
+        if (TABS.length > 0 && !TABS.some(t => t.id === activeTab)) {
+            setActiveTab(TABS[0].id);
+        }
+    }, [TABS, activeTab]);
 
     return (
         <Modal
@@ -42,9 +56,12 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/20">
                                 {user?.name?.[0] || 'E'}
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <div className="font-bold text-zinc-900 dark:text-zinc-100">{user?.name || 'User'}</div>
                                 <div className="text-xs text-zinc-500 font-medium">{roles[0]?.name || 'Guest'}</div>
+                                {user?.email && (
+                                    <div className="text-[10px] text-zinc-400 truncate" title={user.email}>{user.email}</div>
+                                )}
                             </div>
                         </div>
                     </div>

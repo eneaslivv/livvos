@@ -71,6 +71,9 @@ interface ClientPortalAppProps {
   onLogout?: () => void;
   onProjectSwitch?: (projectId: string) => void;
   selectedProjectId?: string;
+  hiddenResourceTabs?: ('finance' | 'access' | 'docs')[];
+  roleBadge?: React.ReactNode;
+  hideSupport?: boolean;
 }
 
 const App: React.FC<ClientPortalAppProps> = ({
@@ -86,7 +89,10 @@ const App: React.FC<ClientPortalAppProps> = ({
   clientEmail,
   onLogout,
   onProjectSwitch,
-  selectedProjectId
+  selectedProjectId,
+  hiddenResourceTabs,
+  roleBadge,
+  hideSupport
 }) => {
   const [data, setData] = useState<DashboardData>(initialData || INITIAL_DATA);
   const [projectTitle, setProjectTitle] = useState(projectTitleProp || "My Project");
@@ -182,6 +188,7 @@ const App: React.FC<ClientPortalAppProps> = ({
                 <span className="text-[11px] font-medium text-zinc-600">{clientName}</span>
               </div>
             )}
+            {roleBadge}
             {mode === 'creator' && (
               <button
                 onClick={() => setIsCreatorOpen(true)}
@@ -192,14 +199,16 @@ const App: React.FC<ClientPortalAppProps> = ({
                 Configure
               </button>
             )}
-            <button
-              onClick={() => setIsChatOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full hover:opacity-90 transition-all text-[11px] font-semibold"
-              style={{ backgroundColor: '#2C0405' }}
-            >
-              <MessageSquare size={14} />
-              <span className="hidden sm:inline">Support</span>
-            </button>
+            {!hideSupport && (
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full hover:opacity-90 transition-all text-[11px] font-semibold"
+                style={{ backgroundColor: '#2C0405' }}
+              >
+                <MessageSquare size={14} />
+                <span className="hidden sm:inline">Support</span>
+              </button>
+            )}
             {onLogout && (
               <button
                 onClick={onLogout}
@@ -242,13 +251,16 @@ const App: React.FC<ClientPortalAppProps> = ({
               )}
 
               {/* Row 3: Combined Resources (Finance + Access + Docs) */}
-              <div className="md:col-span-12">
-                <ResourcesPanel
-                  credentials={data.credentials}
-                  assets={data.assets}
-                  budget={data.budget}
-                />
-              </div>
+              {!(hiddenResourceTabs && hiddenResourceTabs.length >= 3) && (
+                <div className="md:col-span-12">
+                  <ResourcesPanel
+                    credentials={data.credentials}
+                    assets={data.assets}
+                    budget={data.budget}
+                    hiddenTabs={hiddenResourceTabs}
+                  />
+                </div>
+              )}
 
               {/* Row 3: Activity */}
               <div className="md:col-span-12">

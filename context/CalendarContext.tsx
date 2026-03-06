@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 
@@ -346,6 +346,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         project_id: taskData.project_id || null,
         client_id: taskData.client_id || null,
         assigned_to: taskData.assignee_id || null,
+        owner_id: taskData.owner_id || null,
         due_date: taskData.start_date,
         start_date: taskData.start_date,
         start_time: taskData.start_time || null,
@@ -442,7 +443,12 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }
 
   const moveTask = async (taskId: string, newDate: string, newTime?: string) => {
-    await updateTask(taskId, { start_date: newDate, start_time: newTime, updated_at: new Date().toISOString() })
+    const task = tasks.find(t => t.id === taskId)
+    const updates: Partial<CalendarTask> = { start_date: newDate, start_time: newTime, updated_at: new Date().toISOString() }
+    if (task?.completed && task.completed_at) {
+      updates.completed_at = newDate + task.completed_at.slice(10)
+    }
+    await updateTask(taskId, updates)
   }
 
   const moveEvent = async (eventId: string, newDate: string, newTime?: string) => {
@@ -459,24 +465,28 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Getters — always compare date-only portion (TIMESTAMPTZ can include time)
   const getEventsByDate = (date: string) => events.filter(event => event.start_date?.slice(0, 10) === date)
   const getTasksByDate = (date: string) => tasks.filter(task => {
-    // Completed tasks pin to their completed_at date
-    if (task.completed && task.completed_at) {
-      return task.completed_at.slice(0, 10) === date
+    // Completed tasks pin to their completed_at date (or start_date as fallback)
+    if (task.completed) {
+      if (task.completed_at) return task.completed_at.slice(0, 10) === date
+      if (task.start_date) return task.start_date.slice(0, 10) === date
+      // Completed with no dates → pin to created_at
+      return task.created_at?.slice(0, 10) === date
     }
-    // Pending tasks show on their start_date
-    return task.start_date?.slice(0, 10) === date
+    // Pending tasks: show on start_date, fall back to created_at
+    if (task.start_date) return task.start_date.slice(0, 10) === date
+    return task.created_at?.slice(0, 10) === date
   })
   const getEventsByDateRange = (startDate: string, endDate: string) => events.filter(event => {
     const d = event.start_date?.slice(0, 10)
     return d && d >= startDate && d <= endDate
   })
   const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => {
-    // Completed tasks pin to their completed_at date
-    if (task.completed && task.completed_at) {
-      const d = task.completed_at.slice(0, 10)
-      return d >= startDate && d <= endDate
+    // Completed tasks pin to their completed_at date (or start_date/created_at as fallback)
+    if (task.completed) {
+      const d = (task.completed_at ?? task.start_date ?? task.created_at)?.slice(0, 10)
+      return d && d >= startDate && d <= endDate
     }
-    const d = task.start_date?.slice(0, 10)
+    const d = (task.start_date ?? task.created_at)?.slice(0, 10)
     return d && d >= startDate && d <= endDate
   })
 
@@ -499,15 +509,24 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }
 
+  const refreshData = useCallback(() => loadCalendarData(true), [loadCalendarData])
+
+  const value = useMemo(() => ({
+    events, tasks, labels, loading, error, isInitialized,
+    createEvent, updateEvent, deleteEvent,
+    createTask, updateTask, deleteTask,
+    moveTask, moveEvent,
+    getEventsByDate, getTasksByDate, getEventsByDateRange, getTasksByDateRange,
+    createLabel, getCalendarStats, refreshData
+  }), [events, tasks, labels, loading, error, isInitialized,
+    createEvent, updateEvent, deleteEvent,
+    createTask, updateTask, deleteTask,
+    moveTask, moveEvent,
+    getEventsByDate, getTasksByDate, getEventsByDateRange, getTasksByDateRange,
+    createLabel, getCalendarStats, refreshData])
+
   return (
-    <CalendarContext.Provider value={{
-      events, tasks, labels, loading, error, isInitialized,
-      createEvent, updateEvent, deleteEvent,
-      createTask, updateTask, deleteTask,
-      moveTask, moveEvent,
-      getEventsByDate, getTasksByDate, getEventsByDateRange, getTasksByDateRange,
-      createLabel, getCalendarStats, refreshData: () => loadCalendarData(true)
-    }}>
+    <CalendarContext.Provider value={value}>
       {children}
     </CalendarContext.Provider>
   )

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRBAC } from '../../context/RBACContext';
 import { useTenant } from '../../context/TenantContext';
+import { useTeam } from '../../context/TeamContext';
+import { ResourceLimitError } from '../../lib/ResourceLimitError';
 import { Icons } from '../ui/Icons';
 import { supabase, supabaseAdmin } from '../../lib/supabase';
 import { Role } from '../../types/rbac';
@@ -101,6 +103,7 @@ const PermissionCheckboxes: React.FC<{
 export const UserManagement: React.FC = () => {
   const { isAdmin, isOwner } = useRBAC();
   const { currentTenant } = useTenant();
+  const { canAddMember } = useTeam();
 
   // Data
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -202,6 +205,9 @@ export const UserManagement: React.FC = () => {
 
     setIsSending(true);
     try {
+      // Enforce team member limit
+      await canAddMember();
+
       let roleIdToUse: string;
 
       if (accessLevel === 'full') {
@@ -257,9 +263,13 @@ export const UserManagement: React.FC = () => {
       setInviteLink(link);
       setInvitations(prev => [...prev, data]);
       setInviteEmail('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating invitation:', err);
-      alert('Failed to create invitation. Check console for details.');
+      if (err instanceof ResourceLimitError) {
+        alert(err.message);
+      } else {
+        alert('Failed to create invitation. Check console for details.');
+      }
     } finally {
       setIsSending(false);
     }

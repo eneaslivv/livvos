@@ -66,7 +66,7 @@ const NavItem: React.FC<{
       title={!expanded ? label : undefined}
     >
       <div className="flex items-center justify-center w-6 h-6 shrink-0 transition-transform duration-200 group-hover/item:scale-110">
-        {React.cloneElement(icon as React.ReactElement, {
+        {React.cloneElement(icon as React.ReactElement<any>, {
           size: 20,
           strokeWidth: active ? 2.5 : 2
         })}
@@ -684,12 +684,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         `}
       >
         {/* Fixed Top Navbar */}
-        <TopNavbar
-          pageTitle={currentPage}
-          onOpenSearch={() => setShowCommandPalette(true)}
-          onOpenTask={() => setIsTaskModalOpen(true)}
-          onNavigate={onNavigate}
-        />
+        <div className="sticky top-0 z-40 px-4 md:px-8 pt-4 pb-2 w-full max-w-[1600px] mx-auto">
+          <TopNavbar
+            pageTitle={currentPage}
+            onOpenSearch={() => setShowCommandPalette(true)}
+            onOpenTask={() => setIsTaskModalOpen(true)}
+            onNavigate={onNavigate}
+          />
+        </div>
 
         <div className="px-4 md:px-8 pb-8 w-full max-w-[1600px] mx-auto min-h-full fade-in">
           {children}

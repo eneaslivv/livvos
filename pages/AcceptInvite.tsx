@@ -86,7 +86,7 @@ export const AcceptInvite: React.FC = () => {
           .single();
 
         if (!profile) {
-          console.warn('Profile not found after signup — trigger may still be running');
+          if (import.meta.env.DEV) console.warn('Profile not found after signup — trigger may still be running');
         }
 
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/';

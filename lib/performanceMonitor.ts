@@ -62,7 +62,7 @@ export const usePerformanceMonitor = (contextName: string) => {
     
     // Log slow operations
     if (completedMetric.duration! > 1000) { // More than 1 second
-      console.warn(`⚠️ Slow operation in ${contextName}:`, completedMetric);
+      if (import.meta.env.DEV) console.warn(`Slow operation in ${contextName}:`, completedMetric);
     }
     
     return completedMetric;
@@ -96,7 +96,7 @@ export const usePerformanceMonitor = (contextName: string) => {
       
       // Log slow renders
       if (renderTime > 16) { // More than 60fps
-        console.warn(`⚠️ Slow render in ${contextName}: ${renderTime.toFixed(2)}ms`);
+        if (import.meta.env.DEV) console.warn(`Slow render in ${contextName}: ${renderTime.toFixed(2)}ms`);
       }
     }
     
@@ -246,7 +246,7 @@ class GlobalPerformanceMonitor {
 
     // Log issues
     if (issues.length > 0) {
-      console.warn('🚨 Performance issues detected:', issues);
+      if (import.meta.env.DEV) console.warn('Performance issues detected:', issues);
       
       // Send to monitoring service (if configured)
       if (typeof window !== 'undefined' && (window as any).performanceMonitoringService) {
@@ -400,11 +400,9 @@ export const PerformanceBoundary: React.FC<PerformanceBoundaryProps> = ({
     );
   }
 
-  return React.createElement(
-    React.ErrorBoundary,
-    { onError: handleError },
-    children
-  );
+  // Note: React does not have a built-in ErrorBoundary component.
+  // Use the custom ErrorBoundary class component from components/ErrorBoundary.tsx instead.
+  return children;
 };
 
 export default GlobalPerformanceMonitor;

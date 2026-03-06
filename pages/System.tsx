@@ -74,7 +74,7 @@ export const System: React.FC = () => {
       if (action === 'restart') {
         await restartAgent(agentId);
       } else {
-        await updateAgentStatus(agentId, { status: action });
+        await updateAgentStatus(agentId, { status: action as 'active' | 'idle' | 'disabled' | 'error' });
       }
     } catch (error) {
       console.error(`Failed to ${action} agent ${agentId}:`, error);

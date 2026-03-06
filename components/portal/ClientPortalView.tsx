@@ -4,14 +4,14 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { DashboardData, Milestone, LogEntry, PaymentEntry, PortalTask, PortalProject } from './livv-client view-control/types';
 
-/** Wrap a promise with a timeout — returns fallback on timeout or error */
-const safeQuery = <T,>(promise: Promise<{ data: T; error: any }>, fallback: T, ms = 6000): Promise<{ data: T }> =>
+/** Wrap a promise/thenable with a timeout — returns fallback on timeout or error */
+const safeQuery = <T,>(promise: PromiseLike<{ data: any; error: any }>, fallback: T, ms = 6000): Promise<{ data: T }> =>
   Promise.race([
-    promise.then(res => {
-      if (res.error) { console.warn('Portal query error:', res.error.message); return { data: fallback }; }
+    Promise.resolve(promise).then(res => {
+      if (res.error) { if (import.meta.env.DEV) console.warn('Portal query error:', res.error.message); return { data: fallback }; }
       return { data: res.data ?? fallback };
     }).catch(() => ({ data: fallback })),
-    new Promise<{ data: T }>(resolve => setTimeout(() => { console.warn('Portal query timeout'); resolve({ data: fallback }); }, ms))
+    new Promise<{ data: T }>(resolve => setTimeout(() => { if (import.meta.env.DEV) console.warn('Portal query timeout'); resolve({ data: fallback }); }, ms))
   ]);
 
 type ClientRecord = {
@@ -90,7 +90,7 @@ export const ClientPortalView: React.FC = () => {
     if (user) return; // user available, no timeout needed
     const timer = setTimeout(() => {
       if (!user) {
-        console.warn('[Portal] Auth timeout — user not available');
+        if (import.meta.env.DEV) console.warn('[Portal] Auth timeout — user not available');
         setLoading(false);
         setError('Could not verify your session. Please try reloading the page.');
       }
@@ -167,7 +167,7 @@ export const ClientPortalView: React.FC = () => {
             supabase.from('clients').select('id,name,email,company,avatar_url').eq('owner_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
-          if (cd3) console.log('[Portal] Admin access:', cd3.name);
+          if (cd3 && import.meta.env.DEV) console.log('[Portal] Admin access:', cd3.name);
           client = cd3;
         }
 

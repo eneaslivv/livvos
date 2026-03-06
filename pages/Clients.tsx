@@ -7,9 +7,11 @@ import { useTenant } from '../context/TenantContext';
 import { useFinance, IncomeEntry, Installment } from '../context/FinanceContext';
 import { useCalendar, CalendarTask } from '../context/CalendarContext';
 import { useTeam } from '../context/TeamContext';
+import { useProjects } from '../context/ProjectsContext';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import { sendInviteEmail } from '../lib/sendInviteEmail';
+import { PageView, NavParams } from '../types';
 
 import { ClientListSidebar } from '../components/clients/ClientListSidebar';
 import { ClientDetailHeader } from '../components/clients/ClientDetailHeader';
@@ -32,7 +34,7 @@ const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
 /* ─── Detail Tabs ─── */
 type DetailTab = 'info' | 'finance' | 'messages' | 'tasks' | 'history';
 
-export const Clients: React.FC = () => {
+export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParams) => void }> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const {
@@ -45,6 +47,7 @@ export const Clients: React.FC = () => {
   const { incomes, updateInstallment, createIncome, deleteIncome, refreshIncomes } = useFinance();
   const { createTask: createCalendarTask, updateTask: updateCalendarTask, deleteTask: deleteCalendarTask, tasks: allCalendarTasks } = useCalendar();
   const { members: teamMembers } = useTeam();
+  const { refreshProjects } = useProjects();
 
   /* ─── Loading timeout ─── */
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -72,7 +75,7 @@ export const Clients: React.FC = () => {
   const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [showNewTaskInline, setShowNewTaskInline] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
-  const [newTaskData, setNewTaskData] = useState({ title: '', description: '', priority: 'medium' as const, due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' as const });
+  const [newTaskData, setNewTaskData] = useState<{ title: string; description: string; priority: string; due_date: string; assignee_id: string; status: string }>({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -101,10 +104,14 @@ export const Clients: React.FC = () => {
   const [creatingIncome, setCreatingIncome] = useState(false);
   const [deletingIncomeId, setDeletingIncomeId] = useState<string | null>(null);
 
-  const [newClientData, setNewClientData] = useState({
+  const [newClientData, setNewClientData] = useState<{
+    name: string; email: string; company: string; phone: string;
+    status: string; notes: string; industry: string; address: string;
+    color?: string | null;
+  }>({
     name: '', email: '', company: '', phone: '',
-    status: 'prospect' as const, notes: '', industry: '', address: '',
-    color: null as string | null,
+    status: 'prospect', notes: '', industry: '', address: '',
+    color: null,
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -173,6 +180,28 @@ export const Clients: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [selectedClient?.id]);
 
+  /* ─── Realtime: tasks sync (client_id direct + project-linked) ─── */
+  useEffect(() => {
+    if (!selectedClient) return;
+    const projectIds = assignedProjects.map(p => p.id);
+    const channel = supabase
+      .channel(`client-tasks-${selectedClient.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        (payload) => {
+          const row = (payload.new || payload.old) as Record<string, unknown> | undefined;
+          if (!row) return;
+          const isClientTask = row.client_id === selectedClient.id;
+          const isProjectTask = row.project_id && projectIds.includes(row.project_id as string);
+          if (isClientTask || isProjectTask) {
+            loadClientData(selectedClient.id);
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedClient?.id, assignedProjects]);
+
   useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -221,19 +250,22 @@ export const Clients: React.FC = () => {
 
   const loadClientData = async (clientId: string) => {
     try {
-      const [msgs, tsks, hist] = await Promise.all([
+      // Fetch messages, legacy tasks, history, AND linked projects in parallel from DB
+      // (query projects directly — don't rely on stale availableProjects state)
+      const [msgs, tsks, hist, projectsResult] = await Promise.all([
         getClientMessages(clientId),
         getClientTasks(clientId),
-        getClientHistory(clientId)
+        getClientHistory(clientId),
+        supabase.from('projects').select('id, title, client_id, status, progress').eq('client_id', clientId),
       ]);
       setMessages(msgs);
       setTasks(tsks);
       setHistory(hist);
 
-      // Load ALL tasks linked to this client from the unified tasks table
-      const linkedProjects = availableProjects.filter(p => p.client_id === clientId);
+      const linkedProjects = projectsResult.data || [];
       const projectIds = linkedProjects.map(p => p.id);
 
+      // Load ALL tasks linked to this client from the unified tasks table
       const clientTasksQuery = supabase
         .from('tasks')
         .select('*')
@@ -293,13 +325,14 @@ export const Clients: React.FC = () => {
     if (!newClientData.name.trim() || creatingClient) return;
     setCreatingClient(true);
     try {
-      const client = await createClient(newClientData);
+      const client = await createClient({ ...newClientData, status: newClientData.status as Client['status'] });
       await addHistoryEntry({
         client_id: client.id,
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
-        action_description: `Client created: ${client.name}`
+        action_description: `Client created: ${client.name}`,
+        action_date: new Date().toISOString(),
       });
 
       // Auto-invite to portal if client has email
@@ -327,6 +360,7 @@ export const Clients: React.FC = () => {
             await addHistoryEntry({
               client_id: client.id, user_id: user?.id || '', user_name: user?.email?.split('@')[0] || 'User',
               action_type: 'email', action_description: `Portal invitation sent automatically to ${client.email}`,
+              action_date: new Date().toISOString(),
             });
           }
         } catch (autoInviteErr) {
@@ -334,7 +368,7 @@ export const Clients: React.FC = () => {
         }
       }
 
-      setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '' });
+      setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '', color: null });
       setShowNewClientPanel(false);
       setSelectedClient(client);
     } catch (err: any) {
@@ -361,11 +395,12 @@ export const Clients: React.FC = () => {
       // FK constraint broken — drop and recreate it, then retry
       if (err?.code === '23503' && err.message?.includes('client_id')) {
         errorLogger.warn('FK constraint broken on projects.client_id, attempting repair', { clientId: selectedClient.id, projectId: pid });
-        await supabase.rpc('exec_sql', { sql: `
+        const { error: rpcErr } = await supabase.rpc('exec_sql', { sql: `
           ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_client_id_fkey;
           ALTER TABLE projects ADD CONSTRAINT projects_client_id_fkey FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL NOT VALID;
           ALTER TABLE projects VALIDATE CONSTRAINT projects_client_id_fkey;
-        ` }).catch(rpcErr => errorLogger.warn('exec_sql FK repair failed', rpcErr));
+        ` });
+        if (rpcErr) errorLogger.warn('exec_sql FK repair failed', rpcErr);
         const retry = await supabase.from('projects').update({ client_id: selectedClient.id }).eq('id', pid);
         err = retry.error;
       }
@@ -380,9 +415,11 @@ export const Clients: React.FC = () => {
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'note',
-        action_description: `Project assigned: ${proj?.title || ''}`
+        action_description: `Project assigned: ${proj?.title || ''}`,
+        action_date: new Date().toISOString(),
       }).catch(() => {});
       loadClientData(selectedClient.id);
+      refreshProjects();
     } catch (err: any) {
       errorLogger.error('Error assigning project', err);
       alert('Error assigning project: ' + (err?.message || 'Unknown error'));
@@ -397,6 +434,7 @@ export const Clients: React.FC = () => {
       setAvailableProjects(prev => prev.map(p => p.id === projectId ? { ...p, client_id: null } : p));
       setAssignedProjects(prev => prev.filter(p => p.id !== projectId));
       setProjectTasks(prev => prev.filter(t => t.project_id !== projectId));
+      refreshProjects();
     } catch (err) {
       errorLogger.error('Error unassigning project', err);
     }
@@ -546,15 +584,17 @@ export const Clients: React.FC = () => {
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedClient) return;
+    const senderName = teamMembers.find(m => m.id === user?.id)?.name || user?.email?.split('@')[0] || 'Team';
     try {
-      await sendMessage({
+      const msg = await sendMessage({
         client_id: selectedClient.id,
         sender_type: 'user',
         sender_id: user?.id,
-        sender_name: user?.email?.split('@')[0] || 'You',
+        sender_name: senderName,
         message: newMessage,
         message_type: 'text'
       });
+      setMessages(prev => [...prev, msg]);
       setNewMessage('');
     } catch (err) {
       errorLogger.error('Error sending message', err);
@@ -584,7 +624,8 @@ export const Clients: React.FC = () => {
           user_id: user?.id || '',
           user_name: user?.email?.split('@')[0] || 'User',
           action_type: 'task_created',
-          action_description: `Task created: ${newTaskData.title}`
+          action_description: `Task created: ${newTaskData.title}`,
+          action_date: new Date().toISOString(),
         });
       } catch { /* history entry is non-critical */ }
       setNewTaskData({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' });
@@ -660,17 +701,19 @@ export const Clients: React.FC = () => {
 
   const handleUpdateClientStatus = async (status: string) => {
     if (!selectedClient) return;
+    const typedStatus = status as Client['status'];
     try {
-      await updateClient(selectedClient.id, { status });
+      await updateClient(selectedClient.id, { status: typedStatus });
       await addHistoryEntry({
         client_id: selectedClient.id,
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'status_change',
         action_description: `Status changed to ${statusConfig[status as keyof typeof statusConfig]?.label || status}`,
-        metadata: { prevStatus: selectedClient.status, newStatus: status }
+        metadata: { prevStatus: selectedClient.status, newStatus: status },
+        action_date: new Date().toISOString(),
       });
-      setSelectedClient({ ...selectedClient, status });
+      setSelectedClient({ ...selectedClient, status: typedStatus });
     } catch (err) {
       errorLogger.error('Error updating status', err);
     }
@@ -915,6 +958,7 @@ export const Clients: React.FC = () => {
                           errorLogger.error('Error updating client color', err);
                         }
                       }}
+                      onNavigateToProject={(projectId) => onNavigate?.('projects', { projectId })}
                     />
                   )}
 

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
+import { useTenant } from './TenantContext';
+import { ResourceLimitError } from '../lib/ResourceLimitError';
 
 // Types
 export interface TeamMember {
@@ -43,12 +45,14 @@ interface TeamContextType {
     assignTaskToMember: (taskId: string, memberId: string) => Promise<void>;
     getWorkloadSummary: () => { memberId: string; name: string; load: number }[];
     updateMemberAgent: (memberId: string, agentData: { is_agent: boolean; agent_type?: string | null; agent_description?: string | null; agent_connected?: boolean }) => Promise<void>;
+    canAddMember: () => Promise<void>;
 }
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
 export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
+    const { isWithinResourceLimit, getResourceUsage, refreshUsage } = useTenant();
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -93,7 +97,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const msg = profilesResult.status === 'rejected'
                     ? (profilesResult.reason as Error).message
                     : (profilesResult as PromiseFulfilledResult<any>).value?.error?.message || 'Unknown error';
-                console.warn('Could not fetch profiles:', msg);
+                if (import.meta.env.DEV) console.warn('Could not fetch profiles:', msg);
                 setMembers([]);
                 setIsLoading(false);
                 return;
@@ -169,9 +173,23 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [user?.id]);
 
-    // Initial fetch
+    // Initial fetch + realtime
+    const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
         fetchTeamMembers();
+        const debouncedFetch = () => {
+            if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+            refetchTimerRef.current = setTimeout(() => fetchTeamMembers(), 300);
+        };
+        const channel = supabase
+            .channel('team-rt')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, debouncedFetch)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, debouncedFetch)
+            .subscribe();
+        return () => {
+            if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+            supabase.removeChannel(channel);
+        };
     }, [fetchTeamMembers]);
 
     // Get tasks for a specific member
@@ -185,7 +203,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .order('due_date', { ascending: true });
 
             if (error) {
-                console.warn('Could not fetch member tasks:', error.message);
+                if (import.meta.env.DEV) console.warn('Could not fetch member tasks:', error.message);
                 return [];
             }
 
@@ -241,6 +259,15 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // Check if tenant can add another member (throws ResourceLimitError if not)
+    const canAddMember = async () => {
+        await refreshUsage();
+        if (!isWithinResourceLimit('max_users')) {
+            const usage = getResourceUsage('max_users');
+            throw new ResourceLimitError('max_users', usage.used, usage.limit);
+        }
+    };
+
     // Get workload summary for all members
     const getWorkloadSummary = () => {
         return members.map((m) => ({
@@ -261,6 +288,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 assignTaskToMember,
                 getWorkloadSummary,
                 updateMemberAgent,
+                canAddMember,
             }}
         >
             {children}

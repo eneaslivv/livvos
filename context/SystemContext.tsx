@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -93,6 +93,7 @@ export interface ClusterNode {
   lastRestart?: string;
   uptimeSeconds: number;
   config: Record<string, any>;
+  clusterId?: string;
   metadata: Record<string, any>;
   createdAt: string;
   updatedAt: string;
@@ -264,7 +265,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
         setCanViewSystem(hasSystemRole || false);
         setCanManageSystem(hasSystemRole || false);
       } catch (err) {
-        console.warn('Could not verify system permissions:', err);
+        if (import.meta.env.DEV) console.warn('Could not verify system permissions:', err);
         setCanViewSystem(false);
         setCanManageSystem(false);
       }
@@ -1295,7 +1296,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
         .delete()
         .lt('timestamp', cutoffDate.toISOString());
 
-      console.log(`Cleaned up records older than ${daysToKeep} days`);
+      if (import.meta.env.DEV) console.log(`Cleaned up records older than ${daysToKeep} days`);
     } catch (err) {
       errorLogger.error('Error cleaning up old records:', err);
     }
@@ -1310,7 +1311,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
       const backupId = `backup_${Date.now()}`;
       
       // This would trigger actual backup process
-      console.log(`Initiating system backup: ${backupId}`);
+      if (import.meta.env.DEV) console.log(`Initiating system backup: ${backupId}`);
 
       return backupId;
     } catch (err) {
@@ -1326,7 +1327,7 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
 
     try {
       // This would trigger actual restore process
-      console.log(`Initiating system restore from: ${backupId}`);
+      if (import.meta.env.DEV) console.log(`Initiating system restore from: ${backupId}`);
     } catch (err) {
       errorLogger.error('Error restoring system:', err);
       throw err;

@@ -55,7 +55,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         .eq('client_id', clientId)
         .order('created_at', { ascending: true });
       if (fetchErr) {
-        console.warn('[ChatSupport] Error loading messages:', fetchErr.message);
+        if (import.meta.env.DEV) console.warn('[ChatSupport] Error loading messages:', fetchErr.message);
       }
       if (data) setMessages(data as ChatMessage[]);
     };
@@ -143,7 +143,7 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? (data as ChatMessage) : m));
       }
     } catch (err: any) {
-      console.error('[ChatSupport] Error sending message:', err);
+      if (import.meta.env.DEV) console.error('[ChatSupport] Error sending message:', err);
       setError('Failed to send message');
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
       setInput(msgText);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DebugPanel } from './components/DebugPanel';
 import { Layout } from './components/Layout';
-import { PageView, AppMode } from './types';
+import { PageView, AppMode, NavParams } from './types';
 import { ensureAuthSession } from './lib/auth';
 import { supabase, cleanupLocalStorage } from './lib/supabase';
 
@@ -38,6 +38,7 @@ const loadClientPortal = () => import('./pages/ClientPortal').then(module => ({ 
 const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module => ({ default: module.GoogleCallback }));
 const loadAcceptProjectShare = () => import('./pages/AcceptProjectShare').then(module => ({ default: module.AcceptProjectShare }));
 const loadSharedProjectView = () => import('./pages/SharedProjectView').then(module => ({ default: module.SharedProjectView }));
+const loadPublicPortalView = () => import('./pages/PublicPortalView').then(module => ({ default: module.PublicPortalView }));
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -57,6 +58,7 @@ const ClientPortal = React.lazy(loadClientPortal);
 const GoogleCallback = React.lazy(loadGoogleCallback);
 const AcceptProjectShare = React.lazy(loadAcceptProjectShare);
 const SharedProjectView = React.lazy(loadSharedProjectView);
+const PublicPortalView = React.lazy(loadPublicPortalView);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -452,16 +454,36 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-// Keep-alive page slot: mounts once, stays mounted, hidden via CSS when inactive
+// Per-page error fallback (keeps the rest of the app functional)
+const PageErrorFallback: React.FC<{ page: string }> = ({ page }) => (
+  <div className="flex flex-col items-center justify-center h-64 text-center">
+    <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full mb-3">
+      <span className="text-xl">!</span>
+    </div>
+    <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Error loading {page}</h3>
+    <p className="text-sm text-zinc-500 mt-1">Something went wrong in this section.</p>
+    <button
+      onClick={() => window.location.reload()}
+      className="mt-3 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg transition-colors"
+    >
+      Reload page
+    </button>
+  </div>
+);
+
+// Keep-alive page slot: mounts once, stays mounted, hidden via CSS when inactive.
+// Each page gets its own ErrorBoundary so a crash in one doesn't bring down the app.
 const KeepAlivePage: React.FC<{
   page: PageView;
   active: boolean;
   children: React.ReactNode;
 }> = ({ page, active, children }) => (
   <div style={active ? undefined : { display: 'none' }}>
-    <Suspense fallback={getSkeletonForPage(page)}>
-      {children}
-    </Suspense>
+    <ErrorBoundary fallback={<PageErrorFallback page={page} />}>
+      <Suspense fallback={getSkeletonForPage(page)}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
   </div>
 );
 
@@ -479,10 +501,11 @@ const getTeamClientsTab = (page: PageView): 'clients' | 'team' =>
 const AppContent: React.FC<{
   currentPage: PageView;
   appMode: AppMode;
-  handleNavigate: (p: PageView) => void;
+  handleNavigate: (p: PageView, params?: NavParams) => void;
   handleSwitchMode: (m: AppMode) => void;
   showDebug: boolean;
-}> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug }) => {
+  navParams: NavParams | null;
+}> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug, navParams }) => {
   const { isInitialized, hasRole } = useRBAC();
   const { isLoading: tenantLoading, currentTenant } = useTenant();
 
@@ -491,7 +514,7 @@ const AppContent: React.FC<{
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!isInitialized || tenantLoading) {
-        console.warn('[AppContent] Force-ready after timeout — RBAC/Tenant took too long');
+        if (import.meta.env.DEV) console.warn('[AppContent] Force-ready after timeout — RBAC/Tenant took too long');
         setForceReady(true);
       }
     }, 8000);
@@ -577,7 +600,7 @@ const AppContent: React.FC<{
           {visitedPages.has('projects') && (
             <KeepAlivePage page="projects" active={currentPage === 'projects'}>
               <ProtectedRoute permission={{ module: 'projects', action: 'view' }}>
-                <Projects />
+                <Projects navProjectId={navParams?.projectId} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
@@ -586,7 +609,7 @@ const AppContent: React.FC<{
           {hasVisitedTeamClients && (
             <KeepAlivePage page="clients" active={isTeamClientsActive}>
               <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
-                <TeamClients initialTab={getTeamClientsTab(currentPage)} />
+                <TeamClients initialTab={getTeamClientsTab(currentPage)} onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
@@ -613,7 +636,7 @@ const AppContent: React.FC<{
           {visitedPages.has('activity') && (
             <KeepAlivePage page="activity" active={currentPage === 'activity'}>
               <ProtectedRoute permission={{ module: 'activity', action: 'view' }}>
-                <Activity onNavigate={handleNavigate} />
+                <Activity />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
@@ -657,6 +680,7 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageView>('home');
   const [appMode, setAppMode] = useState<AppMode>('os');
   const [showDebug, setShowDebug] = useState(false);
+  const [navParams, setNavParams] = useState<NavParams | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   // Check for invite URL
   const isInvite = window.location.pathname === '/accept-invite';
@@ -664,6 +688,7 @@ const App: React.FC = () => {
   const portalFlag = new URLSearchParams(window.location.search).get('portal');
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
   const viewSharedProjectId = new URLSearchParams(window.location.search).get('view_shared_project');
+  const publicPortalToken = new URLSearchParams(window.location.search).get('public_portal');
   // Google OAuth callback detection
   const urlParams = new URLSearchParams(window.location.search);
   const googleCode = urlParams.get('code');
@@ -672,7 +697,7 @@ const App: React.FC = () => {
 
   // Logging de navegación para debugging
   useEffect(() => {
-    console.log('🧭 Navegación cambiada:', {
+    if (import.meta.env.DEV) console.log('Navigation changed:', {
       currentPage,
       appMode,
       timestamp: new Date().toISOString()
@@ -715,9 +740,9 @@ const App: React.FC = () => {
 
         // Log auth state changes for security monitoring
         if (_event === 'SIGNED_IN') {
-          console.log('🔓 User signed in:', session?.user?.email);
+          if (import.meta.env.DEV) console.log('User signed in:', session?.user?.email);
         } else if (_event === 'SIGNED_OUT') {
-          console.log('🔒 User signed out');
+          if (import.meta.env.DEV) console.log('User signed out');
         }
       }
     );
@@ -743,7 +768,7 @@ const App: React.FC = () => {
 
   // Handle Mode Switch (Reset page to default for that mode)
   const handleSwitchMode = (mode: AppMode) => {
-    console.log('🔄 Cambiando modo:', mode);
+    if (import.meta.env.DEV) console.log('Switching mode:', mode);
     setAppMode(mode);
     if (mode === 'sales') {
       setCurrentPage('sales_dashboard');
@@ -753,14 +778,23 @@ const App: React.FC = () => {
   };
 
   // Handle Navigation with error handling
-  const handleNavigate = (page: PageView) => {
+  const handleNavigate = (page: PageView, params?: NavParams) => {
     try {
-      console.log('📍 Navegando a:', page);
+      if (import.meta.env.DEV) console.log('Navigating to:', page, params);
       setCurrentPage(page);
+      setNavParams(params || null);
     } catch (error) {
       console.error('❌ Error al navegar:', error);
     }
   };
+
+  // Clear navParams after target page consumes them
+  useEffect(() => {
+    if (navParams) {
+      const timer = setTimeout(() => setNavParams(null), 150);
+      return () => clearTimeout(timer);
+    }
+  }, [navParams]);
 
   if (isInvite) {
     return (
@@ -788,6 +822,14 @@ const App: React.FC = () => {
             window.location.reload();
           }}
         />
+      </Suspense>
+    );
+  }
+
+  if (publicPortalToken) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <PublicPortalView token={publicPortalToken} />
       </Suspense>
     );
   }
@@ -850,6 +892,7 @@ const App: React.FC = () => {
                                 handleNavigate={handleNavigate}
                                 handleSwitchMode={handleSwitchMode}
                                 showDebug={showDebug}
+                                navParams={navParams}
                               />
                               {showDebug && (
                                 <DebugPanel visible={showDebug} />

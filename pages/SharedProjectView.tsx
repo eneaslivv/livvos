@@ -1,11 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Icons } from '../components/ui/Icons';
+import PortalApp from '../components/portal/livv-client view-control/App';
+import type { DashboardData, Milestone, PortalTask, LogEntry, PaymentEntry, CredentialItem, AssetItem } from '../components/portal/livv-client view-control/types';
 
+/* ── Interfaces ── */
 interface SharedTask {
   id: string; title: string; description?: string;
   completed: boolean; status: string; priority: string;
   due_date?: string; start_date?: string; parent_task_id?: string;
+  group_name?: string; completed_at?: string;
 }
 interface SharedFile { id: string; name: string; type?: string; size?: number; url: string; created_at: string; }
 interface SharedTeamMember { name: string; email: string; avatar_url?: string; }
@@ -19,11 +23,19 @@ interface SharedDeliverable {
   status: string; reviewed_by?: string; reviewed_at?: string;
   review_comment?: string; created_at: string;
 }
+interface SharedIncome {
+  id: string; concept?: string; total_amount?: number; status?: string; due_date?: string;
+  installments?: { id: string; number?: number; amount?: number; due_date?: string; paid_date?: string; status?: string }[];
+}
+interface SharedActivity { id: string; action?: string; created_at?: string; }
+interface SharedCredential { id: string; service: string; username?: string; secret?: string; }
+interface SharedClientDoc { id: string; name: string; doc_type?: string; url?: string; size_label?: string; }
+
 interface SharedProjectData {
   project: {
     id: string; title: string; description?: string; status: string;
     created_at: string; updated_at: string;
-    client_name?: string; client_company?: string;
+    client_id?: string; client_name?: string; client_company?: string;
   };
   share_role: string;
   tasks: SharedTask[];
@@ -32,33 +44,184 @@ interface SharedProjectData {
   shares: { email: string; role: string; status: string }[];
   comments: SharedComment[];
   deliverables: SharedDeliverable[];
+  incomes?: SharedIncome[];
+  activity?: SharedActivity[];
+  credentials?: SharedCredential[];
+  client_documents?: SharedClientDoc[];
 }
 
-type Tab = 'overview' | 'tasks' | 'files' | 'comments' | 'deliverables';
+const deliverableStatusColors: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-red-100 text-red-700', revision_requested: 'bg-purple-100 text-purple-700',
+};
 
 interface SharedProjectViewProps {
   projectId: string;
   onClose?: () => void;
 }
 
-const statusColors: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-700', completed: 'bg-blue-100 text-blue-700',
-  pending: 'bg-amber-100 text-amber-700', review: 'bg-purple-100 text-purple-700',
-  archived: 'bg-zinc-100 text-zinc-500',
-};
-const priorityColors: Record<string, string> = {
-  urgent: 'text-red-500', high: 'text-orange-500', medium: 'text-yellow-500', low: 'text-zinc-400',
-};
-const deliverableStatusColors: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700',
-  rejected: 'bg-red-100 text-red-700', revision_requested: 'bg-purple-100 text-purple-700',
-};
+/* ── Transform RPC data → DashboardData ── */
+function transformToDashboardData(data: SharedProjectData, shareRole: string): DashboardData {
+  const { project, tasks, files, incomes, activity, credentials, client_documents } = data;
 
-export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId, onClose }) => {
+  // Progress
+  const totalTasks = tasks.length || 1;
+  const completedTasks = tasks.filter(t => t.completed).length;
+  const progress = Math.min(100, Math.round((completedTasks / totalTasks) * 100));
+
+  // Dates
+  const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return 'TBD'; }
+  };
+  const startDate = project.created_at ? fmtDate(project.created_at) : 'TBD';
+  const dueDates = tasks.map(t => t.due_date || t.start_date).filter(Boolean) as string[];
+  const etaRaw = dueDates.length ? dueDates.sort().slice(-1)[0] : null;
+  const etaDate = etaRaw ? fmtDate(etaRaw) : 'TBD';
+
+  // Milestones from task groups
+  const mainTasks = tasks.filter(t => !t.parent_task_id);
+  const groupMap = new Map<string, SharedTask[]>();
+  for (const t of mainTasks) {
+    const key = t.group_name || 'General';
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(t);
+  }
+
+  let foundCurrent = false;
+  const milestones: Milestone[] = Array.from(groupMap.entries()).map(([name, groupTasks], idx) => {
+    const done = groupTasks.filter(t => t.completed).length;
+    const total = groupTasks.length;
+    const allDone = total > 0 && done === total;
+
+    let status: 'completed' | 'current' | 'future';
+    if (allDone) {
+      status = 'completed';
+    } else if (!foundCurrent) {
+      status = 'current';
+      foundCurrent = true;
+    } else {
+      status = 'future';
+    }
+
+    return {
+      id: `phase-${idx}`,
+      title: name,
+      description: `${done}/${total} tasks completed`,
+      status,
+    };
+  });
+
+  // Portal tasks
+  const portalTasks: PortalTask[] = mainTasks.map(t => ({
+    id: t.id,
+    title: t.title,
+    completed: t.completed,
+    completedAt: t.completed_at || undefined,
+    startDate: t.start_date || undefined,
+    dueDate: t.due_date || undefined,
+    groupName: t.group_name || 'General',
+    status: t.status || undefined,
+    priority: t.priority || undefined,
+  }));
+
+  // Activity logs
+  const logs: LogEntry[] = (activity || []).slice(0, 8).map((a, idx) => ({
+    id: a.id || `log-${idx}`,
+    timestamp: a.created_at
+      ? new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : 'Recent',
+    message: a.action || 'Project update',
+  }));
+  if (logs.length === 0) {
+    logs.push({ id: 'default', timestamp: 'Now', message: 'Portal connected' });
+  }
+
+  // Budget from incomes
+  const payments: PaymentEntry[] = [];
+  let totalFromIncomes = 0;
+  let paidFromInstallments = 0;
+  for (const inc of (incomes || [])) {
+    const installments = inc.installments || [];
+    if (installments.length > 0) {
+      for (const inst of installments) {
+        const isPaid = inst.status === 'paid';
+        if (isPaid) paidFromInstallments += Number(inst.amount || 0);
+        payments.push({
+          id: inst.id,
+          concept: `${inc.concept || 'Payment'} — #${inst.number || 1}`,
+          amount: Number(inst.amount || 0),
+          dueDate: inst.due_date || inc.due_date || '',
+          paidDate: inst.paid_date || undefined,
+          status: (inst.status === 'paid' ? 'paid' : inst.status === 'overdue' ? 'overdue' : 'pending') as PaymentEntry['status'],
+          number: inst.number || 1,
+        });
+      }
+    } else {
+      const isPaid = inc.status === 'paid';
+      if (isPaid) paidFromInstallments += Number(inc.total_amount || 0);
+      payments.push({
+        id: inc.id,
+        concept: inc.concept || 'Payment',
+        amount: Number(inc.total_amount || 0),
+        dueDate: inc.due_date || '',
+        status: (inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending') as PaymentEntry['status'],
+      });
+    }
+    totalFromIncomes += Number(inc.total_amount || 0);
+  }
+  payments.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+  const nextPending = payments.find(p => p.status !== 'paid');
+
+  // Assets (files + client_documents)
+  const fileAssets: AssetItem[] = (files || []).map(f => ({
+    id: f.id,
+    name: f.name,
+    type: f.type || 'File',
+    size: f.size ? `${Math.round(f.size / 1024)} KB` : '--',
+    url: f.url || undefined,
+  }));
+  const docAssets: AssetItem[] = (client_documents || []).map(d => ({
+    id: d.id,
+    name: d.name,
+    type: d.doc_type || 'Document',
+    size: d.size_label || '--',
+    url: d.url || undefined,
+  }));
+
+  // Credentials (only for collaborator/editor)
+  const credentialItems: CredentialItem[] = shareRole !== 'viewer'
+    ? (credentials || []).map(c => ({
+        id: c.id,
+        service: c.service,
+        user: c.username || undefined,
+        pass: c.secret || undefined,
+      }))
+    : [];
+
+  return {
+    progress,
+    startDate,
+    etaDate,
+    onTrack: project.status === 'active' || project.status === 'review',
+    budget: {
+      total: totalFromIncomes,
+      paid: paidFromInstallments,
+      nextPayment: nextPending ? { amount: nextPending.amount, dueDate: nextPending.dueDate, concept: nextPending.concept } : undefined,
+      payments,
+    },
+    milestones: milestones.length ? milestones : [{ id: 'default', title: 'Project', description: 'Initial setup', status: 'current' as const }],
+    logs,
+    credentials: credentialItems,
+    assets: [...fileAssets, ...docAssets],
+    tasks: portalTasks,
+  };
+}
+
+export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId }) => {
   const [data, setData] = useState<SharedProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [newComment, setNewComment] = useState('');
   const [commentEntity, setCommentEntity] = useState<{ type: string; id?: string }>({ type: 'project' });
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -105,7 +268,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
       setCommentEntity({ type: 'project' });
       await loadData();
     } catch (err: any) {
-      alert('Error commenting: ' + (err.message || 'Error'));
+      if (import.meta.env.DEV) console.error('Error commenting:', err);
     } finally {
       setSubmittingComment(false);
     }
@@ -124,9 +287,27 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
       setReviewComment('');
       await loadData();
     } catch (err: any) {
-      alert('Error: ' + (err.message || 'Error'));
+      if (import.meta.env.DEV) console.error('Error reviewing:', err);
     }
   };
+
+  // Dashboard data
+  const dashboardData = useMemo(() => data ? transformToDashboardData(data, data.share_role) : null, [data]);
+
+  const hiddenResourceTabs = useMemo(() => {
+    if (!dashboardData) return [];
+    const hidden: ('finance' | 'access' | 'docs')[] = [];
+    if (dashboardData.budget.total === 0 && (!dashboardData.budget.payments || dashboardData.budget.payments.length === 0)) {
+      hidden.push('finance');
+    }
+    if (!dashboardData.credentials || dashboardData.credentials.length === 0) {
+      hidden.push('access');
+    }
+    if (!dashboardData.assets || dashboardData.assets.length === 0) {
+      hidden.push('docs');
+    }
+    return hidden;
+  }, [dashboardData]);
 
   if (loading) {
     return (
@@ -136,7 +317,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
     );
   }
 
-  if (error || !data) {
+  if (error || !data || !dashboardData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
         <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
@@ -151,284 +332,125 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
     );
   }
 
-  const { project, share_role, tasks, files, team, comments, deliverables } = data;
+  const { project, share_role, comments, deliverables } = data;
   const canInteract = share_role === 'collaborator' || share_role === 'editor';
-  const mainTasks = tasks.filter(t => !t.parent_task_id);
-  const completedCount = tasks.filter(t => t.completed).length;
-  const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'tasks', label: 'Tasks', count: mainTasks.length },
-    { id: 'files', label: 'Files', count: files.length },
-    { id: 'comments', label: 'Comments', count: comments.length },
-    { id: 'deliverables', label: 'Deliverables', count: deliverables.length },
-  ];
+  const roleBadge = (
+    <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+      share_role === 'editor' ? 'bg-emerald-100 text-emerald-700' :
+      share_role === 'collaborator' ? 'bg-blue-100 text-blue-700' :
+      'bg-zinc-100 text-zinc-500'
+    }`}>
+      {share_role === 'editor' ? 'Editor' : share_role === 'collaborator' ? 'Collaborator' : 'Viewer'}
+    </span>
+  );
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black">
-      {/* Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-light tracking-wider text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'serif' }}>
-              livv<span className="text-emerald-500">~</span>
-            </span>
-            <span className="text-zinc-300 dark:text-zinc-600">|</span>
-            <span className="text-sm text-zinc-500">Shared project</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
-              share_role === 'editor' ? 'bg-emerald-100 text-emerald-700' :
-              share_role === 'collaborator' ? 'bg-blue-100 text-blue-700' :
-              'bg-zinc-100 text-zinc-500'
-            }`}>
-              {share_role === 'editor' ? 'Editor' : share_role === 'collaborator' ? 'Collaborator' : 'Viewer'}
-            </span>
-            <button onClick={handleLogout} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-zinc-50">
+      {/* Portal Dashboard */}
+      <PortalApp
+        initialData={dashboardData}
+        projectTitle={project.title}
+        projectSubtitle={
+          [project.client_company || project.client_name, project.status]
+            .filter(Boolean)
+            .join(' — ')
+        }
+        forceOnboarded
+        disableLoading
+        hideCreatorToggle
+        onLogout={handleLogout}
+        hiddenResourceTabs={hiddenResourceTabs}
+        roleBadge={roleBadge}
+        hideSupport={!project.client_id}
+      />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        {/* Project Header */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-1">{project.title}</h1>
-              {project.client_name && (
-                <p className="text-sm text-zinc-500">{project.client_company || project.client_name}</p>
-              )}
-            </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[project.status] || 'bg-zinc-100 text-zinc-500'}`}>
-              {project.status}
-            </span>
-          </div>
-          {project.description && (
-            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{project.description}</p>
-          )}
-          {/* Progress bar */}
-          <div className="mt-4 flex items-center gap-3">
-            <div className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <span className="text-xs font-medium text-zinc-500">{progress}%</span>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800 mb-6 overflow-x-auto">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-emerald-500 text-emerald-600'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-              }`}
-            >
-              {tab.label}
-              {tab.count !== undefined && <span className="ml-1.5 text-zinc-400">({tab.count})</span>}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Completed tasks</div>
-              <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{completedCount}/{tasks.length}</div>
-            </div>
-            <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Files</div>
-              <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{files.length}</div>
-            </div>
-            <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 mb-1">Team</div>
-              <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{team.length}</div>
-            </div>
-
-            {/* Team members */}
-            {team.length > 0 && (
-              <div className="md:col-span-3 bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Team</h3>
-                <div className="flex flex-wrap gap-3">
-                  {team.map((m, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
-                      <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                        {(m.name || m.email)?.[0]?.toUpperCase() || '?'}
-                      </div>
-                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{m.name || m.email}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent tasks */}
-            <div className="md:col-span-3 bg-white dark:bg-zinc-900 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Recent tasks</h3>
-              <div className="space-y-2">
-                {mainTasks.slice(0, 5).map(t => (
-                  <div key={t.id} className="flex items-center gap-3 py-2">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      t.completed ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300 dark:border-zinc-600'
-                    }`}>
-                      {t.completed && <Icons.Check size={10} className="text-white" />}
-                    </div>
-                    <span className={`text-sm flex-1 ${t.completed ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                      {t.title}
-                    </span>
-                    <span className={`text-xs ${priorityColors[t.priority] || 'text-zinc-400'}`}>{t.priority}</span>
-                  </div>
-                ))}
-                {mainTasks.length === 0 && <p className="text-xs text-zinc-400">No tasks</p>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'tasks' && (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-            {mainTasks.map(t => {
-              const subtasks = tasks.filter(s => s.parent_task_id === t.id);
+      {/* Comments Section (below portal) */}
+      {(comments.length > 0 || canInteract) && (
+        <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-6">
+          <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
+            <Icons.Message size={14} />
+            Comments
+            {comments.length > 0 && <span className="text-zinc-400 font-normal">({comments.length})</span>}
+          </h3>
+          <div className="bg-white rounded-2xl border border-zinc-200/60 divide-y divide-zinc-100 overflow-hidden">
+            {comments.filter(c => !c.parent_id).map(c => {
+              const replies = comments.filter(r => r.parent_id === c.id);
               return (
-                <div key={t.id} className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                      t.completed ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300 dark:border-zinc-600'
+                <div key={c.id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+                      c.is_external ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
                     }`}>
-                      {t.completed && <Icons.Check size={12} className="text-white" />}
+                      {c.author_name[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium ${t.completed ? 'text-zinc-400 line-through' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                        {t.title}
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-zinc-900">{c.author_name}</span>
+                        {c.is_external && <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">External</span>}
+                        <span className="text-[10px] text-zinc-400">{new Date(c.created_at).toLocaleString()}</span>
                       </div>
-                      {t.description && <p className="text-xs text-zinc-400 mt-0.5 truncate">{t.description}</p>}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[10px] font-semibold uppercase ${priorityColors[t.priority] || ''}`}>{t.priority}</span>
-                      {t.due_date && (
-                        <span className="text-[10px] text-zinc-400">{new Date(t.due_date).toLocaleDateString()}</span>
-                      )}
-                    </div>
-                  </div>
-                  {subtasks.length > 0 && (
-                    <div className="ml-8 mt-2 space-y-1.5">
-                      {subtasks.map(s => (
-                        <div key={s.id} className="flex items-center gap-2">
-                          <div className={`w-3.5 h-3.5 rounded-full border ${s.completed ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-300'}`}>
-                            {s.completed && <Icons.Check size={8} className="text-white" />}
+                      <p className="text-sm text-zinc-700">{c.content}</p>
+                      {replies.map(r => (
+                        <div key={r.id} className="mt-2 ml-4 pl-3 border-l-2 border-zinc-200">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs font-medium text-zinc-700">{r.author_name}</span>
+                            <span className="text-[10px] text-zinc-400">{new Date(r.created_at).toLocaleString()}</span>
                           </div>
-                          <span className={`text-xs ${s.completed ? 'text-zinc-400 line-through' : 'text-zinc-600 dark:text-zinc-400'}`}>{s.title}</span>
+                          <p className="text-xs text-zinc-600">{r.content}</p>
                         </div>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
-            {mainTasks.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No tasks</div>}
-          </div>
-        )}
-
-        {activeTab === 'files' && (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-            {files.map(f => (
-              <a key={f.id} href={f.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                  <Icons.File size={16} className="text-zinc-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{f.name}</div>
-                  <div className="text-[10px] text-zinc-400">
-                    {f.type || 'file'} {f.size ? `· ${(f.size / 1024).toFixed(0)}KB` : ''}
-                  </div>
-                </div>
-                <Icons.External size={14} className="text-zinc-300" />
-              </a>
-            ))}
-            {files.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No files</div>}
-          </div>
-        )}
-
-        {activeTab === 'comments' && (
-          <div className="space-y-4">
-            {/* Comment list */}
-            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-              {comments.filter(c => !c.parent_id).map(c => {
-                const replies = comments.filter(r => r.parent_id === c.id);
-                return (
-                  <div key={c.id} className="p-4">
-                    <div className="flex items-start gap-3">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
-                        c.is_external ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {c.author_name[0]?.toUpperCase() || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{c.author_name}</span>
-                          {c.is_external && <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">External</span>}
-                          <span className="text-[10px] text-zinc-400">{new Date(c.created_at).toLocaleString()}</span>
-                        </div>
-                        <p className="text-sm text-zinc-700 dark:text-zinc-300">{c.content}</p>
-                        {replies.map(r => (
-                          <div key={r.id} className="mt-2 ml-4 pl-3 border-l-2 border-zinc-200 dark:border-zinc-700">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{r.author_name}</span>
-                              <span className="text-[10px] text-zinc-400">{new Date(r.created_at).toLocaleString()}</span>
-                            </div>
-                            <p className="text-xs text-zinc-600 dark:text-zinc-400">{r.content}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {comments.length === 0 && <div className="p-8 text-center text-sm text-zinc-400">No comments yet</div>}
-            </div>
-
-            {/* New comment input */}
-            {canInteract && (
-              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4">
-                <textarea
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  placeholder="Write a comment..."
-                  rows={3}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-                <div className="flex items-center justify-between mt-3">
-                  <span className="text-[10px] text-zinc-400">
-                    Commenting on: {commentEntity.type === 'project' ? 'General project' : commentEntity.type}
-                  </span>
-                  <button
-                    onClick={handleSubmitComment}
-                    disabled={!newComment.trim() || submittingComment}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
-                  >
-                    {submittingComment ? 'Sending...' : 'Send comment'}
-                  </button>
-                </div>
-              </div>
+            {comments.length === 0 && (
+              <div className="p-6 text-center text-sm text-zinc-400">No comments yet</div>
             )}
           </div>
-        )}
 
-        {activeTab === 'deliverables' && (
+          {/* New comment input */}
+          {canInteract && (
+            <div className="mt-3 bg-white rounded-2xl border border-zinc-200/60 p-4">
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="Write a comment..."
+                rows={3}
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-[10px] text-zinc-400">
+                  Commenting on: {commentEntity.type === 'project' ? 'General project' : commentEntity.type}
+                </span>
+                <button
+                  onClick={handleSubmitComment}
+                  disabled={!newComment.trim() || submittingComment}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
+                >
+                  {submittingComment ? 'Sending...' : 'Send comment'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Deliverables Section (below portal) */}
+      {deliverables.length > 0 && (
+        <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-10">
+          <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
+            <Icons.File size={14} />
+            Deliverables
+            <span className="text-zinc-400 font-normal">({deliverables.length})</span>
+          </h3>
           <div className="space-y-3">
             {deliverables.map(d => (
-              <div key={d.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4">
+              <div key={d.id} className="bg-white rounded-2xl border border-zinc-200/60 p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{d.title}</h4>
+                    <h4 className="text-sm font-semibold text-zinc-900">{d.title}</h4>
                     {d.description && <p className="text-xs text-zinc-500 mt-0.5">{d.description}</p>}
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold ${deliverableStatusColors[d.status] || 'bg-zinc-100 text-zinc-500'}`}>
@@ -438,13 +460,13 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                 </div>
 
                 {d.review_comment && (
-                  <div className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-400">
+                  <div className="mt-2 p-2 bg-zinc-50 rounded-lg text-xs text-zinc-600">
                     <span className="font-medium">Review comment:</span> {d.review_comment}
                   </div>
                 )}
 
                 {canInteract && d.status === 'pending' && (
-                  <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="mt-3 pt-3 border-t border-zinc-100">
                     {reviewingId === d.id ? (
                       <div className="space-y-2">
                         <textarea
@@ -452,7 +474,7 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                           onChange={e => setReviewComment(e.target.value)}
                           placeholder="Review comment (optional)..."
                           rows={2}
-                          className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs resize-none"
+                          className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs resize-none"
                         />
                         <div className="flex gap-2">
                           <button onClick={() => handleReview(d.id, 'approved')}
@@ -485,14 +507,9 @@ export const SharedProjectView: React.FC<SharedProjectViewProps> = ({ projectId,
                 )}
               </div>
             ))}
-            {deliverables.length === 0 && (
-              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 text-center">
-                <p className="text-sm text-zinc-400">No pending deliverables</p>
-              </div>
-            )}
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 };

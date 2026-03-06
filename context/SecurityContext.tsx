@@ -1,54 +1,23 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
-import { 
-  credentialManager, 
-  DecryptedCredential, 
-  CredentialCreateInput, 
+import { useRBAC } from './RBACContext';
+import {
+  credentialManager,
+  DecryptedCredential,
+  CredentialCreateInput,
   CredentialUpdateInput,
-  CREDENTIAL_TYPES 
+  CREDENTIAL_TYPES
 } from '../lib/credentialManager';
 
-// Enhanced security interfaces
-export interface Permission {
-  id: string;
-  module: string;
-  action: string;
-  description?: string;
-}
-
-export interface Role {
-  id: string;
-  name: string;
-  description?: string;
-  isSystem: boolean;
-  permissions: Permission[];
-}
-
-export interface SecurityUser {
-  id: string;
-  email: string;
-  roles: Role[];
-  permissions: Permission[];
-  isAdmin: boolean;
-  isOwner: boolean;
-  hasPermission: (module: string, action: string) => boolean;
-  hasRole: (roleName: string) => boolean;
-}
+/**
+ * SecurityContext — Manages encrypted credentials and security event logging.
+ *
+ * Permission checks (hasPermission, hasRole, isAdmin, isOwner) are delegated
+ * to RBACContext as the single source of truth. Do NOT duplicate them here.
+ */
 
 interface SecurityContextType {
-  // User security state
-  user: SecurityUser | null;
-  loading: boolean;
-  error: string | null;
-  isInitialized: boolean;
-
-  // Permission checks
-  hasPermission: (module: string, action: string) => boolean;
-  hasRole: (roleName: string) => boolean;
-  isAdmin: () => boolean;
-  isOwner: () => boolean;
-
   // Credential management
   credentials: DecryptedCredential[];
   credentialsLoading: boolean;
@@ -58,215 +27,28 @@ interface SecurityContextType {
   getCredentials: (projectId?: string) => Promise<void>;
   getCredential: (id: string) => Promise<DecryptedCredential>;
 
-  // Role and permission management
-  roles: Role[];
-  permissions: Permission[];
-  createRole: (role: Partial<Role>) => Promise<Role>;
-  updateRole: (id: string, updates: Partial<Role>) => Promise<Role>;
-  deleteRole: (id: string) => Promise<void>;
-  assignRole: (userId: string, roleId: string) => Promise<void>;
-  revokeRole: (userId: string, roleId: string) => Promise<void>;
-
   // Security utilities
   refreshSecurityData: () => Promise<void>;
   logSecurityEvent: (event: string, details?: any) => Promise<void>;
   checkCredentialAccess: (credentialId: string) => Promise<boolean>;
+
+  // State
+  loading: boolean;
+  error: string | null;
 }
 
 const SecurityContext = createContext<SecurityContextType | undefined>(undefined);
 
 export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<SecurityUser | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const { user, hasPermission } = useRBAC();
 
   // Credential state
   const [credentials, setCredentials] = useState<DecryptedCredential[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Role and permission state
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-
-  // Permission checking functions
-  const hasPermission = useCallback((module: string, action: string): boolean => {
-    if (!user) return false;
-    return user.hasPermission(module, action);
-  }, [user]);
-
-  const hasRole = useCallback((roleName: string): boolean => {
-    if (!user) return false;
-    return user.hasRole(roleName);
-  }, [user]);
-
-  const isAdmin = useCallback((): boolean => {
-    if (!user) return false;
-    return user.isAdmin;
-  }, [user]);
-
-  const isOwner = useCallback((): boolean => {
-    if (!user) return false;
-    return user.isOwner;
-  }, [user]);
-
-  // Create SecurityUser object
-  const createSecurityUser = useCallback(async (userId: string): Promise<SecurityUser | null> => {
-    try {
-      // Get user's roles and permissions
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select(`
-          role_id,
-          roles (
-            id,
-            name,
-            description,
-            is_system,
-            role_permissions (
-              permissions (
-                id,
-                module,
-                action,
-                description
-              )
-            )
-          )
-        `)
-        .eq('user_id', userId);
-
-      if (rolesError) throw rolesError;
-
-      // Extract roles and permissions
-      const userRolesData: Role[] = (userRoles || []).map(ur => ({
-        id: ur.roles.id,
-        name: ur.roles.name,
-        description: ur.roles.description || '',
-        isSystem: ur.roles.is_system,
-        permissions: (ur.roles.role_permissions || []).map((rp: any) => rp.permissions)
-      }));
-
-      const allPermissions = userRolesData.flatMap(role => role.permissions);
-
-      // Check if admin
-      const { data: isAdminCheck } = await supabase.rpc('is_admin', { user_id: userId });
-
-      // Create permission checking functions
-      const hasPermissionFn = (module: string, action: string): boolean => {
-        // Admin has all permissions
-        if (isAdminCheck) return true;
-        
-        // Owner role has all permissions
-        if (userRolesData.some(role => role.name.toLowerCase() === 'owner')) return true;
-        
-        // Check specific permissions
-        return allPermissions.some(
-          perm => perm.module === module && perm.action === action
-        );
-      };
-
-      const hasRoleFn = (roleName: string): boolean => {
-        return userRolesData.some(role => role.name.toLowerCase() === roleName.toLowerCase());
-      };
-
-      return {
-        id: userId,
-        email: '', // Will be filled from auth context
-        roles: userRolesData,
-        permissions: allPermissions,
-        isAdmin: isAdminCheck || false,
-        isOwner: hasRoleFn('owner'),
-        hasPermission: hasPermissionFn,
-        hasRole: hasRoleFn
-      };
-    } catch (error) {
-      errorLogger.error('Error creating security user', error);
-      return null;
-    }
-  }, []);
-
-  // Load roles and permissions (declared before initializeSecurityData to avoid TDZ)
-  const loadRolesAndPermissions = useCallback(async () => {
-    try {
-      // Load roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select(`
-          *,
-          role_permissions (
-            permissions (*)
-          )
-        `);
-
-      if (rolesError) throw rolesError;
-
-      const formattedRoles: Role[] = (rolesData || []).map((role: any) => {
-        return {
-          id: role.id,
-          name: role.name,
-          description: role.description || '',
-          isSystem: role.is_system,
-          permissions: (role.role_permissions || []).map((rp: any) => rp.permissions || [])
-        };
-      });
-
-      setRoles(formattedRoles);
-
-      // Load all permissions
-      const { data: permissionsData, error: permissionsError } = await supabase
-        .from('permissions')
-        .select('*');
-
-      if (permissionsError) throw permissionsError;
-      setPermissions(permissionsData || []);
-    } catch (error) {
-      errorLogger.error('Error loading roles and permissions', error);
-    }
-  }, []);
-
-  const hasLoadedSecurityRef = useRef(false);
-
-  // Initialize security data
-  const initializeSecurityData = useCallback(async () => {
-    try {
-      // Only show loading on first init, not on background re-fetches
-      if (!hasLoadedSecurityRef.current) {
-        setLoading(true);
-      }
-      setError(null);
-
-      // Get current user from auth
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-
-      if (!authUser) {
-        setUser(null);
-        setIsInitialized(true);
-        setLoading(false);
-        return;
-      }
-
-      // Create security user
-      const securityUser = await createSecurityUser(authUser.id);
-
-      if (securityUser) {
-        securityUser.email = authUser.email || '';
-        setUser(securityUser);
-      }
-
-      // Load roles and permissions
-      await loadRolesAndPermissions();
-
-      hasLoadedSecurityRef.current = true;
-      setIsInitialized(true);
-    } catch (err: any) {
-      errorLogger.error('Error initializing security data', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [createSecurityUser, loadRolesAndPermissions]);
-
-  // Credential management — getCredentials declared first to avoid TDZ
+  // Credential management
   const getCredentials = useCallback(async (projectId?: string): Promise<void> => {
     try {
       setCredentialsLoading(true);
@@ -343,113 +125,18 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
-  // Role management functions
-  const createRole = useCallback(async (role: Partial<Role>): Promise<Role> => {
-    try {
-      const { data, error } = await supabase
-        .from('roles')
-        .insert({
-          name: role.name,
-          description: role.description,
-          is_system: role.isSystem || false
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await loadRolesAndPermissions();
-      return data;
-    } catch (error) {
-      errorLogger.error('Error creating role', error);
-      throw error;
-    }
-  }, [loadRolesAndPermissions]);
-
-  const updateRole = useCallback(async (id: string, updates: Partial<Role>): Promise<Role> => {
-    try {
-      const { data, error } = await supabase
-        .from('roles')
-        .update({
-          name: updates.name,
-          description: updates.description
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await loadRolesAndPermissions();
-      return data;
-    } catch (error) {
-      errorLogger.error('Error updating role', error);
-      throw error;
-    }
-  }, [loadRolesAndPermissions]);
-
-  const deleteRole = useCallback(async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('roles')
-        .delete()
-        .eq('id', id)
-        .eq('is_system', false); // Can't delete system roles
-
-      if (error) throw error;
-
-      await loadRolesAndPermissions();
-    } catch (error) {
-      errorLogger.error('Error deleting role', error);
-      throw error;
-    }
-  }, [loadRolesAndPermissions]);
-
-  const assignRole = useCallback(async (userId: string, roleId: string): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: userId,
-          role_id: roleId
-        });
-
-      if (error) throw error;
-
-      // Refresh current user if it's them
-      if (user?.id === userId) {
-        await initializeSecurityData();
-      }
-    } catch (error) {
-      errorLogger.error('Error assigning role', error);
-      throw error;
-    }
-  }, [user?.id, initializeSecurityData]);
-
-  const revokeRole = useCallback(async (userId: string, roleId: string): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .eq('role_id', roleId);
-
-      if (error) throw error;
-
-      // Refresh current user if it's them
-      if (user?.id === userId) {
-        await initializeSecurityData();
-      }
-    } catch (error) {
-      errorLogger.error('Error revoking role', error);
-      throw error;
-    }
-  }, [user?.id, initializeSecurityData]);
-
   // Security utilities
   const refreshSecurityData = useCallback(async (): Promise<void> => {
-    await initializeSecurityData();
-  }, [initializeSecurityData]);
+    try {
+      setLoading(true);
+      setError(null);
+      await getCredentials();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [getCredentials]);
 
   const logSecurityEvent = useCallback(async (event: string, details?: any): Promise<void> => {
     try {
@@ -474,7 +161,6 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (!credential) return false;
 
-      // Check if user owns the project or has appropriate permissions
       const { data: project } = await supabase
         .from('projects')
         .select('owner_id')
@@ -483,49 +169,14 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (!project) return false;
 
-      return project.owner_id === user?.id || hasPermission('credentials', 'access');
+      return project.owner_id === user?.id || hasPermission('security', 'manage');
     } catch (error) {
       errorLogger.error('Error checking credential access', error);
       return false;
     }
   }, [user?.id, hasPermission]);
 
-  // Initialize on mount
-  useEffect(() => {
-    initializeSecurityData();
-
-    // Listen for auth changes — ignore TOKEN_REFRESHED to avoid full reload flicker
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN') {
-          await initializeSecurityData();
-        } else if (event === 'SIGNED_OUT') {
-          hasLoadedSecurityRef.current = false;
-          setUser(null);
-          setCredentials([]);
-          setIsInitialized(false);
-        }
-        // TOKEN_REFRESHED is ignored — session is still valid, no need to re-fetch
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, [initializeSecurityData]);
-
   const value: SecurityContextType = {
-    // User security state
-    user,
-    loading,
-    error,
-    isInitialized,
-
-    // Permission checks
-    hasPermission,
-    hasRole,
-    isAdmin,
-    isOwner,
-
-    // Credential management
     credentials,
     credentialsLoading,
     createCredential,
@@ -533,20 +184,11 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     deleteCredential,
     getCredentials,
     getCredential,
-
-    // Role and permission management
-    roles,
-    permissions,
-    createRole,
-    updateRole,
-    deleteRole,
-    assignRole,
-    revokeRole,
-
-    // Security utilities
     refreshSecurityData,
     logSecurityEvent,
-    checkCredentialAccess
+    checkCredentialAccess,
+    loading,
+    error
   };
 
   return (
@@ -564,5 +206,4 @@ export const useSecurity = (): SecurityContextType => {
   return context;
 };
 
-// Export constants
 export { CREDENTIAL_TYPES };

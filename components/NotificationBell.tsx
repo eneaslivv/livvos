@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Icons } from './ui/Icons';
 import { useNotifications, Notification } from '../context/NotificationsContext';
+import { supabase } from '../lib/supabase';
 
 interface NotificationBellProps {
     onNavigate?: (path: string) => void;
@@ -18,6 +19,14 @@ const getNotificationIcon = (type: Notification['type']) => {
             return <Icons.Users size={14} className="text-amber-500" />;
         case 'activity':
             return <Icons.Activity size={14} className="text-rose-500" />;
+        case 'deadline':
+            return <Icons.Clock size={14} className="text-orange-500" />;
+        case 'security':
+            return <Icons.Shield size={14} className="text-red-500" />;
+        case 'billing':
+            return <Icons.DollarSign size={14} className="text-green-500" />;
+        case 'mention':
+            return <Icons.Bell size={14} className="text-cyan-500" />;
         default:
             return <Icons.Bell size={14} className="text-zinc-500" />;
     }
@@ -38,6 +47,7 @@ const getTimeAgo = (dateString: string): string => {
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
     const { notifications, unreadCount, markAsRead, markAllAsRead, isLoading } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
+    const [reviewingIds, setReviewingIds] = useState<Set<string>>(new Set());
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
@@ -63,6 +73,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
         }
         setIsOpen(false);
     };
+
+    const handleReviewRequest = useCallback(async (notification: Notification, status: 'approved' | 'rejected') => {
+        const requestId = notification.metadata?.request_id;
+        if (!requestId) return;
+        setReviewingIds(prev => new Set(prev).add(notification.id));
+        try {
+            await supabase.rpc('review_portal_request', { p_request_id: requestId, p_status: status });
+            await markAsRead(notification.id);
+        } finally {
+            setReviewingIds(prev => { const next = new Set(prev); next.delete(notification.id); return next; });
+        }
+    }, [markAsRead]);
 
     return (
         <div className="relative" ref={dropdownRef}>
@@ -150,6 +172,25 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
                                             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
                                                 {getTimeAgo(notification.created_at)}
                                             </p>
+                                            {/* Action buttons for portal access requests */}
+                                            {notification.action_required && notification.metadata?.request_id && !notification.read && (
+                                                <div className="flex items-center gap-1.5 mt-2">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleReviewRequest(notification, 'approved'); }}
+                                                        disabled={reviewingIds.has(notification.id)}
+                                                        className="px-2.5 py-1 text-[10px] font-semibold bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleReviewRequest(notification, 'rejected'); }}
+                                                        disabled={reviewingIds.has(notification.id)}
+                                                        className="px-2.5 py-1 text-[10px] font-semibold bg-rose-500 text-white rounded-md hover:bg-rose-600 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </button>
                                 ))}

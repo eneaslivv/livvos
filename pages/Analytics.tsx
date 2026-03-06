@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { BarChart3, TrendingUp, Users, Target, Eye, MousePointer, Clock, AlertCircle, Download, Filter, Calendar, RefreshCw } from 'lucide-react';
-import { useAnalyticsContext } from '../context/AnalyticsContext';
-import { useRBACContext } from '../context/RBACContext';
+import { useAnalytics } from '../context/AnalyticsContext';
+import { useRBAC } from '../context/RBACContext';
 
 interface AnalyticsMetric {
   id: string;
@@ -42,16 +42,15 @@ interface ConversionData {
 }
 
 export const Analytics: React.FC = () => {
-  const { 
+  const {
     webAnalytics,
-    kpiMetrics,
-    conversionMetrics,
+    kpis: contextKpis,
     getWebAnalytics,
-    getKPIMetrics,
-    getConversionMetrics
-  } = useAnalyticsContext();
+    calculateKPIs,
+    calculateConversionRate
+  } = useAnalytics();
 
-  const { hasPermission } = useRBACContext();
+  const { hasPermission } = useRBAC();
   
   const [activeTab, setActiveTab] = useState<'overview' | 'web' | 'conversions' | 'kpis'>('overview');
   const [loading, setLoading] = useState(true);
@@ -66,16 +65,31 @@ export const Analytics: React.FC = () => {
         setLoading(true);
         
         // Load web analytics
-        const webData = await getWebAnalytics(dateRange);
-        setAnalyticsData(webData || []);
+        const now = new Date();
+        const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : dateRange === '90d' ? 90 : 365;
+        const startDate = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10);
+        const endDate = now.toISOString().slice(0, 10);
+        const webData = await getWebAnalytics(startDate, endDate);
+        setAnalyticsData((webData || []).map((w: any) => ({
+          date: w.date,
+          visits: w.total_visits ?? 0,
+          uniqueVisitors: w.unique_visitors ?? 0,
+          pageViews: w.page_views ?? 0,
+          bounceRate: w.bounce_rate ?? 0,
+          conversionRate: 0,
+        })));
 
         // Load KPI metrics
-        const kpis = await getKPIMetrics();
-        setKPIData(kpis || []);
-
-        // Load conversion data
-        const conversions = await getConversionMetrics();
-        setConversionData(conversions || []);
+        const kpis = await calculateKPIs();
+        setKPIData((kpis || []).map((k: any) => ({
+          id: k.metric_name,
+          name: k.metric_name,
+          value: k.value,
+          target: 100,
+          change: k.change,
+          status: k.change >= 0 ? 'on-track' as const : 'at-risk' as const,
+          description: k.unit,
+        })));
 
       } catch (error) {
         console.error('Failed to load analytics data:', error);

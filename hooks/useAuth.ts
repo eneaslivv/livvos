@@ -25,7 +25,7 @@ export function useAuth() {
         const { data, error } = await supabase.auth.getSession()
         if (!isMounted) return
         if (error || !data.session?.user) {
-          if (error) console.warn('[Auth] getSession error, trying getUser fallback:', error.message)
+          if (error && import.meta.env.DEV) console.warn('[Auth] getSession error, trying getUser fallback:', error.message)
           // Session missing or broken (e.g. localStorage quota exceeded) — try server call
           const { data: userData } = await supabase.auth.getUser()
           if (!isMounted) return
@@ -35,7 +35,7 @@ export function useAuth() {
         }
       } catch (err) {
         // getSession can throw if localStorage quota is exceeded
-        console.warn('[Auth] getSession threw, trying getUser fallback:', err)
+        if (import.meta.env.DEV) console.warn('[Auth] getSession threw, trying getUser fallback:', err)
         if (!isMounted) return
         try {
           const { data } = await supabase.auth.getUser()

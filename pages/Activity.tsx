@@ -5,6 +5,7 @@ import { useSupabase } from '../hooks/useSupabase';
 import { useAuth } from '../hooks/useAuth';
 import { useRBAC } from '../context/RBACContext';
 import { useTenant } from '../context/TenantContext';
+import { useTeam } from '../context/TeamContext';
 import { supabase } from '../lib/supabase';
 
 type TabType = 'All Activity' | 'My Updates' | 'Comments' | 'Files';
@@ -83,6 +84,12 @@ export const Activity: React.FC = () => {
     enabled: tenantReady,
     subscribe: true,
   });
+  const { data: allTasks } = useSupabase<any>('tasks', {
+    enabled: tenantReady,
+    subscribe: true,
+    select: 'id,assignee_id,completed,completed_at,priority',
+  });
+  const { members } = useTeam();
 
   const [activeTab, setActiveTab] = useState<TabType>('All Activity');
   const [newPost, setNewPost] = useState('');
@@ -96,6 +103,9 @@ export const Activity: React.FC = () => {
   const [isReplying, setIsReplying] = useState(false);
   const [optimisticReplies, setOptimisticReplies] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Leaderboard toggle
+  const [showLeaderboard, setShowLeaderboard] = useState(true);
 
   // Likes in-flight tracking
   const [likingIds, setLikingIds] = useState<Set<string>>(new Set());
@@ -114,26 +124,92 @@ export const Activity: React.FC = () => {
   const userInitials = useMemo(() => getInitials(effectiveUser?.name), [effectiveUser?.name]);
   const userAvatarColor = useMemo(() => getAvatarColor(effectiveUser?.name || effectiveUser?.email || 'U'), [effectiveUser]);
 
-  // Stats
-  const stats = useMemo(() => {
-    if (!rawActivities) return { tasks: 0, threads: 0, velocity: 0 };
+  // Member lookup
+  const memberMap = useMemo(() => {
+    const map: Record<string, { name: string; avatar_url: string | null }> = {};
+    members.forEach(m => {
+      map[m.id] = { name: m.name || m.email, avatar_url: m.avatar_url };
+    });
+    return map;
+  }, [members]);
+
+  // Weekly per-person stats from real tasks data
+  const weeklyStats = useMemo(() => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Monday start
+
+    const lastWeekStart = new Date(weekStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+    const thisWeekByPerson: Record<string, number> = {};
+    const lastWeekByPerson: Record<string, number> = {};
+    let thisWeekTotal = 0;
+    let lastWeekTotal = 0;
+
+    (allTasks || []).forEach((task: any) => {
+      if (!task.completed || !task.completed_at || !task.assignee_id) return;
+      const completedDate = new Date(task.completed_at);
+
+      if (completedDate >= weekStart) {
+        thisWeekTotal++;
+        thisWeekByPerson[task.assignee_id] = (thisWeekByPerson[task.assignee_id] || 0) + 1;
+      } else if (completedDate >= lastWeekStart && completedDate < weekStart) {
+        lastWeekTotal++;
+        lastWeekByPerson[task.assignee_id] = (lastWeekByPerson[task.assignee_id] || 0) + 1;
+      }
+    });
+
+    const velocity = lastWeekTotal > 0
+      ? Math.round(((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100)
+      : (thisWeekTotal > 0 ? 100 : 0);
+
+    // Top performer
+    let topPerformerId: string | null = null;
+    let topPerformerCount = 0;
+    Object.entries(thisWeekByPerson).forEach(([personId, count]) => {
+      if (count > topPerformerCount) {
+        topPerformerCount = count;
+        topPerformerId = personId;
+      }
+    });
+    const topPerformerName = topPerformerId ? (memberMap[topPerformerId]?.name || 'Team Member') : null;
+
+    // Ranking sorted by this week completions
+    const ranking = Object.entries(thisWeekByPerson)
+      .map(([personId, thisWeekCount]) => ({
+        id: personId,
+        name: memberMap[personId]?.name || 'Team Member',
+        avatar_url: memberMap[personId]?.avatar_url || null,
+        thisWeek: thisWeekCount,
+        lastWeek: lastWeekByPerson[personId] || 0,
+      }))
+      .sort((a, b) => b.thisWeek - a.thisWeek);
+
+    // Add active non-agent members with 0 completions
+    const rankedIds = new Set(ranking.map(r => r.id));
+    members.forEach(m => {
+      if (!rankedIds.has(m.id) && m.status === 'active' && !m.is_agent) {
+        ranking.push({
+          id: m.id,
+          name: m.name || m.email,
+          avatar_url: m.avatar_url,
+          thisWeek: 0,
+          lastWeek: lastWeekByPerson[m.id] || 0,
+        });
+      }
+    });
+
+    return { thisWeekTotal, lastWeekTotal, velocity, topPerformerName, topPerformerCount, ranking };
+  }, [allTasks, memberMap, members]);
+
+  // Thread count from activity_logs (for DISCUSSIONS card)
+  const threadCount = useMemo(() => {
+    if (!rawActivities) return 0;
     const topLevel = rawActivities.filter((a: any) => !a.parent_id);
     const replies = rawActivities.filter((a: any) => a.parent_id);
-    const taskCount = topLevel.filter((a: any) => a.type === 'task_completed').length;
-    const threadCount = topLevel.filter((a: any) => a.type === 'comment' || a.type === 'status').length;
-
-    // Velocity: posts this week vs last week
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 86400000);
-    const twoWeeksAgo = new Date(now.getTime() - 14 * 86400000);
-    const thisWeek = topLevel.filter((a: any) => new Date(a.created_at) >= weekAgo).length;
-    const lastWeek = topLevel.filter((a: any) => {
-      const d = new Date(a.created_at);
-      return d >= twoWeeksAgo && d < weekAgo;
-    }).length;
-    const velocity = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : (thisWeek > 0 ? 100 : 0);
-
-    return { tasks: taskCount, threads: threadCount + replies.length, velocity };
+    return topLevel.filter((a: any) => a.type === 'comment' || a.type === 'status').length + replies.length;
   }, [rawActivities]);
 
   // Transform and filter activities
@@ -477,8 +553,16 @@ export const Activity: React.FC = () => {
             <span className="text-xs font-bold tracking-wider uppercase">COMPLETED</span>
           </div>
           <div>
-            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{stats.tasks} Tasks</div>
-            <div className="text-sm text-zinc-500 mt-1">Top performer: <span className="font-medium text-zinc-700 dark:text-zinc-300">{effectiveUser?.name || 'You'}</span></div>
+            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{weeklyStats.thisWeekTotal} Tasks</div>
+            <div className="text-sm text-zinc-500 mt-1">
+              {weeklyStats.topPerformerName ? (
+                <>
+                  <Icons.Star size={12} className="inline text-amber-500 mr-1" />
+                  Top: <span className="font-medium text-zinc-700 dark:text-zinc-300">{weeklyStats.topPerformerName}</span>
+                  <span className="text-zinc-400 ml-1">({weeklyStats.topPerformerCount})</span>
+                </>
+              ) : 'No completions this week yet'}
+            </div>
           </div>
         </div>
 
@@ -489,9 +573,11 @@ export const Activity: React.FC = () => {
           </div>
           <div>
             <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-              {stats.velocity >= 0 ? '+' : ''}{stats.velocity}%
+              {weeklyStats.velocity >= 0 ? '+' : ''}{weeklyStats.velocity}%
             </div>
-            <div className="text-sm text-zinc-500 mt-1">Vs last week</div>
+            <div className="text-sm text-zinc-500 mt-1">
+              {weeklyStats.thisWeekTotal} this week vs {weeklyStats.lastWeekTotal} last week
+            </div>
           </div>
         </div>
 
@@ -501,7 +587,7 @@ export const Activity: React.FC = () => {
             <span className="text-xs font-bold tracking-wider uppercase">DISCUSSIONS</span>
           </div>
           <div>
-            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{stats.threads} Threads</div>
+            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{threadCount} Threads</div>
             <div className="text-sm text-zinc-500 mt-1">
               {allActivities.length > 0
                 ? <>Most active: <span className="font-medium text-zinc-700 dark:text-zinc-300">{allActivities[0]?.target || 'General'}</span></>
@@ -511,6 +597,76 @@ export const Activity: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Team Performance - This Week */}
+      {weeklyStats.ranking.length > 0 && (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+          <button
+            onClick={() => setShowLeaderboard(prev => !prev)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+              <Icons.Users size={16} className="text-zinc-400" />
+              Team Performance
+              <span className="text-xs font-normal text-zinc-400">This week</span>
+            </div>
+            <Icons.ChevronDown
+              size={16}
+              className={`text-zinc-400 transition-transform duration-200 ${showLeaderboard ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {showLeaderboard && (
+            <div className="mt-4 space-y-2">
+              {weeklyStats.ranking.map((member, idx) => {
+                const maxTasks = weeklyStats.ranking[0]?.thisWeek || 1;
+                const barWidth = maxTasks > 0 ? (member.thisWeek / maxTasks) * 100 : 0;
+                const weekDelta = member.thisWeek - member.lastWeek;
+
+                return (
+                  <div key={member.id} className="flex items-center gap-3 py-1.5">
+                    <span className={`w-5 text-xs font-bold text-center ${
+                      idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-zinc-400' : idx === 2 ? 'text-amber-700' : 'text-zinc-300 dark:text-zinc-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+
+                    <div className={`h-7 w-7 rounded-full ${getAvatarColor(member.name)} text-white flex items-center justify-center text-[10px] font-bold shrink-0`}>
+                      {member.avatar_url ? (
+                        <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                      ) : (
+                        getInitials(member.name)
+                      )}
+                    </div>
+
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 w-28 truncate">
+                      {member.name}
+                    </span>
+
+                    <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+
+                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 w-6 text-right">
+                      {member.thisWeek}
+                    </span>
+
+                    {weekDelta !== 0 && (
+                      <span className={`text-[10px] font-medium w-8 ${weekDelta > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {weekDelta > 0 ? '+' : ''}{weekDelta}
+                      </span>
+                    )}
+                    {weekDelta === 0 && <span className="w-8" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-zinc-200 dark:border-zinc-800">

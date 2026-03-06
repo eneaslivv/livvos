@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -147,7 +147,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
 
   // Load RBAC data
   const loadRBACData = useCallback(async () => {
-    console.log('[RBACContext] loadRBACData triggered. User:', authUser?.id, 'AuthLoading:', authLoading);
+    if (import.meta.env.DEV) console.log('[RBACContext] loadRBACData triggered. User:', authUser?.id, 'AuthLoading:', authLoading);
     if (authLoading) return;
 
     // Only show loading spinner on first load, not on background re-fetches
@@ -170,9 +170,9 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
         }
 
         if (profileError) {
-          console.warn('[RBACContext] Profile not ready yet:', profileError.message);
+          if (import.meta.env.DEV) console.warn('[RBACContext] Profile not ready yet:', profileError.message);
         } else {
-          console.warn('[RBACContext] User is not assigned to any tenant yet.');
+          if (import.meta.env.DEV) console.warn('[RBACContext] User is not assigned to any tenant yet.');
         }
 
         if (attempt < 7) {
@@ -219,7 +219,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       const profile = await fetchProfileWithRetry();
 
       if (!profile) {
-        console.warn('[RBACContext] Profile not found after retries — initializing with empty permissions');
+        if (import.meta.env.DEV) console.warn('[RBACContext] Profile not found after retries — initializing with empty permissions');
         setUser(null);
         setRoles([]);
         setPermissions([]);
@@ -229,7 +229,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       }
 
       setUser(profile);
-      console.log('[RBACContext] Profile loaded:', profile.id, 'Tenant:', profile.tenant_id);
+      if (import.meta.env.DEV) console.log('[RBACContext] Profile loaded:', profile.id, 'Tenant:', profile.tenant_id);
 
       // 2. Fetch user roles with permissions
       const { data: userRoles, error: rolesError } = await rolesPromise;
@@ -253,7 +253,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
       setRoles(allRoles);
       setPermissions(allPermissions);
 
-      console.log('[RBACContext] Roles loaded:', allRoles.map(r => r.name));
+      if (import.meta.env.DEV) console.log('[RBACContext] Roles loaded:', allRoles.map(r => r.name));
 
       hasLoadedRef.current = true;
       setIsInitialized(true);
@@ -748,55 +748,23 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
   // app lifecycle. Clearing state here would cause flicker on React strict-mode
   // re-mounts and serve no real purpose since the provider never unmounts.
 
-  const value: RBACContextType = {
-    // User data
-    user,
-    roles,
-    permissions,
-    isLoading,
-    error,
-    isInitialized,
-
-    // Permission checking methods
-    hasPermission,
-    hasRole,
-    hasAnyRole,
-    isAdmin,
-    isOwner,
-
-    // Role management
-    createRole,
-    updateRole,
-    deleteRole,
-    getRole,
-    getAllRoles,
-
-    // Permission management
-    createPermission,
-    updatePermission,
-    deletePermission,
-    getAllPermissions,
-
-    // Role-Permission assignments
-    assignPermissionToRole,
-    removePermissionFromRole,
-    getRolePermissions,
-
-    // User-Role assignments
-    assignRoleToUser,
-    removeRoleFromUser,
-    getUserRoles,
-    getUserPermissions,
-
-    // Utility functions
-    refreshRBAC,
-    checkAccess,
-    getUserRoleHierarchy,
-
-    // Security functions
-    logPermissionCheck,
-    getPermissionAudit,
-  };
+  const value: RBACContextType = useMemo(() => ({
+    user, roles, permissions, isLoading, error, isInitialized,
+    hasPermission, hasRole, hasAnyRole, isAdmin, isOwner,
+    createRole, updateRole, deleteRole, getRole, getAllRoles,
+    createPermission, updatePermission, deletePermission, getAllPermissions,
+    assignPermissionToRole, removePermissionFromRole, getRolePermissions,
+    assignRoleToUser, removeRoleFromUser, getUserRoles, getUserPermissions,
+    refreshRBAC, checkAccess, getUserRoleHierarchy,
+    logPermissionCheck, getPermissionAudit,
+  }), [user, roles, permissions, isLoading, error, isInitialized,
+    hasPermission, hasRole, hasAnyRole, isAdmin, isOwner,
+    createRole, updateRole, deleteRole, getRole, getAllRoles,
+    createPermission, updatePermission, deletePermission, getAllPermissions,
+    assignPermissionToRole, removePermissionFromRole, getRolePermissions,
+    assignRoleToUser, removeRoleFromUser, getUserRoles, getUserPermissions,
+    refreshRBAC, checkAccess, getUserRoleHierarchy,
+    logPermissionCheck, getPermissionAudit]);
 
   return (
     <RBACContext.Provider value={value}>

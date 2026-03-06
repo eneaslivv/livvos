@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
@@ -109,7 +109,8 @@ interface AnalyticsProviderProps {
 
 export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }) => {
   const { user } = useAuth();
-  const { currentTenant, tenantId } = useTenant();
+  const { currentTenant } = useTenant();
+  const tenantId = currentTenant?.id;
   const [webAnalytics, setWebAnalytics] = useState<WebAnalytics[]>([]);
   const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
   const [kpis, setKpis] = useState<KPIData[]>([]);
@@ -144,7 +145,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
         setCanViewAnalytics(hasAdminRole || false);
         setCanManageAnalytics(hasAdminRole || false);
       } catch (err) {
-        console.warn('Could not verify analytics permissions:', err);
+        if (import.meta.env.DEV) console.warn('Could not verify analytics permissions:', err);
         setCanViewAnalytics(false);
         setCanManageAnalytics(false);
       }
@@ -180,7 +181,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
         .order('date', { ascending: false });
 
       if (webError && webError.code !== 'PGRST116') {
-        console.warn('Web analytics table may not exist:', webError.message);
+        if (import.meta.env.DEV) console.warn('Web analytics table may not exist:', webError.message);
       }
 
       // Load metrics for last 30 days
@@ -192,7 +193,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
         .order('date', { ascending: false });
 
       if (metricsError && metricsError.code !== 'PGRST116') {
-        console.warn('Analytics metrics table may not exist:', metricsError.message);
+        if (import.meta.env.DEV) console.warn('Analytics metrics table may not exist:', metricsError.message);
       }
 
       // Load insights
@@ -204,7 +205,7 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
         .limit(50);
 
       if (insightsError && insightsError.code !== 'PGRST116') {
-        console.warn('Analytics insights table may not exist:', insightsError.message);
+        if (import.meta.env.DEV) console.warn('Analytics insights table may not exist:', insightsError.message);
       }
 
       setWebAnalytics(webData || []);
@@ -224,6 +225,24 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
   // Lazy-load: don't fetch analytics on mount — only when explicitly requested
   // This avoids 4+ sequential DB queries that slow down the initial dashboard load
   const _hasLoadedRef = React.useRef(false);
+
+  // Realtime: only re-fetch if data was already loaded (lazy guard)
+  useEffect(() => {
+    if (!tenantId || !canViewAnalytics) return;
+    const channel = supabase
+      .channel('analytics-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'web_analytics' }, () => {
+        if (_hasLoadedRef.current) loadAnalyticsData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'analytics_metrics' }, () => {
+        if (_hasLoadedRef.current) loadAnalyticsData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'analytics_insights' }, () => {
+        if (_hasLoadedRef.current) loadAnalyticsData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [tenantId, canViewAnalytics, loadAnalyticsData]);
 
   // Track page view
   const trackPageView = useCallback(async (page: string, referrer?: string) => {
@@ -658,45 +677,21 @@ export const AnalyticsProvider: React.FC<AnalyticsProviderProps> = ({ children }
     await loadAnalyticsData();
   }, [loadAnalyticsData]);
 
-  const value: AnalyticsContextType = {
-    // State
-    webAnalytics,
-    metrics,
-    kpis,
-    insights,
-    loading,
-    error,
-
-    // Permissions
-    canViewAnalytics,
-    canManageAnalytics,
-
-    // Web Analytics
-    trackPageView,
-    getWebAnalytics,
-    getTopPages,
-    getReferrers,
-
-    // Metrics Management
-    recordMetric,
-    getMetrics,
-    calculateKPIs,
-
-    // Insights
-    generateInsights,
-    getInsights,
-    markInsightAsRead,
-
-    // Reports
-    generateReport,
-    exportData,
-
-    // Utility functions
-    refreshAnalytics,
-    calculateConversionRate,
-    calculateProductivity,
-    calculateResponseTime,
-  };
+  const value: AnalyticsContextType = useMemo(() => ({
+    webAnalytics, metrics, kpis, insights, loading, error,
+    canViewAnalytics, canManageAnalytics,
+    trackPageView, getWebAnalytics, getTopPages, getReferrers,
+    recordMetric, getMetrics, calculateKPIs,
+    generateInsights, getInsights, markInsightAsRead,
+    generateReport, exportData,
+    refreshAnalytics, calculateConversionRate, calculateProductivity, calculateResponseTime,
+  }), [webAnalytics, metrics, kpis, insights, loading, error,
+    canViewAnalytics, canManageAnalytics,
+    trackPageView, getWebAnalytics, getTopPages, getReferrers,
+    recordMetric, getMetrics, calculateKPIs,
+    generateInsights, getInsights, markInsightAsRead,
+    generateReport, exportData,
+    refreshAnalytics, calculateConversionRate, calculateProductivity, calculateResponseTime]);
 
   return (
     <AnalyticsContext.Provider value={value}>

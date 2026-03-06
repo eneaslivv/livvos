@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
@@ -177,7 +177,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
-    if (!user || !currentTenant) {
+    if (!user) {
       setNotifications([]);
       setIsLoading(false);
       return;
@@ -190,16 +190,22 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
       }
       setError(null);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .eq('tenant_id', currentTenant.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
+      // Filter by tenant if available (RLS already protects cross-user access)
+      if (currentTenant?.id) {
+        query = query.eq('tenant_id', currentTenant.id);
+      }
+
+      const { data, error } = await query;
+
       if (error && error.code !== 'PGRST116') {
-        console.warn('Notifications table may not exist:', error.message);
+        if (import.meta.env.DEV) console.warn('Notifications table may not exist:', error.message);
         setNotifications([]);
       } else {
         setNotifications(data || []);
@@ -213,10 +219,63 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     }
   }, [user, currentTenant]);
 
-  // Load initial data
+  // Check for tasks due today and create deadline notifications (once per session)
+  const hasCheckedDailyRef = useRef(false);
+  const checkDailyTasks = useCallback(async () => {
+    if (!user || hasCheckedDailyRef.current) return;
+    hasCheckedDailyRef.current = true;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Fetch tasks due today (or overdue) assigned to or owned by current user
+      const { data: dueTasks } = await supabase
+        .from('tasks')
+        .select('id, title, start_date')
+        .or(`assigned_to.eq.${user.id},owner_id.eq.${user.id}`)
+        .lte('start_date', today)
+        .eq('completed', false)
+        .limit(20);
+
+      if (!dueTasks?.length) return;
+
+      // Check which tasks already have a deadline notification today
+      const { data: existing } = await supabase
+        .from('notifications')
+        .select('metadata')
+        .eq('user_id', user.id)
+        .eq('type', 'deadline')
+        .gte('created_at', `${today}T00:00:00`);
+
+      const notifiedTaskIds = new Set(
+        (existing || []).map((n: any) => n.metadata?.task_id).filter(Boolean)
+      );
+
+      const newTasks = dueTasks.filter(t => !notifiedTaskIds.has(t.id));
+      if (newTasks.length === 0) return;
+
+      const rows = newTasks.map(t => ({
+        user_id: user.id,
+        tenant_id: currentTenant?.id || null,
+        type: 'deadline',
+        title: `Task due today: ${t.title}`,
+        message: 'This task is scheduled for today',
+        link: '/calendar',
+        metadata: { task_id: t.id },
+        priority: 'high',
+        read: false,
+      }));
+
+      await supabase.from('notifications').insert(rows);
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn('Error checking daily tasks:', err);
+    }
+  }, [user, currentTenant]);
+
+  // Load initial data + check daily tasks
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    fetchNotifications().then(() => checkDailyTasks());
+  }, [fetchNotifications, checkDailyTasks]);
 
   // Real-time subscription
   useEffect(() => {
@@ -233,7 +292,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('🔔 Notification change:', payload.eventType);
+          if (import.meta.env.DEV) console.log('Notification change:', payload.eventType);
           
           if (payload.eventType === 'INSERT') {
             setNotifications((prev) => [payload.new as Notification, ...prev]);
@@ -348,10 +407,6 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
 
   // Advanced operations
   const createNotification = useCallback(async (notificationData: Omit<Notification, 'id' | 'created_at' | 'user_id' | 'tenant_id'> & { user_id?: string }): Promise<Notification> => {
-    if (!currentTenant) {
-      throw new Error('No active tenant');
-    }
-
     try {
       const targetUserId = notificationData.user_id || user?.id;
       if (!targetUserId) {
@@ -361,7 +416,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
       const notification: Omit<Notification, 'id' | 'created_at'> = {
         ...notificationData,
         user_id: targetUserId,
-        tenant_id: currentTenant.id,
+        tenant_id: currentTenant?.id || '',
       };
 
       const { data, error } = await supabase

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Team } from './Team';
 import { Clients } from './Clients';
+import { PageView, NavParams } from '../types';
 
 type TeamClientsTab = 'team' | 'clients';
 
 interface TeamClientsProps {
   initialTab?: TeamClientsTab;
+  onNavigate?: (page: PageView, params?: NavParams) => void;
 }
 
-export const TeamClients: React.FC<TeamClientsProps> = ({ initialTab = 'team' }) => {
+export const TeamClients: React.FC<TeamClientsProps> = ({ initialTab = 'team', onNavigate }) => {
   const [activeTab, setActiveTab] = useState<TeamClientsTab>(initialTab);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export const TeamClients: React.FC<TeamClientsProps> = ({ initialTab = 'team' })
         </div>
       </div>
       <div className="pt-2">
-        {activeTab === 'team' ? <Team /> : <Clients />}
+        {activeTab === 'team' ? <Team /> : <Clients onNavigate={onNavigate} />}
       </div>
     </div>
   );

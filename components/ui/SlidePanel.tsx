@@ -2,13 +2,16 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './Icons';
 
-interface SlidePanelProps {
+export interface SlidePanelProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   subtitle?: string;
+  description?: string;
   /** 'sm' ~384px | 'md' ~448px | 'lg' ~512px | 'xl' ~640px | 'full' ~100% */
   width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  /** Alias for width */
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   /** Optional footer (action buttons, etc.) */
   footer?: React.ReactNode;
   /** Optional header-right element (extra buttons, badges) */

@@ -357,7 +357,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
           {/* Footer — always visible */}
           <div className="border-t border-zinc-100 dark:border-zinc-800/40 px-5 py-2.5 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-950">
             <span className="text-[10px] text-zinc-300 dark:text-zinc-600">
-              {lead.createdAt || lead.created_at ? new Date(lead.createdAt || (lead as any).created_at).toLocaleDateString() : ''}
+              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : ''}
             </span>
             <div className="flex items-center gap-1.5">
               {draft.status === 'new' && (

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../components/ui/Card';
 import { PlayCircle, PauseCircle, RotateCcw, Settings, Clock, CheckCircle, XCircle, AlertTriangle, Terminal, FileText, Download, Filter } from 'lucide-react';
-import { useSystemContext } from '../context/SystemContext';
-import { useRBACContext } from '../context/RBACContext';
+import { useSystem } from '../context/SystemContext';
+import { useRBAC } from '../context/RBACContext';
 import { skillLoader } from '../skills/loader';
 
-interface SkillExecution {
+interface LocalSkillExecution {
   id: string;
   skillId: string;
   skillName: string;
@@ -34,17 +34,16 @@ interface SkillInfo {
 }
 
 export const SkillsManager: React.FC = () => {
-  const { 
+  const {
     executeSkill,
     getSkillExecutions,
-    systemMetrics
-  } = useSystemContext();
+  } = useSystem();
 
-  const { hasPermission } = useRBACContext();
+  const { hasPermission } = useRBAC();
   
   const [activeTab, setActiveTab] = useState<'skills' | 'executions' | 'monitor'>('skills');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [executions, setExecutions] = useState<SkillExecution[]>([]);
+  const [executions, setExecutions] = useState<LocalSkillExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -55,15 +54,15 @@ export const SkillsManager: React.FC = () => {
         setLoading(true);
         
         // Load available skills from registry
-        const skillsRegistry = await skillLoader.getAllSkills();
-        const skillsList: SkillInfo[] = Object.values(skillsRegistry).map(skill => ({
-          id: skill.id,
+        const skillsRegistry = await skillLoader.listSkills();
+        const skillsList: SkillInfo[] = skillsRegistry.map((skill: any) => ({
+          id: skill.name,
           name: skill.name,
           description: skill.description,
           category: skill.category || 'general',
           priority: skill.priority || 'medium',
           duration: skill.expectedDuration || 'Unknown',
-          requiredAgent: skill.requiredAgent || 'system-agent',
+          requiredAgent: skill.requiredAgents?.[0] || 'system-agent',
           dependencies: skill.dependencies || [],
           lastExecution: 'Never',
           successRate: Math.floor(Math.random() * 100) // Mock data
@@ -72,8 +71,8 @@ export const SkillsManager: React.FC = () => {
         setSkills(skillsList);
 
         // Load recent executions
-        const executionsData = await getSkillExecutions(50);
-        setExecutions(executionsData || []);
+        const executionsData = await getSkillExecutions();
+        setExecutions((executionsData || []) as unknown as LocalSkillExecution[]);
 
       } catch (error) {
         console.error('Failed to load skills data:', error);
@@ -87,11 +86,11 @@ export const SkillsManager: React.FC = () => {
 
   const handleSkillExecution = async (skillId: string) => {
     try {
-      const execution = await executeSkill(skillId, selectedAgent);
-      
+      await executeSkill(selectedAgent, skillId, {});
+
       // Refresh executions list
-      const executionsData = await getSkillExecutions(50);
-      setExecutions(executionsData || []);
+      const executionsData = await getSkillExecutions();
+      setExecutions((executionsData || []) as unknown as LocalSkillExecution[]);
       
     } catch (error) {
       console.error('Failed to execute skill:', error);
@@ -138,7 +137,7 @@ export const SkillsManager: React.FC = () => {
     return statusMatch && agentMatch;
   });
 
-  if (!hasPermission('system', 'manage_skills')) {
+  if (!hasPermission('system', 'manage')) {
     return (
       <div className="p-6">
         <Card>
@@ -228,7 +227,7 @@ export const SkillsManager: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  {hasPermission('system', 'execute_skills') && (
+                  {hasPermission('system', 'manage') && (
                     <button
                       onClick={() => handleSkillExecution(skill.id)}
                       className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
@@ -307,12 +306,12 @@ export const SkillsManager: React.FC = () => {
                     )}
                   </div>
                   <div className="ml-4 flex space-x-2">
-                    {execution.status === 'running' && hasPermission('system', 'cancel_skills') && (
+                    {execution.status === 'running' && hasPermission('system', 'manage') && (
                       <button className="p-2 text-yellow-600 hover:text-yellow-700">
                         <PauseCircle className="w-4 h-4" />
                       </button>
                     )}
-                    {execution.status === 'failed' && hasPermission('system', 'retry_skills') && (
+                    {execution.status === 'failed' && hasPermission('system', 'manage') && (
                       <button className="p-2 text-blue-600 hover:text-blue-700">
                         <RotateCcw className="w-4 h-4" />
                       </button>

@@ -362,7 +362,7 @@ export const Finance: React.FC = () => {
         num_installments: Math.max(1, parseInt(incomeForm.num_installments) || 1),
       };
 
-      console.log('[Finance] Creating income:', data);
+      if (import.meta.env.DEV) console.log('[Finance] Creating income:', data);
 
       // Timeout wrapper to prevent infinite "Saving..." state
       const timeout = new Promise<never>((_, reject) =>
@@ -402,7 +402,7 @@ export const Finance: React.FC = () => {
         status: expenseForm.status,
       };
 
-      console.log('[Finance] Creating expense:', data);
+      if (import.meta.env.DEV) console.log('[Finance] Creating expense:', data);
 
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)

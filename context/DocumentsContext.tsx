@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
-import { useTenantId } from './TenantContext'
+import { useTenant } from './TenantContext'
+import { ResourceLimitError } from '../lib/ResourceLimitError'
 
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -65,7 +66,8 @@ interface DocumentsContextType {
 const DocumentsContext = createContext<DocumentsContextType | undefined>(undefined)
 
 export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const tenantId = useTenantId()
+  const { currentTenant, isWithinResourceLimit, getResourceUsage, refreshUsage } = useTenant()
+  const tenantId = currentTenant?.id
   const [folders, setFolders] = useState<Folder[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
@@ -73,10 +75,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const hasLoadedDocsRef = useRef(false)
 
   // Load data
   const loadDocuments = useCallback(async () => {
-    setLoading(true)
+    if (!hasLoadedDocsRef.current) setLoading(true)
     setError(null)
 
     try {
@@ -134,6 +137,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       setIsInitialized(true)
+      hasLoadedDocsRef.current = true
     } catch (err: any) {
       errorLogger.error('Error loading documents', err)
       setError(err.message)
@@ -144,6 +148,12 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     loadDocuments()
+    const channel = supabase
+      .channel('documents-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, () => { loadDocuments() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, () => { loadDocuments() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [loadDocuments])
 
   const createFolder = async (
@@ -177,7 +187,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       client_id: clientId,
       project_id: projectId
     }
-    console.log('Creating folder with payload:', insertPayload)
+    if (import.meta.env.DEV) console.log('Creating folder with payload:', insertPayload)
 
     const { data, error: err } = await withTimeout(
       Promise.resolve(supabase.from('folders').insert(insertPayload).select().single()),
@@ -200,11 +210,18 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const user = (await supabase.auth.getUser()).data.user
     if (!user) throw new Error('User not authenticated')
 
-    console.log('Context uploadFile - Tenant ID:', tenantId); // Debug logging
+    if (import.meta.env.DEV) console.log('Context uploadFile - Tenant ID:', tenantId); // Debug logging
     if (!tenantId) throw new Error('Tenant not available (ID is null/undefined)')
 
+    // Enforce storage limit
+    await refreshUsage()
+    if (!isWithinResourceLimit('max_storage_mb')) {
+      const usage = getResourceUsage('max_storage_mb')
+      throw new ResourceLimitError('max_storage_mb', usage.used, usage.limit)
+    }
+
     const fileName = `${user.id}/${Date.now()}_${file.name}`
-    console.log('Attempting storage upload:', fileName);
+    if (import.meta.env.DEV) console.log('Attempting storage upload:', fileName);
 
     const { error: uploadError } = await withTimeout(
       supabase.storage.from('documents').upload(fileName, file),

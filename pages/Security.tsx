@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Icons } from '../components/ui/Icons';
-import { useRBAC } from '../context/RBACContext';
-import { SecurityProvider, useSecurity } from '../context/SecurityContext';
+import { useRBAC, Permission, Role } from '../context/RBACContext';
+import { useSecurity } from '../context/SecurityContext';
+// Note: SecurityProvider is already in App.tsx provider tree
 import { PageView } from '../types';
 
 // Security management components
@@ -9,22 +10,81 @@ interface SecurityDashboardProps {
   onNavigate: (page: PageView) => void;
 }
 
+interface RoleWithPermissions extends Role {
+  rolePermissions: Permission[];
+}
+
 const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => {
-  const { user, hasPermission } = useRBAC();
-  const { 
-    credentials, 
-    roles, 
-    permissions, 
-    loading, 
-    error,
+  const {
+    user,
+    hasPermission,
+    getAllRoles,
+    getAllPermissions,
+    createRole: rbacCreateRole,
+    updateRole: rbacUpdateRole,
+    deleteRole: rbacDeleteRole,
+    getRolePermissions
+  } = useRBAC();
+  const {
+    credentials,
+    loading: credentialsLoading,
+    error: credentialsError,
     createCredential,
     updateCredential,
     deleteCredential,
-    createRole,
-    updateRole,
-    deleteRole,
     refreshSecurityData
   } = useSecurity();
+
+  // Local state for all roles/permissions (management view)
+  const [roles, setRoles] = useState<RoleWithPermissions[]>([]);
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+
+  const loading = credentialsLoading || rolesLoading;
+  const error = credentialsError || rolesError;
+
+  const loadRolesAndPermissions = useCallback(async () => {
+    try {
+      setRolesLoading(true);
+      setRolesError(null);
+
+      const [fetchedRoles, fetchedPermissions] = await Promise.all([
+        getAllRoles(),
+        getAllPermissions()
+      ]);
+
+      // Load permissions for each role
+      const rolesWithPerms: RoleWithPermissions[] = await Promise.all(
+        fetchedRoles.map(async (role) => {
+          const rolePerms = await getRolePermissions(role.id);
+          return { ...role, rolePermissions: rolePerms };
+        })
+      );
+
+      setRoles(rolesWithPerms);
+      setAllPermissions(fetchedPermissions);
+    } catch (err: any) {
+      setRolesError(err.message);
+    } finally {
+      setRolesLoading(false);
+    }
+  }, [getAllRoles, getAllPermissions, getRolePermissions]);
+
+  const createRole = useCallback(async (data: any) => {
+    await rbacCreateRole(data);
+    await loadRolesAndPermissions();
+  }, [rbacCreateRole, loadRolesAndPermissions]);
+
+  const updateRole = useCallback(async (id: string, data: any) => {
+    await rbacUpdateRole(id, data);
+    await loadRolesAndPermissions();
+  }, [rbacUpdateRole, loadRolesAndPermissions]);
+
+  const deleteRole = useCallback(async (id: string) => {
+    await rbacDeleteRole(id);
+    await loadRolesAndPermissions();
+  }, [rbacDeleteRole, loadRolesAndPermissions]);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'credentials' | 'roles'>('overview');
   const [selectedCredential, setSelectedCredential] = useState<any>(null);
@@ -33,11 +93,12 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
   const [selectedRole, setSelectedRole] = useState<any>(null);
 
   // Permission checks
-  const canManageCredentials = hasPermission('security', 'manage_credentials');
-  const canManageRoles = hasPermission('security', 'manage_roles');
+  const canManageCredentials = hasPermission('security', 'manage');
+  const canManageRoles = hasPermission('security', 'manage');
 
   useEffect(() => {
     refreshSecurityData();
+    loadRolesAndPermissions();
   }, []);
 
   if (loading) {
@@ -127,7 +188,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Permissions</p>
-                <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{permissions?.length || 0}</p>
+                <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{allPermissions?.length || 0}</p>
               </div>
               <div className="p-3 bg-rose-100 dark:bg-rose-900/20 rounded-lg">
                 <Icons.Lock className="text-rose-600 dark:text-rose-400" size={20} />
@@ -192,7 +253,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                   <div key={role.id} className="p-4 border border-zinc-200 dark:border-zinc-700 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium text-zinc-900 dark:text-zinc-100">{role.name}</h4>
-                      {role.isSystem && (
+                      {role.is_system && (
                         <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 rounded-full">
                           System
                         </span>
@@ -200,7 +261,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                     </div>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">{role.description}</p>
                     <div className="mt-2">
-                      <span className="text-xs text-zinc-400">{role.permissions?.length || 0} permissions</span>
+                      <span className="text-xs text-zinc-400">{role.rolePermissions?.length || 0} permissions</span>
                     </div>
                   </div>
                 ))}
@@ -308,7 +369,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                     <div>
                       <h4 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{role.name}</h4>
                       <p className="text-sm text-zinc-500 dark:text-zinc-400">{role.description}</p>
-                      {role.isSystem && (
+                      {role.is_system && (
                         <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 mt-2">
                           System Role
                         </span>
@@ -324,7 +385,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                       >
                         <Icons.Edit size={16} className="text-zinc-400" />
                       </button>
-                      {!role.isSystem && (
+                      {!role.is_system && (
                         <button
                           onClick={() => deleteRole(role.id)}
                           className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded"
@@ -337,7 +398,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Permissions</p>
                     <div className="flex flex-wrap gap-1">
-                      {role.permissions?.slice(0, 3).map(permission => (
+                      {role.rolePermissions?.slice(0, 3).map(permission => (
                         <span
                           key={permission.id}
                           className="inline-flex px-2 py-1 text-xs font-medium rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
@@ -345,9 +406,9 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
                           {permission.module}:{permission.action}
                         </span>
                       ))}
-                      {(role.permissions?.length || 0) > 3 && (
+                      {(role.rolePermissions?.length || 0) > 3 && (
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                          +{(role.permissions?.length || 0) - 3} more
+                          +{(role.rolePermissions?.length || 0) - 3} more
                         </span>
                       )}
                     </div>
@@ -379,7 +440,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
       {showRoleModal && (
         <RoleModal
           role={selectedRole}
-          permissions={permissions || []}
+          permissions={allPermissions || []}
           onClose={() => setShowRoleModal(false)}
           onSave={async (data) => {
             if (selectedRole) {
@@ -613,11 +674,4 @@ const RoleModal: React.FC<{
   );
 };
 
-// Export wrapped component
-export const Security: React.FC<SecurityDashboardProps> = (props) => {
-  return (
-    <SecurityProvider>
-      <SecurityDashboard {...props} />
-    </SecurityProvider>
-  );
-};
+export const Security: React.FC<SecurityDashboardProps> = SecurityDashboard;

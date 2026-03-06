@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from '../context/TenantContext'
@@ -237,6 +237,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadFinances()
+    const channel = supabase
+      .channel('finances-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => { loadFinances() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [loadFinances])
 
   // ─── Load Incomes ───────────────────────────────────────────
@@ -268,7 +273,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
       if (err) {
         // Table might not exist, permission denied, or timeout — gracefully degrade
-        console.warn('[FinanceContext] Incomes load issue:', err.code, err.message)
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Incomes load issue:', err.code, err.message)
         setIncomes([])
         return
       }
@@ -299,7 +304,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           .update({ status: 'overdue' })
           .in('id', overdueIds)
           .then(({ error: oErr }) => {
-            if (oErr) console.warn('[FinanceContext] Overdue update error:', oErr.message)
+            if (oErr && import.meta.env.DEV) console.warn('[FinanceContext] Overdue update error:', oErr.message)
           })
       }
 
@@ -315,6 +320,12 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadIncomes()
+    const channel = supabase
+      .channel('incomes-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incomes' }, () => { loadIncomes() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'installments' }, () => { loadIncomes() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [loadIncomes])
 
   // ─── Load Expenses ──────────────────────────────────────────
@@ -344,7 +355,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       const { data, error: err } = await Promise.race([query, timeout])
 
       if (err) {
-        console.warn('[FinanceContext] Expenses load issue:', err.code, err.message)
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Expenses load issue:', err.code, err.message)
         setExpenses([])
         return
       }
@@ -360,6 +371,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadExpenses()
+    const channel = supabase
+      .channel('expenses-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => { loadExpenses() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [loadExpenses])
 
   // ─── Legacy Finance CRUD ────────────────────────────────────
@@ -488,7 +504,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       if (data.client_id) incomePayload.client_id = data.client_id
       if (data.project_id) incomePayload.project_id = data.project_id
 
-      console.log('[FinanceContext] Inserting income:', incomePayload)
+      if (import.meta.env.DEV) console.log('[FinanceContext] Inserting income:', incomePayload)
 
       const { data: income, error: incErr } = await supabase
         .from('incomes')
@@ -595,7 +611,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       }
       if (data.project_id) expensePayload.project_id = data.project_id
 
-      console.log('[FinanceContext] Inserting expense:', expensePayload)
+      if (import.meta.env.DEV) console.log('[FinanceContext] Inserting expense:', expensePayload)
 
       const { data: expense, error: err } = await supabase
         .from('expenses')
@@ -640,21 +656,23 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   // ─── Value ──────────────────────────────────────────────────
 
-  const value: FinanceContextType = {
-    // Legacy
+  const value: FinanceContextType = useMemo(() => ({
     finances, loading, error, canViewFinances, canEditFinances,
     createFinance, updateFinance, deleteFinance,
     getFinanceByProject, getFinancialSummary,
     getTenantFinancials, updateProjectFinancials,
-    // Incomes
     incomes, incomesLoading,
     createIncome, updateInstallment, deleteIncome,
     refreshIncomes: loadIncomes,
-    // Expenses
     expenses, expensesLoading,
     createExpense, updateExpense, deleteExpense,
     refreshExpenses: loadExpenses,
-  }
+  }), [finances, loading, error, canViewFinances, canEditFinances,
+    createFinance, updateFinance, deleteFinance,
+    getFinanceByProject, getFinancialSummary,
+    getTenantFinancials, updateProjectFinancials,
+    incomes, incomesLoading, createIncome, updateInstallment, deleteIncome, loadIncomes,
+    expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses])
 
   return (
     <FinanceContext.Provider value={value}>

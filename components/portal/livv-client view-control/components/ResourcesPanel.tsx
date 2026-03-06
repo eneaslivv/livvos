@@ -12,6 +12,7 @@ interface ResourcesPanelProps {
     nextPayment?: { amount: number; dueDate: string; concept?: string };
     payments?: PaymentEntry[];
   };
+  hiddenTabs?: ('finance' | 'access' | 'docs')[];
 }
 
 const TABS = [
@@ -28,26 +29,17 @@ const fmtDate = (d: string) => {
   return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget }) => {
-  const [activeTab, setActiveTab] = useState<TabId>('finance');
+const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget, hiddenTabs }) => {
+  const visibleTabs = TABS.filter(tab => !hiddenTabs?.includes(tab.id));
+  const [activeTab, setActiveTab] = useState<TabId>(visibleTabs[0]?.id || 'finance');
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showAmounts, setShowAmounts] = useState(true);
 
-  const credItems = credentials && credentials.length
-    ? credentials
-    : [
-        { id: '1', service: 'Panel de Admin', user: 'admin@livv.com', pass: 'secure-pass-2026' },
-        { id: '2', service: 'Base de Datos', user: 'db_admin', pass: 'p_secure_88!v2' },
-      ];
+  if (visibleTabs.length === 0) return null;
 
-  const docItems = assets && assets.length
-    ? assets
-    : [
-        { id: '1', name: 'Contrato de Servicios', type: 'PDF', size: '2.4 MB' },
-        { id: '2', name: 'Diseño del Proyecto', type: 'Figma', size: 'Enlace' },
-        { id: '3', name: 'Entregables Fase I', type: 'Drive', size: 'Enlace' },
-      ];
+  const credItems = credentials || [];
+  const docItems = assets || [];
 
   const togglePass = (id: string) => setShowPass(p => ({ ...p, [id]: !p[id] }));
   const copyText = (text: string, id: string) => {
@@ -80,7 +72,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
     >
       {/* Tab bar */}
       <div className="flex items-center border-b border-zinc-100 px-1 pt-1">
-        {TABS.map(tab => {
+        {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
