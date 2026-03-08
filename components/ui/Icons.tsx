@@ -96,7 +96,8 @@ import {
   ToggleLeft,
   ToggleRight,
   Workflow,
-  Inbox
+  Inbox,
+  Globe
 } from 'lucide-react';
 
 export const Icons = {
@@ -200,5 +201,6 @@ export const Icons = {
   ToggleLeft,
   ToggleRight,
   Workflow,
-  Inbox
+  Inbox,
+  Globe
 };

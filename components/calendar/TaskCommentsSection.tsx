@@ -5,6 +5,9 @@ import { useAuth } from '../../hooks/useAuth';
 
 interface TaskCommentsSectionProps {
   taskId: string;
+  taskTitle?: string;
+  taskOwnerId?: string;
+  taskAssigneeId?: string;
 }
 
 const formatTime = (dateStr: string): string => {
@@ -33,9 +36,10 @@ const groupByDate = (comments: TaskComment[]): Map<string, TaskComment[]> => {
   return groups;
 };
 
-export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId }) => {
+export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId, taskTitle, taskOwnerId, taskAssigneeId }) => {
   const { user } = useAuth();
-  const { comments, loading, addComment } = useTaskComments(taskId);
+  const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId } : undefined, [taskTitle, taskOwnerId, taskAssigneeId]);
+  const { comments, loading, addComment } = useTaskComments(taskId, taskInfo);
   const [activeTab, setActiveTab] = useState<'internal' | 'client'>('internal');
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);

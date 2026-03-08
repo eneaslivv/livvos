@@ -32,6 +32,10 @@ export interface CalendarHeaderProps {
   syncGoogle: () => Promise<void>;
   showGoogleSettings: boolean;
   setShowGoogleSettings: React.Dispatch<React.SetStateAction<boolean>>;
+  // Timezones
+  showTimezones?: boolean;
+  onToggleTimezones?: () => void;
+  hasClientTimezones?: boolean;
 }
 
 export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
@@ -56,6 +60,9 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   googleSyncing,
   syncGoogle,
   setShowGoogleSettings,
+  showTimezones,
+  onToggleTimezones,
+  hasClientTimezones,
 }) => {
   return (
     <div className="flex items-center justify-between mb-6">
@@ -195,6 +202,19 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             title="Sync Google Calendar"
           >
             <Icons.RefreshCw size={14} className={googleSyncing ? 'animate-spin' : ''} />
+          </button>
+        )}
+        {onToggleTimezones && hasClientTimezones && (
+          <button
+            onClick={onToggleTimezones}
+            className={`flex items-center gap-1.5 px-2.5 py-2 border rounded-xl transition-colors ${
+              showTimezones
+                ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border-zinc-200 dark:border-zinc-700'
+            }`}
+            title="Toggle client timezones"
+          >
+            <Icons.Globe size={14} />
           </button>
         )}
         <button

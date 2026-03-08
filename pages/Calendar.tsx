@@ -17,6 +17,7 @@ import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
 import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
+import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { Icons } from '../components/ui/Icons';
 
 export const Calendar: React.FC = () => {
@@ -57,6 +58,28 @@ export const Calendar: React.FC = () => {
 
   // 'all' = see all, 'me' = only my tasks, uuid = specific member
   const [taskFilter, setTaskFilter] = useState<'all' | 'me' | string>('all');
+
+  // Timezone state
+  const [showTimezones, setShowTimezones] = useState(() => localStorage.getItem('cal-tz-bar') === '1');
+  const [activeTimezone, setActiveTimezone] = useState<string | null>(null);
+  const hasClientTimezones = clients.some(c => !!c.timezone);
+
+  const clientTimezoneMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of clients) {
+      if (c.timezone) map[c.id] = c.timezone;
+    }
+    return map;
+  }, [clients]);
+
+  const toggleTimezones = () => {
+    setShowTimezones(prev => {
+      const next = !prev;
+      localStorage.setItem('cal-tz-bar', next ? '1' : '0');
+      if (!next) setActiveTimezone(null);
+      return next;
+    });
+  };
 
   // Quick member map for resolving names/avatars
   const memberMap = teamMembers.reduce<Record<string, { name: string | null; avatar_url: string | null }>>((acc, m) => {
@@ -777,6 +800,9 @@ export const Calendar: React.FC = () => {
         syncGoogle={syncGoogle}
         showGoogleSettings={showGoogleSettings}
         setShowGoogleSettings={setShowGoogleSettings}
+        showTimezones={showTimezones}
+        onToggleTimezones={toggleTimezones}
+        hasClientTimezones={hasClientTimezones}
       />
 
       {/* AI Weekly Summary */}
@@ -826,6 +852,15 @@ export const Calendar: React.FC = () => {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Timezone bar */}
+      {calendarMode === 'schedule' && showTimezones && (
+        <TimezoneBar
+          clients={clients}
+          activeTimezone={activeTimezone}
+          onSelectTimezone={setActiveTimezone}
+        />
       )}
 
       {/* Event/Task creation panel */}
@@ -938,6 +973,8 @@ export const Calendar: React.FC = () => {
             });
           }}
           onOpenTaskDetail={handleOpenTaskDetail}
+          activeTimezone={activeTimezone}
+          clientTimezoneMap={clientTimezoneMap}
         />
       )}
 

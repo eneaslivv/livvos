@@ -42,21 +42,21 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white rounded-2xl border border-zinc-200/60 p-6 md:p-8"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-          <ListChecks size={13} className="text-zinc-300" />
+        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+          <ListChecks size={13} className="text-zinc-300 dark:text-zinc-600" />
           Tareas del Proyecto
         </h3>
-        <span className="text-[11px] font-semibold text-zinc-500">
+        <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
           {totalCompleted}/{tasks.length}
         </span>
       </div>
 
       {/* Overall progress bar */}
-      <div className="w-full h-1.5 bg-zinc-100 rounded-full mb-6 overflow-hidden">
+      <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-6 overflow-hidden">
         <motion.div
           className="h-full rounded-full bg-[#2C0405]"
           initial={{ width: 0 }}
@@ -73,20 +73,20 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
           const allDone = phasePct === 100 && group.total > 0;
 
           return (
-            <div key={group.name} className="rounded-xl border border-zinc-100 overflow-hidden">
+            <div key={group.name} className="rounded-xl border border-zinc-100 dark:border-zinc-800 overflow-hidden">
               {/* Group header */}
               <button
                 onClick={() => toggleGroup(group.name)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-zinc-50/50 hover:bg-zinc-50 transition-colors"
+                className="w-full px-4 py-3 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
                   <div className={`w-2 h-2 rounded-full ${
-                    allDone ? 'bg-emerald-500' : phasePct > 0 ? 'bg-amber-400' : 'bg-zinc-300'
+                    allDone ? 'bg-emerald-500' : phasePct > 0 ? 'bg-amber-400' : 'bg-zinc-300 dark:bg-zinc-600'
                   }`} />
-                  <span className="text-[13px] font-semibold text-zinc-700">
+                  <span className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-200">
                     {group.name}
                   </span>
-                  <span className="text-[10px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full tabular-nums">
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full tabular-nums">
                     {group.completed}/{group.total}
                   </span>
                 </div>
@@ -94,7 +94,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
                   animate={{ rotate: isCollapsed ? 0 : 180 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <ChevronDown size={14} className="text-zinc-400" />
+                  <ChevronDown size={14} className="text-zinc-400 dark:text-zinc-500" />
                 </motion.div>
               </button>
 
@@ -108,21 +108,21 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
                     transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                     className="overflow-hidden"
                   >
-                    <div className="divide-y divide-zinc-50">
+                    <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
                       {group.tasks.map(task => (
                         <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
                           {/* Status circle (read-only) */}
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                             task.completed
                               ? 'bg-[#2C0405] border-[#2C0405] text-white'
-                              : 'border-zinc-300'
+                              : 'border-zinc-300 dark:border-zinc-600'
                           }`}>
                             {task.completed && <Check size={10} strokeWidth={3} />}
                           </div>
 
                           {/* Task title */}
                           <span className={`text-[12px] flex-1 min-w-0 truncate ${
-                            task.completed ? 'line-through text-zinc-400' : 'text-zinc-700'
+                            task.completed ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200'
                           }`}>
                             {task.title}
                           </span>
@@ -136,8 +136,8 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
                           {task.dueDate && !task.completed && (
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono shrink-0 ${
                               new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10))
-                                ? 'text-red-500 bg-red-50 font-semibold'
-                                : 'text-zinc-400 bg-zinc-100'
+                                ? 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/40 font-semibold'
+                                : 'text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800'
                             }`}>
                               {new Date(task.dueDate).toLocaleDateString('es-AR', { month: 'short', day: 'numeric' })}
                             </span>
@@ -145,7 +145,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
 
                           {/* Completed date */}
                           {task.completed && task.completedAt && (
-                            <span className="text-[10px] text-[#2C0405] font-medium shrink-0">
+                            <span className="text-[10px] text-[#2C0405] dark:text-[#e8a0a2] font-medium shrink-0">
                               {new Date(task.completedAt).toLocaleDateString('es-AR', { month: 'short', day: 'numeric' })}
                             </span>
                           )}
@@ -162,7 +162,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
 
       {/* Empty state */}
       {tasks.length === 0 && (
-        <p className="text-xs text-zinc-300 text-center py-8">No hay tareas en este proyecto</p>
+        <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-8">No hay tareas en este proyecto</p>
       )}
     </motion.div>
   );

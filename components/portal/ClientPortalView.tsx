@@ -419,7 +419,7 @@ export const ClientPortalView: React.FC = () => {
   }, [user, clientIdParam, projectIdParam, selectedProjectId]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading portal...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-zinc-500 dark:text-zinc-400 dark:bg-zinc-950">Loading portal...</div>;
   }
 
   if (error || !data) {

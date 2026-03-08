@@ -15,6 +15,7 @@ export interface Client {
   notes?: string
   address?: string
   industry?: string
+  timezone?: string | null
   color?: string | null
   created_at: string
   updated_at: string

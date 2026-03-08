@@ -5,6 +5,17 @@ import { Project, ProjectStatus } from '../../context/ProjectsContext';
 import { Client } from '../../context/ClientsContext';
 import { TeamMember } from '../../context/TeamContext';
 
+const fmtShortDate = (d: string | null | undefined) => {
+  if (!d) return '—';
+  const date = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+};
+
+const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
+
+const finInputClass = 'w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all';
+const finLabelClass = 'block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5';
+
 export interface OverviewTabProps {
   project: Project;
   selectedClient: Client | null;
@@ -23,8 +34,6 @@ export interface OverviewTabProps {
     totalHours: number;
     timeCost: number;
   };
-  expandedIncomeId: string | null;
-  onExpandIncome: (id: string | null) => void;
   onUpdateProject: (updates: Partial<Project>) => void;
   onToggleTask: (groupIdx: number, taskId: string) => void;
   onSetActiveTab: (tab: string) => void;
@@ -34,9 +43,9 @@ export interface OverviewTabProps {
   showExpenseForm: boolean;
   onShowIncomeForm: (val: boolean) => void;
   onShowExpenseForm: (val: boolean) => void;
-  incomeFormData: { concept: string; amount: string; installments: string; dueDate: string };
+  incomeFormData: { concept: string; amount: string; installments: string; dueDate: string; currency: string; installment_dates: string[] };
   expenseFormData: { concept: string; amount: string; category: string; date: string };
-  onIncomeFormChange: (data: { concept: string; amount: string; installments: string; dueDate: string }) => void;
+  onIncomeFormChange: (data: { concept: string; amount: string; installments: string; dueDate: string; currency: string; installment_dates: string[] }) => void;
   onExpenseFormChange: (data: { concept: string; amount: string; category: string; date: string }) => void;
   isSubmittingFinance: boolean;
   onCreateIncome: () => void;
@@ -61,8 +70,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   members,
   derivedTasksGroups,
   projectFinancials,
-  expandedIncomeId,
-  onExpandIncome,
   onUpdateProject,
   onToggleTask,
   onSetActiveTab,
@@ -340,113 +347,108 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           )}
 
-          {/* Income entries */}
-          {projectFinancials.incomeEntries.length > 0 && (
-            <div className="space-y-1 mb-3">
-              {projectFinancials.incomeEntries.map((inc: any) => {
-                const isExpanded = expandedIncomeId === inc.id;
-                const installments = inc.installments || [];
-                const paidCount = installments.filter((i: any) => i.status === 'paid').length;
-                return (
-                  <div key={inc.id} className="rounded-lg border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
-                    <button
-                      onClick={() => onExpandIncome(isExpanded ? null : inc.id)}
-                      className="flex items-center justify-between w-full py-2 px-3 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          inc.status === 'paid' ? 'bg-emerald-500' : inc.status === 'overdue' ? 'bg-red-500' : 'bg-amber-500'
-                        }`} />
-                        <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate font-medium">{inc.concept || inc.client_name}</span>
-                        {installments.length > 1 && (
-                          <span className="text-[9px] text-zinc-400 shrink-0">{paidCount}/{installments.length}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                          inc.status === 'paid' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
-                            : inc.status === 'overdue' ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-                            : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
-                        }`}>{inc.status}</span>
-                        <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">${inc.total_amount.toLocaleString()}</span>
-                        <Icons.ChevronDown size={12} className={`text-zinc-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                      </div>
-                    </button>
+          {/* Add income button — dashed, shown when form is hidden */}
+          {!showIncomeForm && (
+            <button
+              onClick={() => { onShowIncomeForm(true); onShowExpenseForm(false); onShowTimeForm(false); }}
+              className="w-full p-3 mb-3 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Icons.Plus size={13} />
+              Add income
+            </button>
+          )}
 
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
+          {/* Income entries — card style */}
+          {projectFinancials.incomeEntries.length > 0 && (
+            <div className="space-y-3 mb-3">
+              {projectFinancials.incomeEntries.map((inc: any) => {
+                const installments = inc.installments || [];
+                const paidInst = installments.filter((i: any) => i.status === 'paid');
+                return (
+                  <div key={inc.id} className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl overflow-hidden">
+                    {/* Income header */}
+                    <div className="p-4 flex items-center justify-between group">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{inc.concept || inc.client_name || 'Income'}</p>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                            inc.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700'
+                            : inc.status === 'overdue' ? 'bg-red-100 dark:bg-red-500/20 text-red-600'
+                            : inc.status === 'partial' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700'
+                            : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                          }`}>
+                            {inc.status === 'paid' ? 'Paid' : inc.status === 'overdue' ? 'Overdue' : inc.status === 'partial' ? 'Partial' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">
+                          {inc.client_name && inc.client_name !== 'General' ? `${inc.client_name} · ` : ''}
+                          {installments.length > 0 ? `${paidInst.length}/${installments.length} installments` : 'Single payment'}
+                          {inc.due_date ? ` · Due ${fmtShortDate(inc.due_date)}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">{fmtMoney(inc.total_amount)}</p>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Delete this income entry?')) return;
+                            try { await onDeleteIncome(inc.id); } catch (err) { errorLogger.error('Error deleting income', err); }
+                          }}
+                          className="p-1.5 text-zinc-300 hover:text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          title="Delete income"
                         >
-                          <div className="px-3 pb-2.5 pt-1 space-y-1 border-t border-zinc-100 dark:border-zinc-800/40">
-                            {installments.length > 0 ? installments.map((inst: any) => (
-                              <div key={inst.id} className={`flex items-center justify-between py-1.5 px-2 rounded-md text-xs ${
-                                inst.status === 'overdue' ? 'bg-red-50/50 dark:bg-red-500/5' : ''
-                              }`}>
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                    inst.status === 'paid'
-                                      ? 'border-emerald-500 bg-emerald-500'
-                                      : inst.status === 'overdue'
-                                        ? 'border-red-400 bg-transparent'
-                                        : 'border-zinc-300 dark:border-zinc-600 bg-transparent'
-                                  }`}>
-                                    {inst.status === 'paid' && <Icons.Check size={10} className="text-white" />}
-                                  </div>
-                                  <span className={`${inst.status === 'paid' ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                                    Installment {inst.number}
-                                  </span>
-                                  <span className="text-[10px] text-zinc-400">
-                                    {inst.due_date ? new Date(inst.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className={`font-semibold tabular-nums ${inst.status === 'paid' ? 'text-zinc-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                                    ${inst.amount.toLocaleString()}
-                                  </span>
-                                  {inst.status !== 'paid' && (
-                                    <button
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        try {
-                                          await onUpdateInstallment(inst.id, { status: 'paid', paid_date: new Date().toISOString().split('T')[0] });
-                                        } catch (err) {
-                                          errorLogger.error('Error marking installment paid', err);
-                                        }
-                                      }}
-                                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors ${
-                                        inst.status === 'overdue'
-                                          ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30'
-                                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20'
-                                      }`}
-                                    >
-                                      Mark paid
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            )) : (
-                              <div className="text-[10px] text-zinc-400 py-1">Single payment — no installments</div>
-                            )}
-                            <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800/40 flex justify-end">
+                          <Icons.Trash size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Installments — always visible */}
+                    {installments.length > 0 && (
+                      <div className="border-t border-zinc-200/60 dark:border-zinc-700/40">
+                        {installments.map((inst: any) => {
+                          const isPaid = inst.status === 'paid';
+                          const isOverdue = inst.status === 'overdue';
+                          return (
+                            <div
+                              key={inst.id}
+                              className={`flex items-center gap-3 px-4 py-2.5 border-b border-zinc-100/80 dark:border-zinc-700/30 last:border-b-0 transition-colors ${
+                                isPaid ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : ''
+                              }`}
+                            >
                               <button
                                 onClick={async () => {
-                                  if (!confirm('Delete this income entry?')) return;
-                                  try { await onDeleteIncome(inc.id); } catch (err) { errorLogger.error('Error deleting income', err); }
+                                  if (isPaid) return;
+                                  try {
+                                    await onUpdateInstallment(inst.id, { status: 'paid', paid_date: new Date().toISOString().split('T')[0] });
+                                  } catch (err) {
+                                    errorLogger.error('Error marking installment paid', err);
+                                  }
                                 }}
-                                className="text-[10px] text-zinc-400 hover:text-red-500 transition-colors font-medium px-1.5 py-0.5"
+                                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
+                                  isPaid
+                                    ? 'bg-emerald-500 border-emerald-500'
+                                    : isOverdue
+                                    ? 'border-red-300 dark:border-red-600 hover:border-red-400'
+                                    : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400'
+                                }`}
                               >
-                                Delete
+                                {isPaid && <Icons.Check size={12} className="text-white" />}
                               </button>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-medium ${isPaid ? 'text-emerald-700 dark:text-emerald-400 line-through' : isOverdue ? 'text-red-600' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                  Installment {inst.number}
+                                </p>
+                                <p className={`text-[10px] ${isPaid ? 'text-emerald-500 dark:text-emerald-500/60' : isOverdue ? 'text-red-400' : 'text-zinc-400'}`}>
+                                  {isPaid && inst.paid_date ? `Paid ${fmtShortDate(inst.paid_date)}` : `Due ${fmtShortDate(inst.due_date)}`}
+                                </p>
+                              </div>
+                              <p className={`text-xs font-bold ${isPaid ? 'text-emerald-600' : isOverdue ? 'text-red-600' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                                {fmtMoney(inst.amount)}
+                              </p>
                             </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -525,7 +527,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           )}
 
-          {/* Inline Income Form */}
+          {/* Inline Income Form — neutral style matching Clients */}
           <AnimatePresence>
             {showIncomeForm && (
               <motion.div
@@ -535,75 +537,125 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 transition={{ duration: 0.25 }}
                 className="overflow-hidden"
               >
-                <div className="p-3 mb-3 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg border border-emerald-200/60 dark:border-emerald-800/40 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">New Income</span>
-                    <button onClick={() => { onShowIncomeForm(false); onIncomeFormChange({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0] }); }}
-                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
-                      <Icons.X size={14} />
-                    </button>
-                  </div>
+                <div className="p-4 mb-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl space-y-3">
+                  <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">New income</p>
                   <input
                     type="text"
-                    placeholder="Concept (e.g. Web development, Consulting...)"
+                    placeholder="Concept (e.g.: Web development, Consulting...)"
                     value={incomeFormData.concept}
                     onChange={e => onIncomeFormChange({ ...incomeFormData, concept: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    className={finInputClass}
                     autoFocus
                   />
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-1">
-                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">Amount</label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400">$</span>
-                        <input
-                          type="number" min="0" step="0.01" placeholder="0"
-                          value={incomeFormData.amount}
-                          onChange={e => onIncomeFormChange({ ...incomeFormData, amount: e.target.value })}
-                          className="w-full pl-6 pr-2 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                        />
-                      </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={finLabelClass}>Total amount *</label>
+                      <input
+                        type="number" placeholder="0.00" min="0" step="0.01"
+                        value={incomeFormData.amount}
+                        onChange={e => onIncomeFormChange({ ...incomeFormData, amount: e.target.value })}
+                        className={finInputClass}
+                      />
                     </div>
                     <div>
-                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">Installments</label>
+                      <label className={finLabelClass}>Currency</label>
+                      <select
+                        value={incomeFormData.currency}
+                        onChange={e => onIncomeFormChange({ ...incomeFormData, currency: e.target.value })}
+                        className={finInputClass}
+                      >
+                        <option value="USD">USD</option>
+                        <option value="ARS">ARS</option>
+                        <option value="EUR">EUR</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={finLabelClass}>Installments</label>
                       <input
                         type="number" min="1" max="24"
                         value={incomeFormData.installments}
-                        onChange={e => onIncomeFormChange({ ...incomeFormData, installments: e.target.value })}
-                        className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        onChange={e => {
+                          const n = parseInt(e.target.value) || 1;
+                          const base = incomeFormData.dueDate ? new Date(incomeFormData.dueDate + 'T12:00:00') : new Date();
+                          const dates = Array.from({ length: n }, (_, i) => {
+                            const d = new Date(base);
+                            d.setMonth(d.getMonth() + i);
+                            return d.toISOString().split('T')[0];
+                          });
+                          onIncomeFormChange({ ...incomeFormData, installments: e.target.value, installment_dates: dates });
+                        }}
+                        className={finInputClass}
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] text-zinc-400 font-medium uppercase mb-0.5 block">First due</label>
+                      <label className={finLabelClass}>First due date</label>
                       <input
                         type="date"
                         value={incomeFormData.dueDate}
-                        onChange={e => onIncomeFormChange({ ...incomeFormData, dueDate: e.target.value })}
-                        className="w-full px-2 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        onChange={e => {
+                          const n = parseInt(incomeFormData.installments) || 1;
+                          const base = e.target.value ? new Date(e.target.value + 'T12:00:00') : new Date();
+                          const dates = Array.from({ length: n }, (_, i) => {
+                            const d = new Date(base);
+                            d.setMonth(d.getMonth() + i);
+                            return d.toISOString().split('T')[0];
+                          });
+                          onIncomeFormChange({ ...incomeFormData, dueDate: e.target.value, installment_dates: dates });
+                        }}
+                        className={finInputClass}
                       />
                     </div>
                   </div>
-                  {incomeFormData.amount && parseInt(incomeFormData.installments) > 1 && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-100/60 dark:bg-emerald-500/10 rounded-md">
-                      <Icons.CreditCard size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-medium">
-                        {incomeFormData.installments} installments of ~${(Number(incomeFormData.amount) / parseInt(incomeFormData.installments)).toLocaleString(undefined, { maximumFractionDigits: 2 })} each
-                      </span>
+                  {/* Per-installment date editors */}
+                  {parseInt(incomeFormData.installments) > 1 && incomeFormData.installment_dates.length > 0 && (
+                    <div className="space-y-1.5 p-3 bg-zinc-100/60 dark:bg-zinc-700/20 rounded-lg">
+                      <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Dates per installment</p>
+                      {incomeFormData.installment_dates.map((date, idx) => {
+                        const totalAmt = parseFloat(incomeFormData.amount) || 0;
+                        const n = parseInt(incomeFormData.installments) || 1;
+                        const perInst = Math.round((totalAmt / n) * 100) / 100;
+                        const amt = idx === n - 1 ? Math.round((totalAmt - perInst * (n - 1)) * 100) / 100 : perInst;
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-[10px] font-medium text-zinc-500 w-14 shrink-0">Inst. {idx + 1}</span>
+                            <input
+                              type="date"
+                              value={date}
+                              onChange={e => {
+                                const updated = [...incomeFormData.installment_dates];
+                                updated[idx] = e.target.value;
+                                onIncomeFormChange({ ...incomeFormData, installment_dates: updated });
+                              }}
+                              className={finInputClass + ' flex-1'}
+                            />
+                            {totalAmt > 0 && (
+                              <span className="text-[10px] text-zinc-400 w-20 text-right shrink-0">${amt.toLocaleString()}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                  <div className="flex items-center justify-end gap-2 pt-1">
+                  <div className="flex gap-2 pt-1">
                     <button
-                      onClick={() => { onShowIncomeForm(false); onIncomeFormChange({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0] }); }}
-                      className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                      onClick={onCreateIncome}
+                      disabled={isSubmittingFinance || !incomeFormData.concept.trim() || !incomeFormData.amount || Number(incomeFormData.amount) <= 0}
+                      className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold disabled:opacity-40 transition-all flex items-center gap-2"
                     >
-                      Cancel
+                      {isSubmittingFinance ? (
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Icons.Plus size={13} />
+                      )}
+                      {isSubmittingFinance ? 'Creating...' : 'Create Income'}
                     </button>
                     <button
-                      disabled={isSubmittingFinance || !incomeFormData.concept.trim() || !incomeFormData.amount || Number(incomeFormData.amount) <= 0}
-                      onClick={onCreateIncome}
-                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg shadow-sm transition-all"
+                      onClick={() => { onShowIncomeForm(false); onIncomeFormChange({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0], currency: project.currency || 'USD', installment_dates: [] }); }}
+                      className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
-                      {isSubmittingFinance ? 'Saving...' : 'Save Income'}
+                      Cancel
                     </button>
                   </div>
                 </div>
@@ -776,7 +828,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Budget input + Action buttons */}
+          {/* Budget input + Expense/Time buttons */}
           <div className="flex items-center gap-2">
             {!project.budget && (
               <div className="flex-1 flex items-center gap-2">
@@ -796,13 +848,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 />
               </div>
             )}
-            <button
-              onClick={() => { onShowIncomeForm(true); onShowExpenseForm(false); onShowTimeForm(false); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors"
-            >
-              <Icons.Plus size={12} />
-              Income
-            </button>
             <button
               onClick={() => { onShowExpenseForm(true); onShowIncomeForm(false); onShowTimeForm(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"

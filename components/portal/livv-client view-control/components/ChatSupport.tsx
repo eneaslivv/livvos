@@ -173,26 +173,26 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: '100%', opacity: 0 }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full w-full max-w-[420px] bg-white/95 backdrop-blur-xl z-[60] flex flex-col shadow-[-8px_0_40px_rgba(0,0,0,0.06)]"
+        className="fixed top-0 right-0 h-full w-full max-w-[420px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl z-[60] flex flex-col shadow-[-8px_0_40px_rgba(0,0,0,0.06)] dark:shadow-[-8px_0_40px_rgba(0,0,0,0.4)]"
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-zinc-100/80">
+        <div className="px-6 py-5 border-b border-zinc-100/80 dark:border-zinc-800/80">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center">
                   <span className="text-[10px] font-bold text-white tracking-wide">L</span>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white dark:border-zinc-900" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-zinc-800 leading-none">Support</p>
+                <p className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100 leading-none">Support</p>
                 <p className="text-[11px] text-emerald-500 font-medium mt-1">Online</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
             >
               <X size={16} strokeWidth={2} />
             </button>
@@ -204,11 +204,11 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
           {/* Empty state */}
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center px-4 -mt-8">
-              <div className="w-14 h-14 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-4">
-                <ShieldCheck size={22} className="text-zinc-300" />
+              <div className="w-14 h-14 rounded-2xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center mb-4">
+                <ShieldCheck size={22} className="text-zinc-300 dark:text-zinc-600" />
               </div>
-              <p className="text-[13px] font-medium text-zinc-700 mb-1">How can we help?</p>
-              <p className="text-[11px] text-zinc-400 leading-relaxed max-w-[240px]">
+              <p className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200 mb-1">How can we help?</p>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed max-w-[240px]">
                 Send us a message and we'll get back to you as soon as possible.
               </p>
             </div>
@@ -219,9 +219,9 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
             <div key={group.label} className="mb-5 last:mb-0">
               {/* Date divider */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-zinc-100" />
-                <span className="text-[10px] font-medium text-zinc-300 uppercase tracking-wider">{group.label}</span>
-                <div className="flex-1 h-px bg-zinc-100" />
+                <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+                <span className="text-[10px] font-medium text-zinc-300 dark:text-zinc-600 uppercase tracking-wider">{group.label}</span>
+                <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
               </div>
 
               {/* Messages */}
@@ -246,16 +246,16 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
                       {/* Bubble */}
                       <div className={`max-w-[75%] ${isClient ? 'items-end' : 'items-start'} flex flex-col`}>
                         {!isClient && showAvatar && (
-                          <p className="text-[10px] font-medium text-zinc-400 mb-1 ml-1">{m.sender_name}</p>
+                          <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 mb-1 ml-1">{m.sender_name}</p>
                         )}
                         <div className={`px-4 py-2.5 text-[13px] leading-relaxed ${
                           isClient
-                            ? 'bg-zinc-900 text-white rounded-2xl rounded-br-md'
-                            : 'bg-zinc-50 border border-zinc-100 text-zinc-700 rounded-2xl rounded-bl-md'
+                            ? 'bg-zinc-900 text-white dark:bg-indigo-600 rounded-2xl rounded-br-md'
+                            : 'bg-zinc-50 border border-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 rounded-2xl rounded-bl-md'
                         }`}>
                           {m.message}
                         </div>
-                        <p className={`text-[10px] mt-1 mx-1 ${isClient ? 'text-zinc-300' : 'text-zinc-300'}`}>
+                        <p className={`text-[10px] mt-1 mx-1 ${isClient ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-300 dark:text-zinc-600'}`}>
                           {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
@@ -268,30 +268,30 @@ const ChatSupport: React.FC<ChatSupportProps> = ({ onClose, clientId, clientName
         </div>
 
         {/* Input area */}
-        <div className="px-5 pb-5 pt-3 border-t border-zinc-100/80">
+        <div className="px-5 pb-5 pt-3 border-t border-zinc-100/80 dark:border-zinc-800/80">
           {error && (
             <p className="text-[11px] text-red-400 mb-2 px-1">{error}</p>
           )}
-          <div className="flex items-center gap-2 bg-zinc-50/80 border border-zinc-200/60 rounded-2xl px-4 py-1 focus-within:border-zinc-300 focus-within:bg-white transition-all">
+          <div className="flex items-center gap-2 bg-zinc-50/80 dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-zinc-700/60 rounded-2xl px-4 py-1 focus-within:border-zinc-300 dark:focus-within:border-zinc-600 focus-within:bg-white dark:focus-within:bg-zinc-800 transition-all">
             <input
               type="text"
               value={input}
               onChange={(e) => { setInput(e.target.value); setError(null); }}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
               placeholder="Write a message..."
-              className="flex-1 bg-transparent py-2.5 text-[13px] text-zinc-700 placeholder:text-zinc-300 focus:outline-none"
+              className="flex-1 bg-transparent py-2.5 text-[13px] text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 focus:outline-none"
             />
             <button
               onClick={handleSend}
               disabled={sending || !input.trim()}
-              className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center hover:bg-zinc-700 transition-all disabled:opacity-20 disabled:hover:bg-zinc-900 flex-shrink-0"
+              className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center hover:bg-zinc-700 dark:hover:bg-zinc-300 transition-all disabled:opacity-20 disabled:hover:bg-zinc-900 flex-shrink-0"
             >
               <ArrowRight size={14} strokeWidth={2.5} />
             </button>
           </div>
           <div className="mt-3 flex items-center justify-center gap-1.5">
-            <ShieldCheck size={10} className="text-zinc-200" />
-            <span className="text-[9px] text-zinc-300 font-medium tracking-wide">End-to-end encrypted</span>
+            <ShieldCheck size={10} className="text-zinc-200 dark:text-zinc-700" />
+            <span className="text-[9px] text-zinc-300 dark:text-zinc-600 font-medium tracking-wide">End-to-end encrypted</span>
           </div>
         </div>
       </motion.div>

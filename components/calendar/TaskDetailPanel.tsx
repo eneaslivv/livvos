@@ -624,7 +624,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
           <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-6" />
 
           {/* ─── Comments ─── */}
-          <TaskCommentsSection taskId={selectedTask.id} />
+          <TaskCommentsSection taskId={selectedTask.id} taskTitle={selectedTask.title} taskOwnerId={selectedTask.owner_id} taskAssigneeId={selectedTask.assignee_id} />
 
           {/* ─── Meta ─── */}
           <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">

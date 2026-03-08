@@ -107,11 +107,11 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const [newClientData, setNewClientData] = useState<{
     name: string; email: string; company: string; phone: string;
     status: string; notes: string; industry: string; address: string;
-    color?: string | null;
+    color?: string | null; timezone?: string | null;
   }>({
     name: '', email: '', company: '', phone: '',
     status: 'prospect', notes: '', industry: '', address: '',
-    color: null,
+    color: null, timezone: null,
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -368,7 +368,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         }
       }
 
-      setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '', color: null });
+      setNewClientData({ name: '', email: '', company: '', phone: '', status: 'prospect', notes: '', industry: '', address: '', color: null, timezone: null });
       setShowNewClientPanel(false);
       setSelectedClient(client);
     } catch (err: any) {
@@ -956,6 +956,14 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                           setSelectedClient({ ...selectedClient, color });
                         } catch (err) {
                           errorLogger.error('Error updating client color', err);
+                        }
+                      }}
+                      onUpdateTimezone={async (timezone: string | null) => {
+                        try {
+                          await updateClient(selectedClient.id, { timezone });
+                          setSelectedClient({ ...selectedClient, timezone });
+                        } catch (err) {
+                          errorLogger.error('Error updating client timezone', err);
                         }
                       }}
                       onNavigateToProject={(projectId) => onNavigate?.('projects', { projectId })}

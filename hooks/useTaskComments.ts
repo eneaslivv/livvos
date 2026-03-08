@@ -23,7 +23,13 @@ interface UseTaskCommentsReturn {
   deleteComment: (commentId: string) => Promise<void>;
 }
 
-export function useTaskComments(taskId: string | null): UseTaskCommentsReturn {
+interface TaskNotifyInfo {
+  title: string;
+  owner_id?: string;
+  assignee_id?: string;
+}
+
+export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo): UseTaskCommentsReturn {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const { members } = useTeam();
@@ -135,8 +141,31 @@ export function useTaskComments(taskId: string | null): UseTaskCommentsReturn {
       // Remove optimistic on failure
       setComments(prev => prev.filter(c => c.id !== tempId));
       if (import.meta.env.DEV) console.warn('[useTaskComments] insert error:', error.message);
+    } else if (taskInfo && currentTenant?.id) {
+      // Notify task owner + assignee (skip self)
+      const recipients = new Set<string>();
+      if (taskInfo.owner_id && taskInfo.owner_id !== user.id) recipients.add(taskInfo.owner_id);
+      if (taskInfo.assignee_id && taskInfo.assignee_id !== user.id) recipients.add(taskInfo.assignee_id);
+
+      if (recipients.size > 0) {
+        const rows = [...recipients].map(uid => ({
+          user_id: uid,
+          tenant_id: currentTenant.id,
+          type: 'task',
+          title: `New comment on: ${taskInfo.title}`,
+          message: `${userName}: ${trimmed.length > 80 ? trimmed.slice(0, 80) + '…' : trimmed}`,
+          priority: 'low' as const,
+          read: false,
+          action_required: false,
+          category: 'task',
+          metadata: { task_id: taskId },
+        }));
+        supabase.from('notifications').insert(rows).then(({ error: nErr }) => {
+          if (nErr && import.meta.env.DEV) console.warn('[useTaskComments] notification error:', nErr.message);
+        });
+      }
     }
-  }, [taskId, user?.id, currentTenant?.id, userName, userAvatar]);
+  }, [taskId, user?.id, currentTenant?.id, userName, userAvatar, taskInfo]);
 
   const deleteComment = useCallback(async (commentId: string) => {
     setComments(prev => prev.filter(c => c.id !== commentId));

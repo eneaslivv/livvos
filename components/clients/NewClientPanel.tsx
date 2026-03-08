@@ -2,6 +2,7 @@ import React from 'react';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
 import { ColorPalette } from '../ui/ColorPalette';
+import { TIMEZONE_OPTIONS, tzCity, tzNow } from '../../lib/timezone';
 
 const inputClass = 'w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all';
 const labelClass = 'block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5';
@@ -18,6 +19,7 @@ interface NewClientPanelProps {
     industry: string;
     address: string;
     color?: string | null;
+    timezone?: string | null;
   };
   creatingClient: boolean;
   onClose: () => void;
@@ -131,6 +133,24 @@ export const NewClientPanel: React.FC<NewClientPanelProps> = ({
             <option value="prospect">Prospect</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass}>Timezone</label>
+          <select
+            value={newClientData.timezone || ''}
+            onChange={(e) => onDataChange({ ...newClientData, timezone: e.target.value || null })}
+            className={inputClass}
+          >
+            <option value="">No timezone</option>
+            {TIMEZONE_OPTIONS.map(group => (
+              <optgroup key={group.group} label={group.group}>
+                {group.zones.map(z => (
+                  <option key={z.value} value={z.value}>{z.label} — {tzNow(z.value)}</option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </div>
 

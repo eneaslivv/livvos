@@ -6,7 +6,9 @@ import {
   MessageSquare,
   UserCog,
   Eye,
-  LogOut
+  LogOut,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { DashboardData } from './types';
 
@@ -106,6 +108,24 @@ const App: React.FC<ClientPortalAppProps> = ({
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
 
+  // Dark mode
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('portal-theme');
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('portal-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('portal-theme', 'light');
+    }
+  }, [isDark]);
+
   useEffect(() => { if (disableLoading) { setLoading(false); return; } const t = setTimeout(() => setLoading(false), 1500); return () => clearTimeout(t); }, [disableLoading]);
   useEffect(() => { if (initialData) setData(initialData); }, [initialData]);
   useEffect(() => { if (projectTitleProp) setProjectTitle(projectTitleProp); }, [projectTitleProp]);
@@ -118,17 +138,17 @@ const App: React.FC<ClientPortalAppProps> = ({
 
   if (loading) {
     return (
-      <div className="h-screen w-screen bg-zinc-50 flex items-center justify-center">
+      <div className="h-screen w-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-brand-accent/20 border-t-brand-accent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-xs text-zinc-400 font-medium">Loading portal...</p>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">Loading portal...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 selection:bg-indigo-100">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-300">
       {/* Creator Toggle */}
       {!hideCreatorToggle && (
         <div className="fixed bottom-6 left-6 z-[100]">
@@ -148,27 +168,35 @@ const App: React.FC<ClientPortalAppProps> = ({
         <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-3.5">
             {clientLogo ? (
-              <img src={clientLogo} alt="" className="w-10 h-10 rounded-xl object-cover border border-zinc-200" />
+              <img src={clientLogo} alt="" className="w-10 h-10 rounded-xl object-cover border border-zinc-200 dark:border-zinc-700" />
             ) : (
-              <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center text-white font-bold text-base">
+              <div className="w-10 h-10 bg-zinc-900 dark:bg-zinc-100 rounded-xl flex items-center justify-center text-white dark:text-zinc-900 font-bold text-base">
                 {(clientName || projectTitle).charAt(0).toUpperCase()}
               </div>
             )}
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-900">{projectTitle}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{projectTitle}</h1>
               {projectSubtitle && (
-                <p className="text-[11px] text-zinc-400 font-medium mt-0.5">{projectSubtitle}</p>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium mt-0.5">{projectSubtitle}</p>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Dark mode toggle */}
+            <button
+              onClick={() => setIsDark(!isDark)}
+              className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-full hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all text-zinc-400 dark:text-zinc-300"
+              title={isDark ? 'Modo claro' : 'Modo oscuro'}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             {/* Project selector — only if multiple projects */}
             {data.projects && data.projects.length > 1 && (
               <select
                 value={selectedProjectId || data.projects[0]?.id || ''}
                 onChange={(e) => onProjectSwitch?.(e.target.value)}
-                className="text-[11px] font-medium text-zinc-600 bg-white border border-zinc-200/80 rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-200 focus:border-indigo-300 transition-all cursor-pointer mr-1"
+                className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-200 dark:focus:ring-indigo-800 focus:border-indigo-300 transition-all cursor-pointer mr-1"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
@@ -181,11 +209,11 @@ const App: React.FC<ClientPortalAppProps> = ({
               </select>
             )}
             {clientName && (
-              <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-white border border-zinc-200/80 rounded-full mr-1">
+              <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-full mr-1">
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-semibold text-[10px]" style={{ backgroundColor: '#2C0405' }}>
                   {clientName.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-[11px] font-medium text-zinc-600">{clientName}</span>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300">{clientName}</span>
               </div>
             )}
             {roleBadge}
@@ -212,7 +240,7 @@ const App: React.FC<ClientPortalAppProps> = ({
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="p-2 bg-white border border-zinc-200/80 rounded-full hover:bg-red-50 hover:border-red-200 transition-all text-zinc-400 hover:text-red-500"
+                className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-800/50 transition-all text-zinc-400 dark:text-zinc-300 hover:text-red-500"
                 title="Sign Out"
               >
                 <LogOut size={16} />
@@ -272,7 +300,7 @@ const App: React.FC<ClientPortalAppProps> = ({
 
         {/* Footer */}
         <footer className="mt-10 text-center pb-10">
-          <p className="text-[10px] text-zinc-300 font-medium">
+          <p className="text-[10px] text-zinc-300 dark:text-zinc-700 font-medium">
             Powered by Livv &copy; {new Date().getFullYear()}
           </p>
         </footer>

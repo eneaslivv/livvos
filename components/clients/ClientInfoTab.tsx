@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { ColorPalette } from '../ui/ColorPalette';
 import { Client } from '../../hooks/useClients';
+import { TIMEZONE_OPTIONS, tzCity, tzNow } from '../../lib/timezone';
 
 interface AssignedProject {
   id: string;
@@ -36,6 +37,7 @@ interface ClientInfoTabProps {
   onUnassignProject: (projectId: string) => void;
   onToggleProjectDropdown: () => void;
   onUpdateColor?: (color: string | null) => void;
+  onUpdateTimezone?: (timezone: string | null) => void;
   onNavigateToProject?: (projectId: string) => void;
 }
 
@@ -58,9 +60,21 @@ export const ClientInfoTab: React.FC<ClientInfoTabProps> = ({
   onUnassignProject,
   onToggleProjectDropdown,
   onUpdateColor,
+  onUpdateTimezone,
   onNavigateToProject,
 }) => {
   const [savedField, setSavedField] = useState<string | null>(null);
+  const [tzOpen, setTzOpen] = useState(false);
+  const [tzSearch, setTzSearch] = useState('');
+  const tzRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (tzRef.current && !tzRef.current.contains(e.target as Node)) setTzOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const EditableField = ({ field, label, value, type = 'text', placeholder = '' }: { field: string; label: string; value: string | undefined; type?: string; placeholder?: string }) => {
     const isEditing = editingField === field;
@@ -130,6 +144,76 @@ export const ClientInfoTab: React.FC<ClientInfoTabProps> = ({
         <EditableField field="company" label="Company" value={client.company} />
         <EditableField field="industry" label="Industry" value={client.industry} />
         <EditableField field="address" label="Address" value={client.address} />
+        {/* Timezone selector */}
+        {onUpdateTimezone && (
+          <div className="group" ref={tzRef}>
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Timezone</p>
+            <div
+              onClick={() => setTzOpen(!tzOpen)}
+              className="flex items-center gap-1.5 cursor-pointer rounded-lg px-2 py-1.5 -mx-2 -my-1 transition-all hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group/edit relative"
+            >
+              {client.timezone ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Icons.Globe size={13} className="text-blue-500 shrink-0" />
+                  <span className="text-sm text-zinc-900 dark:text-zinc-100 truncate">{tzCity(client.timezone)}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono shrink-0">{tzNow(client.timezone)}</span>
+                </div>
+              ) : (
+                <span className="text-sm text-zinc-300 dark:text-zinc-600 italic">Set timezone...</span>
+              )}
+              <Icons.ChevronDown size={12} className="text-zinc-300 opacity-0 group-hover/edit:opacity-100 transition-opacity shrink-0" />
+            </div>
+            {tzOpen && (
+              <div className="absolute z-30 mt-1 w-72 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 max-h-64 overflow-hidden">
+                <div className="p-2 border-b border-zinc-100 dark:border-zinc-700">
+                  <input
+                    type="text"
+                    value={tzSearch}
+                    onChange={e => setTzSearch(e.target.value)}
+                    placeholder="Search timezone..."
+                    className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs outline-none focus:border-blue-400"
+                    autoFocus
+                  />
+                </div>
+                <div className="overflow-y-auto max-h-[200px] py-1">
+                  {client.timezone && (
+                    <button
+                      onClick={() => { onUpdateTimezone(null); setTzOpen(false); setTzSearch(''); }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                    >
+                      <Icons.X size={12} /> Clear timezone
+                    </button>
+                  )}
+                  {TIMEZONE_OPTIONS.map(group => {
+                    const filtered = group.zones.filter(z =>
+                      z.label.toLowerCase().includes(tzSearch.toLowerCase()) ||
+                      z.value.toLowerCase().includes(tzSearch.toLowerCase())
+                    );
+                    if (filtered.length === 0) return null;
+                    return (
+                      <div key={group.group}>
+                        <p className="px-3 pt-2 pb-1 text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">{group.group}</p>
+                        {filtered.map(z => (
+                          <button
+                            key={z.value}
+                            onClick={() => { onUpdateTimezone(z.value); setTzOpen(false); setTzSearch(''); }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors ${
+                              client.timezone === z.value ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600' : 'text-zinc-700 dark:text-zinc-300'
+                            }`}
+                          >
+                            <Icons.Globe size={11} className="shrink-0 text-zinc-400" />
+                            <span className="truncate flex-1 text-left">{z.label}</span>
+                            <span className="text-[10px] text-zinc-400 font-mono shrink-0">{tzNow(z.value)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {onUpdateColor && (

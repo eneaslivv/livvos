@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icons } from '../ui/Icons';
 import { CalendarEvent, CalendarTask } from '../../hooks/useCalendar';
+import { convertHourToTz, tzCity, tzNow } from '../../lib/timezone';
 
 interface ContentPlatformConfig {
   label: string;
@@ -41,6 +42,9 @@ export interface WeekViewProps {
   onSlotClick: (e: React.MouseEvent, dateStr: string, hour: number) => void;
   // Task detail
   onOpenTaskDetail: (task: CalendarTask) => void;
+  // Timezone
+  activeTimezone?: string | null;
+  clientTimezoneMap?: Record<string, string>;
 }
 
 export const WeekView: React.FC<WeekViewProps> = ({
@@ -67,6 +71,8 @@ export const WeekView: React.FC<WeekViewProps> = ({
   slotPopover,
   onSlotClick,
   onOpenTaskDetail,
+  activeTimezone,
+  clientTimezoneMap,
 }) => {
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -179,7 +185,15 @@ export const WeekView: React.FC<WeekViewProps> = ({
         {hours.map((hour) => (
           <div key={hour} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800">
             <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800">
-              {hour.toString().padStart(2, '0')}:00
+              <div>{hour.toString().padStart(2, '0')}:00</div>
+              {activeTimezone && (() => {
+                const { time, dayOffset } = convertHourToTz(hour, activeTimezone);
+                return (
+                  <div className="text-[9px] text-blue-500 dark:text-blue-400 font-mono mt-0.5">
+                    {time}{dayOffset !== 0 && <span className="text-[8px] text-blue-400/70"> {dayOffset > 0 ? '+' : ''}{dayOffset}d</span>}
+                  </div>
+                );
+              })()}
             </div>
             {weekDays.map((day, dayIndex) => {
               const dateStr = day.toISOString().split('T')[0];
@@ -243,7 +257,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                         className={`text-xs px-3 py-1.5 rounded-full mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
                           task.status === 'cancelled' ? 'opacity-50' : ''
                         } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                        title={`${task.title}${task.assignee_id ? ` \u2014 ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` \u00B7 ${getClientLabel(task)}` : ''}${isTaskBlocked(task) ? ` \u26A0 BLOCKED \u2014 waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
+                        title={`${task.title}${task.assignee_id ? ` \u2014 ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` \u00B7 ${getClientLabel(task)}` : ''}${clientTimezoneMap && task.client_id && clientTimezoneMap[task.client_id] ? ` \u00B7 Client tz: ${tzCity(clientTimezoneMap[task.client_id])} (${tzNow(clientTimezoneMap[task.client_id])})` : ''}${isTaskBlocked(task) ? ` \u26A0 BLOCKED \u2014 waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
                         onClick={(e) => { e.stopPropagation(); onOpenTaskDetail(task); }}
                       >
                         <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
@@ -283,8 +297,13 @@ export const WeekView: React.FC<WeekViewProps> = ({
                             );
                           })()}
                           {getClientLabel(task) && (
-                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto truncate">
+                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto truncate flex items-center gap-0.5">
                               {getClientLabel(task)}
+                              {clientTimezoneMap && task.client_id && clientTimezoneMap[task.client_id] && task.start_time && (
+                                <span className="text-[7px] text-blue-500 dark:text-blue-400 font-mono">
+                                  {convertHourToTz(parseInt(task.start_time.split(':')[0]), clientTimezoneMap[task.client_id]).time}
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>

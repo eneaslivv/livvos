@@ -390,10 +390,9 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   // Finance inline form state
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [incomeFormData, setIncomeFormData] = useState({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0] });
+  const [incomeFormData, setIncomeFormData] = useState({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0], currency: 'USD', installment_dates: [] as string[] });
   const [expenseFormData, setExpenseFormData] = useState({ concept: '', amount: '', category: 'Software', date: new Date().toISOString().split('T')[0] });
   const [isSubmittingFinance, setIsSubmittingFinance] = useState(false);
-  const [expandedIncomeId, setExpandedIncomeId] = useState<string | null>(null);
   const [showTimeForm, setShowTimeForm] = useState(false);
   const [timeFormData, setTimeFormData] = useState({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
 
@@ -907,12 +906,13 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         project_name: selectedProject.title,
         concept: incomeFormData.concept.trim(),
         total_amount: Number(incomeFormData.amount),
-        currency: selectedProject.currency || 'USD',
+        currency: incomeFormData.currency || selectedProject.currency || 'USD',
         num_installments: Math.max(1, parseInt(incomeFormData.installments) || 1),
         due_date: incomeFormData.dueDate || undefined,
+        installment_dates: incomeFormData.installment_dates.length > 0 ? incomeFormData.installment_dates : undefined,
       });
       setShowIncomeForm(false);
-      setIncomeFormData({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0] });
+      setIncomeFormData({ concept: '', amount: '', installments: '1', dueDate: new Date().toISOString().split('T')[0], currency: 'USD', installment_dates: [] });
     } catch (err) {
       errorLogger.error('Error creating income', err);
     } finally {
@@ -1432,8 +1432,6 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     members={members}
                     derivedTasksGroups={derivedTasksGroups}
                     projectFinancials={projectFinancials}
-                    expandedIncomeId={expandedIncomeId}
-                    onExpandIncome={setExpandedIncomeId}
                     onUpdateProject={handleUpdateProject}
                     onToggleTask={handleToggleTask}
                     onSetActiveTab={setActiveTab}

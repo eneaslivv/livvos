@@ -68,10 +68,10 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white rounded-2xl border border-zinc-200/60 overflow-hidden h-full flex flex-col"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 overflow-hidden h-full flex flex-col"
     >
       {/* Tab bar */}
-      <div className="flex items-center border-b border-zinc-100 px-1 pt-1">
+      <div className="flex items-center border-b border-zinc-100 dark:border-zinc-800 px-1 pt-1">
         {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -81,8 +81,8 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               onClick={() => setActiveTab(tab.id)}
               className={`relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold transition-colors ${
                 isActive
-                  ? 'text-zinc-800'
-                  : 'text-zinc-300 hover:text-zinc-500'
+                  ? 'text-zinc-800 dark:text-zinc-100'
+                  : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400'
               }`}
             >
               <Icon size={12} />
@@ -90,7 +90,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {isActive && (
                 <motion.div
                   layoutId="resources-tab-indicator"
-                  className="absolute bottom-0 left-2 right-2 h-[2px] bg-zinc-800 rounded-full"
+                  className="absolute bottom-0 left-2 right-2 h-[2px] bg-zinc-800 dark:bg-zinc-100 rounded-full"
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 />
               )}
@@ -115,21 +115,21 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {/* Header: total + toggle */}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-zinc-400 font-medium mb-0.5">Valor total del proyecto</p>
-                  <p className="text-2xl font-black text-zinc-900 tracking-tight">{fmt(budget.total)}</p>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium mb-0.5">Valor total del proyecto</p>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">{fmt(budget.total)}</p>
                 </div>
-                <button onClick={() => setShowAmounts(!showAmounts)} className="p-1.5 hover:bg-zinc-50 rounded-lg transition-colors">
-                  {showAmounts ? <EyeOff size={13} className="text-zinc-300" /> : <Eye size={13} className="text-zinc-400" />}
+                <button onClick={() => setShowAmounts(!showAmounts)} className="p-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                  {showAmounts ? <EyeOff size={13} className="text-zinc-300 dark:text-zinc-600" /> : <Eye size={13} className="text-zinc-400 dark:text-zinc-500" />}
                 </button>
               </div>
 
               {/* Progress bar */}
               <div>
                 <div className="flex justify-between text-[10px] mb-1.5">
-                  <span className="text-zinc-400">Progreso de cobro</span>
-                  <span className="font-semibold text-zinc-500">{showAmounts ? `${pct}%` : '••'}</span>
+                  <span className="text-zinc-400 dark:text-zinc-500">Progreso de cobro</span>
+                  <span className="font-semibold text-zinc-500 dark:text-zinc-400">{showAmounts ? `${pct}%` : '••'}</span>
                 </div>
-                <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
@@ -141,31 +141,31 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
 
               {/* Paid / Remaining cards */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 bg-[#2C0405]/5 rounded-xl">
-                  <p className="text-[9px] text-[#2C0405]/50 font-semibold mb-0.5">Cobrado</p>
-                  <p className="text-sm font-bold text-[#2C0405]">{fmt(budget.paid)}</p>
+                <div className="p-3 bg-[#2C0405]/5 dark:bg-[#822b2e]/15 rounded-xl">
+                  <p className="text-[9px] text-[#2C0405]/50 dark:text-[#e8a0a2]/50 font-semibold mb-0.5">Cobrado</p>
+                  <p className="text-sm font-bold text-[#2C0405] dark:text-[#e8a0a2]">{fmt(budget.paid)}</p>
                 </div>
-                <div className="p-3 bg-zinc-50 rounded-xl">
-                  <p className="text-[9px] text-zinc-400 font-semibold mb-0.5">Pendiente</p>
-                  <p className="text-sm font-bold text-zinc-600">{fmt(remaining)}</p>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-xl">
+                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-semibold mb-0.5">Pendiente</p>
+                  <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">{fmt(remaining)}</p>
                 </div>
               </div>
 
               {/* Next Payment highlight */}
               {nextPayment && (
-                <div className="p-3.5 bg-amber-50/80 border border-amber-200/50 rounded-xl">
+                <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-800/40 rounded-xl">
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <CalendarClock size={12} className="text-amber-600" />
-                    <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider">Pr{'\u00f3'}ximo pago</p>
+                    <CalendarClock size={12} className="text-amber-600 dark:text-amber-400" />
+                    <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Pr{'\u00f3'}ximo pago</p>
                   </div>
                   <div className="flex items-end justify-between">
                     <div>
-                      <p className="text-[10px] text-amber-600/70 mb-0.5">{nextPayment.concept || 'Cuota pendiente'}</p>
-                      <p className="text-lg font-bold text-amber-800">{fmt(nextPayment.amount)}</p>
+                      <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mb-0.5">{nextPayment.concept || 'Cuota pendiente'}</p>
+                      <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{fmt(nextPayment.amount)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[9px] text-amber-500 font-medium">Vence</p>
-                      <p className="text-[11px] font-semibold text-amber-700">{fmtDate(nextPayment.dueDate)}</p>
+                      <p className="text-[9px] text-amber-500 dark:text-amber-400 font-medium">Vence</p>
+                      <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">{fmtDate(nextPayment.dueDate)}</p>
                     </div>
                   </div>
                 </div>
@@ -174,9 +174,9 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {/* Payment Schedule */}
               {payments.length > 0 && (
                 <div>
-                  <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider mb-2.5">
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold uppercase tracking-wider mb-2.5">
                     Calendario de pagos
-                    <span className="text-zinc-300 ml-1.5 normal-case font-normal">
+                    <span className="text-zinc-300 dark:text-zinc-600 ml-1.5 normal-case font-normal">
                       ({paidPayments.length}/{payments.length} completados)
                     </span>
                   </p>
@@ -191,21 +191,21 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                           key={p.id}
                           className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${
                             isPaid
-                              ? 'bg-[#2C0405]/[0.03] border-[#2C0405]/10'
+                              ? 'bg-[#2C0405]/[0.03] dark:bg-[#822b2e]/10 border-[#2C0405]/10 dark:border-[#822b2e]/20'
                               : isOverdue
-                              ? 'bg-red-50/40 border-red-100/60'
+                              ? 'bg-red-50/40 dark:bg-red-950/30 border-red-100/60 dark:border-red-800/40'
                               : isNext
-                              ? 'bg-amber-50/40 border-amber-200/60'
-                              : 'bg-zinc-50/60 border-zinc-100/60'
+                              ? 'bg-amber-50/40 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40'
+                              : 'bg-zinc-50/60 dark:bg-zinc-800/40 border-zinc-100/60 dark:border-zinc-700/40'
                           }`}
                         >
                           {/* Status icon */}
                           <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
                             isPaid
-                              ? 'bg-[#2C0405]/10 text-[#2C0405]'
+                              ? 'bg-[#2C0405]/10 dark:bg-[#822b2e]/20 text-[#2C0405] dark:text-[#e8a0a2]'
                               : isOverdue
-                              ? 'bg-red-100 text-red-500'
-                              : 'bg-zinc-100 text-zinc-400'
+                              ? 'bg-red-100 dark:bg-red-900/40 text-red-500 dark:text-red-400'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500'
                           }`}>
                             {isPaid ? <CircleCheck size={11} /> : isOverdue ? <AlertTriangle size={10} /> : <Clock size={10} />}
                           </div>
@@ -213,18 +213,18 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <p className={`text-[10px] font-semibold truncate ${
-                              isPaid ? 'text-[#2C0405]' : isOverdue ? 'text-red-700' : 'text-zinc-600'
+                              isPaid ? 'text-[#2C0405] dark:text-[#e8a0a2]' : isOverdue ? 'text-red-700 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300'
                             }`}>
                               {p.concept}
                             </p>
-                            <p className={`text-[9px] ${isPaid ? 'text-[#2C0405]/70' : isOverdue ? 'text-red-400' : 'text-zinc-400'}`}>
+                            <p className={`text-[9px] ${isPaid ? 'text-[#2C0405]/70 dark:text-[#e8a0a2]/70' : isOverdue ? 'text-red-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
                               {isPaid && p.paidDate ? `Pagado ${fmtDate(p.paidDate)}` : `Vence ${fmtDate(p.dueDate)}`}
                             </p>
                           </div>
 
                           {/* Amount */}
                           <p className={`text-[11px] font-bold flex-shrink-0 ${
-                            isPaid ? 'text-[#2C0405]' : isOverdue ? 'text-red-600' : 'text-zinc-600'
+                            isPaid ? 'text-[#2C0405] dark:text-[#e8a0a2]' : isOverdue ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300'
                           }`}>
                             {fmt(p.amount)}
                           </p>
@@ -238,8 +238,8 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {/* Empty state when no payments and no budget */}
               {payments.length === 0 && budget.total === 0 && (
                 <div className="text-center py-4">
-                  <CalendarClock size={20} className="text-zinc-200 mx-auto mb-2" />
-                  <p className="text-[11px] text-zinc-300">No hay pagos configurados a{'\u00fa'}n</p>
+                  <CalendarClock size={20} className="text-zinc-200 dark:text-zinc-700 mx-auto mb-2" />
+                  <p className="text-[11px] text-zinc-300 dark:text-zinc-600">No hay pagos configurados a{'\u00fa'}n</p>
                 </div>
               )}
             </motion.div>
@@ -256,26 +256,26 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               className="space-y-2"
             >
               {credItems.map(c => (
-                <div key={c.id} className="p-3 bg-zinc-50/80 border border-zinc-100 rounded-xl hover:border-zinc-200 transition-all group">
+                <div key={c.id} className="p-3 bg-zinc-50/80 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-600 transition-all group">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] font-semibold text-zinc-600">{c.service}</p>
+                    <p className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{c.service}</p>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => togglePass(c.id)} className="p-1 text-zinc-300 hover:text-zinc-500 rounded transition-colors">
+                      <button onClick={() => togglePass(c.id)} className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-300 rounded transition-colors">
                         {showPass[c.id] ? <EyeOff size={12} /> : <Eye size={12} />}
                       </button>
-                      <button onClick={() => copyText(c.pass || '', c.id)} className="p-1 text-zinc-300 hover:text-zinc-500 rounded transition-colors">
-                        {copied === c.id ? <Check size={12} className="text-[#2C0405]/70" /> : <Copy size={12} />}
+                      <button onClick={() => copyText(c.pass || '', c.id)} className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-300 rounded transition-colors">
+                        {copied === c.id ? <Check size={12} className="text-[#2C0405]/70 dark:text-[#e8a0a2]/70" /> : <Copy size={12} />}
                       </button>
                     </div>
                   </div>
                   <div className="space-y-1 text-[10px]">
                     <div className="flex justify-between">
-                      <span className="text-zinc-300">Usuario</span>
-                      <span className="text-zinc-500 font-mono font-medium">{c.user || '—'}</span>
+                      <span className="text-zinc-300 dark:text-zinc-600">Usuario</span>
+                      <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium">{c.user || '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-300">Contrase{'\u00f1'}a</span>
-                      <span className="text-zinc-500 font-mono font-medium tracking-wider">
+                      <span className="text-zinc-300 dark:text-zinc-600">Contrase{'\u00f1'}a</span>
+                      <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium tracking-wider">
                         {showPass[c.id] ? c.pass : '••••••••'}
                       </span>
                     </div>
@@ -283,7 +283,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                 </div>
               ))}
               {credItems.length === 0 && (
-                <p className="text-[11px] text-zinc-300 text-center py-6">No hay accesos compartidos</p>
+                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No hay accesos compartidos</p>
               )}
             </motion.div>
           )}
@@ -302,24 +302,24 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                 <div
                   key={a.id || i}
                   onClick={() => a.url && window.open(a.url, '_blank')}
-                  className="flex items-center justify-between p-2.5 bg-zinc-50/80 border border-zinc-100 rounded-xl hover:border-zinc-200 transition-all cursor-pointer group"
+                  className="flex items-center justify-between p-2.5 bg-zinc-50/80 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-600 transition-all cursor-pointer group"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 bg-white rounded-lg text-zinc-300 group-hover:text-indigo-500 transition-colors border border-zinc-100">
+                    <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg text-zinc-300 dark:text-zinc-600 group-hover:text-indigo-500 transition-colors border border-zinc-100 dark:border-zinc-800">
                       {getDocIcon(a.type)}
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold text-zinc-600 group-hover:text-zinc-800 transition-colors">{a.name}</p>
-                      <p className="text-[9px] text-zinc-300">{a.size} · {a.type}</p>
+                      <p className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 group-hover:text-zinc-800 dark:group-hover:text-zinc-100 transition-colors">{a.name}</p>
+                      <p className="text-[9px] text-zinc-300 dark:text-zinc-600">{a.size} · {a.type}</p>
                     </div>
                   </div>
-                  <button className="p-1 text-zinc-200 group-hover:text-indigo-500 transition-all">
+                  <button className="p-1 text-zinc-200 dark:text-zinc-700 group-hover:text-indigo-500 transition-all">
                     <Download size={13} />
                   </button>
                 </div>
               ))}
               {docItems.length === 0 && (
-                <p className="text-[11px] text-zinc-300 text-center py-6">No hay documentos compartidos</p>
+                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No hay documentos compartidos</p>
               )}
             </motion.div>
           )}

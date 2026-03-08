@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { useDocuments, File as DocFile } from '../hooks/useDocuments';
 import { useClients } from '../hooks/useClients';
@@ -345,13 +346,22 @@ export const Docs: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
+                    ? 'text-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
                   }`}
               >
-                <tab.icon size={14} />
-                {tab.label}
+                {activeTab === tab.id && (
+                  <motion.div
+                    layoutId="docsActiveTab"
+                    className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-lg shadow-sm"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <tab.icon size={14} />
+                  {tab.label}
+                </span>
               </button>
             ))}
           </div>
@@ -405,21 +415,35 @@ export const Docs: React.FC = () => {
               <div className="flex bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg p-0.5">
                 <button
                   onClick={() => setView('grid')}
-                  className={`p-1.5 rounded-md transition-all ${view === 'grid'
-                      ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                  className={`relative p-1.5 rounded-md transition-colors duration-200 ${view === 'grid'
+                      ? 'text-zinc-900 dark:text-zinc-100'
                       : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
                     }`}
                 >
-                  <Icons.Grid size={15} />
+                  {view === 'grid' && (
+                    <motion.div
+                      layoutId="docsViewToggle"
+                      className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-md shadow-sm"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <Icons.Grid size={15} className="relative z-10" />
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`p-1.5 rounded-md transition-all ${view === 'list'
-                      ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                  className={`relative p-1.5 rounded-md transition-colors duration-200 ${view === 'list'
+                      ? 'text-zinc-900 dark:text-zinc-100'
                       : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
                     }`}
                 >
-                  <Icons.List size={15} />
+                  {view === 'list' && (
+                    <motion.div
+                      layoutId="docsViewToggle"
+                      className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-md shadow-sm"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <Icons.List size={15} className="relative z-10" />
                 </button>
               </div>
             </div>
@@ -428,8 +452,16 @@ export const Docs: React.FC = () => {
       </div>
 
       {/* New folder inline form */}
+      <AnimatePresence>
       {activeTab === 'documents' && showNewFolderInput && (
-        <div className="mb-5 p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+        <motion.div
+          initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+          animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
+          exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="overflow-hidden"
+        >
+        <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
               <Icons.Folder size={20} className="text-blue-500" />
@@ -465,18 +497,50 @@ export const Docs: React.FC = () => {
             </div>
           )}
         </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Tab content */}
+      <AnimatePresence mode="wait">
       {activeTab === 'proposals' ? (
-        <ProposalsPanel />
+        <motion.div
+          key="proposals"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <ProposalsPanel />
+        </motion.div>
       ) : activeTab === 'blog' ? (
-        <BlogPanel />
+        <motion.div
+          key="blog"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <BlogPanel />
+        </motion.div>
       ) : activeTab === 'passwords' ? (
-        <PasswordsPanel />
+        <motion.div
+          key="passwords"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <PasswordsPanel />
+        </motion.div>
       ) : (
         /* Documents content area — with drag & drop */
-        <div
+        <motion.div
+          key={`docs-${currentFolderId || 'root'}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
@@ -484,9 +548,22 @@ export const Docs: React.FC = () => {
           className="relative"
         >
           {/* Drag overlay */}
+          <AnimatePresence>
           {isDragging && (
-            <div className="absolute inset-0 z-20 bg-blue-50/90 dark:bg-blue-950/90 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-2xl flex items-center justify-center pointer-events-none">
-              <div className="text-center">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0 z-20 bg-blue-50/90 dark:bg-blue-950/90 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-2xl flex items-center justify-center pointer-events-none"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ duration: 0.2, delay: 0.05 }}
+                className="text-center"
+              >
                 <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/40 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <Icons.Upload size={28} className="text-blue-500" />
                 </div>
@@ -494,9 +571,10 @@ export const Docs: React.FC = () => {
                 <p className="text-sm text-blue-500 dark:text-blue-400 mt-1">
                   {currentFolderId ? `Into "${currentFolderName}"` : 'Into root folder'}
                 </p>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           {/* Upload progress bar */}
           {isUploading && uploadProgress > 0 && (
@@ -555,12 +633,17 @@ export const Docs: React.FC = () => {
                 : 'space-y-1.5'
             }>
               {/* Folders */}
-              {folders.map((folder) => (
+              {folders.map((folder, i) => (
                 view === 'grid' ? (
-                  <div
+                  <motion.div
                     key={folder.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
                     onClick={() => setCurrentFolderId(folder.id)}
-                    className="group cursor-pointer bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm transition-all"
+                    className="group cursor-pointer bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm transition-[border-color,background-color,box-shadow] duration-200"
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
@@ -575,12 +658,16 @@ export const Docs: React.FC = () => {
                     </div>
                     <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{fmtDate(folder.created_at)}</p>
-                  </div>
+                  </motion.div>
                 ) : (
-                  <div
+                  <motion.div
                     key={folder.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
                     onClick={() => setCurrentFolderId(folder.id)}
-                    className="group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-all"
+                    className="group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-[border-color,background-color] duration-200"
+                    whileTap={{ scale: 0.99 }}
                   >
                     <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
                       <Icons.Folder size={18} className="text-blue-500" />
@@ -594,16 +681,21 @@ export const Docs: React.FC = () => {
                       <Icons.MoreVert size={16} />
                     </button>
                     <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600 group-hover:text-blue-400 transition-colors" />
-                  </div>
+                  </motion.div>
                 )
               ))}
 
               {/* Files */}
-              {files.map((file) => (
+              {files.map((file, i) => (
                 view === 'grid' ? (
-                  <div
+                  <motion.div
                     key={file.id}
-                    className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-all"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
+                    className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-[border-color,box-shadow] duration-200"
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     {/* Image thumbnail or icon */}
                     {isImageType(file.type) && file.url ? (
@@ -668,11 +760,15 @@ export const Docs: React.FC = () => {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ) : (
-                  <div
+                  <motion.div
                     key={file.id}
-                    className="group flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all"
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
+                    className="group flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-[border-color] duration-200"
+                    whileTap={{ scale: 0.99 }}
                   >
                     {isImageType(file.type) && file.url ? (
                       <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
@@ -706,18 +802,34 @@ export const Docs: React.FC = () => {
                         <Icons.MoreVert size={13} />
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 )
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Action Modal */}
+      <AnimatePresence>
       {actionMenu && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeActionMenu}>
-          <div className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={closeActionMenu}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flex items-center gap-3 px-5 pt-5 pb-3">
               <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
@@ -857,9 +969,10 @@ export const Docs: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 };
