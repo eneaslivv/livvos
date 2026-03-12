@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './ui/Icons';
 import { generateAdvisorInsights, clearAICache, AdvisorInsight } from '../lib/ai';
@@ -96,6 +96,7 @@ export const AiAdvisor: React.FC = () => {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const lastContextHashRef = useRef<number>(0);
 
   // Cycle loading steps
   useEffect(() => {
@@ -121,61 +122,81 @@ export const AiAdvisor: React.FC = () => {
     };
   }, [isOpen]);
 
+  /** Simple hash for data-change detection */
+  const quickHash = (s: string): number => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return h;
+  };
+
   const buildContextSummary = useCallback(() => {
     const lines: string[] = [];
+    const now = new Date();
 
-    const activeProjects = projects.filter(p => p.status === 'Active' || p.status === 'Pending');
-    const overdueProjects = projects.filter(p => p.deadline && new Date(p.deadline) < new Date() && p.status !== 'Completed');
-    lines.push(`PROYECTOS (${projects.length} total, ${activeProjects.length} activos):`);
-    activeProjects.slice(0, 8).forEach(p => {
-      lines.push(`- "${p.title}" | cliente: ${p.clientName} | progreso: ${p.progress}% | deadline: ${p.deadline} | estado: ${p.status}`);
+    // Top 5 active projects sorted by deadline proximity
+    const activeProjects = projects
+      .filter(p => p.status === 'Active' || p.status === 'Pending')
+      .sort((a, b) => {
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      })
+      .slice(0, 5);
+    const overdueCount = projects.filter(p => p.deadline && new Date(p.deadline) < now && p.status !== 'Completed').length;
+    lines.push(`PROYECTOS (${projects.length} total, ${activeProjects.length} activos, ${overdueCount} atrasados):`);
+    activeProjects.forEach(p => {
+      lines.push(`- "${p.title}" | ${p.clientName} | ${p.progress}% | deadline: ${p.deadline || 'n/a'}`);
     });
-    if (overdueProjects.length > 0) {
-      lines.push(`ATRASADOS: ${overdueProjects.map(p => p.title).join(', ')}`);
-    }
 
+    // Aggregated finance stats only (no individual entries)
     const totalIncome = (incomes || []).reduce((s: number, i: any) => s + (i.total_amount || 0), 0);
     const paidIncome = (incomes || []).reduce((s: number, i: any) => {
-      const paidInstallments = (i.installments || []).filter((inst: any) => inst.status === 'paid');
-      return s + paidInstallments.reduce((sum: number, inst: any) => sum + (inst.amount || 0), 0);
+      const paid = (i.installments || []).filter((inst: any) => inst.status === 'paid');
+      return s + paid.reduce((sum: number, inst: any) => sum + (inst.amount || 0), 0);
     }, 0);
     const totalExpenses = (expenses || []).reduce((s: number, e: any) => s + (e.amount || 0), 0);
-    const pendingIncome = totalIncome - paidIncome;
-    lines.push(`\nFINANZAS:`);
-    lines.push(`- Ingresos totales: $${totalIncome.toLocaleString()} | Cobrado: $${paidIncome.toLocaleString()} | Pendiente: $${pendingIncome.toLocaleString()}`);
-    lines.push(`- Gastos totales: $${totalExpenses.toLocaleString()}`);
-    lines.push(`- Balance neto (cobrado - gastos): $${(paidIncome - totalExpenses).toLocaleString()}`);
+    lines.push(`\nFINANZAS: Ingresos $${totalIncome.toLocaleString()} (cobrado $${paidIncome.toLocaleString()}) | Gastos $${totalExpenses.toLocaleString()} | Balance $${(paidIncome - totalExpenses).toLocaleString()}`);
 
-    const agentCount = members.filter(m => (m as any).is_agent).length;
+    // Team summary (counts only, no individual listing)
     const activeMembers = members.filter(m => m.status === 'active');
-    lines.push(`\nEQUIPO (${members.length} miembros, ${agentCount} agentes):`);
-    activeMembers.slice(0, 6).forEach(m => {
-      lines.push(`- ${m.name || m.email} | rol: ${m.role} | ${m.openTasks} tareas abiertas, ${m.completedTasks} completadas`);
-    });
+    const totalOpen = activeMembers.reduce((s, m) => s + (m.openTasks || 0), 0);
+    lines.push(`\nEQUIPO: ${activeMembers.length} activos, ${totalOpen} tareas abiertas`);
 
-    lines.push(`\nFecha actual: ${new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
+    lines.push(`\nFecha: ${now.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
 
-    return lines.join('\n');
+    // Truncate to ~1500 chars max
+    let result = lines.join('\n');
+    if (result.length > 1500) result = result.slice(0, 1500);
+    return result;
   }, [projects, incomes, expenses, members]);
 
   const loadInsights = useCallback(async (forceRefresh = false) => {
     if (!user) return;
+    const context = buildContextSummary();
+    const contextHash = quickHash(context);
+
+    // Skip API call if data hasn't changed and we already have results
+    if (!forceRefresh && hasLoaded && contextHash === lastContextHashRef.current) {
+      if (import.meta.env.DEV) console.log('[AI] Advisor data unchanged — skipping API call');
+      return;
+    }
+
     if (forceRefresh) clearAICache('advisor');
     setLoading(true);
     setError(null);
     try {
-      const context = buildContextSummary();
       const result = await generateAdvisorInsights(context);
       setInsights(result.insights || []);
       setGreeting(result.greeting || '');
       setHasLoaded(true);
+      lastContextHashRef.current = contextHash;
     } catch (err: any) {
       console.error('AI Advisor error:', err);
       setError(err?.message || 'Could not generate the analysis');
     } finally {
       setLoading(false);
     }
-  }, [user, buildContextSummary]);
+  }, [user, buildContextSummary, hasLoaded]);
 
   const handleOpen = () => {
     setIsOpen(true);

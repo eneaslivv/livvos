@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { supabase } from '../lib/supabase';
 import { defaultBranding, TenantBranding, mergeBranding } from '../config/whitelabel';
+import { useTenant } from '../context/TenantContext';
 
 interface TenantConfig {
     id: string;
@@ -15,8 +16,10 @@ interface TenantConfig {
 }
 
 export const TenantSettings: React.FC = () => {
+    const { currentTenant, updateTenant } = useTenant();
     const [config, setConfig] = useState<TenantConfig | null>(null);
     const [branding, setBranding] = useState<TenantBranding>(defaultBranding);
+    const [websiteUrl, setWebsiteUrl] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -24,6 +27,12 @@ export const TenantSettings: React.FC = () => {
     useEffect(() => {
         loadTenantConfig();
     }, []);
+
+    useEffect(() => {
+        if (currentTenant?.website_url) {
+            setWebsiteUrl(currentTenant.website_url);
+        }
+    }, [currentTenant]);
 
     const loadTenantConfig = async () => {
         try {
@@ -54,6 +63,9 @@ export const TenantSettings: React.FC = () => {
                 .eq('tenant_id', config?.tenant_id);
 
             if (error) throw error;
+
+            // Save website URL to tenants table
+            await updateTenant({ website_url: websiteUrl || null });
 
             setMessage({ text: 'Configuration saved successfully', type: 'success' });
         } catch (err: any) {
@@ -152,6 +164,29 @@ export const TenantSettings: React.FC = () => {
                             className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         />
                     </div>
+                </div>
+            </section>
+
+            {/* Website URL Section */}
+            <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
+                    <Icons.Globe size={20} />
+                    Website
+                </h2>
+                <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                        Website URL
+                    </label>
+                    <input
+                        type="url"
+                        value={websiteUrl}
+                        onChange={e => setWebsiteUrl(e.target.value)}
+                        placeholder="https://your-website.com"
+                        className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-zinc-400 mt-2">
+                        Used for the live preview in the Content CMS
+                    </p>
                 </div>
             </section>
 

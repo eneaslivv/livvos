@@ -47,6 +47,7 @@
     "skill": "tsx skills/cli.ts"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.89.0",
     "@types/crypto-js": "^4.2.2",
     "crypto-js": "^4.2.0",

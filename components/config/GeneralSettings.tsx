@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons } from '../ui/Icons';
+import { useTenant } from '../../context/TenantContext';
 
 export const GeneralSettings: React.FC = () => {
+  const { currentTenant, updateTenant } = useTenant();
   const [workspaceName, setWorkspaceName] = useState('Eneas OS');
   const [logo, setLogo] = useState<string | null>(null);
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [savingUrl, setSavingUrl] = useState(false);
+
+  useEffect(() => {
+    if (currentTenant?.website_url) {
+      setWebsiteUrl(currentTenant.website_url);
+    }
+  }, [currentTenant]);
 
   return (
     <div className="space-y-6">
@@ -37,6 +47,34 @@ export const GeneralSettings: React.FC = () => {
                 </div>
                 <button className="px-3 py-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                     Upload Logo
+                </button>
+            </div>
+        </div>
+
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Website URL</label>
+            <p className="text-xs text-zinc-400">Used for the live preview in Content CMS</p>
+            <div className="flex items-center gap-2">
+                <input
+                    type="url"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    placeholder="https://your-website.com"
+                    className="flex-1 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                />
+                <button
+                    onClick={async () => {
+                        setSavingUrl(true);
+                        try {
+                            await updateTenant({ website_url: websiteUrl || null });
+                        } finally {
+                            setSavingUrl(false);
+                        }
+                    }}
+                    disabled={savingUrl || websiteUrl === (currentTenant?.website_url || '')}
+                    className="px-3 py-2 text-sm font-medium text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 disabled:opacity-40 transition-colors"
+                >
+                    {savingUrl ? <Icons.Loader size={16} className="animate-spin" /> : 'Save'}
                 </button>
             </div>
         </div>

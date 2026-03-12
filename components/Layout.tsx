@@ -725,7 +725,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           <div className="absolute inset-0 -z-10" onClick={() => setShowCommandPalette(false)}></div>
         </div>
       )}
-      <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
+      <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onNavigate={onNavigate} />
       <AiAdvisor />
     </div>
   );

@@ -4,12 +4,13 @@ import { Icons } from './ui/Icons';
 import { useRBAC } from '../context/RBACContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { NotificationBell } from './NotificationBell';
+import type { PageView } from '../types';
 
 interface TopNavbarProps {
     pageTitle: string;
     onOpenSearch: () => void;
     onOpenTask: () => void;
-    onNavigate?: (page: string) => void;
+    onNavigate?: (page: PageView) => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, onOpenTask, onNavigate }) => {
@@ -71,7 +72,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
 
                 </div>
             </div>
-            <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
+            <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onNavigate={onNavigate} />
         </header>
     );
 };

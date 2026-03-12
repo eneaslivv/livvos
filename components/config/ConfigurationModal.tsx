@@ -6,18 +6,19 @@ import { ServiceManagement } from './ServiceManagement';
 import { RoleManagement } from './RoleManagement';
 import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
-import { ContentManagement } from './ContentManagement';
 import { EmailPreferences } from './EmailPreferences';
 import { useRBAC } from '../../context/RBACContext';
+import type { PageView } from '../../types';
 
 interface ConfigurationModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onNavigate?: (page: PageView) => void;
 }
 
 type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email';
 
-export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose }) => {
+export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose, onNavigate }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
     const { user, roles, hasPermission, isAdmin } = useRBAC();
 
@@ -72,7 +73,14 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                         {TABS.map((tab) => (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
+                                onClick={() => {
+                                    if (tab.id === 'content' && onNavigate) {
+                                        onClose();
+                                        onNavigate('content_cms');
+                                        return;
+                                    }
+                                    setActiveTab(tab.id);
+                                }}
                                 className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === tab.id
                                         ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50'
                                         : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50'
@@ -80,6 +88,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                             >
                                 <tab.icon size={18} className={activeTab === tab.id ? 'text-indigo-500' : 'text-zinc-400'} />
                                 {tab.label}
+                                {tab.id === 'content' && <Icons.External size={12} className="ml-auto text-zinc-400" />}
                             </button>
                         ))}
                     </nav>
@@ -111,7 +120,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                         {activeTab === 'services' && <ServiceManagement />}
                         {activeTab === 'billing' && <PaymentSettings />}
                         {activeTab === 'users' && <UserManagement />}
-                        {activeTab === 'content' && <ContentManagement />}
+
                         {activeTab === 'roles' && <RoleManagement />}
                         {activeTab === 'email' && <EmailPreferences />}
                     </div>

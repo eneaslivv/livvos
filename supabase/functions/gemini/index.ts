@@ -3,11 +3,21 @@
 // Requires GEMINI_API_KEY in function environment
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const allowedOrigin = Deno.env.get('ALLOWED_ORIGINS') || '*'
 const corsHeaders = {
   'Access-Control-Allow-Origin': allowedOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+const DAILY_QUOTA = 50 // max AI calls per tenant per day
+
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
 }
 
 type TaskResponse = {
@@ -79,6 +89,53 @@ serve(async (req) => {
         status: 429,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Resolve user and tenant from JWT
+    const supabaseAdmin = getSupabaseAdmin()
+    const jwt = authHeader.replace('Bearer ', '')
+    const { data: { user: authUser } } = await supabaseAdmin.auth.getUser(jwt)
+    const userId = authUser?.id || null
+    let tenantId: string | null = null
+
+    if (userId) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', userId)
+        .single()
+      tenantId = profile?.tenant_id || null
+    }
+
+    // Check if tenant has AI feature enabled
+    if (tenantId) {
+      const { data: tenant } = await supabaseAdmin
+        .from('tenants')
+        .select('features')
+        .eq('id', tenantId)
+        .single()
+      if (tenant?.features && tenant.features.ai_assistant === false) {
+        return new Response(JSON.stringify({ error: 'AI no está habilitado para este equipo.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // Daily quota check per tenant
+    if (tenantId) {
+      const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+      const { count } = await supabaseAdmin
+        .from('ai_usage_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .gte('created_at', `${today}T00:00:00Z`)
+      if ((count || 0) >= DAILY_QUOTA) {
+        return new Response(JSON.stringify({ error: 'Límite diario de AI alcanzado. Intenta mañana.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
     }
 
     const body = await req.json()
@@ -161,7 +218,7 @@ Rules:
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,6 +292,18 @@ Rules:
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Log usage (non-blocking)
+    const usage = data?.usageMetadata
+    if (tenantId) {
+      supabaseAdmin.from('ai_usage_log').insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        request_type: type,
+        tokens_input: usage?.promptTokenCount || 0,
+        tokens_output: usage?.candidatesTokenCount || 0,
+      }).then(() => {})
     }
 
     return new Response(JSON.stringify({ result: json }), {

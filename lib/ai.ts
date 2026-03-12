@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 
 // ─── AI Response Cache ───────────────────────────────────────────
 // Prevents duplicate API calls for identical inputs within a TTL window.
-// Cache is per-type + input hash, stored in sessionStorage for cross-navigation persistence.
+// Cache is per-type + input hash, stored in localStorage for cross-navigation persistence.
 
 type AICacheEntry = {
   result: unknown
@@ -11,13 +11,15 @@ type AICacheEntry = {
 
 /** TTL per request type (in milliseconds) */
 const CACHE_TTL: Record<string, number> = {
-  advisor: 30 * 60 * 1000,        // 30 min — business context changes slowly
-  weekly_summary: 15 * 60 * 1000, // 15 min — weekly data is stable
-  proposal: 10 * 60 * 1000,       // 10 min — same brief = same proposal
-  blog: 10 * 60 * 1000,           // 10 min
-  tasks_bulk: 5 * 60 * 1000,      // 5 min
+  advisor: 2 * 60 * 60 * 1000,    // 2h — business context changes slowly
+  weekly_summary: 60 * 60 * 1000, // 1h — weekly data is stable
+  proposal: 30 * 60 * 1000,       // 30 min — same brief = same proposal
+  blog: 30 * 60 * 1000,           // 30 min
+  tasks_bulk: 10 * 60 * 1000,     // 10 min
   task: 0,                         // no cache — single tasks are quick & varied
 }
+
+const CACHE_VERSION = 'ai_v2'
 
 /** Simple string hash for cache keys */
 const hashInput = (s: string): string => {
@@ -28,17 +30,17 @@ const hashInput = (s: string): string => {
   return String(h)
 }
 
-const cacheKey = (type: string, input: string) => `ai_cache:${type}:${hashInput(input)}`
+const cacheKey = (type: string, input: string) => `${CACHE_VERSION}:${type}:${hashInput(input)}`
 
 function getCached<T>(type: string, input: string): T | null {
   const ttl = CACHE_TTL[type] ?? 0
   if (ttl === 0) return null
   try {
-    const raw = sessionStorage.getItem(cacheKey(type, input))
+    const raw = localStorage.getItem(cacheKey(type, input))
     if (!raw) return null
     const entry: AICacheEntry = JSON.parse(raw)
     if (Date.now() - entry.timestamp > ttl) {
-      sessionStorage.removeItem(cacheKey(type, input))
+      localStorage.removeItem(cacheKey(type, input))
       return null
     }
     return entry.result as T
@@ -52,9 +54,9 @@ function setCache(type: string, input: string, result: unknown): void {
   if (ttl === 0) return
   try {
     const entry: AICacheEntry = { result, timestamp: Date.now() }
-    sessionStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
+    localStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
   } catch {
-    // sessionStorage full or unavailable — silently skip
+    // localStorage full or unavailable — silently skip
   }
 }
 
@@ -160,13 +162,13 @@ export const generateBlogFromAI = (input: string): Promise<BlogAIResult> =>
 export const clearAICache = (type?: string): void => {
   try {
     const keys: string[] = []
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const k = sessionStorage.key(i)
-      if (k?.startsWith('ai_cache:') && (!type || k.startsWith(`ai_cache:${type}:`))) {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(`${CACHE_VERSION}:`) && (!type || k.startsWith(`${CACHE_VERSION}:${type}:`))) {
         keys.push(k)
       }
     }
-    keys.forEach(k => sessionStorage.removeItem(k))
+    keys.forEach(k => localStorage.removeItem(k))
   } catch {
     // ignore
   }

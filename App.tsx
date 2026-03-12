@@ -39,6 +39,7 @@ const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module =>
 const loadAcceptProjectShare = () => import('./pages/AcceptProjectShare').then(module => ({ default: module.AcceptProjectShare }));
 const loadSharedProjectView = () => import('./pages/SharedProjectView').then(module => ({ default: module.SharedProjectView }));
 const loadPublicPortalView = () => import('./pages/PublicPortalView').then(module => ({ default: module.PublicPortalView }));
+const loadContentCms = () => import('./pages/ContentCms').then(module => ({ default: module.ContentCms }));
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -59,6 +60,7 @@ const GoogleCallback = React.lazy(loadGoogleCallback);
 const AcceptProjectShare = React.lazy(loadAcceptProjectShare);
 const SharedProjectView = React.lazy(loadSharedProjectView);
 const PublicPortalView = React.lazy(loadPublicPortalView);
+const ContentCms = React.lazy(loadContentCms);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -556,6 +558,7 @@ const AppContent: React.FC<{
         loadTeamClients,
         loadTenantSettings,
         loadClientPortal,
+        loadContentCms,
       ].forEach(loader => loader());
     });
   }, []);
@@ -655,6 +658,15 @@ const AppContent: React.FC<{
             <KeepAlivePage page="sales_dashboard" active={isSalesActive}>
               <ProtectedRoute permission={{ module: 'sales', action: 'view_dashboard' }}>
                 <Sales view={getSalesView(currentPage)} onNavigate={handleNavigate} />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Content CMS */}
+          {visitedPages.has('content_cms') && (
+            <KeepAlivePage page="content_cms" active={currentPage === 'content_cms'}>
+              <ProtectedRoute role="owner">
+                <ContentCms onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
