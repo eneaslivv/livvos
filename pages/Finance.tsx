@@ -5,15 +5,17 @@ import {
   CreditCard, FileText, Settings, Download,
   ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
-  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil
+  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus
 } from 'lucide-react';
 import {
   useFinance,
   type IncomeEntry,
   type Installment,
   type ExpenseEntry,
+  type Budget,
   type CreateIncomeData,
   type CreateExpenseData,
+  type CreateBudgetData,
 } from '../context/FinanceContext';
 import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
@@ -32,7 +34,7 @@ interface LiquidityPoint {
   balance: number;
 }
 
-type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'proyectos' | 'config';
+type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'budgets' | 'proyectos' | 'config';
 
 // ─── Formatters ───────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ export const Finance: React.FC = () => {
   const {
     incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome,
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense,
+    budgets, budgetsLoading, createBudget, updateBudget, deleteBudget,
   } = useFinance();
   const { projects } = useProjects();
   const { clients } = useClients();
@@ -140,7 +143,7 @@ export const Finance: React.FC = () => {
 
   // Slide panel state
   const [isEntryOpen, setIsEntryOpen] = useState(false);
-  const [entryType, setEntryType] = useState<'income' | 'expense'>('income');
+  const [entryType, setEntryType] = useState<'income' | 'expense' | 'budget'>('income');
   const [entryError, setEntryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
@@ -157,6 +160,20 @@ export const Finance: React.FC = () => {
     concept: '', category: 'Software', amount: '',
     vendor: '', project_id: '', date: new Date().toISOString().split('T')[0],
     recurring: false, status: 'pending' as 'paid' | 'pending',
+    budget_id: '',
+  });
+
+  // Budget form state
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [budgetSearch, setBudgetSearch] = useState('');
+  const [budgetCategoryFilter, setBudgetCategoryFilter] = useState<string>('all');
+  const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
+  const [budgetForm, setBudgetForm] = useState({
+    name: '', description: '', allocated_amount: '',
+    category: '', color: '#3b82f6',
+    period: 'monthly' as 'monthly' | 'quarterly' | 'yearly' | 'one-time',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: '',
   });
 
   // ─── Computed Data ────────────────────────────────────────────
@@ -312,6 +329,45 @@ export const Finance: React.FC = () => {
     return result;
   }, [expenseSearch, expenseCategoryFilter, expenses]);
 
+  // ─── Budget Computed Data ──────────────────────────────────────
+
+  const budgetSpending = useMemo(() => {
+    const map: Record<string, { spent: number; count: number }> = {};
+    expenses.forEach((e: ExpenseEntry) => {
+      if (e.budget_id) {
+        if (!map[e.budget_id]) map[e.budget_id] = { spent: 0, count: 0 };
+        map[e.budget_id].spent += e.amount;
+        map[e.budget_id].count += 1;
+      }
+    });
+    return map;
+  }, [expenses]);
+
+  const totalAllocated = useMemo(() => budgets.filter(b => b.is_active).reduce((s, b) => s + b.allocated_amount, 0), [budgets]);
+  const totalBudgetSpent = useMemo(() => budgets.filter(b => b.is_active).reduce((s, b) => s + (budgetSpending[b.id]?.spent || 0), 0), [budgets, budgetSpending]);
+
+  const budgetCategories = useMemo(() => {
+    const cats = new Set<string>();
+    budgets.forEach(b => { if (b.category) cats.add(b.category); });
+    return Array.from(cats).sort();
+  }, [budgets]);
+
+  const filteredBudgets = useMemo(() => {
+    let result = [...budgets];
+    if (budgetCategoryFilter !== 'all') {
+      result = result.filter(b => b.category === budgetCategoryFilter);
+    }
+    if (budgetSearch) {
+      const q = budgetSearch.toLowerCase();
+      result = result.filter(b =>
+        b.name.toLowerCase().includes(q) ||
+        b.category.toLowerCase().includes(q) ||
+        b.description.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [budgets, budgetCategoryFilter, budgetSearch]);
+
   // ─── Form Handlers ────────────────────────────────────────────
 
   const resetIncomeForm = useCallback(() => {
@@ -319,7 +375,7 @@ export const Finance: React.FC = () => {
   }, []);
 
   const resetExpenseForm = useCallback(() => {
-    setExpenseForm({ concept: '', category: 'Software', amount: '', vendor: '', project_id: '', date: new Date().toISOString().split('T')[0], recurring: false, status: 'pending' });
+    setExpenseForm({ concept: '', category: 'Software', amount: '', vendor: '', project_id: '', date: new Date().toISOString().split('T')[0], recurring: false, status: 'pending', budget_id: '' });
   }, []);
 
   const openIncomeForm = useCallback(() => {
@@ -363,6 +419,7 @@ export const Finance: React.FC = () => {
       date: exp.date,
       recurring: exp.recurring,
       status: exp.status as 'paid' | 'pending',
+      budget_id: exp.budget_id || '',
     });
     setEditingExpenseId(exp.id);
     setEntryType('expense');
@@ -375,6 +432,36 @@ export const Finance: React.FC = () => {
     setEntryError(null);
     setEditingIncomeId(null);
     setEditingExpenseId(null);
+    setEditingBudgetId(null);
+  }, []);
+
+  const resetBudgetForm = useCallback(() => {
+    setBudgetForm({ name: '', description: '', allocated_amount: '', category: '', color: '#3b82f6', period: 'monthly', start_date: new Date().toISOString().split('T')[0], end_date: '' });
+  }, []);
+
+  const openBudgetForm = useCallback(() => {
+    resetBudgetForm();
+    setEditingBudgetId(null);
+    setEntryType('budget');
+    setEntryError(null);
+    setIsEntryOpen(true);
+  }, [resetBudgetForm]);
+
+  const openEditBudget = useCallback((b: Budget) => {
+    setBudgetForm({
+      name: b.name,
+      description: b.description || '',
+      allocated_amount: String(b.allocated_amount),
+      category: b.category || '',
+      color: b.color || '#3b82f6',
+      period: b.period,
+      start_date: b.start_date || '',
+      end_date: b.end_date || '',
+    });
+    setEditingBudgetId(b.id);
+    setEntryType('budget');
+    setEntryError(null);
+    setIsEntryOpen(true);
   }, []);
 
   const handleSubmitIncome = useCallback(async () => {
@@ -453,6 +540,7 @@ export const Finance: React.FC = () => {
           vendor: expenseForm.vendor.trim(),
           recurring: expenseForm.recurring,
           status: expenseForm.status,
+          budget_id: expenseForm.budget_id || null,
         };
         if (import.meta.env.DEV) console.log('[Finance] Updating expense:', editingExpenseId, updates);
         await Promise.race([updateExpense(editingExpenseId, updates), timeout]);
@@ -467,6 +555,7 @@ export const Finance: React.FC = () => {
           vendor: expenseForm.vendor.trim(),
           recurring: expenseForm.recurring,
           status: expenseForm.status,
+          budget_id: expenseForm.budget_id || null,
         };
         if (import.meta.env.DEV) console.log('[Finance] Creating expense:', data);
         await Promise.race([createExpense(data), timeout]);
@@ -480,6 +569,61 @@ export const Finance: React.FC = () => {
       setIsSubmitting(false);
     }
   }, [expenseForm, projects, createExpense, updateExpense, editingExpenseId, closeForm]);
+
+  const handleSubmitBudget = useCallback(async () => {
+    if (!budgetForm.name.trim()) { setEntryError('Enter a name.'); return; }
+    if (!budgetForm.allocated_amount || Number(budgetForm.allocated_amount) <= 0) { setEntryError('Amount must be greater than 0.'); return; }
+
+    setIsSubmitting(true);
+    setEntryError(null);
+
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
+      );
+
+      if (editingBudgetId) {
+        const updates: Partial<Budget> = {
+          name: budgetForm.name.trim(),
+          description: budgetForm.description.trim(),
+          allocated_amount: Number(budgetForm.allocated_amount),
+          category: budgetForm.category.trim(),
+          color: budgetForm.color,
+          period: budgetForm.period,
+          start_date: budgetForm.start_date || null,
+          end_date: budgetForm.end_date || null,
+        };
+        await Promise.race([updateBudget(editingBudgetId, updates), timeout]);
+      } else {
+        const data: CreateBudgetData = {
+          name: budgetForm.name.trim(),
+          description: budgetForm.description.trim(),
+          allocated_amount: Number(budgetForm.allocated_amount),
+          category: budgetForm.category.trim(),
+          color: budgetForm.color,
+          period: budgetForm.period,
+          start_date: budgetForm.start_date || null,
+          end_date: budgetForm.end_date || null,
+        };
+        await Promise.race([createBudget(data), timeout]);
+      }
+
+      closeForm();
+    } catch (err: any) {
+      console.error('[Finance] Error saving budget:', err);
+      setEntryError(err?.message || 'Error saving budget.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [budgetForm, createBudget, updateBudget, editingBudgetId, closeForm]);
+
+  const handleDeleteBudget = useCallback(async (id: string) => {
+    try {
+      await deleteBudget(id);
+    } catch (err) {
+      console.error('Error deleting budget:', err);
+    }
+  }, [deleteBudget]);
 
   const handleMarkInstallmentPaid = useCallback(async (installment: Installment) => {
     try {
@@ -550,6 +694,10 @@ export const Finance: React.FC = () => {
                 <ArrowUpFromLine size={14} strokeWidth={2.5} />
                 <span>Expense</span>
               </button>
+              <button onClick={openBudgetForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
+                <Wallet size={14} strokeWidth={2.5} />
+                <span>Budget</span>
+              </button>
             </>
           )}
           <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
@@ -565,6 +713,7 @@ export const Finance: React.FC = () => {
           { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
           { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
           { id: 'gastos', label: 'Expenses', icon: Receipt },
+          { id: 'budgets', label: 'Budgets', icon: Wallet },
           { id: 'proyectos', label: 'Projects P&L', icon: Target },
           { id: 'config', label: 'Settings', icon: Settings },
         ] as const).map(tab => (
@@ -1210,6 +1359,183 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
+      {/* ═══════════════ BUDGETS ═══════════════ */}
+      {activeTab === 'budgets' && (
+        <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+          {/* Summary strip */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Allocated</div>
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(totalAllocated)}</div>
+            </div>
+            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Spent</div>
+              <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">{fmtCurrency(totalBudgetSpent)}</div>
+            </div>
+            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Remaining</div>
+              <div className={`text-sm font-semibold ${totalAllocated - totalBudgetSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {fmtCurrency(totalAllocated - totalBudgetSpent)}
+              </div>
+            </div>
+          </div>
+
+          {/* Filter bar */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={budgetSearch}
+                  onChange={e => setBudgetSearch(e.target.value)}
+                  placeholder="Search budgets..."
+                  className="pl-8 pr-3 py-1.5 w-48 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                />
+              </div>
+              <div className="flex gap-0.5 p-0.5 bg-zinc-100 dark:bg-zinc-900/60 rounded-lg">
+                <button
+                  onClick={() => setBudgetCategoryFilter('all')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${budgetCategoryFilter === 'all' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                >All</button>
+                {budgetCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setBudgetCategoryFilter(cat)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${budgetCategoryFilter === cat ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
+                  >{cat}</button>
+                ))}
+              </div>
+            </div>
+            {hasPermission('finance', 'create') && (
+              <button onClick={openBudgetForm} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-medium transition-colors">
+                <Plus size={13} />
+                New Budget
+              </button>
+            )}
+          </div>
+
+          {/* Budget cards */}
+          {budgetsLoading ? (
+            <div className="text-center py-12">
+              <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs text-zinc-400">Loading budgets...</p>
+            </div>
+          ) : filteredBudgets.length === 0 ? (
+            <div className="text-center py-12">
+              <Wallet size={28} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">
+                {budgets.length === 0 ? 'No budgets yet' : 'No budgets match this filter'}
+              </p>
+              <p className="text-[11px] text-zinc-400 mb-3">Create a budget to track spending against allocated funds</p>
+              {budgets.length === 0 && hasPermission('finance', 'create') && (
+                <button onClick={openBudgetForm} className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors">
+                  <Plus size={14} /> Create Budget
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredBudgets.map(budget => {
+                const spending = budgetSpending[budget.id] || { spent: 0, count: 0 };
+                const pct = budget.allocated_amount > 0 ? (spending.spent / budget.allocated_amount) * 100 : 0;
+                const remaining = budget.allocated_amount - spending.spent;
+                const barColor = pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+                const isExpanded = expandedBudgetId === budget.id;
+                const linkedExpenses = isExpanded ? expenses.filter(e => e.budget_id === budget.id) : [];
+
+                return (
+                  <div key={budget.id} className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden group">
+                    {/* Color top bar */}
+                    <div className="h-1" style={{ backgroundColor: budget.color }} />
+
+                    <div className="p-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{budget.name}</h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {budget.category && (
+                              <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                                {budget.category}
+                              </span>
+                            )}
+                            <span className="text-[9px] font-medium text-zinc-400 capitalize">{budget.period}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          {hasPermission('finance', 'create') && (
+                            <>
+                              <button onClick={() => openEditBudget(budget)} className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
+                                <Pencil size={12} />
+                              </button>
+                              <button onClick={() => handleDeleteBudget(budget.id)} className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete">
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {budget.description && (
+                        <p className="text-[11px] text-zinc-400 line-clamp-2 mb-3">{budget.description}</p>
+                      )}
+
+                      {/* Amounts */}
+                      <div className="flex items-baseline justify-between mb-2">
+                        <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{fmtCurrency(budget.allocated_amount)}</span>
+                        <span className={`text-xs font-semibold ${remaining >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {fmtCurrency(remaining)} left
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="mb-2">
+                        <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[10px] text-zinc-400">{fmtCurrency(spending.spent)} spent</span>
+                          <span className="text-[10px] font-semibold text-zinc-500">{pct.toFixed(0)}%</span>
+                        </div>
+                      </div>
+
+                      {/* Expense count + expand */}
+                      <button
+                        onClick={() => setExpandedBudgetId(isExpanded ? null : budget.id)}
+                        className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors mt-1"
+                      >
+                        <Receipt size={11} />
+                        <span>{spending.count} expense{spending.count !== 1 ? 's' : ''}</span>
+                        <ChevronRight size={10} className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                      </button>
+
+                      {/* Expanded: linked expenses */}
+                      {isExpanded && linkedExpenses.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-1.5">
+                          {linkedExpenses.slice(0, 8).map(exp => (
+                            <div key={exp.id} className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600 shrink-0" />
+                                <span className="text-zinc-600 dark:text-zinc-400 truncate">{exp.concept}</span>
+                              </div>
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300 shrink-0 ml-2">{fmtCurrency(exp.amount)}</span>
+                            </div>
+                          ))}
+                          {linkedExpenses.length > 8 && (
+                            <p className="text-[10px] text-zinc-400 italic">+{linkedExpenses.length - 8} more</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ═══════════════ PROYECTOS P&L ═══════════════ */}
       {activeTab === 'proyectos' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
@@ -1342,8 +1668,8 @@ export const Finance: React.FC = () => {
       <SlidePanel
         isOpen={isEntryOpen}
         onClose={closeForm}
-        title={entryType === 'income' ? (editingIncomeId ? 'Edit Income' : 'New Income') : (editingExpenseId ? 'Edit Expense' : 'New Expense')}
-        subtitle={entryType === 'income' ? (editingIncomeId ? 'Update income details' : 'Select a project or register a general income') : (editingExpenseId ? 'Update expense details' : 'Register expense')}
+        title={entryType === 'income' ? (editingIncomeId ? 'Edit Income' : 'New Income') : entryType === 'budget' ? (editingBudgetId ? 'Edit Budget' : 'New Budget') : (editingExpenseId ? 'Edit Expense' : 'New Expense')}
+        subtitle={entryType === 'income' ? (editingIncomeId ? 'Update income details' : 'Select a project or register a general income') : entryType === 'budget' ? (editingBudgetId ? 'Update budget details' : 'Create a fund to track spending') : (editingExpenseId ? 'Update expense details' : 'Register expense')}
         width="md"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -1352,10 +1678,10 @@ export const Finance: React.FC = () => {
               Cancel
             </button>
             <button
-              onClick={entryType === 'income' ? handleSubmitIncome : handleSubmitExpense}
+              onClick={entryType === 'income' ? handleSubmitIncome : entryType === 'budget' ? handleSubmitBudget : handleSubmitExpense}
               disabled={isSubmitting}
               className={`px-4 py-1.5 rounded-lg text-white text-xs font-medium shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity
-                ${entryType === 'income' ? 'bg-emerald-600' : 'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900'}`}
+                ${entryType === 'income' ? 'bg-emerald-600' : entryType === 'budget' ? 'bg-blue-600' : 'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900'}`}
             >
               {isSubmitting ? 'Saving...' : 'Save'}
             </button>
@@ -1487,6 +1813,86 @@ export const Finance: React.FC = () => {
                 </div>
               )}
             </>
+          ) : entryType === 'budget' ? (
+            <>
+              {/* Budget name */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Name *</label>
+                <input type="text" value={budgetForm.name} onChange={e => setBudgetForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="E.g.: Marketing, Infrastructure..."
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Description</label>
+                <input type="text" value={budgetForm.description} onChange={e => setBudgetForm(p => ({ ...p, description: e.target.value }))}
+                  placeholder="What is this budget for?"
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+              </div>
+
+              {/* Amount + Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Allocated Amount *</label>
+                  <input type="number" min="0" step="0.01" value={budgetForm.allocated_amount}
+                    onChange={e => setBudgetForm(p => ({ ...p, allocated_amount: e.target.value }))}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Category</label>
+                  <input type="text" value={budgetForm.category} onChange={e => setBudgetForm(p => ({ ...p, category: e.target.value }))}
+                    placeholder="E.g.: Investment, Ads..."
+                    list="budget-categories"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+                  <datalist id="budget-categories">
+                    {budgetCategories.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* Period + Dates */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Period</label>
+                  <select value={budgetForm.period} onChange={e => setBudgetForm(p => ({ ...p, period: e.target.value as typeof p.period }))}
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                    <option value="one-time">One-time</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Start</label>
+                  <input type="date" value={budgetForm.start_date}
+                    onChange={e => setBudgetForm(p => ({ ...p, start_date: e.target.value }))}
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">End</label>
+                  <input type="date" value={budgetForm.end_date}
+                    onChange={e => setBudgetForm(p => ({ ...p, end_date: e.target.value }))}
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+                </div>
+              </div>
+
+              {/* Color picker */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Color</label>
+                <div className="flex gap-2">
+                  {['#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#84cc16', '#f97316'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setBudgetForm(p => ({ ...p, color: c }))}
+                      className={`w-6 h-6 rounded-full transition-all ${budgetForm.color === c ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900 scale-110' : 'hover:scale-110'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <div className="space-y-1.5">
@@ -1551,6 +1957,19 @@ export const Finance: React.FC = () => {
                   </label>
                 </div>
               </div>
+              {/* Budget selector */}
+              {budgets.filter(b => b.is_active).length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Budget (optional)</label>
+                  <select value={expenseForm.budget_id} onChange={e => setExpenseForm(p => ({ ...p, budget_id: e.target.value }))}
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                    <option value="">No budget</option>
+                    {budgets.filter(b => b.is_active).map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({fmtCurrency(b.allocated_amount)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </>
           )}
 
