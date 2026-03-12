@@ -5,7 +5,7 @@ import {
   CreditCard, FileText, Settings, Download,
   ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
-  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus
+  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2
 } from 'lucide-react';
 import {
   useFinance,
@@ -18,6 +18,7 @@ import {
   type CreateBudgetData,
 } from '../context/FinanceContext';
 import { useProjects } from '../context/ProjectsContext';
+import { supabase } from '../lib/supabase';
 import { useClients } from '../context/ClientsContext';
 import { useRBAC } from '../context/RBACContext';
 import {
@@ -102,7 +103,7 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
 export const Finance: React.FC = () => {
   const {
     incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome,
-    expenses, expensesLoading, createExpense, updateExpense, deleteExpense,
+    expenses, expensesLoading, createExpense, updateExpense, deleteExpense, refreshExpenses,
     budgets, budgetsLoading, createBudget, updateBudget, deleteBudget,
   } = useFinance();
   const { projects } = useProjects();
@@ -134,11 +135,29 @@ export const Finance: React.FC = () => {
     setExpensesTimedOut(false);
   }, [expensesLoading]);
 
+  // Auto-renew recurring expenses on mount (once per session)
+  const renewedRef = useRef(false);
+  useEffect(() => {
+    if (renewedRef.current || expensesLoading) return;
+    renewedRef.current = true;
+    supabase.rpc('renew_recurring_expenses').then(({ data, error }) => {
+      if (error) { if (import.meta.env.DEV) console.warn('Recurring renewal error:', error.message); return; }
+      if (data && data > 0) {
+        if (import.meta.env.DEV) console.log(`[Finance] Renewed ${data} recurring expenses`);
+        refreshExpenses();
+      }
+    });
+  }, [expensesLoading]);
+
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
   const [incomeSearch, setIncomeSearch] = useState('');
   const [incomeStatusFilter, setIncomeStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
+  const [incomeDateFrom, setIncomeDateFrom] = useState('');
+  const [incomeDateTo, setIncomeDateTo] = useState('');
   const [expenseSearch, setExpenseSearch] = useState('');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
+  const [expenseDateFrom, setExpenseDateFrom] = useState('');
+  const [expenseDateTo, setExpenseDateTo] = useState('');
   const [expandedIncome, setExpandedIncome] = useState<string | null>(null);
 
   // Slide panel state
@@ -175,6 +194,18 @@ export const Finance: React.FC = () => {
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
   });
+
+  // ─── Project tasks cache for linking installments to deliveries ───
+  const [projectTasksCache, setProjectTasksCache] = useState<Record<string, { id: string; title: string }[]>>({});
+  const fetchProjectTasks = useCallback(async (projectId: string) => {
+    if (projectTasksCache[projectId]) return;
+    const { data } = await supabase
+      .from('tasks')
+      .select('id,title')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true });
+    if (data) setProjectTasksCache(prev => ({ ...prev, [projectId]: data }));
+  }, [projectTasksCache]);
 
   // ─── Computed Data ────────────────────────────────────────────
 
@@ -302,6 +333,12 @@ export const Finance: React.FC = () => {
     } else if (incomeStatusFilter !== 'all') {
       result = result.filter((inc: IncomeEntry) => inc.status === incomeStatusFilter);
     }
+    if (incomeDateFrom) {
+      result = result.filter((inc: IncomeEntry) => (inc.due_date || inc.created_at?.split('T')[0] || '') >= incomeDateFrom);
+    }
+    if (incomeDateTo) {
+      result = result.filter((inc: IncomeEntry) => (inc.due_date || inc.created_at?.split('T')[0] || '') <= incomeDateTo);
+    }
     if (incomeSearch) {
       const q = incomeSearch.toLowerCase();
       result = result.filter((inc: IncomeEntry) =>
@@ -311,12 +348,18 @@ export const Finance: React.FC = () => {
       );
     }
     return result;
-  }, [incomeSearch, incomeStatusFilter, incomes]);
+  }, [incomeSearch, incomeStatusFilter, incomeDateFrom, incomeDateTo, incomes]);
 
   const filteredExpenses = useMemo(() => {
     let result = expenses;
     if (expenseCategoryFilter !== 'all') {
       result = result.filter((e: ExpenseEntry) => e.category === expenseCategoryFilter);
+    }
+    if (expenseDateFrom) {
+      result = result.filter((e: ExpenseEntry) => e.date >= expenseDateFrom);
+    }
+    if (expenseDateTo) {
+      result = result.filter((e: ExpenseEntry) => e.date <= expenseDateTo);
     }
     if (expenseSearch) {
       const q = expenseSearch.toLowerCase();
@@ -327,7 +370,7 @@ export const Finance: React.FC = () => {
       );
     }
     return result;
-  }, [expenseSearch, expenseCategoryFilter, expenses]);
+  }, [expenseSearch, expenseCategoryFilter, expenseDateFrom, expenseDateTo, expenses]);
 
   // ─── Budget Computed Data ──────────────────────────────────────
 
@@ -1072,11 +1115,26 @@ export const Finance: React.FC = () => {
 
             {/* Search + quick stats */}
             <div className="lg:col-span-2 space-y-3">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input type="text" value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)}
-                  placeholder="Search by client, project, or concept..."
-                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40 transition-all" />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input type="text" value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)}
+                    placeholder="Search by client, project, or concept..."
+                    className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40 transition-all" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input type="date" value={incomeDateFrom} onChange={e => setIncomeDateFrom(e.target.value)}
+                    className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40 transition-all text-zinc-600 dark:text-zinc-300" />
+                  <span className="text-[10px] text-zinc-400">to</span>
+                  <input type="date" value={incomeDateTo} onChange={e => setIncomeDateTo(e.target.value)}
+                    className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/40 transition-all text-zinc-600 dark:text-zinc-300" />
+                  {(incomeDateFrom || incomeDateTo) && (
+                    <button onClick={() => { setIncomeDateFrom(''); setIncomeDateTo(''); }}
+                      className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Collection progress */}
@@ -1168,7 +1226,7 @@ export const Finance: React.FC = () => {
                       return (
                         <React.Fragment key={inc.id}>
                           <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition-colors cursor-pointer"
-                            onClick={() => setExpandedIncome(isExpanded ? null : inc.id)}>
+                            onClick={() => { setExpandedIncome(isExpanded ? null : inc.id); if (!isExpanded && inc.project_id) fetchProjectTasks(inc.project_id); }}>
                             <td className="px-5 py-3">
                               <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100">{inc.client_name}</div>
                               <div className="text-[10px] text-zinc-400">{inc.project_name}</div>
@@ -1212,6 +1270,25 @@ export const Finance: React.FC = () => {
                                       <span className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 w-24">{fmtCurrency(inst.amount)}</span>
                                       <span className="text-[10px] text-zinc-400 w-28">Due: {fmtDate(inst.due_date)}</span>
                                       {inst.paid_date && <span className="text-[10px] text-emerald-500">Paid: {fmtDate(inst.paid_date)}</span>}
+                                      {/* Linked delivery selector */}
+                                      {inc.project_id && (
+                                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                          <Link2 size={10} className="text-zinc-300 dark:text-zinc-600 flex-shrink-0" />
+                                          <select
+                                            value={inst.linked_task_id || ''}
+                                            onChange={async (e) => {
+                                              const taskId = e.target.value || null;
+                                              await updateInstallment(inst.id, { linked_task_id: taskId } as any);
+                                            }}
+                                            className="text-[10px] bg-transparent border border-zinc-100 dark:border-zinc-700 rounded px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                          >
+                                            <option value="">No delivery link</option>
+                                            {(projectTasksCache[inc.project_id] || []).map(t => (
+                                              <option key={t.id} value={t.id}>{t.title}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
                                       <div className="ml-auto flex items-center gap-2">
                                         <StatusBadge status={inst.status} />
                                         {inst.status !== 'paid' && (
@@ -1243,35 +1320,56 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ GASTOS ═══════════════ */}
       {activeTab === 'gastos' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
-          {/* Summary strip */}
+          {/* Summary strip — reflects filtered data */}
+          {(() => {
+            const filtPaid = filteredExpenses.filter((e: ExpenseEntry) => e.status === 'paid').reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
+            const filtPending = filteredExpenses.filter((e: ExpenseEntry) => e.status === 'pending').reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
+            const filtRecurring = filteredExpenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
+            const hasDateFilter = expenseDateFrom || expenseDateTo;
+            return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses</div>
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(totalExpensesPaid + totalExpensesPending)}</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses{hasDateFilter ? ' (filtered)' : ''}</div>
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(filtPaid + filtPending)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Paid</div>
-              <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(totalExpensesPaid)}</div>
+              <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(filtPaid)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pending</div>
-              <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(totalExpensesPending)}</div>
+              <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(filtPending)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Recurring / month</div>
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                {fmtCurrency(expenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0))}
-              </div>
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(filtRecurring)}</div>
             </div>
           </div>
+            );
+          })()}
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-              <input type="text" value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)}
-                placeholder="Search expenses..."
-                className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all" />
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input type="text" value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)}
+                  placeholder="Search expenses..."
+                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={expenseDateFrom} onChange={e => setExpenseDateFrom(e.target.value)}
+                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
+                <span className="text-[10px] text-zinc-400">to</span>
+                <input type="date" value={expenseDateTo} onChange={e => setExpenseDateTo(e.target.value)}
+                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
+                {(expenseDateFrom || expenseDateTo) && (
+                  <button onClick={() => { setExpenseDateFrom(''); setExpenseDateTo(''); }}
+                    className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
               {['all', ...Object.keys(EXPENSE_CATEGORIES)].map(cat => (
@@ -1329,7 +1427,8 @@ export const Finance: React.FC = () => {
                                 <CatIcon size={10} />
                               </div>
                               <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{exp.category}</span>
-                              {exp.recurring && <span className="text-[8px] bg-zinc-100 dark:bg-zinc-800 text-zinc-400 px-1 rounded">REC</span>}
+                              {exp.recurring && <span className="text-[8px] bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 px-1 rounded font-semibold">REC</span>}
+                              {exp.recurring_source_id && <span className="text-[8px] bg-blue-50 dark:bg-blue-500/10 text-blue-500 px-1 rounded font-semibold">AUTO</span>}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">{exp.project_name}</td>

@@ -54,6 +54,7 @@ export interface IncomeEntry {
   created_at: string
   updated_at: string
   installments?: Installment[]
+  linked_task_id?: string | null
 }
 
 export interface Installment {
@@ -66,6 +67,7 @@ export interface Installment {
   status: 'paid' | 'pending' | 'overdue'
   created_at: string
   updated_at: string
+  linked_task_id?: string | null
 }
 
 export interface ExpenseEntry {
@@ -84,6 +86,8 @@ export interface ExpenseEntry {
   recurring: boolean
   status: 'paid' | 'pending'
   budget_id: string | null
+  recurring_source_id: string | null
+  last_renewed_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string
