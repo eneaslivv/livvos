@@ -79,7 +79,10 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">Next payment: ${nextPay.amount.toLocaleString()}</p>
-            <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">{nextPay.concept} · Due {nextPay.dueDate}</p>
+            <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">
+              {nextPay.concept} · Due {nextPay.dueDate}
+              {nextPay.linkedTaskTitle && <span className="font-medium"> · {nextPay.linkedTaskTitle}</span>}
+            </p>
           </div>
         </div>
       )}

@@ -12,6 +12,12 @@ export interface Milestone {
   eta?: string;
   /** When this milestone was completed */
   completedAt?: string;
+  /** Linked payment info (if this delivery triggers a payment) */
+  linkedPayment?: {
+    amount: number;
+    status: 'paid' | 'pending' | 'overdue';
+    dueDate?: string;
+  };
 }
 
 export interface Credential {
@@ -55,6 +61,8 @@ export interface PaymentEntry {
   status: 'paid' | 'pending' | 'overdue';
   number?: number;
   projectTitle?: string;
+  linkedTaskId?: string;
+  linkedTaskTitle?: string;
 }
 
 export interface ProjectBudget {
@@ -62,7 +70,7 @@ export interface ProjectBudget {
   projectTitle: string;
   total: number;
   paid: number;
-  nextPayment?: { amount: number; dueDate: string; concept?: string };
+  nextPayment?: { amount: number; dueDate: string; concept?: string; linkedTaskTitle?: string };
   payments: PaymentEntry[];
 }
 
@@ -93,7 +101,7 @@ export interface DashboardData {
     total: number;
     paid: number;
     /** Optional next payment info */
-    nextPayment?: { amount: number; dueDate: string; concept?: string };
+    nextPayment?: { amount: number; dueDate: string; concept?: string; linkedTaskTitle?: string };
     /** Full payment schedule */
     payments?: PaymentEntry[];
   };

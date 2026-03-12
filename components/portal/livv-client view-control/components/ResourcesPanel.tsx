@@ -329,6 +329,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                             </div>
                             <p className={`text-[9px] ${isPaid ? 'text-[#2C0405]/70 dark:text-[#e8a0a2]/70' : isOverdue ? 'text-red-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
                               {isPaid && p.paidDate ? `Paid ${fmtDate(p.paidDate)}` : `Due ${fmtDate(p.dueDate)}`}
+                              {p.linkedTaskTitle && ` · Delivery: ${p.linkedTaskTitle}`}
                             </p>
                           </div>
 

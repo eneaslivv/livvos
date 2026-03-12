@@ -5,7 +5,8 @@ import {
   CreditCard, FileText, Settings, Download,
   ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
-  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2
+  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
+  Send, ThumbsUp, ThumbsDown, ArrowRight
 } from 'lucide-react';
 import {
   useFinance,
@@ -20,6 +21,7 @@ import {
 import { useProjects } from '../context/ProjectsContext';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../context/ClientsContext';
+import type { Proposal, ProposalStatus } from '../types/crm';
 import { useRBAC } from '../context/RBACContext';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -35,7 +37,7 @@ interface LiquidityPoint {
   balance: number;
 }
 
-type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'budgets' | 'proyectos' | 'config';
+type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'budgets' | 'propuestas' | 'proyectos' | 'config';
 
 // ─── Formatters ───────────────────────────────────────────────────
 
@@ -206,6 +208,65 @@ export const Finance: React.FC = () => {
       .order('created_at', { ascending: true });
     if (data) setProjectTasksCache(prev => ({ ...prev, [projectId]: data }));
   }, [projectTasksCache]);
+
+  // ─── Proposals data ─────────────────────────────────────────
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [proposalsLoading, setProposalsLoading] = useState(true);
+  const [proposalStatusFilter, setProposalStatusFilter] = useState<'all' | ProposalStatus>('all');
+
+  useEffect(() => {
+    const fetchProposals = async () => {
+      setProposalsLoading(true);
+      const { data } = await supabase
+        .from('proposals')
+        .select('id,tenant_id,title,status,pricing_total,client_id,lead_id,currency,sent_at,approved_at,rejected_at,created_at,updated_at')
+        .order('created_at', { ascending: false });
+      setProposals((data as Proposal[]) || []);
+      setProposalsLoading(false);
+    };
+    fetchProposals();
+  }, []);
+
+  const proposalMetrics = useMemo(() => {
+    const sent = proposals.filter(p => p.status === 'sent');
+    const approved = proposals.filter(p => p.status === 'approved');
+    const rejected = proposals.filter(p => p.status === 'rejected');
+    const draft = proposals.filter(p => p.status === 'draft');
+    const potentialRevenue = sent.reduce((s, p) => s + (p.pricing_total || 0), 0);
+    const confirmedRevenue = approved.reduce((s, p) => s + (p.pricing_total || 0), 0);
+    const lostRevenue = rejected.reduce((s, p) => s + (p.pricing_total || 0), 0);
+    const responded = sent.length + approved.length + rejected.length;
+    const conversionRate = responded > 0 ? (approved.length / responded) * 100 : 0;
+    return { sent, approved, rejected, draft, potentialRevenue, confirmedRevenue, lostRevenue, conversionRate };
+  }, [proposals]);
+
+  const filteredProposals = useMemo(() => {
+    if (proposalStatusFilter === 'all') return proposals;
+    return proposals.filter(p => p.status === proposalStatusFilter);
+  }, [proposals, proposalStatusFilter]);
+
+  const updateProposalStatus = useCallback(async (id: string, status: ProposalStatus) => {
+    const updates: Record<string, any> = { status };
+    if (status === 'approved') updates.approved_at = new Date().toISOString();
+    if (status === 'rejected') updates.rejected_at = new Date().toISOString();
+    await supabase.from('proposals').update(updates).eq('id', id);
+    setProposals(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, []);
+
+  const convertProposalToIncome = useCallback((proposal: Proposal) => {
+    setIncomeForm({
+      client_id: proposal.client_id || '',
+      project_id: '',
+      concept: proposal.title,
+      total_amount: String(proposal.pricing_total || 0),
+      num_installments: '1',
+      due_date: new Date().toISOString().split('T')[0],
+    });
+    setEditingIncomeId(null);
+    setEntryType('income');
+    setEntryError(null);
+    setIsEntryOpen(true);
+  }, []);
 
   // ─── Computed Data ────────────────────────────────────────────
 
@@ -757,6 +818,7 @@ export const Finance: React.FC = () => {
           { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
           { id: 'gastos', label: 'Expenses', icon: Receipt },
           { id: 'budgets', label: 'Budgets', icon: Wallet },
+          { id: 'propuestas', label: 'Proposals', icon: FileText },
           { id: 'proyectos', label: 'Projects P&L', icon: Target },
           { id: 'config', label: 'Settings', icon: Settings },
         ] as const).map(tab => (
@@ -780,12 +842,13 @@ export const Finance: React.FC = () => {
         <div className="space-y-5 animate-in slide-in-from-bottom-2 duration-500">
 
           {/* Metric Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {[
               { title: 'Overall Balance', value: fmtCurrency(currentBalance), change: incomes.length > 0 ? fmtPercent(margin > 0 ? 12.4 : -5.2) : null, trend: 'up' as const, status: currentBalance >= 0 ? 'positive' as const : 'negative' as const, icon: Wallet, accent: 'emerald' },
               { title: 'Available Liquidity', value: fmtCurrency(liquidez), change: incomes.length > 0 ? fmtPercent(8.2) : null, trend: 'up' as const, status: liquidez >= 0 ? 'positive' as const : 'negative' as const, icon: Banknote, accent: 'blue' },
               { title: '90-Day Forecast', value: fmtCurrency(projection90d), change: null, trend: 'up' as const, status: 'neutral' as const, icon: TrendingUp, accent: 'violet' },
               { title: 'Operating Margin', value: `${margin.toFixed(1)}%`, change: incomes.length > 0 ? fmtPercent(3.1) : null, trend: 'up' as const, status: margin >= 0 ? 'positive' as const : 'negative' as const, icon: PieChart, accent: 'amber' },
+              { title: 'Potential Revenue', value: fmtCurrency(proposalMetrics.potentialRevenue), change: proposalMetrics.sent.length > 0 ? `${proposalMetrics.sent.length} pending` : null, trend: 'up' as const, status: proposalMetrics.potentialRevenue > 0 ? 'positive' as const : 'neutral' as const, icon: FileText, accent: 'indigo' },
             ].map((m, i) => (
               <div key={i} className="group relative p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all duration-300">
                 <div className="flex items-center gap-2 mb-3">
@@ -1632,6 +1695,159 @@ export const Finance: React.FC = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══════════════ PROPOSALS ═══════════════ */}
+      {activeTab === 'propuestas' && (
+        <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
+                  <Send size={12} className="text-indigo-500" />
+                </div>
+                <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Pending</span>
+              </div>
+              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.sent.length}</div>
+              <div className="text-[10px] text-indigo-500 font-medium mt-0.5">{fmtCurrency(proposalMetrics.potentialRevenue)}</div>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
+                  <ThumbsUp size={12} className="text-emerald-500" />
+                </div>
+                <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Confirmed</span>
+              </div>
+              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.approved.length}</div>
+              <div className="text-[10px] text-emerald-500 font-medium mt-0.5">{fmtCurrency(proposalMetrics.confirmedRevenue)}</div>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10">
+                  <ThumbsDown size={12} className="text-rose-500" />
+                </div>
+                <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Rejected</span>
+              </div>
+              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.rejected.length}</div>
+              <div className="text-[10px] text-rose-400 font-medium mt-0.5">{fmtCurrency(proposalMetrics.lostRevenue)}</div>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                  <Target size={12} className="text-zinc-500" />
+                </div>
+                <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Conversion</span>
+              </div>
+              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.conversionRate.toFixed(0)}%</div>
+              <div className="text-[10px] text-zinc-400 font-medium mt-0.5">{proposalMetrics.approved.length + proposalMetrics.rejected.length + proposalMetrics.sent.length} total responded</div>
+            </div>
+          </div>
+
+          {/* Filter pills */}
+          <div className="flex items-center gap-1.5">
+            {([
+              { key: 'all', label: 'All', count: proposals.length },
+              { key: 'draft', label: 'Draft', count: proposalMetrics.draft.length },
+              { key: 'sent', label: 'Sent', count: proposalMetrics.sent.length },
+              { key: 'approved', label: 'Approved', count: proposalMetrics.approved.length },
+              { key: 'rejected', label: 'Rejected', count: proposalMetrics.rejected.length },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setProposalStatusFilter(tab.key)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  proposalStatusFilter === tab.key
+                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                    : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 && <span className={`ml-1 text-[10px] ${proposalStatusFilter === tab.key ? 'opacity-60' : 'opacity-40'}`}>{tab.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* Proposals table */}
+          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+            {proposalsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="w-5 h-5 border-2 border-zinc-200 dark:border-zinc-700 border-t-indigo-500 rounded-full animate-spin" />
+              </div>
+            ) : filteredProposals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
+                <FileText size={28} className="mb-2 text-zinc-300" />
+                <p className="text-xs">No proposals found.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                {filteredProposals.map(p => {
+                  const client = p.client_id ? clients.find((c: any) => c.id === p.client_id) : null;
+                  const statusStyles: Record<string, string> = {
+                    draft: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400',
+                    sent: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+                    approved: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+                    rejected: 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400',
+                  };
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                      {/* Title + client */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{p.title}</div>
+                        <div className="text-[10px] text-zinc-400 truncate mt-0.5">
+                          {client?.name || (p.lead_id ? 'Lead' : 'No client')}
+                          {p.sent_at && ` · Sent ${fmtDate(p.sent_at.split('T')[0])}`}
+                        </div>
+                      </div>
+
+                      {/* Amount */}
+                      <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
+                        {p.pricing_total ? fmtCurrency(p.pricing_total) : '—'}
+                      </div>
+
+                      {/* Status badge */}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 ${statusStyles[p.status] || statusStyles.draft}`}>
+                        {p.status}
+                      </span>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {p.status === 'sent' && (
+                          <>
+                            <button
+                              onClick={() => updateProposalStatus(p.id, 'approved')}
+                              className="p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                              title="Approve"
+                            >
+                              <CheckCircle2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => updateProposalStatus(p.id, 'rejected')}
+                              className="p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                              title="Reject"
+                            >
+                              <ThumbsDown size={14} />
+                            </button>
+                          </>
+                        )}
+                        {p.status === 'approved' && p.pricing_total && (
+                          <button
+                            onClick={() => convertProposalToIncome(p)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-[10px] font-semibold transition-colors"
+                            title="Convert to Income"
+                          >
+                            <ArrowRight size={10} />
+                            Income
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

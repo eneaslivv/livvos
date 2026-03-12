@@ -92,6 +92,7 @@ const buildPaymentsFromIncomes = (incomesData: any[], projectTitle?: string) => 
           status: inst.status || 'pending',
           number: inst.number || 1,
           projectTitle,
+          linkedTaskId: inst.linked_task_id || inc.linked_task_id || undefined,
         });
       }
     } else {
@@ -104,6 +105,7 @@ const buildPaymentsFromIncomes = (incomesData: any[], projectTitle?: string) => 
         dueDate: inc.due_date || '',
         status: inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending',
         projectTitle,
+        linkedTaskId: inc.linked_task_id || undefined,
       });
     }
     totalFromIncomes += Number(inc.total_amount || 0);
@@ -268,9 +270,9 @@ export const ClientPortalView: React.FC = () => {
             ? safeQuery(supabase.from('files').select('id,name,type,size,url').eq('project_id', projectId).order('created_at', { ascending: false }), [] as any[])
             : Promise.resolve({ data: [] }),
           projectId
-            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', projectId).order('due_date', { ascending: true }), [] as any[])
+            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,linked_task_id,installments(id,number,amount,due_date,paid_date,status,linked_task_id)').eq('project_id', projectId).order('due_date', { ascending: true }), [] as any[])
             : client?.id
-            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('client_id', client.id).order('due_date', { ascending: true }), [] as any[])
+            ? safeQuery(supabase.from('incomes').select('id,concept,total_amount,status,due_date,linked_task_id,installments(id,number,amount,due_date,paid_date,status,linked_task_id)').eq('client_id', client.id).order('due_date', { ascending: true }), [] as any[])
             : Promise.resolve({ data: [] })
         ]);
 
@@ -365,13 +367,33 @@ export const ClientPortalView: React.FC = () => {
           project?.title || undefined
         );
 
+        // Resolve linked task titles on payments, and attach linked payments to milestones
+        const taskMap = new Map(tasks.map(t => [t.id, t]));
+        for (const p of payments) {
+          if (p.linkedTaskId) {
+            const task = taskMap.get(p.linkedTaskId);
+            if (task) p.linkedTaskTitle = task.title || undefined;
+          }
+        }
+        // Attach linked payment info to milestones
+        for (const m of milestones) {
+          const linkedPay = payments.find(p => p.linkedTaskId === m.id);
+          if (linkedPay) {
+            m.linkedPayment = {
+              amount: linkedPay.amount,
+              status: linkedPay.status,
+              dueDate: linkedPay.dueDate,
+            };
+          }
+        }
+
         const budgetTotal = Number(finances?.total_agreed || 0) || totalFromIncomes;
         const budgetPaid = Number(finances?.total_collected || 0) || paidFromInstallments;
 
         // Determine next payment
         const nextPending = payments.find(p => p.status !== 'paid');
         const nextPayment = nextPending
-          ? { amount: nextPending.amount, dueDate: nextPending.dueDate, concept: nextPending.concept }
+          ? { amount: nextPending.amount, dueDate: nextPending.dueDate, concept: nextPending.concept, linkedTaskTitle: nextPending.linkedTaskTitle }
           : undefined;
 
         // Map tasks for the ProjectTasks component
@@ -404,7 +426,7 @@ export const ClientPortalView: React.FC = () => {
             otherProjects.map(async (proj) => {
               const [{ data: otherIncomes }, { data: otherFinances }, { data: otherFiles }, { data: otherLogs }] = await Promise.all([
                 safeQuery(
-                  supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', proj.id).order('due_date', { ascending: true }),
+                  supabase.from('incomes').select('id,concept,total_amount,status,due_date,linked_task_id,installments(id,number,amount,due_date,paid_date,status,linked_task_id)').eq('project_id', proj.id).order('due_date', { ascending: true }),
                   [] as any[], 4000
                 ),
                 safeQuery(

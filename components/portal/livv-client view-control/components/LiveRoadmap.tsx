@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Check, Circle } from 'lucide-react';
+import { Check, Circle, CreditCard } from 'lucide-react';
 import { Milestone } from '../types';
 
 const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
@@ -88,6 +88,17 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                   {!done && m.eta && (
                     <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
                       Date: {m.eta}
+                    </span>
+                  )}
+                  {m.linkedPayment && (
+                    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${
+                      m.linkedPayment.status === 'paid'
+                        ? 'bg-[#2C0405]/5 dark:bg-[#822b2e]/20 text-[#2C0405] dark:text-[#e8a0a2]'
+                        : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+                    }`}>
+                      <CreditCard size={9} />
+                      ${m.linkedPayment.amount.toLocaleString()}
+                      {m.linkedPayment.status === 'paid' && ' ✓'}
                     </span>
                   )}
                 </div>
