@@ -79,9 +79,11 @@ export interface ExpenseEntry {
   date: string
   project_id: string | null
   project_name: string
+  client_id: string | null
   vendor: string
   recurring: boolean
   status: 'paid' | 'pending'
+  budget_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -109,15 +111,18 @@ export interface CreateExpenseData {
   date: string
   project_id?: string | null
   project_name?: string
+  client_id?: string | null
   vendor: string
   recurring?: boolean
   status?: 'paid' | 'pending'
+  budget_id?: string | null
 }
 
 export interface TimeEntry {
   id: string
   tenant_id: string
-  project_id: string
+  project_id: string | null
+  client_id: string | null
   user_id: string
   description: string
   hours: number
@@ -128,11 +133,44 @@ export interface TimeEntry {
 }
 
 export interface CreateTimeEntryData {
-  project_id: string
+  project_id?: string | null
+  client_id?: string | null
   description: string
   hours: number
   date: string
   hourly_rate?: number | null
+}
+
+export interface Budget {
+  id: string
+  tenant_id: string
+  name: string
+  description: string
+  allocated_amount: number
+  currency: string
+  category: string
+  color: string
+  icon: string
+  period: 'monthly' | 'quarterly' | 'yearly' | 'one-time'
+  start_date: string | null
+  end_date: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateBudgetData {
+  name: string
+  description?: string
+  allocated_amount: number
+  currency?: string
+  category?: string
+  color?: string
+  icon?: string
+  period?: 'monthly' | 'quarterly' | 'yearly' | 'one-time'
+  start_date?: string | null
+  end_date?: string | null
 }
 
 // ─── Context Type ─────────────────────────────────────────────────
@@ -156,6 +194,7 @@ interface FinanceContextType {
   incomes: IncomeEntry[]
   incomesLoading: boolean
   createIncome: (data: CreateIncomeData) => Promise<IncomeEntry | null>
+  updateIncome: (id: string, updates: Partial<IncomeEntry>) => Promise<void>
   updateInstallment: (id: string, updates: Partial<Installment>) => Promise<void>
   deleteIncome: (id: string) => Promise<void>
   refreshIncomes: () => Promise<void>
@@ -174,6 +213,14 @@ interface FinanceContextType {
   createTimeEntry: (data: CreateTimeEntryData) => Promise<TimeEntry | null>
   deleteTimeEntry: (id: string) => Promise<void>
   refreshTimeEntries: () => Promise<void>
+
+  // Budget operations
+  budgets: Budget[]
+  budgetsLoading: boolean
+  createBudget: (data: CreateBudgetData) => Promise<Budget | null>
+  updateBudget: (id: string, updates: Partial<Budget>) => Promise<void>
+  deleteBudget: (id: string) => Promise<void>
+  refreshBudgets: () => Promise<void>
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -218,6 +265,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
   const [timeEntriesLoading, setTimeEntriesLoading] = useState(false)
   const hasLoadedTimeEntriesRef = useRef(false)
+
+  // Budget state
+  const [budgets, setBudgets] = useState<Budget[]>([])
+  const [budgetsLoading, setBudgetsLoading] = useState(false)
+  const hasLoadedBudgetsRef = useRef(false)
 
   // ─── Permissions ────────────────────────────────────────────
 
@@ -644,6 +696,18 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   }, [user, currentTenant?.id, loadIncomes])
 
+  const updateIncome = useCallback(async (id: string, updates: Partial<IncomeEntry>): Promise<void> => {
+    try {
+      const { error: err } = await supabase
+        .from('incomes').update(updates).eq('id', id)
+      if (err) throw err
+      await loadIncomes()
+    } catch (err) {
+      console.error('Error updating income:', err)
+      throw err
+    }
+  }, [loadIncomes])
+
   const updateInstallment = useCallback(async (id: string, updates: Partial<Installment>): Promise<void> => {
     try {
       const { error: err } = await supabase
@@ -692,6 +756,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         created_by: user.id,
       }
       if (data.project_id) expensePayload.project_id = data.project_id
+      if (data.client_id) expensePayload.client_id = data.client_id
+      if (data.budget_id) expensePayload.budget_id = data.budget_id
 
       if (import.meta.env.DEV) console.log('[FinanceContext] Inserting expense:', expensePayload)
 
@@ -741,17 +807,20 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const createTimeEntry = useCallback(async (data: CreateTimeEntryData): Promise<TimeEntry | null> => {
     if (!user || !currentTenant?.id) throw new Error('Not authenticated')
     try {
+      const timePayload: Record<string, any> = {
+        tenant_id: currentTenant.id,
+        user_id: user.id,
+        description: data.description,
+        hours: data.hours,
+        date: data.date,
+        hourly_rate: data.hourly_rate || null,
+      }
+      if (data.project_id) timePayload.project_id = data.project_id
+      if (data.client_id) timePayload.client_id = data.client_id
+
       const { data: entry, error: err } = await supabase
         .from('time_entries')
-        .insert({
-          tenant_id: currentTenant.id,
-          user_id: user.id,
-          project_id: data.project_id,
-          description: data.description,
-          hours: data.hours,
-          date: data.date,
-          hourly_rate: data.hourly_rate || null,
-        })
+        .insert(timePayload)
         .select()
         .single()
       if (err) {
@@ -777,6 +846,113 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   }, [])
 
+  // ─── Budget CRUD ───────────────────────────────────────────
+
+  const loadBudgets = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setBudgets([])
+      setBudgetsLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedBudgetsRef.current) {
+        setBudgetsLoading(true)
+      }
+      const timeout = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timed out' } }), 8000)
+      )
+      const query = supabase
+        .from('budgets')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('created_at', { ascending: false })
+
+      const { data, error: err } = await Promise.race([query, timeout])
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Budgets load issue:', err.code, err.message)
+        setBudgets([])
+        return
+      }
+      setBudgets(data || [])
+      hasLoadedBudgetsRef.current = true
+    } catch (err) {
+      console.error('Error loading budgets:', err)
+      setBudgets([])
+    } finally {
+      setBudgetsLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadBudgets()
+    const channel = supabase
+      .channel('budgets-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => { loadBudgets() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadBudgets])
+
+  const createBudget = useCallback(async (data: CreateBudgetData): Promise<Budget | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    try {
+      const payload: Record<string, any> = {
+        tenant_id: currentTenant.id,
+        name: data.name,
+        description: data.description || '',
+        allocated_amount: data.allocated_amount,
+        currency: data.currency || 'USD',
+        category: data.category || '',
+        color: data.color || '#3b82f6',
+        icon: data.icon || 'wallet',
+        period: data.period || 'monthly',
+        start_date: data.start_date || null,
+        end_date: data.end_date || null,
+        created_by: user.id,
+      }
+      const { data: budget, error: err } = await supabase
+        .from('budgets')
+        .insert(payload)
+        .select()
+        .single()
+      if (err) {
+        console.error('[FinanceContext] Budget insert error:', err)
+        throw new Error(err.message || 'Error creating budget.')
+      }
+      setBudgets(prev => [budget, ...prev])
+      return budget
+    } catch (err) {
+      console.error('[FinanceContext] createBudget failed:', err)
+      throw err
+    }
+  }, [user, currentTenant?.id])
+
+  const updateBudget = useCallback(async (id: string, updates: Partial<Budget>): Promise<void> => {
+    try {
+      const { data: updated, error: err } = await supabase
+        .from('budgets')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single()
+      if (err) throw err
+      setBudgets(prev => prev.map(b => b.id === id ? updated : b))
+    } catch (err) {
+      console.error('Error updating budget:', err)
+      throw err
+    }
+  }, [])
+
+  const deleteBudget = useCallback(async (id: string): Promise<void> => {
+    try {
+      const { error: err } = await supabase.from('budgets').delete().eq('id', id)
+      if (err) throw err
+      setBudgets(prev => prev.filter(b => b.id !== id))
+    } catch (err) {
+      console.error('Error deleting budget:', err)
+      throw err
+    }
+  }, [])
+
   // ─── Value ──────────────────────────────────────────────────
 
   const value: FinanceContextType = useMemo(() => ({
@@ -785,7 +961,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     getFinanceByProject, getFinancialSummary,
     getTenantFinancials, updateProjectFinancials,
     incomes, incomesLoading,
-    createIncome, updateInstallment, deleteIncome,
+    createIncome, updateIncome, updateInstallment, deleteIncome,
     refreshIncomes: loadIncomes,
     expenses, expensesLoading,
     createExpense, updateExpense, deleteExpense,
@@ -793,13 +969,17 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     timeEntries, timeEntriesLoading,
     createTimeEntry, deleteTimeEntry,
     refreshTimeEntries: loadTimeEntries,
+    budgets, budgetsLoading,
+    createBudget, updateBudget, deleteBudget,
+    refreshBudgets: loadBudgets,
   }), [finances, loading, error, canViewFinances, canEditFinances,
     createFinance, updateFinance, deleteFinance,
     getFinanceByProject, getFinancialSummary,
     getTenantFinancials, updateProjectFinancials,
-    incomes, incomesLoading, createIncome, updateInstallment, deleteIncome, loadIncomes,
+    incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome, loadIncomes,
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses,
-    timeEntries, timeEntriesLoading, createTimeEntry, deleteTimeEntry, loadTimeEntries])
+    timeEntries, timeEntriesLoading, createTimeEntry, deleteTimeEntry, loadTimeEntries,
+    budgets, budgetsLoading, createBudget, updateBudget, deleteBudget, loadBudgets])
 
   return (
     <FinanceContext.Provider value={value}>

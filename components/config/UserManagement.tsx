@@ -4,7 +4,8 @@ import { useTenant } from '../../context/TenantContext';
 import { useTeam } from '../../context/TeamContext';
 import { ResourceLimitError } from '../../lib/ResourceLimitError';
 import { Icons } from '../ui/Icons';
-import { supabase, supabaseAdmin } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
+import { errorLogger } from '../../lib/errorLogger';
 import { Role } from '../../types/rbac';
 import { SCREEN_PERMISSIONS, OS_SCREENS, SALES_SCREENS, ALL_SCREEN_IDS } from '../../lib/screenPermissions';
 import { sendInviteEmail } from '../../lib/sendInviteEmail';
@@ -120,6 +121,7 @@ export const UserManagement: React.FC = () => {
   const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set(ALL_SCREEN_IDS));
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [emailFailed, setEmailFailed] = useState(false);
 
   // Edit permissions
   const [editingUser, setEditingUser] = useState<MemberRow | null>(null);
@@ -171,7 +173,7 @@ export const UserManagement: React.FC = () => {
 
       setMembers(memberRows);
     } catch (err) {
-      console.error('Error fetching user data:', err);
+      errorLogger.error('Error fetching user data:', err);
     } finally {
       setIsLoading(false);
     }
@@ -217,12 +219,13 @@ export const UserManagement: React.FC = () => {
         roleIdToUse = adminRole.id;
       } else {
         // Create custom role with selected permissions (admin client bypasses RLS)
-        const { data: newRole, error: roleError } = await supabaseAdmin
+        const { data: newRole, error: roleError } = await supabase
           .from('roles')
           .insert({
             name: `custom_${Date.now()}`,
             description: `Custom access for ${inviteEmail}`,
             is_system: false,
+            tenant_id: currentTenant.id,
           })
           .select()
           .single();
@@ -239,7 +242,7 @@ export const UserManagement: React.FC = () => {
           .filter(Boolean) as { role_id: string; permission_id: string }[];
 
         if (permInserts.length > 0) {
-          const { error: rpError } = await supabaseAdmin.from('role_permissions').insert(permInserts);
+          const { error: rpError } = await supabase.from('role_permissions').insert(permInserts);
           if (rpError) throw rpError;
         }
 
@@ -265,6 +268,7 @@ export const UserManagement: React.FC = () => {
       setInvitations(prev => [...prev, data]);
 
       // Send invite email via Edge Function
+      setEmailFailed(false);
       try {
         await sendInviteEmail({
           clientName: inviteEmail.split('@')[0],
@@ -273,12 +277,13 @@ export const UserManagement: React.FC = () => {
           tenantName: currentTenant?.name || undefined,
         });
       } catch (emailErr) {
-        if (import.meta.env.DEV) console.warn('Invite email send failed (link still valid):', emailErr);
+        errorLogger.warn('Invite email send failed (link still valid)', emailErr);
+        setEmailFailed(true);
       }
 
       setInviteEmail('');
     } catch (err: any) {
-      console.error('Error creating invitation:', err);
+      errorLogger.error('Error creating invitation:', err);
       if (err instanceof ResourceLimitError) {
         alert(err.message);
       } else {
@@ -292,10 +297,10 @@ export const UserManagement: React.FC = () => {
   const cancelInvitation = async (inviteId: string) => {
     if (!confirm('Cancel this invitation?')) return;
     try {
-      await supabaseAdmin.from('invitations').update({ status: 'expired' }).eq('id', inviteId);
+      await supabase.from('invitations').update({ status: 'expired' }).eq('id', inviteId);
       setInvitations(prev => prev.filter(i => i.id !== inviteId));
     } catch (err) {
-      console.error('Error cancelling invitation:', err);
+      errorLogger.error('Error cancelling invitation:', err);
     }
   };
 
@@ -305,6 +310,7 @@ export const UserManagement: React.FC = () => {
     setInviteEmail('');
     setAccessLevel('full');
     setSelectedScreens(new Set(ALL_SCREEN_IDS));
+    setEmailFailed(false);
   };
 
   const copyLink = () => {
@@ -320,7 +326,7 @@ export const UserManagement: React.FC = () => {
     if (!member.role_id) return;
 
     // Load the member's current screen permissions (admin client for reliable read)
-    const { data: rolePerms } = await supabaseAdmin
+    const { data: rolePerms } = await supabase
       .from('role_permissions')
       .select('permissions(module, action)')
       .eq('role_id', member.role_id);
@@ -359,15 +365,16 @@ export const UserManagement: React.FC = () => {
       if (!editingUser.is_system_role && editingUser.role_name.startsWith('custom_') && editingUser.role_id) {
         roleId = editingUser.role_id;
         // Clear existing permissions for this role
-        await supabaseAdmin.from('role_permissions').delete().eq('role_id', roleId);
+        await supabase.from('role_permissions').delete().eq('role_id', roleId);
       } else {
         // Create new custom role & reassign
-        const { data: newRole, error: roleError } = await supabaseAdmin
+        const { data: newRole, error: roleError } = await supabase
           .from('roles')
           .insert({
             name: `custom_${Date.now()}`,
             description: `Custom access for ${editingUser.email}`,
             is_system: false,
+            tenant_id: currentTenant.id,
           })
           .select()
           .single();
@@ -377,9 +384,9 @@ export const UserManagement: React.FC = () => {
 
         // Remove old role assignment, add new
         if (editingUser.role_id) {
-          await supabaseAdmin.from('user_roles').delete().eq('user_id', editingUser.id).eq('role_id', editingUser.role_id);
+          await supabase.from('user_roles').delete().eq('user_id', editingUser.id).eq('role_id', editingUser.role_id);
         }
-        await supabaseAdmin.from('user_roles').insert({ user_id: editingUser.id, role_id: roleId });
+        await supabase.from('user_roles').insert({ user_id: editingUser.id, role_id: roleId });
       }
 
       // Insert selected permissions
@@ -392,13 +399,13 @@ export const UserManagement: React.FC = () => {
         .filter(Boolean) as { role_id: string; permission_id: string }[];
 
       if (permInserts.length > 0) {
-        await supabaseAdmin.from('role_permissions').insert(permInserts);
+        await supabase.from('role_permissions').insert(permInserts);
       }
 
       setEditingUser(null);
       await fetchData();
     } catch (err) {
-      console.error('Error saving permissions:', err);
+      errorLogger.error('Error saving permissions:', err);
       alert('Failed to save permissions.');
     } finally {
       setIsSaving(false);
@@ -415,7 +422,7 @@ export const UserManagement: React.FC = () => {
       await supabase.from('profiles').update({ status: newStatus }).eq('id', member.id);
       setMembers(prev => prev.map(m => m.id === member.id ? { ...m, status: newStatus } : m));
     } catch (err) {
-      console.error('Error updating user status:', err);
+      errorLogger.error('Error updating user status:', err);
     }
     setOpenMenuId(null);
   };
@@ -550,7 +557,17 @@ export const UserManagement: React.FC = () => {
                 <Icons.Check size={24} />
               </div>
               <h4 className="font-bold text-zinc-900 dark:text-zinc-100">Invitation Created!</h4>
-              <p className="text-sm text-zinc-500">Share this link with the user to let them join.</p>
+              <p className="text-sm text-zinc-500">
+                {emailFailed
+                  ? 'Email delivery failed. Copy the link below and share it manually.'
+                  : 'Share this link with the user to let them join.'}
+              </p>
+              {emailFailed && (
+                <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300 max-w-md mx-auto">
+                  <Icons.AlertCircle size={15} className="text-amber-500 shrink-0" />
+                  Email could not be sent — share the link manually
+                </div>
+              )}
               <div className="flex items-center gap-2 max-w-md mx-auto mt-4">
                 <input
                   type="text"

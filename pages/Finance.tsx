@@ -5,7 +5,7 @@ import {
   CreditCard, FileText, Settings, Download,
   ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
-  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2
+  Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil
 } from 'lucide-react';
 import {
   useFinance,
@@ -99,8 +99,8 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
 
 export const Finance: React.FC = () => {
   const {
-    incomes, incomesLoading, createIncome, updateInstallment, deleteIncome,
-    expenses, expensesLoading, createExpense, deleteExpense,
+    incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome,
+    expenses, expensesLoading, createExpense, updateExpense, deleteExpense,
   } = useFinance();
   const { projects } = useProjects();
   const { clients } = useClients();
@@ -143,6 +143,8 @@ export const Finance: React.FC = () => {
   const [entryType, setEntryType] = useState<'income' | 'expense'>('income');
   const [entryError, setEntryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -322,6 +324,7 @@ export const Finance: React.FC = () => {
 
   const openIncomeForm = useCallback(() => {
     resetIncomeForm();
+    setEditingIncomeId(null);
     setEntryType('income');
     setEntryError(null);
     setIsEntryOpen(true);
@@ -329,14 +332,49 @@ export const Finance: React.FC = () => {
 
   const openExpenseForm = useCallback(() => {
     resetExpenseForm();
+    setEditingExpenseId(null);
     setEntryType('expense');
     setEntryError(null);
     setIsEntryOpen(true);
   }, [resetExpenseForm]);
 
+  const openEditIncome = useCallback((inc: IncomeEntry) => {
+    setIncomeForm({
+      client_id: inc.client_id || '',
+      project_id: inc.project_id || '',
+      concept: inc.concept,
+      total_amount: String(inc.total_amount),
+      num_installments: String((inc.installments || []).length || 1),
+      due_date: inc.due_date || new Date().toISOString().split('T')[0],
+    });
+    setEditingIncomeId(inc.id);
+    setEntryType('income');
+    setEntryError(null);
+    setIsEntryOpen(true);
+  }, []);
+
+  const openEditExpense = useCallback((exp: ExpenseEntry) => {
+    setExpenseForm({
+      concept: exp.concept,
+      category: exp.category,
+      amount: String(exp.amount),
+      vendor: exp.vendor || '',
+      project_id: exp.project_id || '',
+      date: exp.date,
+      recurring: exp.recurring,
+      status: exp.status as 'paid' | 'pending',
+    });
+    setEditingExpenseId(exp.id);
+    setEntryType('expense');
+    setEntryError(null);
+    setIsEntryOpen(true);
+  }, []);
+
   const closeForm = useCallback(() => {
     setIsEntryOpen(false);
     setEntryError(null);
+    setEditingIncomeId(null);
+    setEditingExpenseId(null);
   }, []);
 
   const handleSubmitIncome = useCallback(async () => {
@@ -351,33 +389,43 @@ export const Finance: React.FC = () => {
       const client = clients.find((c: any) => c.id === incomeForm.client_id);
       const project = projects.find((p: any) => p.id === incomeForm.project_id);
 
-      const data: CreateIncomeData = {
-        client_id: incomeForm.client_id || null,
-        project_id: incomeForm.project_id || null,
-        client_name: client?.name || (incomeForm.client_id ? 'Client' : 'No client'),
-        project_name: project?.title || (incomeForm.project_id ? 'Project' : 'No project'),
-        concept: incomeForm.concept.trim(),
-        total_amount: Number(incomeForm.total_amount),
-        due_date: incomeForm.due_date || new Date().toISOString().split('T')[0],
-        num_installments: Math.max(1, parseInt(incomeForm.num_installments) || 1),
-      };
-
-      if (import.meta.env.DEV) console.log('[Finance] Creating income:', data);
-
-      // Timeout wrapper to prevent infinite "Saving..." state
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
       );
 
-      await Promise.race([createIncome(data), timeout]);
+      if (editingIncomeId) {
+        const updates: Partial<IncomeEntry> = {
+          client_id: incomeForm.client_id || null,
+          project_id: incomeForm.project_id || null,
+          client_name: client?.name || (incomeForm.client_id ? 'Client' : 'No client'),
+          project_name: project?.title || (incomeForm.project_id ? 'Project' : 'No project'),
+          concept: incomeForm.concept.trim(),
+        };
+        if (import.meta.env.DEV) console.log('[Finance] Updating income:', editingIncomeId, updates);
+        await Promise.race([updateIncome(editingIncomeId, updates), timeout]);
+      } else {
+        const data: CreateIncomeData = {
+          client_id: incomeForm.client_id || null,
+          project_id: incomeForm.project_id || null,
+          client_name: client?.name || (incomeForm.client_id ? 'Client' : 'No client'),
+          project_name: project?.title || (incomeForm.project_id ? 'Project' : 'No project'),
+          concept: incomeForm.concept.trim(),
+          total_amount: Number(incomeForm.total_amount),
+          due_date: incomeForm.due_date || new Date().toISOString().split('T')[0],
+          num_installments: Math.max(1, parseInt(incomeForm.num_installments) || 1),
+        };
+        if (import.meta.env.DEV) console.log('[Finance] Creating income:', data);
+        await Promise.race([createIncome(data), timeout]);
+      }
+
       closeForm();
     } catch (err: any) {
-      console.error('[Finance] Error creating income:', err);
+      console.error('[Finance] Error saving income:', err);
       setEntryError(err?.message || 'Error saving income. Check the console.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [incomeForm, clients, projects, createIncome, closeForm]);
+  }, [incomeForm, clients, projects, createIncome, updateIncome, editingIncomeId, closeForm]);
 
   const handleSubmitExpense = useCallback(async () => {
     if (!expenseForm.concept.trim()) { setEntryError('Enter a concept.'); return; }
@@ -390,33 +438,48 @@ export const Finance: React.FC = () => {
     try {
       const project = projects.find((p: any) => p.id === expenseForm.project_id);
 
-      const data: CreateExpenseData = {
-        category: expenseForm.category,
-        concept: expenseForm.concept.trim(),
-        amount: Number(expenseForm.amount),
-        date: expenseForm.date,
-        project_id: expenseForm.project_id || null,
-        project_name: project?.title || 'General',
-        vendor: expenseForm.vendor.trim(),
-        recurring: expenseForm.recurring,
-        status: expenseForm.status,
-      };
-
-      if (import.meta.env.DEV) console.log('[Finance] Creating expense:', data);
-
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
       );
 
-      await Promise.race([createExpense(data), timeout]);
+      if (editingExpenseId) {
+        const updates: Partial<ExpenseEntry> = {
+          category: expenseForm.category,
+          concept: expenseForm.concept.trim(),
+          amount: Number(expenseForm.amount),
+          date: expenseForm.date,
+          project_id: expenseForm.project_id || null,
+          project_name: project?.title || 'General',
+          vendor: expenseForm.vendor.trim(),
+          recurring: expenseForm.recurring,
+          status: expenseForm.status,
+        };
+        if (import.meta.env.DEV) console.log('[Finance] Updating expense:', editingExpenseId, updates);
+        await Promise.race([updateExpense(editingExpenseId, updates), timeout]);
+      } else {
+        const data: CreateExpenseData = {
+          category: expenseForm.category,
+          concept: expenseForm.concept.trim(),
+          amount: Number(expenseForm.amount),
+          date: expenseForm.date,
+          project_id: expenseForm.project_id || null,
+          project_name: project?.title || 'General',
+          vendor: expenseForm.vendor.trim(),
+          recurring: expenseForm.recurring,
+          status: expenseForm.status,
+        };
+        if (import.meta.env.DEV) console.log('[Finance] Creating expense:', data);
+        await Promise.race([createExpense(data), timeout]);
+      }
+
       closeForm();
     } catch (err: any) {
-      console.error('[Finance] Error creating expense:', err);
+      console.error('[Finance] Error saving expense:', err);
       setEntryError(err?.message || 'Error saving expense. Check the console.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [expenseForm, projects, createExpense, closeForm]);
+  }, [expenseForm, projects, createExpense, updateExpense, editingExpenseId, closeForm]);
 
   const handleMarkInstallmentPaid = useCallback(async (installment: Installment) => {
     try {
@@ -969,11 +1032,17 @@ export const Finance: React.FC = () => {
                             </td>
                             <td className="px-4 py-3 text-center"><StatusBadge status={inc.status} /></td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 justify-end">
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteIncome(inc.id); }}
-                                  className="p-1 rounded text-zinc-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
-                                  <Trash2 size={12} />
-                                </button>
+                              <div className="flex items-center gap-0.5 justify-end">
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                                  <button onClick={(e) => { e.stopPropagation(); openEditIncome(inc); }}
+                                    className="p-1 rounded text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                                    <Pencil size={12} />
+                                  </button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteIncome(inc.id); }}
+                                    className="p-1 rounded text-zinc-300 hover:text-rose-500 transition-colors">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
                                 <ChevronRight size={14} className={`text-zinc-300 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
                               </div>
                             </td>
@@ -1119,10 +1188,16 @@ export const Finance: React.FC = () => {
                           <td className="px-4 py-3 text-[11px] text-zinc-400 text-center">{fmtDate(exp.date)}</td>
                           <td className="px-4 py-3 text-center"><StatusBadge status={exp.status} /></td>
                           <td className="px-4 py-3">
-                            <button onClick={() => handleDeleteExpense(exp.id)}
-                              className="p-1 rounded text-zinc-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
-                              <Trash2 size={12} />
-                            </button>
+                            <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => openEditExpense(exp)}
+                                className="p-1 rounded text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                                <Pencil size={12} />
+                              </button>
+                              <button onClick={() => handleDeleteExpense(exp.id)}
+                                className="p-1 rounded text-zinc-300 hover:text-rose-500 transition-colors">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1267,8 +1342,8 @@ export const Finance: React.FC = () => {
       <SlidePanel
         isOpen={isEntryOpen}
         onClose={closeForm}
-        title={entryType === 'income' ? 'New Income' : 'New Expense'}
-        subtitle={entryType === 'income' ? 'Select a project or register a general income' : 'Register expense'}
+        title={entryType === 'income' ? (editingIncomeId ? 'Edit Income' : 'New Income') : (editingExpenseId ? 'Edit Expense' : 'New Expense')}
+        subtitle={entryType === 'income' ? (editingIncomeId ? 'Update income details' : 'Select a project or register a general income') : (editingExpenseId ? 'Update expense details' : 'Register expense')}
         width="md"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -1373,33 +1448,37 @@ export const Finance: React.FC = () => {
               {/* Amount + installments in a row */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total Amount *</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total Amount *{editingIncomeId ? ' (read-only)' : ''}</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">$</span>
                     <input type="number" min="0" step="0.01" value={incomeForm.total_amount}
                       onChange={e => setIncomeForm(p => ({ ...p, total_amount: e.target.value }))}
                       placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
+                      disabled={!!editingIncomeId}
+                      className={`w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 ${editingIncomeId ? 'opacity-50 cursor-not-allowed' : ''}`} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Installments</label>
                   <input type="number" min="1" max="24" value={incomeForm.num_installments}
                     onChange={e => setIncomeForm(p => ({ ...p, num_installments: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 text-center" />
+                    disabled={!!editingIncomeId}
+                    className={`w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 text-center ${editingIncomeId ? 'opacity-50 cursor-not-allowed' : ''}`} />
                 </div>
               </div>
 
               {/* Due date */}
+              {!editingIncomeId && (
               <div className="space-y-1.5">
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">First installment date</label>
                 <input type="date" value={incomeForm.due_date}
                   onChange={e => setIncomeForm(p => ({ ...p, due_date: e.target.value }))}
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
+              )}
 
               {/* Installment preview */}
-              {incomeForm.total_amount && parseInt(incomeForm.num_installments) > 1 && (
+              {!editingIncomeId && incomeForm.total_amount && parseInt(incomeForm.num_installments) > 1 && (
                 <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
                   <Receipt size={14} className="text-emerald-500 shrink-0" />
                   <span className="text-xs text-emerald-700 dark:text-emerald-300">

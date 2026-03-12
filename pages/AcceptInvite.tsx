@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { errorLogger } from '../lib/errorLogger';
 import { Icons } from '../components/ui/Icons';
 
 export const AcceptInvite: React.FC = () => {
@@ -12,6 +13,7 @@ export const AcceptInvite: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteType, setInviteType] = useState<string>('team');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [existingUserFlow, setExistingUserFlow] = useState(false);
 
   const queryParams = new URLSearchParams(window.location.search);
   const token = queryParams.get('token');
@@ -26,19 +28,19 @@ export const AcceptInvite: React.FC = () => {
 
     const verifyToken = async () => {
       try {
+        // Use SECURITY DEFINER RPC to verify token (works without tenant membership)
         const { data, error } = await supabase
-          .from('invitations')
-          .select('email, status, type')
-          .eq('token', token)
-          .single();
+          .rpc('verify_invitation_token', { p_token: token });
 
-        if (error || !data) {
+        const row = Array.isArray(data) ? data[0] : data;
+
+        if (error || !row) {
           setError('Invitation not found or expired.');
-        } else if (data.status === 'accepted') {
+        } else if (row.status === 'accepted') {
           setError('This invitation has already been used.');
         } else {
-          setEmail(data.email);
-          setInviteType(data.type || 'team');
+          setEmail(row.email);
+          setInviteType(row.type || 'team');
           setIsValidToken(true);
         }
       } catch {
@@ -50,6 +52,24 @@ export const AcceptInvite: React.FC = () => {
 
     verifyToken();
   }, [token]);
+
+  // Poll for profile creation after signup (handle_new_user trigger is async)
+  const waitForProfile = async (userId: string): Promise<boolean> => {
+    const MAX_RETRIES = 10;
+    const POLL_INTERVAL = 500;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, tenant_id')
+        .eq('id', userId)
+        .single();
+
+      if (data?.tenant_id) return true;
+    }
+    return false;
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,22 +94,20 @@ export const AcceptInvite: React.FC = () => {
       if (authError) throw authError;
 
       if (authData.session) {
-        // Session created immediately — wait briefly for the trigger to complete
-        // (handle_new_user creates profile, assigns role, links client)
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Wait for the handle_new_user trigger to create profile + assign role
+        const profileReady = await waitForProfile(authData.session.user.id);
 
-        // Verify the profile was created
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, tenant_id')
-          .eq('id', authData.session.user.id)
-          .single();
-
-        if (!profile) {
-          if (import.meta.env.DEV) console.warn('Profile not found after signup — trigger may still be running');
+        if (!profileReady) {
+          errorLogger.error('Profile not created after signup', {
+            userId: authData.session.user.id,
+            token,
+          });
+          setError('Account was created but setup is taking longer than expected. Please try signing in.');
+          setIsSubmitting(false);
+          return;
         }
 
-        // Mark invitation as accepted
+        // Safety: mark invitation as accepted (trigger already does this, but belt-and-suspenders)
         if (token) {
           await supabase
             .from('invitations')
@@ -108,7 +126,54 @@ export const AcceptInvite: React.FC = () => {
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/auth';
       }
     } catch (err: any) {
-      setError(err.message || 'Error registering the account.');
+      const message = err.message || '';
+      // Handle "already registered" — show sign-in flow instead
+      if (message.toLowerCase().includes('already registered') || message.toLowerCase().includes('already been registered')) {
+        setExistingUserFlow(true);
+        setPassword('');
+        setConfirmPassword('');
+        setError(null);
+      } else {
+        setError(message || 'Error registering the account.');
+      }
+      setIsSubmitting(false);
+    }
+  };
+
+  // Sign-in flow for existing users
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) {
+      setError('Enter your password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) throw signInError;
+
+      // Use RPC to accept the invitation (assigns role, updates tenant, marks accepted)
+      if (token) {
+        const { data: result } = await supabase.rpc('accept_invitation', { p_token: token });
+        if (result?.error) {
+          errorLogger.error('accept_invitation RPC error', result.error);
+          setError(result.error);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      const redirectType = inviteType === 'client' ? '/?portal=client' : '/';
+      window.location.href = redirectType;
+    } catch (err: any) {
+      setError(err.message || 'Error signing in.');
       setIsSubmitting(false);
     }
   };
@@ -169,7 +234,7 @@ export const AcceptInvite: React.FC = () => {
     );
   }
 
-  /* ─── Registration Form ─── */
+  /* ─── Registration / Sign-in Form ─── */
   return (
     <div className="min-h-screen flex">
       {/* Left Panel */}
@@ -240,121 +305,215 @@ export const AcceptInvite: React.FC = () => {
               <Icons.Mail size={22} className={isClientInvite ? 'text-[#2C0405]' : 'text-amber-600'} />
             </div>
             <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
-              {isClientInvite ? 'Create your account' : 'Complete your registration'}
+              {existingUserFlow
+                ? 'Sign in to accept'
+                : isClientInvite
+                  ? 'Create your account'
+                  : 'Complete your registration'}
             </h2>
             <p className="text-zinc-500 text-sm">
-              {isClientInvite
-                ? 'Set up your client portal access.'
-                : 'You were invited to join the team.'}
+              {existingUserFlow
+                ? 'An account with this email already exists. Sign in to accept the invitation.'
+                : isClientInvite
+                  ? 'Set up your client portal access.'
+                  : 'You were invited to join the team.'}
             </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSignup} className="space-y-5">
-            <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="w-full pl-11 pr-4 py-3.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500 cursor-not-allowed"
-                />
+          {/* Form — Sign-in flow for existing users */}
+          {existingUserFlow ? (
+            <form onSubmit={handleSignIn} className="space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                  Email
+                </label>
+                <div className="relative">
+                  <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full pl-11 pr-4 py-3.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500 cursor-not-allowed"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                  placeholder="Minimum 6 characters"
-                  className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
-                    isClientInvite
-                      ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
-                      : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
-                  }`}
-                  autoFocus
-                  required
-                />
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                    placeholder="Enter your password"
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
+                      isClientInvite
+                        ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
+                        : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
+                    }`}
+                    autoFocus
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                Confirm password
-              </label>
-              <div className="relative">
-                <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                  placeholder="Repeat password"
-                  className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
-                    isClientInvite
-                      ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
-                      : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
-                  }`}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Error message */}
-            {error && (
-              <div className="p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
-                <Icons.AlertCircle size={15} className="text-red-500 shrink-0" />
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting || !password || !confirmPassword}
-              className={`w-full py-3.5 mt-2 text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
-                isClientInvite
-                  ? 'bg-[#2C0405] hover:bg-[#1a0203] shadow-lg shadow-[#2C0405]/20'
-                  : 'bg-zinc-900 hover:bg-zinc-800'
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                <>
-                  Create account and access
-                  <Icons.ChevronRight size={16} />
-                </>
+              {error && (
+                <div className="p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
+                  <Icons.AlertCircle size={15} className="text-red-500 shrink-0" />
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !password}
+                className={`w-full py-3.5 mt-2 text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
+                  isClientInvite
+                    ? 'bg-[#2C0405] hover:bg-[#1a0203] shadow-lg shadow-[#2C0405]/20'
+                    : 'bg-zinc-900 hover:bg-zinc-800'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign in and accept invitation
+                    <Icons.ChevronRight size={16} />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setExistingUserFlow(false); setPassword(''); setError(null); }}
+                className="w-full text-center text-sm text-zinc-400 hover:text-zinc-700 transition-colors mt-2"
+              >
+                Back to registration
+              </button>
+            </form>
+          ) : (
+            /* Form — Registration for new users */
+            <form onSubmit={handleSignup} className="space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                  Email
+                </label>
+                <div className="relative">
+                  <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full pl-11 pr-4 py-3.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                    placeholder="Minimum 6 characters"
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
+                      isClientInvite
+                        ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
+                        : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
+                    }`}
+                    autoFocus
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                  Confirm password
+                </label>
+                <div className="relative">
+                  <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
+                    placeholder="Repeat password"
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
+                      isClientInvite
+                        ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
+                        : 'border-zinc-200 focus:ring-amber-500/20 focus:border-amber-500'
+                    }`}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Error message */}
+              {error && (
+                <div className="p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
+                  <Icons.AlertCircle size={15} className="text-red-500 shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !password || !confirmPassword}
+                className={`w-full py-3.5 mt-2 text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
+                  isClientInvite
+                    ? 'bg-[#2C0405] hover:bg-[#1a0203] shadow-lg shadow-[#2C0405]/20'
+                    : 'bg-zinc-900 hover:bg-zinc-800'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    Create account and access
+                    <Icons.ChevronRight size={16} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
 
           {/* Footer */}
           <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
             <p className="text-zinc-400 text-xs">
-              {isClientInvite
-                ? 'Already have an account? '
-                : 'Restricted access · Invite only'}
+              {existingUserFlow
+                ? 'Need a new account? '
+                : isClientInvite
+                  ? 'Already have an account? '
+                  : 'Restricted access · Invite only'}
             </p>
-            {isClientInvite && (
-              <a
-                href="/?portal=client"
+            {existingUserFlow ? (
+              <button
+                onClick={() => { setExistingUserFlow(false); setPassword(''); setError(null); }}
+                className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
+              >
+                Create account
+              </button>
+            ) : isClientInvite ? (
+              <button
+                onClick={() => { setExistingUserFlow(true); setPassword(''); setConfirmPassword(''); setError(null); }}
                 className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
               >
                 Sign in
-              </a>
-            )}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

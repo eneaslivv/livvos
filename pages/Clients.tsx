@@ -20,6 +20,7 @@ import { ClientFinanceTab } from '../components/clients/ClientFinanceTab';
 import { ClientMessagesTab } from '../components/clients/ClientMessagesTab';
 import { ClientTasksTab } from '../components/clients/ClientTasksTab';
 import { ClientHistoryTab } from '../components/clients/ClientHistoryTab';
+import { ClientProjectsTab } from '../components/clients/ClientProjectsTab';
 import { NewClientPanel } from '../components/clients/NewClientPanel';
 
 /* ─── Helpers ─── */
@@ -32,7 +33,7 @@ const statusConfig = {
 const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
 
 /* ─── Detail Tabs ─── */
-type DetailTab = 'info' | 'finance' | 'messages' | 'tasks' | 'history';
+type DetailTab = 'info' | 'projects' | 'finance' | 'messages' | 'tasks' | 'history';
 
 export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParams) => void }> = ({ onNavigate }) => {
   const { user } = useAuth();
@@ -44,7 +45,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
     getClientTasks, createTask, updateTask,
     getClientHistory, addHistoryEntry
   } = useClients();
-  const { incomes, updateInstallment, createIncome, deleteIncome, refreshIncomes } = useFinance();
+  const { incomes, expenses, timeEntries, updateInstallment, createIncome, deleteIncome, refreshIncomes, createExpense, deleteExpense, createTimeEntry, deleteTimeEntry } = useFinance();
   const { createTask: createCalendarTask, updateTask: updateCalendarTask, deleteTask: deleteCalendarTask, tasks: allCalendarTasks } = useCalendar();
   const { members: teamMembers } = useTeam();
   const { refreshProjects } = useProjects();
@@ -88,8 +89,8 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [clientInviteStatus, setClientInviteStatus] = useState<'none' | 'pending' | 'accepted'>('none');
-  const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number }[]>([]);
-  const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number }[]>([]);
+  const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number; deadline?: string; description?: string; created_at?: string }[]>([]);
+  const [assignedProjects, setAssignedProjects] = useState<{ id: string; title: string; status?: string; progress?: number; deadline?: string; description?: string; created_at?: string }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const projectDropdownRef = React.useRef<HTMLDivElement>(null);
@@ -103,6 +104,11 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   });
   const [creatingIncome, setCreatingIncome] = useState(false);
   const [deletingIncomeId, setDeletingIncomeId] = useState<string | null>(null);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expenseFormData, setExpenseFormData] = useState({ concept: '', amount: '', category: 'Software', date: new Date().toISOString().split('T')[0] });
+  const [showTimeForm, setShowTimeForm] = useState(false);
+  const [timeFormData, setTimeFormData] = useState({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
+  const [isSubmittingFinance, setIsSubmittingFinance] = useState(false);
 
   const [newClientData, setNewClientData] = useState<{
     name: string; email: string; company: string; phone: string;
@@ -117,21 +123,46 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   /* ─── Client finance data ─── */
+  const clientProjectIds = useMemo(() => assignedProjects.map(p => p.id), [assignedProjects]);
+
   const clientIncomes = useMemo(() => {
     if (!selectedClient) return [];
-    return incomes.filter(i => i.client_id === selectedClient.id);
-  }, [selectedClient?.id, incomes]);
+    return incomes.filter(i =>
+      i.client_id === selectedClient.id ||
+      (i.project_id && clientProjectIds.includes(i.project_id))
+    );
+  }, [selectedClient?.id, incomes, clientProjectIds]);
 
-  const clientFinanceSummary = useMemo(() => {
-    const totalInvoiced = clientIncomes.reduce((s, i) => s + i.total_amount, 0);
+  const clientExpenses = useMemo(() => {
+    if (!selectedClient) return [];
+    return expenses.filter(e =>
+      e.client_id === selectedClient.id ||
+      (e.project_id && clientProjectIds.includes(e.project_id))
+    );
+  }, [selectedClient?.id, expenses, clientProjectIds]);
+
+  const clientTimeEntries = useMemo(() => {
+    if (!selectedClient) return [];
+    return timeEntries.filter(t =>
+      t.client_id === selectedClient.id ||
+      (t.project_id && clientProjectIds.includes(t.project_id))
+    );
+  }, [selectedClient?.id, timeEntries, clientProjectIds]);
+
+  const clientFinancials = useMemo(() => {
+    const totalIncome = clientIncomes.reduce((s, i) => s + i.total_amount, 0);
     const allInstallments = clientIncomes.flatMap(i => i.installments || []);
-    const totalPaid = allInstallments.filter(inst => inst.status === 'paid').reduce((s, inst) => s + inst.amount, 0);
-    const totalPending = totalInvoiced - totalPaid;
+    const totalCollected = allInstallments.filter(inst => inst.status === 'paid').reduce((s, inst) => s + inst.amount, 0);
+    const totalExpenses = clientExpenses.reduce((s, e) => s + e.amount, 0);
+    const totalHours = clientTimeEntries.reduce((s, t) => s + Number(t.hours), 0);
+    const timeCost = clientTimeEntries.reduce((s, t) => s + (Number(t.hours) * Number(t.hourly_rate || 0)), 0);
+    const profit = totalCollected - totalExpenses - timeCost;
+    const pendingAmount = totalIncome - totalCollected;
     const paidCount = allInstallments.filter(i => i.status === 'paid').length;
     const totalCount = allInstallments.length || clientIncomes.length;
     const overdue = allInstallments.filter(i => i.status === 'overdue').length;
-    return { totalInvoiced, totalPaid, totalPending, paidCount, totalCount, overdue };
-  }, [clientIncomes]);
+    return { totalIncome, totalCollected, totalExpenses, totalHours, timeCost, profit, pendingAmount, paidCount, totalCount, overdue };
+  }, [clientIncomes, clientExpenses, clientTimeEntries]);
 
   // Load portal invitation status independently (so it doesn't depend on other data loading)
   const loadInvitationStatus = useCallback(async (clientId: string) => {
@@ -207,7 +238,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       try {
         const { data, error: fetchErr } = await supabase
           .from('projects')
-          .select('id, title, client_id, status, progress')
+          .select('id, title, client_id, status, progress, deadline, description, created_at')
           .order('created_at', { ascending: false });
         if (fetchErr) {
           console.error('[Clients] Error loading projects:', fetchErr.message);
@@ -224,7 +255,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   useEffect(() => {
     if (selectedClient && availableProjects.length > 0) {
       const linked = availableProjects.filter(p => p.client_id === selectedClient.id);
-      setAssignedProjects(linked.map(p => ({ id: p.id, title: p.title, status: p.status, progress: p.progress })));
+      setAssignedProjects(linked.map(p => ({ id: p.id, title: p.title, status: p.status, progress: p.progress, deadline: p.deadline, description: p.description, created_at: p.created_at })));
       setSelectedProjectId('');
       setTaskProjectFilter('all');
     } else {
@@ -256,7 +287,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         getClientMessages(clientId),
         getClientTasks(clientId),
         getClientHistory(clientId),
-        supabase.from('projects').select('id, title, client_id, status, progress').eq('client_id', clientId),
+        supabase.from('projects').select('id, title, client_id, status, progress, deadline, description, created_at').eq('client_id', clientId),
       ]);
       setMessages(msgs);
       setTasks(tsks);
@@ -808,6 +839,63 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
     }
   };
 
+  const handleCreateExpense = async () => {
+    if (!selectedClient || !expenseFormData.concept.trim() || !expenseFormData.amount || isSubmittingFinance) return;
+    setIsSubmittingFinance(true);
+    try {
+      const amount = parseFloat(expenseFormData.amount);
+      if (isNaN(amount) || amount <= 0) throw new Error('Invalid amount');
+      await createExpense({
+        category: expenseFormData.category,
+        concept: expenseFormData.concept,
+        amount,
+        date: expenseFormData.date,
+        client_id: selectedClient.id,
+        vendor: '',
+      });
+      setExpenseFormData({ concept: '', amount: '', category: 'Software', date: new Date().toISOString().split('T')[0] });
+      setShowExpenseForm(false);
+    } catch (err: any) {
+      errorLogger.error('Error creating expense', err);
+      alert(err.message || 'Error creating expense');
+    } finally {
+      setIsSubmittingFinance(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm('Delete this expense?')) return;
+    try { await deleteExpense(id); } catch (err) { errorLogger.error('Error deleting expense', err); }
+  };
+
+  const handleCreateTimeEntry = async () => {
+    if (!selectedClient || !timeFormData.hours || isSubmittingFinance) return;
+    setIsSubmittingFinance(true);
+    try {
+      const hours = parseFloat(timeFormData.hours);
+      if (isNaN(hours) || hours <= 0) throw new Error('Invalid hours');
+      await createTimeEntry({
+        description: timeFormData.description || 'Time entry',
+        hours,
+        date: timeFormData.date,
+        hourly_rate: timeFormData.hourlyRate ? parseFloat(timeFormData.hourlyRate) : null,
+        client_id: selectedClient.id,
+      });
+      setTimeFormData({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
+      setShowTimeForm(false);
+    } catch (err: any) {
+      errorLogger.error('Error creating time entry', err);
+      alert(err.message || 'Error creating time entry');
+    } finally {
+      setIsSubmittingFinance(false);
+    }
+  };
+
+  const handleDeleteTimeEntry = async (id: string) => {
+    if (!confirm('Delete this time entry?')) return;
+    try { await deleteTimeEntry(id); } catch (err) { errorLogger.error('Error deleting time entry', err); }
+  };
+
   /* ─── Loading / Error states ─── */
   if (loading && !loadingTimedOut) {
     return (
@@ -829,7 +917,8 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   /* ─── Detail tabs ─── */
   const detailTabs: { id: DetailTab; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'info', label: 'Info', icon: Icons.Users },
-    { id: 'finance', label: 'Finance', icon: Icons.DollarSign || Icons.Activity, badge: clientFinanceSummary.overdue },
+    { id: 'projects', label: 'Projects', icon: Icons.Briefcase, badge: assignedProjects.length || undefined },
+    { id: 'finance', label: 'Finance', icon: Icons.DollarSign || Icons.Activity, badge: clientFinancials.overdue },
     { id: 'messages', label: 'Chat', icon: Icons.Message, badge: messages.filter(m => m.sender_type === 'client' && !m.read_at).length },
     { id: 'tasks', label: 'Tasks', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
     { id: 'history', label: 'History', icon: Icons.Clock },
@@ -874,7 +963,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                 client={selectedClient}
                 editingField={editingField}
                 editDraft={editDraft}
-                clientFinanceSummary={clientFinanceSummary}
+                clientFinanceSummary={{ totalInvoiced: clientFinancials.totalIncome, totalPaid: clientFinancials.totalCollected, totalPending: clientFinancials.pendingAmount }}
                 clientInviteStatus={clientInviteStatus}
                 portalInviteLink={portalInviteLink}
                 portalInviteError={portalInviteError}
@@ -970,22 +1059,52 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                     />
                   )}
 
+                  {/* ─── PROJECTS TAB ─── */}
+                  {detailTab === 'projects' && (
+                    <ClientProjectsTab
+                      clientId={selectedClient.id}
+                      assignedProjects={assignedProjects}
+                      projectTasks={projectTasks}
+                      availableProjects={availableProjects}
+                      assigningProject={assigningProject}
+                      showProjectDropdown={showProjectDropdown}
+                      projectDropdownRef={projectDropdownRef}
+                      onAssignProject={(pid) => handleAssignProject(pid)}
+                      onUnassignProject={handleUnassignProject}
+                      onToggleProjectDropdown={() => setShowProjectDropdown(!showProjectDropdown)}
+                      onNavigateToProject={(projectId) => onNavigate?.('projects', { projectId })}
+                    />
+                  )}
+
                   {/* ─── FINANCE TAB ─── */}
                   {detailTab === 'finance' && (
                     <ClientFinanceTab
                       client={selectedClient}
                       clientIncomes={clientIncomes}
-                      clientFinanceSummary={clientFinanceSummary}
+                      clientFinancials={clientFinancials}
                       showNewIncomeForm={showNewIncomeForm}
                       newIncomeData={newIncomeData}
                       creatingIncome={creatingIncome}
                       deletingIncomeId={deletingIncomeId}
                       availableProjects={availableProjects}
-                      onShowNewIncomeForm={setShowNewIncomeForm}
+                      onShowNewIncomeForm={(v) => { setShowNewIncomeForm(v); if (v) { setShowExpenseForm(false); setShowTimeForm(false); } }}
                       onNewIncomeDataChange={setNewIncomeData}
                       onCreateIncome={handleCreateIncome}
                       onDeleteIncome={handleDeleteIncome}
                       onMarkInstallmentPaid={handleMarkInstallmentPaid}
+                      showExpenseForm={showExpenseForm}
+                      onShowExpenseForm={(v) => { setShowExpenseForm(v); if (v) { setShowNewIncomeForm(false); setShowTimeForm(false); } }}
+                      expenseFormData={expenseFormData}
+                      onExpenseFormChange={setExpenseFormData}
+                      onCreateExpense={handleCreateExpense}
+                      onDeleteExpense={handleDeleteExpense}
+                      showTimeForm={showTimeForm}
+                      onShowTimeForm={(v) => { setShowTimeForm(v); if (v) { setShowNewIncomeForm(false); setShowExpenseForm(false); } }}
+                      timeFormData={timeFormData}
+                      onTimeFormChange={setTimeFormData}
+                      onCreateTimeEntry={handleCreateTimeEntry}
+                      onDeleteTimeEntry={handleDeleteTimeEntry}
+                      isSubmittingFinance={isSubmittingFinance}
                     />
                   )}
 
