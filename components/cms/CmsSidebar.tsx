@@ -5,6 +5,7 @@ import {
   Package,
   FileText,
   Image as ImageIcon,
+  Code2,
 } from 'lucide-react';
 import type { CmsSection } from '../../types/cms';
 
@@ -12,6 +13,7 @@ interface CmsSidebarProps {
   activeSection: CmsSection;
   onSectionChange: (section: CmsSection) => void;
   onBack: () => void;
+  onShowIntegration?: () => void;
 }
 
 const NAV_ITEMS: { id: CmsSection; label: string; icon: React.ReactNode }[] = [
@@ -25,6 +27,7 @@ export const CmsSidebar: React.FC<CmsSidebarProps> = ({
   activeSection,
   onSectionChange,
   onBack,
+  onShowIntegration,
 }) => {
   return (
     <div className="w-[200px] min-h-screen bg-[#09090B] flex flex-col border-r border-white/5">
@@ -62,6 +65,19 @@ export const CmsSidebar: React.FC<CmsSidebarProps> = ({
           </button>
         ))}
       </nav>
+
+      {/* Integration button */}
+      {onShowIntegration && (
+        <div className="px-2 pb-2">
+          <button
+            onClick={onShowIntegration}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:text-white/80 hover:bg-white/5 transition-all"
+          >
+            <Code2 size={18} />
+            <span className="font-medium">API Integration</span>
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-white/5">

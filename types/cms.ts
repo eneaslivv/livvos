@@ -111,12 +111,22 @@ export interface CmsBlogPost {
   updated_at?: string;
 }
 
+export type LogoCategory = 'client' | 'award' | 'alliance' | 'media';
+
+export const LOGO_CATEGORIES: { value: LogoCategory; label: string }[] = [
+  { value: 'client', label: 'Clients' },
+  { value: 'award', label: 'Awards' },
+  { value: 'alliance', label: 'Alliances' },
+  { value: 'media', label: 'Media' },
+];
+
 export interface CmsClientLogo {
   id: string;
   tenant_id: string;
   name: string;
   logo_url: string;
   website_url?: string | null;
+  category?: LogoCategory;
   is_visible?: boolean;
   sort_order?: number;
   created_at?: string;

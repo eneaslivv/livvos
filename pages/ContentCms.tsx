@@ -8,6 +8,7 @@ import { ProductEditor } from '../components/cms/ProductEditor';
 import { BlogEditor } from '../components/cms/BlogEditor';
 import { ClientLogosEditor } from '../components/cms/ClientLogosEditor';
 import { LivePreview } from '../components/cms/LivePreview';
+import { IntegrationSnippet } from '../components/cms/IntegrationSnippet';
 import { CmsToastContainer, useToasts } from '../components/cms/CmsToast';
 import type { PageView } from '../types';
 import type { CmsSection } from '../types/cms';
@@ -21,6 +22,7 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
   const { currentTenant } = useTenant();
   const [activeSection, setActiveSection] = useState<CmsSection>('portfolio');
   const [previewKey, setPreviewKey] = useState(0);
+  const [showIntegration, setShowIntegration] = useState(false);
   const { toasts, addToast, dismissToast } = useToasts();
 
   const cms = useCmsContent();
@@ -113,6 +115,7 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
         activeSection={activeSection}
         onSectionChange={setActiveSection}
         onBack={() => onNavigate('home')}
+        onShowIntegration={() => setShowIntegration(true)}
       />
 
       {/* Main content area */}
@@ -179,6 +182,13 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
 
       {/* Toast notifications */}
       <CmsToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Integration snippet modal */}
+      <IntegrationSnippet
+        isOpen={showIntegration}
+        onClose={() => setShowIntegration(false)}
+        tenantSlug={currentTenant?.slug || ''}
+      />
     </div>
   );
 };

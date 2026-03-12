@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
-import type { CmsClientLogo } from '../../types/cms';
+import type { CmsClientLogo, LogoCategory } from '../../types/cms';
+import { LOGO_CATEGORIES } from '../../types/cms';
 import { ImageUploader } from './ImageUploader';
 
 interface ClientLogosEditorProps {
@@ -15,6 +16,7 @@ const emptyForm = {
   name: '',
   logo_url: '',
   website_url: '',
+  category: 'client' as LogoCategory,
   is_visible: true,
   sort_order: 0,
 };
@@ -30,11 +32,28 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<LogoCategory | 'all'>('all');
 
   const editingItem = useMemo(
     () => items.find((i) => i.id === editingId) || null,
     [items, editingId]
   );
+
+  const filteredItems = useMemo(
+    () =>
+      activeCategory === 'all'
+        ? items
+        : items.filter((i) => (i.category || 'client') === activeCategory),
+    [items, activeCategory]
+  );
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: items.length };
+    for (const cat of LOGO_CATEGORIES) {
+      counts[cat.value] = items.filter((i) => (i.category || 'client') === cat.value).length;
+    }
+    return counts;
+  }, [items]);
 
   useEffect(() => {
     if (editingItem) {
@@ -42,6 +61,7 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
         name: editingItem.name || '',
         logo_url: editingItem.logo_url || '',
         website_url: editingItem.website_url || '',
+        category: editingItem.category || 'client',
         is_visible: editingItem.is_visible ?? true,
         sort_order: editingItem.sort_order ?? 0,
       });
@@ -61,6 +81,7 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
       name: form.name.trim(),
       logo_url: form.logo_url,
       website_url: form.website_url || null,
+      category: form.category,
       is_visible: form.is_visible,
       sort_order: form.sort_order,
     };
@@ -78,18 +99,26 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
     await onSave({ is_visible: !item.is_visible }, item.id);
   };
 
+  const handleNewClick = () => {
+    resetForm();
+    if (activeCategory !== 'all') {
+      setForm((f) => ({ ...f, category: activeCategory }));
+    }
+    setShowForm(true);
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#E6E2D8]">
         <div>
-          <h2 className="text-lg font-semibold text-[#09090B] tracking-tight">Client Logos</h2>
+          <h2 className="text-lg font-semibold text-[#09090B] tracking-tight">Logos</h2>
           <p className="text-xs text-[#09090B]/40 mt-0.5">
-            {items.length} logo{items.length !== 1 ? 's' : ''}
+            {filteredItems.length} logo{filteredItems.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
-          onClick={() => { resetForm(); setShowForm(true); }}
+          onClick={handleNewClick}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#09090B] text-white text-xs font-medium rounded-lg hover:bg-[#09090B]/90 transition-colors"
         >
           <Plus size={14} />
@@ -97,10 +126,39 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
         </button>
       </div>
 
+      {/* Category tabs */}
+      <div className="flex items-center gap-1 px-6 py-2.5 border-b border-[#E6E2D8] overflow-x-auto">
+        <button
+          onClick={() => setActiveCategory('all')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+            activeCategory === 'all'
+              ? 'bg-[#09090B] text-white'
+              : 'text-[#09090B]/50 hover:text-[#09090B] hover:bg-[#F5F3EE]'
+          }`}
+        >
+          All
+          <span className="ml-1.5 text-[10px] opacity-60">{categoryCounts.all}</span>
+        </button>
+        {LOGO_CATEGORIES.map((cat) => (
+          <button
+            key={cat.value}
+            onClick={() => setActiveCategory(cat.value)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+              activeCategory === cat.value
+                ? 'bg-[#09090B] text-white'
+                : 'text-[#09090B]/50 hover:text-[#09090B] hover:bg-[#F5F3EE]'
+            }`}
+          >
+            {cat.label}
+            <span className="ml-1.5 text-[10px] opacity-60">{categoryCounts[cat.value] || 0}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto">
         {/* Logo grid */}
         <div className="p-6 grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 gap-3">
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <div
               key={item.id}
               className={`group relative border border-[#E6E2D8] rounded-xl bg-white hover:shadow-sm transition-all cursor-pointer overflow-hidden ${
@@ -132,6 +190,9 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
                     <EyeOff size={10} className="text-[#09090B]/30 shrink-0" />
                   )}
                 </div>
+                <span className="text-[9px] text-[#09090B]/30 capitalize">
+                  {item.category || 'client'}
+                </span>
               </div>
               {/* Hover actions */}
               <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -163,6 +224,17 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
           ))}
         </div>
 
+        {/* Empty state */}
+        {filteredItems.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-sm text-[#09090B]/40">
+              {activeCategory === 'all'
+                ? 'No logos yet. Click "+ New" to add one.'
+                : `No ${LOGO_CATEGORIES.find((c) => c.value === activeCategory)?.label.toLowerCase() || ''} logos yet.`}
+            </p>
+          </div>
+        )}
+
         {/* Form */}
         {showForm && (
           <div className="border-t border-[#E6E2D8] px-6 py-5 bg-[#FDFBF7]">
@@ -175,21 +247,35 @@ export const ClientLogosEditor: React.FC<ClientLogosEditorProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-[#09090B]/70">Client Name</label>
+                <label className="text-xs font-medium text-[#09090B]/70">Name</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] placeholder:text-[#09090B]/30 focus:outline-none focus:border-[#E8BC59]"
-                  placeholder="Company name"
+                  placeholder="Logo name"
                 />
               </div>
               <div className="space-y-1">
+                <label className="text-xs font-medium text-[#09090B]/70">Category</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as LogoCategory }))}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] focus:outline-none focus:border-[#E8BC59]"
+                >
+                  {LOGO_CATEGORIES.map((cat) => (
+                    <option key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2 space-y-1">
                 <label className="text-xs font-medium text-[#09090B]/70">Website URL</label>
                 <input
                   value={form.website_url}
                   onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] placeholder:text-[#09090B]/30 focus:outline-none focus:border-[#E8BC59]"
-                  placeholder="https://client.com"
+                  placeholder="https://example.com"
                 />
               </div>
               <div className="col-span-2">

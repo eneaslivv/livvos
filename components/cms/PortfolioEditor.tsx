@@ -129,13 +129,10 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     setShowModal(false);
   };
 
-  const handleSave = async () => {
-    if (!form.title.trim()) return;
-    // Use cover from media if no explicit image set
+  const buildData = (): Partial<CmsPortfolioItem> => {
     const coverMedia = form.media.find((m) => m.is_cover);
     const coverImage = form.image || coverMedia?.url || null;
-
-    const data: Partial<CmsPortfolioItem> = {
+    return {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
       category: form.category,
@@ -153,8 +150,17 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
       media: form.media,
       content_blocks: form.content_blocks,
     };
-    const result = await onSave(data, editingId || undefined);
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return;
+    const result = await onSave(buildData(), editingId || undefined);
     if (result) resetForm();
+  };
+
+  const handleSaveChanges = async () => {
+    if (!form.title.trim() || !editingId) return;
+    await onSave(buildData(), editingId);
   };
 
   const handleDelete = async (id: string) => {
@@ -796,6 +802,15 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   >
                     Cancel
                   </button>
+                  {editingId && (
+                    <button
+                      onClick={handleSaveChanges}
+                      disabled={isSaving || !form.title.trim()}
+                      className="px-4 py-2 text-xs font-medium text-[#09090B] border border-[#E8BC59] rounded-full hover:bg-[#E8BC59]/10 disabled:opacity-50 transition-colors"
+                    >
+                      {isSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  )}
                   <button
                     onClick={handleSave}
                     disabled={isSaving || !form.title.trim()}
@@ -806,7 +821,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                     ) : (
                       <>
                         <span className="w-4 h-4 rounded-full bg-[#E8BC59] flex items-center justify-center text-[#09090B] text-[8px] font-bold">✓</span>
-                        {editingId ? 'Update' : 'Create'}
+                        {editingId ? 'Update & Close' : 'Create'}
                       </>
                     )}
                   </button>

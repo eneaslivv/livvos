@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Check } from 'lucide-react';
 
 const ACCEPTED_TYPES = 'image/*,video/mp4,video/webm,video/quicktime,image/gif';
 const isMediaFile = (file: File) =>
@@ -25,13 +25,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [justUploaded, setJustUploaded] = useState(false);
 
   const handleFile = useCallback(
     async (file: File) => {
       if (!isMediaFile(file)) return;
       setIsUploading(true);
+      setJustUploaded(false);
       const url = await onUpload(file);
-      if (url) onChange(url);
+      if (url) {
+        onChange(url);
+        setJustUploaded(true);
+        setTimeout(() => setJustUploaded(false), 2500);
+      }
       setIsUploading(false);
     },
     [onUpload, onChange]
@@ -134,6 +140,13 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         >
           {isUploading ? (
             <div className="w-6 h-6 border-2 border-[#E8BC59] border-t-transparent rounded-full animate-spin" />
+          ) : justUploaded ? (
+            <div className="flex flex-col items-center gap-1">
+              <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
+                <Check size={16} className="text-green-600" />
+              </div>
+              <span className="text-xs text-green-600 font-medium">Uploaded</span>
+            </div>
           ) : (
             <>
               <ImageIcon size={20} className="text-[#09090B]/30 mb-2" />
