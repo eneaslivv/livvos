@@ -16,7 +16,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Etapas del Proyecto</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Project Stages</h3>
         <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
           {completed}/{total}
         </span>
@@ -70,7 +70,7 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                   </h4>
                   {active && (
                     <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-500 dark:text-indigo-400 text-[9px] font-bold rounded uppercase tracking-wide">
-                      En curso
+                      In Progress
                     </span>
                   )}
                 </div>
@@ -82,12 +82,12 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {done && m.completedAt && (
                     <span className="text-[10px] text-[#2C0405] dark:text-[#e8a0a2] font-medium">
-                      Completada {m.completedAt}
+                      Completed {m.completedAt}
                     </span>
                   )}
                   {!done && m.eta && (
                     <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
-                      Fecha: {m.eta}
+                      Date: {m.eta}
                     </span>
                   )}
                 </div>
@@ -102,9 +102,9 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
         <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 text-center">
             {progressPct === 100 ? (
-              <span className="text-[#2C0405] dark:text-[#e8a0a2] font-semibold">Proyecto completado</span>
+              <span className="text-[#2C0405] dark:text-[#e8a0a2] font-semibold">Project completed</span>
             ) : (
-              <>{progressPct}% completado</>
+              <>{progressPct}% completed</>
             )}
           </p>
         </div>

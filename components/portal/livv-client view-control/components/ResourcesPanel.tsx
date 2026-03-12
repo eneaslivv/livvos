@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { KeyRound, FileText, DollarSign, Eye, EyeOff, Copy, Check, Download, Figma, FolderOpen, CalendarClock, CircleCheck, Clock, AlertTriangle } from 'lucide-react';
-import type { CredentialItem, AssetItem, PaymentEntry } from '../types';
+import type { CredentialItem, AssetItem, PaymentEntry, ProjectBudget } from '../types';
 
 interface ResourcesPanelProps {
   credentials?: CredentialItem[];
@@ -12,13 +12,14 @@ interface ResourcesPanelProps {
     nextPayment?: { amount: number; dueDate: string; concept?: string };
     payments?: PaymentEntry[];
   };
+  allProjectsBudget?: ProjectBudget[];
   hiddenTabs?: ('finance' | 'access' | 'docs')[];
 }
 
 const TABS = [
-  { id: 'finance', label: 'Finanzas', icon: DollarSign },
-  { id: 'access', label: 'Accesos', icon: KeyRound },
-  { id: 'docs', label: 'Documentos', icon: FileText },
+  { id: 'finance', label: 'Finance', icon: DollarSign },
+  { id: 'access', label: 'Access', icon: KeyRound },
+  { id: 'docs', label: 'Documents', icon: FileText },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -26,17 +27,20 @@ type TabId = typeof TABS[number]['id'];
 const fmtDate = (d: string) => {
   if (!d) return '—';
   const date = new Date(d + 'T00:00:00');
-  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget, hiddenTabs }) => {
+const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget, allProjectsBudget, hiddenTabs }) => {
   const visibleTabs = TABS.filter(tab => !hiddenTabs?.includes(tab.id));
   const [activeTab, setActiveTab] = useState<TabId>(visibleTabs[0]?.id || 'finance');
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showAmounts, setShowAmounts] = useState(true);
+  const [financeFilter, setFinanceFilter] = useState<string>('all');
 
   if (visibleTabs.length === 0) return null;
+
+  const hasMultipleProjects = allProjectsBudget && allProjectsBudget.length > 1;
 
   const credItems = credentials || [];
   const docItems = assets || [];
@@ -56,14 +60,44 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
     return <FileText size={14} />;
   };
 
-  const remaining = budget.total - budget.paid;
-  const pct = budget.total > 0 ? Math.round((budget.paid / budget.total) * 100) : 0;
+  // Compute active budget based on filter
+  const activeBudget = (() => {
+    if (!hasMultipleProjects || financeFilter === 'all') return budget;
+    const proj = allProjectsBudget!.find(p => p.projectId === financeFilter);
+    if (!proj) return budget;
+    return {
+      total: proj.total,
+      paid: proj.paid,
+      nextPayment: proj.nextPayment,
+      payments: proj.payments,
+    };
+  })();
+
+  // For "all" view with multiple projects, merge all payments sorted by date
+  const allPaymentsMerged = hasMultipleProjects && financeFilter === 'all'
+    ? allProjectsBudget!.flatMap(pb => pb.payments).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
+    : undefined;
+
+  const consolidatedTotal = hasMultipleProjects ? allProjectsBudget!.reduce((s, p) => s + p.total, 0) : budget.total;
+  const consolidatedPaid = hasMultipleProjects ? allProjectsBudget!.reduce((s, p) => s + p.paid, 0) : budget.paid;
+
+  const displayBudget = financeFilter === 'all' && hasMultipleProjects
+    ? { total: consolidatedTotal, paid: consolidatedPaid, payments: allPaymentsMerged }
+    : activeBudget;
+
+  const remaining = displayBudget.total - displayBudget.paid;
+  const pct = displayBudget.total > 0 ? Math.round((displayBudget.paid / displayBudget.total) * 100) : 0;
   const fmt = (v: number) => showAmounts ? `$${v.toLocaleString()}` : '••••••';
 
-  const payments = budget.payments || [];
+  const payments = displayBudget.payments || [];
   const paidPayments = payments.filter(p => p.status === 'paid');
   const pendingPayments = payments.filter(p => p.status !== 'paid');
-  const nextPayment = budget.nextPayment;
+  const nextPayment = financeFilter === 'all' && hasMultipleProjects
+    ? (() => {
+        const next = pendingPayments[0];
+        return next ? { amount: next.amount, dueDate: next.dueDate, concept: next.projectTitle ? `${next.projectTitle} — ${next.concept}` : next.concept } : undefined;
+      })()
+    : activeBudget.nextPayment;
 
   return (
     <motion.div
@@ -112,11 +146,42 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               transition={{ duration: 0.2 }}
               className="space-y-4"
             >
+              {/* Project sub-selector (only with multiple projects) */}
+              {hasMultipleProjects && (
+                <div className="flex gap-1 flex-wrap">
+                  <button
+                    onClick={() => setFinanceFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+                      financeFilter === 'all'
+                        ? 'bg-[#2C0405] text-white dark:bg-[#e8a0a2] dark:text-[#2C0405]'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    All Projects
+                  </button>
+                  {allProjectsBudget!.map(pb => (
+                    <button
+                      key={pb.projectId}
+                      onClick={() => setFinanceFilter(pb.projectId)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all truncate max-w-[140px] ${
+                        financeFilter === pb.projectId
+                          ? 'bg-[#2C0405] text-white dark:bg-[#e8a0a2] dark:text-[#2C0405]'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {pb.projectTitle}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Header: total + toggle */}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium mb-0.5">Valor total del proyecto</p>
-                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">{fmt(budget.total)}</p>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium mb-0.5">
+                    {financeFilter === 'all' && hasMultipleProjects ? 'Total value (all projects)' : 'Total project value'}
+                  </p>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">{fmt(displayBudget.total)}</p>
                 </div>
                 <button onClick={() => setShowAmounts(!showAmounts)} className="p-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors">
                   {showAmounts ? <EyeOff size={13} className="text-zinc-300 dark:text-zinc-600" /> : <Eye size={13} className="text-zinc-400 dark:text-zinc-500" />}
@@ -126,7 +191,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {/* Progress bar */}
               <div>
                 <div className="flex justify-between text-[10px] mb-1.5">
-                  <span className="text-zinc-400 dark:text-zinc-500">Progreso de cobro</span>
+                  <span className="text-zinc-400 dark:text-zinc-500">Collection progress</span>
                   <span className="font-semibold text-zinc-500 dark:text-zinc-400">{showAmounts ? `${pct}%` : '••'}</span>
                 </div>
                 <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
@@ -142,29 +207,65 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {/* Paid / Remaining cards */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-3 bg-[#2C0405]/5 dark:bg-[#822b2e]/15 rounded-xl">
-                  <p className="text-[9px] text-[#2C0405]/50 dark:text-[#e8a0a2]/50 font-semibold mb-0.5">Cobrado</p>
-                  <p className="text-sm font-bold text-[#2C0405] dark:text-[#e8a0a2]">{fmt(budget.paid)}</p>
+                  <p className="text-[9px] text-[#2C0405]/50 dark:text-[#e8a0a2]/50 font-semibold mb-0.5">Collected</p>
+                  <p className="text-sm font-bold text-[#2C0405] dark:text-[#e8a0a2]">{fmt(displayBudget.paid)}</p>
                 </div>
                 <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-xl">
-                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-semibold mb-0.5">Pendiente</p>
+                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-semibold mb-0.5">Remaining</p>
                   <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">{fmt(remaining)}</p>
                 </div>
               </div>
+
+              {/* Per-project breakdown (only in "all" view with multiple projects) */}
+              {financeFilter === 'all' && hasMultipleProjects && (
+                <div>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold uppercase tracking-wider mb-2">Per project</p>
+                  <div className="space-y-1.5">
+                    {allProjectsBudget!.map(pb => {
+                      const pbPct = pb.total > 0 ? Math.round((pb.paid / pb.total) * 100) : 0;
+                      return (
+                        <button
+                          key={pb.projectId}
+                          onClick={() => setFinanceFilter(pb.projectId)}
+                          className="w-full p-3 bg-zinc-50/80 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-600 transition-all text-left"
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 truncate">{pb.projectTitle}</p>
+                            <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 flex-shrink-0 ml-2">{fmt(pb.total)}</p>
+                          </div>
+                          <div className="h-1 bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pbPct}%` }}
+                              transition={{ duration: 0.8, ease: 'circOut' }}
+                              className="h-full bg-[#2C0405] dark:bg-[#e8a0a2] rounded-full"
+                            />
+                          </div>
+                          <div className="flex justify-between mt-1">
+                            <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{fmt(pb.paid)} collected</span>
+                            <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{pbPct}%</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Next Payment highlight */}
               {nextPayment && (
                 <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-800/40 rounded-xl">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <CalendarClock size={12} className="text-amber-600 dark:text-amber-400" />
-                    <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Pr{'\u00f3'}ximo pago</p>
+                    <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Next Payment</p>
                   </div>
                   <div className="flex items-end justify-between">
                     <div>
-                      <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mb-0.5">{nextPayment.concept || 'Cuota pendiente'}</p>
+                      <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mb-0.5">{nextPayment.concept || 'Pending installment'}</p>
                       <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{fmt(nextPayment.amount)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[9px] text-amber-500 dark:text-amber-400 font-medium">Vence</p>
+                      <p className="text-[9px] text-amber-500 dark:text-amber-400 font-medium">Due</p>
                       <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">{fmtDate(nextPayment.dueDate)}</p>
                     </div>
                   </div>
@@ -175,9 +276,9 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               {payments.length > 0 && (
                 <div>
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold uppercase tracking-wider mb-2.5">
-                    Calendario de pagos
+                    Payment Schedule
                     <span className="text-zinc-300 dark:text-zinc-600 ml-1.5 normal-case font-normal">
-                      ({paidPayments.length}/{payments.length} completados)
+                      ({paidPayments.length}/{payments.length} completed)
                     </span>
                   </p>
                   <div className="space-y-1.5">
@@ -212,13 +313,20 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
 
                           {/* Info */}
                           <div className="flex-1 min-w-0">
-                            <p className={`text-[10px] font-semibold truncate ${
-                              isPaid ? 'text-[#2C0405] dark:text-[#e8a0a2]' : isOverdue ? 'text-red-700 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300'
-                            }`}>
-                              {p.concept}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              {financeFilter === 'all' && hasMultipleProjects && p.projectTitle && (
+                                <span className="flex-shrink-0 text-[8px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                                  {p.projectTitle}
+                                </span>
+                              )}
+                              <p className={`text-[10px] font-semibold truncate ${
+                                isPaid ? 'text-[#2C0405] dark:text-[#e8a0a2]' : isOverdue ? 'text-red-700 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300'
+                              }`}>
+                                {p.concept}
+                              </p>
+                            </div>
                             <p className={`text-[9px] ${isPaid ? 'text-[#2C0405]/70 dark:text-[#e8a0a2]/70' : isOverdue ? 'text-red-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
-                              {isPaid && p.paidDate ? `Pagado ${fmtDate(p.paidDate)}` : `Vence ${fmtDate(p.dueDate)}`}
+                              {isPaid && p.paidDate ? `Paid ${fmtDate(p.paidDate)}` : `Due ${fmtDate(p.dueDate)}`}
                             </p>
                           </div>
 
@@ -236,10 +344,10 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
               )}
 
               {/* Empty state when no payments and no budget */}
-              {payments.length === 0 && budget.total === 0 && (
+              {payments.length === 0 && displayBudget.total === 0 && (
                 <div className="text-center py-4">
                   <CalendarClock size={20} className="text-zinc-200 dark:text-zinc-700 mx-auto mb-2" />
-                  <p className="text-[11px] text-zinc-300 dark:text-zinc-600">No hay pagos configurados a{'\u00fa'}n</p>
+                  <p className="text-[11px] text-zinc-300 dark:text-zinc-600">No payments configured yet</p>
                 </div>
               )}
             </motion.div>
@@ -270,11 +378,11 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                   </div>
                   <div className="space-y-1 text-[10px]">
                     <div className="flex justify-between">
-                      <span className="text-zinc-300 dark:text-zinc-600">Usuario</span>
+                      <span className="text-zinc-300 dark:text-zinc-600">Username</span>
                       <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium">{c.user || '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-300 dark:text-zinc-600">Contrase{'\u00f1'}a</span>
+                      <span className="text-zinc-300 dark:text-zinc-600">Password</span>
                       <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium tracking-wider">
                         {showPass[c.id] ? c.pass : '••••••••'}
                       </span>
@@ -283,7 +391,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                 </div>
               ))}
               {credItems.length === 0 && (
-                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No hay accesos compartidos</p>
+                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No shared credentials</p>
               )}
             </motion.div>
           )}
@@ -319,7 +427,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                 </div>
               ))}
               {docItems.length === 0 && (
-                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No hay documentos compartidos</p>
+                <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No shared documents</p>
               )}
             </motion.div>
           )}

@@ -285,6 +285,7 @@ const App: React.FC<ClientPortalAppProps> = ({
                     credentials={data.credentials}
                     assets={data.assets}
                     budget={data.budget}
+                    allProjectsBudget={data.allProjectsBudget}
                     hiddenTabs={hiddenResourceTabs}
                   />
                 </div>

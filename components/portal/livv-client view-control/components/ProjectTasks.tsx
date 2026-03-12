@@ -48,7 +48,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
           <ListChecks size={13} className="text-zinc-300 dark:text-zinc-600" />
-          Tareas del Proyecto
+          Project Tasks
         </h3>
         <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
           {totalCompleted}/{tasks.length}
@@ -139,14 +139,14 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
                                 ? 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/40 font-semibold'
                                 : 'text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800'
                             }`}>
-                              {new Date(task.dueDate).toLocaleDateString('es-AR', { month: 'short', day: 'numeric' })}
+                              {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                           )}
 
                           {/* Completed date */}
                           {task.completed && task.completedAt && (
                             <span className="text-[10px] text-[#2C0405] dark:text-[#e8a0a2] font-medium shrink-0">
-                              {new Date(task.completedAt).toLocaleDateString('es-AR', { month: 'short', day: 'numeric' })}
+                              {new Date(task.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                           )}
                         </div>
@@ -162,7 +162,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
 
       {/* Empty state */}
       {tasks.length === 0 && (
-        <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-8">No hay tareas en este proyecto</p>
+        <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-8">No tasks in this project</p>
       )}
     </motion.div>
   );

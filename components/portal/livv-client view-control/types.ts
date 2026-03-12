@@ -52,6 +52,16 @@ export interface PaymentEntry {
   paidDate?: string;
   status: 'paid' | 'pending' | 'overdue';
   number?: number;
+  projectTitle?: string;
+}
+
+export interface ProjectBudget {
+  projectId: string;
+  projectTitle: string;
+  total: number;
+  paid: number;
+  nextPayment?: { amount: number; dueDate: string; concept?: string };
+  payments: PaymentEntry[];
 }
 
 export interface PortalTask {
@@ -91,4 +101,5 @@ export interface DashboardData {
   assets?: AssetItem[];
   tasks?: PortalTask[];
   projects?: PortalProject[];
+  allProjectsBudget?: ProjectBudget[];
 }

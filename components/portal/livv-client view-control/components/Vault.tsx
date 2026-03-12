@@ -11,8 +11,8 @@ const Vault: React.FC<{ credentials?: CredentialItem[] }> = ({ credentials }) =>
   const items = credentials && credentials.length
     ? credentials
     : [
-        { id: '1', service: 'Panel de Admin', user: 'admin@livv.com', pass: 'secure-pass-2026' },
-        { id: '2', service: 'Base de Datos', user: 'db_admin', pass: 'p_secure_88!v2' },
+        { id: '1', service: 'Admin Panel', user: 'admin@livv.com', pass: 'secure-pass-2026' },
+        { id: '2', service: 'Database', user: 'db_admin', pass: 'p_secure_88!v2' },
       ];
 
   const toggle = (id: string) => setShowPass(p => ({ ...p, [id]: !p[id] }));
@@ -26,7 +26,7 @@ const Vault: React.FC<{ credentials?: CredentialItem[] }> = ({ credentials }) =>
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
           <KeyRound size={13} className="text-zinc-300 dark:text-zinc-600" />
-          Accesos
+          Credentials
         </h3>
       </div>
 
@@ -46,11 +46,11 @@ const Vault: React.FC<{ credentials?: CredentialItem[] }> = ({ credentials }) =>
             </div>
             <div className="space-y-1 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-zinc-300 dark:text-zinc-500">Usuario</span>
+                <span className="text-zinc-300 dark:text-zinc-500">Username</span>
                 <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium">{c.user || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-300 dark:text-zinc-500">Contraseña</span>
+                <span className="text-zinc-300 dark:text-zinc-500">Password</span>
                 <span className="text-zinc-500 dark:text-zinc-400 font-mono font-medium tracking-wider">
                   {showPass[c.id] ? c.pass : '••••••••'}
                 </span>

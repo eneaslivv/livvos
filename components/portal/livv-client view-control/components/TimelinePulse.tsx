@@ -17,10 +17,10 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Progreso del Proyecto</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Project Progress</h3>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${data.onTrack ? 'bg-[#2C0405]/5 dark:bg-[#822b2e]/20 text-[#2C0405] dark:text-[#e8a0a2]' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${data.onTrack ? 'bg-[#2C0405] dark:bg-[#e8a0a2]' : 'bg-amber-400'}`} />
-          {data.onTrack ? 'En tiempo' : 'Con retraso'}
+          {data.onTrack ? 'On Track' : 'Delayed'}
         </div>
       </div>
 
@@ -28,17 +28,17 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
       <div className="flex items-end justify-between mb-4">
         <div>
           <p className="text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight leading-none">{data.progress}<span className="text-2xl text-zinc-300 dark:text-zinc-600">%</span></p>
-          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1.5">completado</p>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1.5">completed</p>
         </div>
         {data.progress >= 100 ? (
           <div className="flex items-center gap-2 text-[#2C0405] dark:text-[#e8a0a2] bg-[#2C0405]/5 dark:bg-[#822b2e]/20 px-3 py-1.5 rounded-lg">
             <CheckCircle2 size={16} />
-            <span className="text-xs font-semibold">Finalizado</span>
+            <span className="text-xs font-semibold">Completed</span>
           </div>
         ) : (
           <div className="text-right">
             <p className="text-3xl font-black text-zinc-800 dark:text-zinc-200 leading-none">{daysLeft}</p>
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">días restantes</p>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">days left</p>
           </div>
         )}
       </div>
@@ -58,14 +58,14 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
         <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl">
           <div className="flex items-center gap-1.5 mb-1.5">
             <CalendarDays size={12} className="text-zinc-300 dark:text-zinc-600" />
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Inicio</p>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Start</p>
           </div>
           <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{data.startDate}</p>
         </div>
         <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl">
           <div className="flex items-center gap-1.5 mb-1.5">
             <Clock size={12} className="text-zinc-300 dark:text-zinc-600" />
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Entrega estimada</p>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Estimated Delivery</p>
           </div>
           <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">{data.etaDate}</p>
         </div>
@@ -78,8 +78,8 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
             <CreditCard size={15} className="text-amber-600 dark:text-amber-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">Próximo pago: ${nextPay.amount.toLocaleString()}</p>
-            <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">{nextPay.concept} · Vence {nextPay.dueDate}</p>
+            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">Next payment: ${nextPay.amount.toLocaleString()}</p>
+            <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">{nextPay.concept} · Due {nextPay.dueDate}</p>
           </div>
         </div>
       )}

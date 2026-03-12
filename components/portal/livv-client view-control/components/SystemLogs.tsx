@@ -21,7 +21,7 @@ const SystemLogs: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
           <Clock size={13} className="text-zinc-300 dark:text-zinc-600" />
-          Actividad Reciente
+          Recent Activity
         </h3>
       </div>
 
@@ -44,7 +44,7 @@ const SystemLogs: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
       </div>
 
       {logs.length === 0 && (
-        <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-8">Sin actividad reciente</p>
+        <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-8">No recent activity</p>
       )}
     </motion.div>
   );

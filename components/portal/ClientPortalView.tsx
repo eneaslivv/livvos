@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PortalApp from './livv-client view-control/App';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { DashboardData, Milestone, LogEntry, PaymentEntry, PortalTask, PortalProject } from './livv-client view-control/types';
+import { DashboardData, Milestone, LogEntry, PaymentEntry, PortalTask, PortalProject, ProjectBudget } from './livv-client view-control/types';
 
 /** Wrap a promise/thenable with a timeout — returns fallback on timeout or error */
 const safeQuery = <T,>(promise: PromiseLike<{ data: any; error: any }>, fallback: T, ms = 6000): Promise<{ data: T }> =>
@@ -70,6 +70,46 @@ type FileRecord = {
   type?: string | null;
   size?: number | null;
   url: string;
+};
+
+/** Build payment schedule + totals from incomes+installments data */
+const buildPaymentsFromIncomes = (incomesData: any[], projectTitle?: string) => {
+  const payments: PaymentEntry[] = [];
+  let totalFromIncomes = 0;
+  let paidFromInstallments = 0;
+  for (const inc of incomesData) {
+    const installments = (inc.installments || []) as any[];
+    if (installments.length > 0) {
+      for (const inst of installments) {
+        const isPaid = inst.status === 'paid';
+        if (isPaid) paidFromInstallments += Number(inst.amount || 0);
+        payments.push({
+          id: inst.id,
+          concept: `${inc.concept || 'Payment'} — Installment ${inst.number || 1}`,
+          amount: Number(inst.amount || 0),
+          dueDate: inst.due_date || inc.due_date || '',
+          paidDate: inst.paid_date || undefined,
+          status: inst.status || 'pending',
+          number: inst.number || 1,
+          projectTitle,
+        });
+      }
+    } else {
+      const isPaid = inc.status === 'paid';
+      if (isPaid) paidFromInstallments += Number(inc.total_amount || 0);
+      payments.push({
+        id: inc.id,
+        concept: inc.concept || 'Payment',
+        amount: Number(inc.total_amount || 0),
+        dueDate: inc.due_date || '',
+        status: inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending',
+        projectTitle,
+      });
+    }
+    totalFromIncomes += Number(inc.total_amount || 0);
+  }
+  payments.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+  return { payments, totalFromIncomes, paidFromInstallments };
 };
 
 export const ClientPortalView: React.FC = () => {
@@ -318,39 +358,10 @@ export const ClientPortalView: React.FC = () => {
         }));
 
         // Build payment schedule from incomes + installments
-        const payments: PaymentEntry[] = [];
-        let totalFromIncomes = 0;
-        let paidFromInstallments = 0;
-        for (const inc of (incomesData || []) as any[]) {
-          const installments = (inc.installments || []) as any[];
-          if (installments.length > 0) {
-            for (const inst of installments) {
-              const isPaid = inst.status === 'paid';
-              if (isPaid) paidFromInstallments += Number(inst.amount || 0);
-              payments.push({
-                id: inst.id,
-                concept: `${inc.concept || 'Payment'} — Installment ${inst.number || 1}`,
-                amount: Number(inst.amount || 0),
-                dueDate: inst.due_date || inc.due_date || '',
-                paidDate: inst.paid_date || undefined,
-                status: inst.status || 'pending',
-                number: inst.number || 1,
-              });
-            }
-          } else {
-            const isPaid = inc.status === 'paid';
-            if (isPaid) paidFromInstallments += Number(inc.total_amount || 0);
-            payments.push({
-              id: inc.id,
-              concept: inc.concept || 'Payment',
-              amount: Number(inc.total_amount || 0),
-              dueDate: inc.due_date || '',
-              status: inc.status === 'paid' ? 'paid' : inc.status === 'overdue' ? 'overdue' : 'pending',
-            });
-          }
-          totalFromIncomes += Number(inc.total_amount || 0);
-        }
-        payments.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+        const { payments, totalFromIncomes, paidFromInstallments } = buildPaymentsFromIncomes(
+          (incomesData || []) as any[],
+          project?.title || undefined
+        );
 
         const budgetTotal = Number(finances?.total_agreed || 0) || totalFromIncomes;
         const budgetPaid = Number(finances?.total_collected || 0) || paidFromInstallments;
@@ -381,6 +392,50 @@ export const ClientPortalView: React.FC = () => {
           status: p.status || undefined,
         }));
 
+        // Build per-project budget breakdown when multiple projects exist
+        let allProjectsBudget: ProjectBudget[] | undefined;
+        if (allProjects.length > 1) {
+          const otherProjects = allProjects.filter(p => p.id !== projectId);
+          const otherFetches = await Promise.all(
+            otherProjects.map(async (proj) => {
+              const [{ data: otherIncomes }, { data: otherFinances }] = await Promise.all([
+                safeQuery(
+                  supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', proj.id).order('due_date', { ascending: true }),
+                  [] as any[], 4000
+                ),
+                safeQuery(
+                  supabase.from('finances').select('total_agreed,total_collected').eq('project_id', proj.id).maybeSingle(),
+                  null, 4000
+                ),
+              ]);
+              const result = buildPaymentsFromIncomes((otherIncomes || []) as any[], proj.title || 'Untitled');
+              const fin = (otherFinances || {}) as FinanceRecord;
+              return {
+                projectId: proj.id,
+                projectTitle: proj.title || 'Untitled Project',
+                total: Number(fin.total_agreed || 0) || result.totalFromIncomes,
+                paid: Number(fin.total_collected || 0) || result.paidFromInstallments,
+                nextPayment: result.payments.find(p => p.status !== 'paid')
+                  ? { amount: result.payments.find(p => p.status !== 'paid')!.amount, dueDate: result.payments.find(p => p.status !== 'paid')!.dueDate, concept: result.payments.find(p => p.status !== 'paid')!.concept }
+                  : undefined,
+                payments: result.payments,
+              } as ProjectBudget;
+            })
+          );
+
+          // Current project budget entry
+          const currentProjectBudget: ProjectBudget = {
+            projectId: projectId || '',
+            projectTitle: project?.title || 'Untitled Project',
+            total: budgetTotal,
+            paid: budgetPaid,
+            nextPayment,
+            payments,
+          };
+
+          allProjectsBudget = [currentProjectBudget, ...otherFetches];
+        }
+
         const dashboard: DashboardData = {
           progress,
           startDate,
@@ -402,6 +457,7 @@ export const ClientPortalView: React.FC = () => {
           credentials,
           tasks: portalTasks,
           projects: portalProjects,
+          allProjectsBudget,
         };
 
         setProjectTitle(project?.title || client.company || client.name || 'Client Portal');

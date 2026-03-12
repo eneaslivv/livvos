@@ -8,9 +8,9 @@ const LegalAssets: React.FC<{ assets?: AssetItem[] }> = ({ assets }) => {
   const items = assets && assets.length
     ? assets
     : [
-        { id: '1', name: 'Contrato de Servicios', type: 'PDF', size: '2.4 MB' },
-        { id: '2', name: 'Diseño del Proyecto', type: 'Figma', size: 'Enlace' },
-        { id: '3', name: 'Entregables Fase I', type: 'Drive', size: 'Enlace' },
+        { id: '1', name: 'Service Agreement', type: 'PDF', size: '2.4 MB' },
+        { id: '2', name: 'Project Design', type: 'Figma', size: 'Link' },
+        { id: '3', name: 'Phase I Deliverables', type: 'Drive', size: 'Link' },
       ];
 
   const getIcon = (type?: string) => {
@@ -26,7 +26,7 @@ const LegalAssets: React.FC<{ assets?: AssetItem[] }> = ({ assets }) => {
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
       className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8 h-full flex flex-col"
     >
-      <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-5">Documentos</h3>
+      <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-5">Documents</h3>
 
       <div className="space-y-2 flex-1">
         {items.map((a, i) => (
