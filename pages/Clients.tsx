@@ -87,6 +87,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [clientInviteStatus, setClientInviteStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [availableProjects, setAvailableProjects] = useState<{ id: string; title: string; client_id?: string | null; status?: string; progress?: number; deadline?: string; description?: string; created_at?: string }[]>([]);
@@ -468,6 +469,36 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       refreshProjects();
     } catch (err) {
       errorLogger.error('Error unassigning project', err);
+    }
+  };
+
+  const handleUploadLogo = async (file: File) => {
+    if (!selectedClient) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Max file size is 2MB'); return; }
+    setIsUploadingLogo(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `client_logos/${selectedClient.id}.${ext}`;
+      await supabase.storage.from('documents').upload(path, file, { upsert: true });
+      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+      const avatarUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+      await updateClient(selectedClient.id, { avatar_url: avatarUrl });
+      setSelectedClient({ ...selectedClient, avatar_url: avatarUrl });
+    } catch (err: any) {
+      errorLogger.error('Error uploading client logo', err);
+      alert('Failed to upload logo: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!selectedClient?.avatar_url) return;
+    try {
+      await updateClient(selectedClient.id, { avatar_url: null });
+      setSelectedClient({ ...selectedClient, avatar_url: undefined });
+    } catch (err: any) {
+      errorLogger.error('Error removing client logo', err);
     }
   };
 
@@ -984,6 +1015,9 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   }
                 }}
                 onInvitePortal={handleInvitePortal}
+                onUploadLogo={handleUploadLogo}
+                onRemoveLogo={handleRemoveLogo}
+                isUploadingLogo={isUploadingLogo}
               />
 
               {/* Tabs */}

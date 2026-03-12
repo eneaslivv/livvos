@@ -323,7 +323,8 @@ export const ClientPortalView: React.FC = () => {
         const logs: LogEntry[] = (logsData || []).map((log: any) => ({
           id: log.id,
           timestamp: new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          message: log.action || 'Project update'
+          message: log.action || 'Project update',
+          projectTitle: log.project_title || project?.title || undefined,
         }));
 
         const assets = (docsData || []).map((doc: ClientDocument) => ({
@@ -347,7 +348,8 @@ export const ClientPortalView: React.FC = () => {
           name: doc.name,
           type: doc.type || 'File',
           size: doc.size ? `${Math.round(doc.size / 1024)} KB` : '—',
-          url: doc.url || undefined
+          url: doc.url || undefined,
+          projectTitle: project?.title || undefined,
         }));
 
         const credentials = (credsData || []).map((cred: ClientCredential) => ({
@@ -392,13 +394,15 @@ export const ClientPortalView: React.FC = () => {
           status: p.status || undefined,
         }));
 
-        // Build per-project budget breakdown when multiple projects exist
+        // Build per-project budget breakdown + fetch other projects' files/logs when multiple projects exist
         let allProjectsBudget: ProjectBudget[] | undefined;
+        let otherProjectFiles: typeof projectFileAssets = [];
+        let otherProjectLogs: LogEntry[] = [];
         if (allProjects.length > 1) {
           const otherProjects = allProjects.filter(p => p.id !== projectId);
           const otherFetches = await Promise.all(
             otherProjects.map(async (proj) => {
-              const [{ data: otherIncomes }, { data: otherFinances }] = await Promise.all([
+              const [{ data: otherIncomes }, { data: otherFinances }, { data: otherFiles }, { data: otherLogs }] = await Promise.all([
                 safeQuery(
                   supabase.from('incomes').select('id,concept,total_amount,status,due_date,installments(id,number,amount,due_date,paid_date,status)').eq('project_id', proj.id).order('due_date', { ascending: true }),
                   [] as any[], 4000
@@ -407,7 +411,31 @@ export const ClientPortalView: React.FC = () => {
                   supabase.from('finances').select('total_agreed,total_collected').eq('project_id', proj.id).maybeSingle(),
                   null, 4000
                 ),
+                safeQuery(
+                  supabase.from('files').select('id,name,type,size,url').eq('project_id', proj.id).order('created_at', { ascending: false }),
+                  [] as FileRecord[], 4000
+                ),
+                proj.title
+                  ? safeQuery(supabase.from('activity_logs').select('id,action,created_at,project_title').eq('project_title', proj.title).order('created_at', { ascending: false }).limit(5), [] as any[], 4000)
+                  : Promise.resolve({ data: [] as any[] }),
               ]);
+              // Collect files tagged with project title
+              for (const f of (otherFiles || [])) {
+                otherProjectFiles.push({
+                  id: f.id, name: f.name, type: f.type || 'File',
+                  size: f.size ? `${Math.round(f.size / 1024)} KB` : '—',
+                  url: f.url || undefined, projectTitle: proj.title || undefined,
+                });
+              }
+              // Collect logs tagged with project title
+              for (const l of (otherLogs || [])) {
+                otherProjectLogs.push({
+                  id: l.id,
+                  timestamp: new Date(l.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  message: l.action || 'Project update',
+                  projectTitle: proj.title || undefined,
+                });
+              }
               const result = buildPaymentsFromIncomes((otherIncomes || []) as any[], proj.title || 'Untitled');
               const fin = (otherFinances || {}) as FinanceRecord;
               return {
@@ -436,6 +464,11 @@ export const ClientPortalView: React.FC = () => {
           allProjectsBudget = [currentProjectBudget, ...otherFetches];
         }
 
+        // Merge all logs sorted by date, dedup by id
+        const allLogs = [...logs, ...otherProjectLogs];
+        const seenLogIds = new Set<string>();
+        const dedupedLogs = allLogs.filter(l => { if (seenLogIds.has(l.id)) return false; seenLogIds.add(l.id); return true; });
+
         const dashboard: DashboardData = {
           progress,
           startDate,
@@ -450,10 +483,10 @@ export const ClientPortalView: React.FC = () => {
           milestones: milestones.length ? milestones : [
             { id: 'm1', title: 'Project Start', description: 'Initial setup', status: 'current' }
           ],
-          logs: logs.length ? logs : [
+          logs: dedupedLogs.length ? dedupedLogs : [
             { id: 'l1', timestamp: 'Today', message: 'Portal connected to live project data.' }
           ],
-          assets: [...assets, ...fileAssets, ...projectFileAssets],
+          assets: [...assets, ...fileAssets, ...projectFileAssets, ...otherProjectFiles],
           credentials,
           tasks: portalTasks,
           projects: portalProjects,

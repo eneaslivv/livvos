@@ -5,11 +5,48 @@ const allowedOrigin = Deno.env.get('ALLOWED_ORIGINS') || '*'
 const corsHeaders = {
   'Access-Control-Allow-Origin': allowedOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-function buildInviteEmailHtml(clientName: string, inviteLink: string, brandName: string): string {
-  const firstName = clientName.split(' ')[0]
+interface EmailData {
+  recipient_name?: string
+  title: string
+  message: string
+  cta_url?: string
+  cta_text?: string
+}
+
+// Template-specific accent colors and icons
+const templateConfig: Record<string, { accent: string; icon: string }> = {
+  task_assigned:     { accent: '#3b82f6', icon: '&#128203;' }, // blue, clipboard
+  task_completed:    { accent: '#10b981', icon: '&#9989;' },   // green, check
+  deadline_reminder: { accent: '#f59e0b', icon: '&#9200;' },   // amber, alarm
+  project_update:    { accent: '#8b5cf6', icon: '&#128640;' }, // violet, rocket
+  system_alert:      { accent: '#ef4444', icon: '&#128680;' }, // red, rotating light
+}
+
+function buildEmailHtml(
+  template: string,
+  data: EmailData,
+  brandName: string
+): string {
+  const config = templateConfig[template] || templateConfig.system_alert
+  const firstName = data.recipient_name?.split(' ')[0] || ''
+  const greeting = firstName ? `Hi ${firstName},` : 'Hi,'
+
+  const ctaBlock = data.cta_url
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="center" style="padding:8px 0 32px;">
+            <a href="${data.cta_url}"
+               style="display:inline-block;padding:14px 36px;background-color:${config.accent};color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:999px;letter-spacing:0.3px;">
+              ${data.cta_text || 'View Details'}
+            </a>
+          </td>
+        </tr>
+      </table>`
+    : ''
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -31,51 +68,20 @@ function buildInviteEmailHtml(clientName: string, inviteLink: string, brandName:
           <tr>
             <td style="padding:40px;">
               <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#18181b;">
-                Hi ${firstName},
+                ${greeting}
               </h1>
+              <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#18181b;">
+                ${config.icon} ${data.title}
+              </h2>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#71717a;">
-                You've been invited to access your client portal. From there you can track your project's progress, payments, documents, and communicate directly with the team.
+                ${data.message}
               </p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center" style="padding:8px 0 32px;">
-                    <a href="${inviteLink}"
-                       style="display:inline-block;padding:14px 36px;background-color:#059669;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:999px;letter-spacing:0.3px;">
-                      Access Your Portal
-                    </a>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f4f4f5;padding-top:24px;">
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Live progress</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — Track your project in real time</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Payments</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — View your payment plan and status</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Documents</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — Contracts, files, and credentials</span>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:24px 0 0;font-size:12px;color:#a1a1aa;line-height:1.5;">
-                If the button doesn't work, copy and paste this link into your browser:<br>
-                <a href="${inviteLink}" style="color:#059669;word-break:break-all;">${inviteLink}</a>
-              </p>
+              ${ctaBlock}
             </td>
           </tr>
           <tr>
             <td style="padding:20px 40px;background-color:#fafafa;border-top:1px solid #f4f4f5;text-align:center;">
               <p style="margin:0;font-size:11px;color:#a1a1aa;">
-                Secure portal &bull; Encrypted data<br>
                 &copy; ${new Date().getFullYear()} ${brandName}
               </p>
             </td>
@@ -109,28 +115,28 @@ serve(async (req) => {
       })
     }
 
-    const { client_name, client_email, invite_link, tenant_name } = await req.json()
+    const { template, to, subject, brand_name, data } = await req.json()
 
-    if (!client_email || !invite_link) {
-      return new Response(JSON.stringify({ error: 'Missing client_email or invite_link' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (!to || !subject || !data?.title) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: to, subject, data.title' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    const brandName = tenant_name || 'Eneas OS'
-    const htmlBody = buildInviteEmailHtml(client_name || client_email, invite_link, brandName)
+    const brandName = brand_name || 'LIVV OS'
+    const htmlBody = buildEmailHtml(template || 'system_alert', data, brandName)
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
+        Authorization: `Bearer ${resendApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: `${brandName} <onboarding@resend.dev>`,
-        to: [client_email],
-        subject: `${client_name || 'Hi'}, your portal access is ready`,
+        to: [to],
+        subject,
         html: htmlBody,
       }),
     })

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { notifyWithEmail } from '../lib/notifyWithEmail'
 
 // Interfaces (copiadas de useClients.ts)
 export interface Client {
@@ -284,8 +285,23 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .insert(taskData)
       .select()
       .single()
-    
+
     if (error) throw error
+
+    // Notify task owner (fire-and-forget)
+    if (data.owner_id && (taskData as any).tenant_id) {
+      notifyWithEmail({
+        userId: data.owner_id,
+        tenantId: (taskData as any).tenant_id,
+        type: 'task',
+        title: `New client task: ${data.title}`,
+        message: data.description || 'A new client task has been created.',
+        priority: data.priority || 'medium',
+        link: '/clients',
+        actionText: 'View Task',
+      }).catch(() => {})
+    }
+
     return data
   }
 

@@ -131,6 +131,10 @@ export const UserManagement: React.FC = () => {
   // Action menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // Invite actions
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
   // ─── Fetch data ──────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
@@ -317,6 +321,31 @@ export const UserManagement: React.FC = () => {
     if (inviteLink) {
       navigator.clipboard.writeText(inviteLink);
       alert('Invitation link copied!');
+    }
+  };
+
+  const copyInviteLink = (invite: Invitation) => {
+    const link = `${window.location.origin}/accept-invite?token=${invite.token}`;
+    navigator.clipboard.writeText(link);
+    setCopiedInviteId(invite.id);
+    setTimeout(() => setCopiedInviteId(null), 2000);
+  };
+
+  const resendInviteEmail = async (invite: Invitation) => {
+    setResendingId(invite.id);
+    try {
+      const link = `${window.location.origin}/accept-invite?token=${invite.token}`;
+      await sendInviteEmail({
+        clientName: invite.email.split('@')[0],
+        clientEmail: invite.email,
+        inviteLink: link,
+        tenantName: currentTenant?.name || undefined,
+      });
+    } catch (err) {
+      errorLogger.warn('Resend invite email failed', err);
+      alert('Failed to resend email. You can copy the link instead.');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -675,13 +704,30 @@ export const UserManagement: React.FC = () => {
                           Invited
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => cancelInvitation(invite.id)}
-                          className="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
-                        >
-                          Cancel
-                        </button>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => copyInviteLink(invite)}
+                            className="text-xs font-medium px-2 py-1 rounded flex items-center gap-1 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          >
+                            {copiedInviteId === invite.id ? <Icons.Check size={12} className="text-emerald-500" /> : <Icons.Link size={12} />}
+                            {copiedInviteId === invite.id ? 'Copied!' : 'Copy Link'}
+                          </button>
+                          <button
+                            onClick={() => resendInviteEmail(invite)}
+                            disabled={resendingId === invite.id}
+                            className="text-xs font-medium px-2 py-1 rounded flex items-center gap-1 text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50"
+                          >
+                            <Icons.Send size={12} />
+                            {resendingId === invite.id ? 'Sending...' : 'Resend'}
+                          </button>
+                          <button
+                            onClick={() => cancelInvitation(invite.id)}
+                            className="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

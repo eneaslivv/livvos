@@ -287,13 +287,14 @@ const App: React.FC<ClientPortalAppProps> = ({
                     budget={data.budget}
                     allProjectsBudget={data.allProjectsBudget}
                     hiddenTabs={hiddenResourceTabs}
+                    projects={data.projects}
                   />
                 </div>
               )}
 
               {/* Row 3: Activity */}
               <div className="md:col-span-12">
-                <SystemLogs logs={data.logs} />
+                <SystemLogs logs={data.logs} showProjectTags={!!(data.projects && data.projects.length > 1)} />
               </div>
             </motion.div>
           )}

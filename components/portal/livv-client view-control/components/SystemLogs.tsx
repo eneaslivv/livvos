@@ -12,7 +12,7 @@ const typeConfig: Record<string, { icon: React.ElementType; bg: string; text: st
   update: { icon: Activity, bg: 'bg-zinc-50 dark:bg-zinc-800', text: 'text-zinc-400 dark:text-zinc-500' },
 };
 
-const SystemLogs: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
+const SystemLogs: React.FC<{ logs: LogEntry[]; showProjectTags?: boolean }> = ({ logs, showProjectTags }) => {
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
@@ -35,7 +35,14 @@ const SystemLogs: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
                 <Icon size={13} className={cfg.text} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{log.message}</p>
+                <div className="flex items-center gap-1.5">
+                  {showProjectTags && log.projectTitle && (
+                    <span className="flex-shrink-0 text-[8px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                      {log.projectTitle}
+                    </span>
+                  )}
+                  <p className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{log.message}</p>
+                </div>
               </div>
               <span className="text-[10px] text-zinc-300 dark:text-zinc-600 font-medium shrink-0 mt-0.5">{log.timestamp}</span>
             </div>

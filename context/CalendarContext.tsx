@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
+import { notifyWithEmail } from '../lib/notifyWithEmail'
 
 export interface CalendarEvent {
   id: string
@@ -374,6 +375,25 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!err) {
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
+
+          // Notify assignee (fire-and-forget)
+          const assigneeId = data.assigned_to || data.assignee_id
+          if (assigneeId && assigneeId !== taskData.owner_id) {
+            const tenantId = data.tenant_id || currentPayload.tenant_id
+            if (tenantId) {
+              notifyWithEmail({
+                userId: assigneeId,
+                tenantId,
+                type: 'task',
+                title: `New task assigned: ${data.title}`,
+                message: data.description || 'You have been assigned a new task.',
+                priority: data.priority || 'medium',
+                link: '/calendar',
+                actionText: 'View Task',
+              }).catch(() => {})
+            }
+          }
+
           return normalized
         }
         const missingColumn = getMissingColumn(err.message || '')

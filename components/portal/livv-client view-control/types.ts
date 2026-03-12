@@ -27,6 +27,7 @@ export interface LogEntry {
   message: string;
   /** 'update' | 'milestone' | 'payment' | 'review' | 'delivery' */
   type?: string;
+  projectTitle?: string;
 }
 
 export interface CredentialItem {
@@ -42,6 +43,7 @@ export interface AssetItem {
   type?: string;
   size?: string;
   url?: string;
+  projectTitle?: string;
 }
 
 export interface PaymentEntry {

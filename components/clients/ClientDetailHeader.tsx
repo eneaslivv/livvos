@@ -30,6 +30,7 @@ interface ClientDetailHeaderProps {
   portalInviteError: string | null;
   isInvitingPortal: boolean;
   emailSent: boolean | null;
+  isUploadingLogo?: boolean;
   onEditField: (field: string) => void;
   onEditDraftChange: (draft: Record<string, string>) => void;
   onCancelEdit: () => void;
@@ -37,6 +38,8 @@ interface ClientDetailHeaderProps {
   onUpdateStatus: (status: string) => void;
   onDelete: () => void;
   onInvitePortal: () => void;
+  onUploadLogo?: (file: File) => void;
+  onRemoveLogo?: () => void;
 }
 
 export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
@@ -56,6 +59,9 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
   onUpdateStatus,
   onDelete,
   onInvitePortal,
+  onUploadLogo,
+  onRemoveLogo,
+  isUploadingLogo,
 }) => {
   const [savedField, setSavedField] = useState<string | null>(null);
 
@@ -71,20 +77,51 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
     <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div
-            className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
-              client.color
-                ? ''
-                : 'bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 text-zinc-600 dark:text-zinc-300'
-            }`}
-            style={client.color ? {
-              backgroundColor: colorToBg(client.color, 0.15),
-              color: client.color,
-            } : undefined}
-          >
-            {client.avatar_url ? (
-              <img src={client.avatar_url} alt="" className="w-12 h-12 object-cover" />
-            ) : getInitials(client.name)}
+          <div className="relative group/avatar">
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
+                client.color
+                  ? ''
+                  : 'bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 text-zinc-600 dark:text-zinc-300'
+              }`}
+              style={client.color ? {
+                backgroundColor: colorToBg(client.color, 0.15),
+                color: client.color,
+              } : undefined}
+            >
+              {client.avatar_url ? (
+                <img src={client.avatar_url} alt="" className="w-12 h-12 object-cover" />
+              ) : getInitials(client.name)}
+            </div>
+            {onUploadLogo && (
+              <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover/avatar:opacity-100 cursor-pointer transition-opacity">
+                {isUploadingLogo ? (
+                  <Icons.Loader size={14} className="text-white animate-spin" />
+                ) : (
+                  <Icons.Upload size={14} className="text-white" />
+                )}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={isUploadingLogo}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onUploadLogo(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+            {client.avatar_url && onRemoveLogo && (
+              <button
+                onClick={onRemoveLogo}
+                className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity hover:bg-rose-600"
+                title="Remove logo"
+              >
+                <Icons.X size={8} />
+              </button>
+            )}
           </div>
           <div>
             {editingField === 'name' ? (

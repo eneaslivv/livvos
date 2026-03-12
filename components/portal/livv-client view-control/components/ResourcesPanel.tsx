@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { KeyRound, FileText, DollarSign, Eye, EyeOff, Copy, Check, Download, Figma, FolderOpen, CalendarClock, CircleCheck, Clock, AlertTriangle } from 'lucide-react';
-import type { CredentialItem, AssetItem, PaymentEntry, ProjectBudget } from '../types';
+import type { CredentialItem, AssetItem, PaymentEntry, ProjectBudget, PortalProject } from '../types';
 
 interface ResourcesPanelProps {
   credentials?: CredentialItem[];
@@ -14,6 +14,7 @@ interface ResourcesPanelProps {
   };
   allProjectsBudget?: ProjectBudget[];
   hiddenTabs?: ('finance' | 'access' | 'docs')[];
+  projects?: PortalProject[];
 }
 
 const TABS = [
@@ -30,13 +31,14 @@ const fmtDate = (d: string) => {
   return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget, allProjectsBudget, hiddenTabs }) => {
+const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, budget, allProjectsBudget, hiddenTabs, projects }) => {
   const visibleTabs = TABS.filter(tab => !hiddenTabs?.includes(tab.id));
   const [activeTab, setActiveTab] = useState<TabId>(visibleTabs[0]?.id || 'finance');
   const [showPass, setShowPass] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [showAmounts, setShowAmounts] = useState(true);
   const [financeFilter, setFinanceFilter] = useState<string>('all');
+  const [docsFilter, setDocsFilter] = useState<string>('all');
 
   if (visibleTabs.length === 0) return null;
 
@@ -397,16 +399,67 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
           )}
 
           {/* ── Documents Tab ── */}
-          {activeTab === 'docs' && (
+          {activeTab === 'docs' && (() => {
+            const hasMultiProjects = projects && projects.length > 1;
+            // Get unique project names from docs
+            const docProjectNames = hasMultiProjects
+              ? [...new Set(docItems.filter(d => d.projectTitle).map(d => d.projectTitle!))]
+              : [];
+            const filteredDocs = docsFilter === 'all'
+              ? docItems
+              : docsFilter === 'general'
+              ? docItems.filter(d => !d.projectTitle)
+              : docItems.filter(d => d.projectTitle === docsFilter);
+
+            return (
             <motion.div
               key="docs"
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 8 }}
               transition={{ duration: 0.2 }}
-              className="space-y-1.5"
+              className="space-y-3"
             >
-              {docItems.map((a, i) => (
+              {/* Project filter pills (only with multiple projects) */}
+              {hasMultiProjects && docProjectNames.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  <button
+                    onClick={() => setDocsFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+                      docsFilter === 'all'
+                        ? 'bg-[#2C0405] text-white dark:bg-[#e8a0a2] dark:text-[#2C0405]'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setDocsFilter('general')}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+                      docsFilter === 'general'
+                        ? 'bg-[#2C0405] text-white dark:bg-[#e8a0a2] dark:text-[#2C0405]'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    General
+                  </button>
+                  {docProjectNames.map(name => (
+                    <button
+                      key={name}
+                      onClick={() => setDocsFilter(name)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all truncate max-w-[140px] ${
+                        docsFilter === name
+                          ? 'bg-[#2C0405] text-white dark:bg-[#e8a0a2] dark:text-[#2C0405]'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {filteredDocs.map((a, i) => (
                 <div
                   key={a.id || i}
                   onClick={() => a.url && window.open(a.url, '_blank')}
@@ -417,7 +470,14 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                       {getDocIcon(a.type)}
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 group-hover:text-zinc-800 dark:group-hover:text-zinc-100 transition-colors">{a.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        {hasMultiProjects && a.projectTitle && docsFilter === 'all' && (
+                          <span className="flex-shrink-0 text-[8px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                            {a.projectTitle}
+                          </span>
+                        )}
+                        <p className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 group-hover:text-zinc-800 dark:group-hover:text-zinc-100 transition-colors">{a.name}</p>
+                      </div>
                       <p className="text-[9px] text-zinc-300 dark:text-zinc-600">{a.size} · {a.type}</p>
                     </div>
                   </div>
@@ -426,11 +486,12 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                   </button>
                 </div>
               ))}
-              {docItems.length === 0 && (
+              {filteredDocs.length === 0 && (
                 <p className="text-[11px] text-zinc-300 dark:text-zinc-600 text-center py-6">No shared documents</p>
               )}
             </motion.div>
-          )}
+            );
+          })()}
         </AnimatePresence>
       </div>
     </motion.div>

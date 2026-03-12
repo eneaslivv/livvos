@@ -4,6 +4,7 @@ import { errorLogger } from '../lib/errorLogger'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from './TenantContext'
 import { ResourceLimitError } from '../lib/ResourceLimitError'
+import { notifyWithEmail } from '../lib/notifyWithEmail'
 
 export enum ProjectStatus {
   Active = 'Active',
@@ -291,6 +292,21 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       const newProject = normalizeProject(data)
       setProjects(prev => [newProject, ...prev])
+
+      // Notify project owner (fire-and-forget confirmation)
+      if (tenantId && user.id) {
+        notifyWithEmail({
+          userId: user.id,
+          tenantId,
+          type: 'project',
+          title: `Project created: ${newProject.title}`,
+          message: `Your project "${newProject.title}" has been created successfully.`,
+          priority: 'low',
+          link: '/projects',
+          actionText: 'View Project',
+        }).catch(() => {})
+      }
+
       return newProject
     } catch (err) {
       throw err

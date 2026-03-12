@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from './TenantContext';
 import { errorLogger } from '../lib/errorLogger';
+import { sendEmail } from '../lib/sendEmail';
+import type { SendEmailParams } from '../lib/sendEmail';
 
 // Enhanced notification types
 export interface Notification {
@@ -174,6 +176,81 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const hasLoadedNotificationsRef = useRef(false);
+
+  // Template mapping for email notifications
+  const notificationTypeToTemplate: Record<string, SendEmailParams['template']> = {
+    task: 'task_assigned',
+    deadline: 'deadline_reminder',
+    project: 'project_update',
+    system: 'system_alert',
+    security: 'system_alert',
+    billing: 'system_alert',
+    invite: 'system_alert',
+    lead: 'system_alert',
+    activity: 'project_update',
+    mention: 'task_assigned',
+  };
+
+  // Fire-and-forget email sender for notifications
+  const maybeSendEmailForNotification = useCallback(async (
+    notification: { type: string; title: string; message?: string | null; priority?: string; link?: string | null; action_url?: string },
+    targetUserId: string,
+    targetEmail?: string
+  ) => {
+    try {
+      // Check email preferences via RPC
+      const { data: shouldSend } = await supabase.rpc('should_send_email', {
+        p_user_id: targetUserId,
+        p_type: notification.type,
+        p_priority: notification.priority || 'medium',
+      });
+
+      if (!shouldSend) return;
+
+      // Look up email if not provided
+      let email = targetEmail;
+      if (!email) {
+        const { data: userData } = await supabase
+          .from('auth_user_view')
+          .select('email')
+          .eq('id', targetUserId)
+          .single();
+
+        if (!userData?.email) {
+          // Fallback: try profiles table
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', targetUserId)
+            .single();
+          email = profile?.email;
+        } else {
+          email = userData.email;
+        }
+      }
+
+      if (!email) return;
+
+      const template = notificationTypeToTemplate[notification.type] || 'system_alert';
+      const ctaUrl = notification.action_url || notification.link;
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+      await sendEmail({
+        template,
+        to: email,
+        subject: notification.title,
+        brandName: currentTenant?.name || 'LIVV OS',
+        data: {
+          title: notification.title,
+          message: notification.message || '',
+          ctaUrl: ctaUrl ? (ctaUrl.startsWith('http') ? ctaUrl : `${baseUrl}${ctaUrl}`) : undefined,
+          ctaText: 'View Details',
+        },
+      });
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn('Email notification failed (non-blocking):', err);
+    }
+  }, [currentTenant]);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -427,12 +504,15 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
 
       if (error) throw error;
 
+      // Fire-and-forget email
+      maybeSendEmailForNotification(data, data.user_id).catch(() => {});
+
       return data;
     } catch (err) {
       errorLogger.error('Error creating notification:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to create notification');
     }
-  }, [currentTenant, user?.id]);
+  }, [currentTenant, user?.id, maybeSendEmailForNotification]);
 
   const createBatchNotification = useCallback(async (notificationData: Omit<Notification, 'id' | 'created_at' | 'user_id' | 'tenant_id'> & { userIds: string[] }): Promise<NotificationBatch> => {
     if (!currentTenant) {
@@ -473,6 +553,11 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
         .single();
 
       if (batchError) throw batchError;
+
+      // Fire-and-forget emails for each user
+      notificationData.userIds.forEach(userId => {
+        maybeSendEmailForNotification(notificationData, userId).catch(() => {});
+      });
 
       return batch;
     } catch (err) {
@@ -643,7 +728,12 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     await supabase
       .from('notifications')
       .insert(notifications);
-  }, [currentTenant]);
+
+    // Fire-and-forget emails
+    users.forEach(userProfile => {
+      maybeSendEmailForNotification({ type: 'system', title, message, priority }, userProfile.id).catch(() => {});
+    });
+  }, [currentTenant, maybeSendEmailForNotification]);
 
   const notifyAdmins = useCallback(async (message: string, metadata: Record<string, any> = {}) => {
     if (!currentTenant) return;
@@ -670,7 +760,15 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     await supabase
       .from('notifications')
       .insert(notifications);
-  }, [currentTenant]);
+
+    // Fire-and-forget emails to admins
+    adminUsers.forEach(userRole => {
+      maybeSendEmailForNotification(
+        { type: 'security', title: 'Admin Notification', message, priority: 'high' },
+        userRole.user_id
+      ).catch(() => {});
+    });
+  }, [currentTenant, maybeSendEmailForNotification]);
 
   // Real-time subscription management
   const subscribeToNotifications = useCallback((userId?: string) => {
@@ -746,9 +844,28 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     sendFromTemplate: async () => { throw new Error('Not implemented'); },
     
     // Preferences
-    getPreferences: async () => [],
+    getPreferences: async () => {
+      if (!user) return [];
+      const { data } = await supabase
+        .from('email_preferences')
+        .select('*')
+        .eq('user_id', user.id);
+      return (data || []) as any;
+    },
     updatePreferences: async () => { throw new Error('Not implemented'); },
-    updateUserPreference: async () => { throw new Error('Not implemented'); },
+    updateUserPreference: async (type: Notification['type'], updates: Partial<NotificationPreference>) => {
+      if (!user || !currentTenant) return;
+      await supabase
+        .from('email_preferences')
+        .upsert({
+          user_id: user.id,
+          tenant_id: currentTenant.id,
+          notification_type: type,
+          email_enabled: updates.email_enabled ?? true,
+          min_priority: updates.min_priority || 'high',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,notification_type' });
+    },
     
     // Batching
     getBatches: async () => [],

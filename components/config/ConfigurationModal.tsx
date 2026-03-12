@@ -7,6 +7,7 @@ import { RoleManagement } from './RoleManagement';
 import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
 import { ContentManagement } from './ContentManagement';
+import { EmailPreferences } from './EmailPreferences';
 import { useRBAC } from '../../context/RBACContext';
 
 interface ConfigurationModalProps {
@@ -14,7 +15,7 @@ interface ConfigurationModalProps {
     onClose: () => void;
 }
 
-type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles';
+type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email';
 
 export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -27,6 +28,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
         { id: 'billing', label: 'Billing', icon: Icons.CreditCard, permission: { module: 'finance', action: 'view' } },
         { id: 'users', label: 'Members', icon: Icons.Users, requireAdmin: true },
         { id: 'roles', label: 'Roles', icon: Icons.Shield, requireAdmin: true },
+        { id: 'email', label: 'Email', icon: Icons.Mail },
     ];
 
     const TABS = ALL_TABS.filter(tab => {
@@ -111,6 +113,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
                         {activeTab === 'users' && <UserManagement />}
                         {activeTab === 'content' && <ContentManagement />}
                         {activeTab === 'roles' && <RoleManagement />}
+                        {activeTab === 'email' && <EmailPreferences />}
                     </div>
                 </div>
             </div>
