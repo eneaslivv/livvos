@@ -1,5 +1,107 @@
 import { supabase } from './supabase'
 
+// ─── AI Response Cache ───────────────────────────────────────────
+// Prevents duplicate API calls for identical inputs within a TTL window.
+// Cache is per-type + input hash, stored in sessionStorage for cross-navigation persistence.
+
+type AICacheEntry = {
+  result: unknown
+  timestamp: number
+}
+
+/** TTL per request type (in milliseconds) */
+const CACHE_TTL: Record<string, number> = {
+  advisor: 30 * 60 * 1000,        // 30 min — business context changes slowly
+  weekly_summary: 15 * 60 * 1000, // 15 min — weekly data is stable
+  proposal: 10 * 60 * 1000,       // 10 min — same brief = same proposal
+  blog: 10 * 60 * 1000,           // 10 min
+  tasks_bulk: 5 * 60 * 1000,      // 5 min
+  task: 0,                         // no cache — single tasks are quick & varied
+}
+
+/** Simple string hash for cache keys */
+const hashInput = (s: string): string => {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0
+  }
+  return String(h)
+}
+
+const cacheKey = (type: string, input: string) => `ai_cache:${type}:${hashInput(input)}`
+
+function getCached<T>(type: string, input: string): T | null {
+  const ttl = CACHE_TTL[type] ?? 0
+  if (ttl === 0) return null
+  try {
+    const raw = sessionStorage.getItem(cacheKey(type, input))
+    if (!raw) return null
+    const entry: AICacheEntry = JSON.parse(raw)
+    if (Date.now() - entry.timestamp > ttl) {
+      sessionStorage.removeItem(cacheKey(type, input))
+      return null
+    }
+    return entry.result as T
+  } catch {
+    return null
+  }
+}
+
+function setCache(type: string, input: string, result: unknown): void {
+  const ttl = CACHE_TTL[type] ?? 0
+  if (ttl === 0) return
+  try {
+    const entry: AICacheEntry = { result, timestamp: Date.now() }
+    sessionStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
+  } catch {
+    // sessionStorage full or unavailable — silently skip
+  }
+}
+
+// ─── In-flight deduplication ─────────────────────────────────────
+// If the same request is already in-flight, return the same promise
+// instead of making a duplicate API call.
+
+const inflight = new Map<string, Promise<unknown>>()
+
+async function callGemini<T>(type: string, input: string, validate: (d: any) => boolean): Promise<T> {
+  // 1. Check cache
+  const cached = getCached<T>(type, input)
+  if (cached) {
+    if (import.meta.env.DEV) console.log(`[AI] Cache hit for ${type}`)
+    return cached
+  }
+
+  // 2. Deduplicate in-flight requests
+  const key = cacheKey(type, input)
+  const existing = inflight.get(key)
+  if (existing) {
+    if (import.meta.env.DEV) console.log(`[AI] Dedup in-flight for ${type}`)
+    return existing as Promise<T>
+  }
+
+  // 3. Make the actual call
+  const promise = (async (): Promise<T> => {
+    const { data, error } = await supabase.functions.invoke('gemini', {
+      body: { type, input },
+    })
+
+    if (error) throw new Error(error.message)
+    if (!data?.result || !validate(data.result)) throw new Error('Invalid AI response')
+
+    const result = data.result as T
+    setCache(type, input, result)
+    return result
+  })()
+
+  inflight.set(key, promise)
+  promise.finally(() => inflight.delete(key))
+
+  return promise
+}
+
+// ─── Exported functions ──────────────────────────────────────────
+
 type TaskAIResult = {
   title: string
   priority?: 'low' | 'medium' | 'high' | 'urgent'
@@ -20,67 +122,10 @@ type BlogAIResult = {
   language?: 'en' | 'es'
 }
 
-export const generateTaskFromAI = async (input: string): Promise<TaskAIResult> => {
-  const { data, error } = await supabase.functions.invoke('gemini', {
-    body: {
-      type: 'task',
-      input,
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data?.result?.title) {
-    throw new Error('Invalid AI response')
-  }
-
-  return data.result as TaskAIResult
-}
-
-export const generateProposalFromAI = async (input: string): Promise<ProposalAIResult> => {
-  const { data, error } = await supabase.functions.invoke('gemini', {
-    body: {
-      type: 'proposal',
-      input,
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data?.result?.content) {
-    throw new Error('Invalid AI response')
-  }
-
-  return data.result as ProposalAIResult
-}
-
 type WeeklySummaryAIResult = {
   objectives: string[]
   focus_tasks: string[]
   recommendations: string[]
-}
-
-export const generateWeeklySummaryFromAI = async (input: string): Promise<WeeklySummaryAIResult> => {
-  const { data, error } = await supabase.functions.invoke('gemini', {
-    body: {
-      type: 'weekly_summary',
-      input,
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data?.result?.objectives || !data?.result?.focus_tasks || !data?.result?.recommendations) {
-    throw new Error('Invalid AI response')
-  }
-
-  return data.result as WeeklySummaryAIResult
 }
 
 export type AdvisorInsight = {
@@ -96,40 +141,33 @@ export type AdvisorAIResult = {
   greeting: string
 }
 
-export const generateAdvisorInsights = async (input: string): Promise<AdvisorAIResult> => {
-  const { data, error } = await supabase.functions.invoke('gemini', {
-    body: {
-      type: 'advisor',
-      input,
-    },
-  })
+export const generateTaskFromAI = (input: string): Promise<TaskAIResult> =>
+  callGemini('task', input, (r) => !!r?.title)
 
-  if (error) {
-    throw new Error(error.message)
+export const generateProposalFromAI = (input: string): Promise<ProposalAIResult> =>
+  callGemini('proposal', input, (r) => !!r?.content)
+
+export const generateWeeklySummaryFromAI = (input: string): Promise<WeeklySummaryAIResult> =>
+  callGemini('weekly_summary', input, (r) => Array.isArray(r?.objectives) && Array.isArray(r?.focus_tasks) && Array.isArray(r?.recommendations))
+
+export const generateAdvisorInsights = (input: string): Promise<AdvisorAIResult> =>
+  callGemini('advisor', input, (r) => Array.isArray(r?.insights))
+
+export const generateBlogFromAI = (input: string): Promise<BlogAIResult> =>
+  callGemini('blog', input, (r) => !!r?.title && !!r?.content)
+
+/** Force-clear all AI caches (e.g., when user wants fresh results) */
+export const clearAICache = (type?: string): void => {
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)
+      if (k?.startsWith('ai_cache:') && (!type || k.startsWith(`ai_cache:${type}:`))) {
+        keys.push(k)
+      }
+    }
+    keys.forEach(k => sessionStorage.removeItem(k))
+  } catch {
+    // ignore
   }
-
-  if (!data?.result?.insights || !Array.isArray(data.result.insights)) {
-    throw new Error('Invalid AI response')
-  }
-
-  return data.result as AdvisorAIResult
-}
-
-export const generateBlogFromAI = async (input: string): Promise<BlogAIResult> => {
-  const { data, error } = await supabase.functions.invoke('gemini', {
-    body: {
-      type: 'blog',
-      input,
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data?.result?.title || !data?.result?.content) {
-    throw new Error('Invalid AI response')
-  }
-
-  return data.result as BlogAIResult
 }

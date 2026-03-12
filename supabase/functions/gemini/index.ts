@@ -48,12 +48,39 @@ type AdvisorResponse = {
   greeting: string
 }
 
+// ─── Simple in-memory rate limiter (per edge function instance) ──
+const rateLimiter = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT = 10     // max requests per window
+const RATE_WINDOW = 60000 // 1 minute window
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now()
+  const entry = rateLimiter.get(userId)
+  if (!entry || now > entry.resetAt) {
+    rateLimiter.set(userId, { count: 1, resetAt: now + RATE_WINDOW })
+    return true
+  }
+  if (entry.count >= RATE_LIMIT) return false
+  entry.count++
+  return true
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Extract user from auth header for rate limiting
+    const authHeader = req.headers.get('authorization') || ''
+    const userKey = authHeader.slice(-16) || 'anon' // last 16 chars as user identifier
+    if (!checkRateLimit(userKey)) {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please wait a moment before trying again.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const body = await req.json()
     const { type, input } = body || {}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './ui/Icons';
-import { generateAdvisorInsights, AdvisorInsight } from '../lib/ai';
+import { generateAdvisorInsights, clearAICache, AdvisorInsight } from '../lib/ai';
 import { useProjects } from '../context/ProjectsContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTeam } from '../context/TeamContext';
@@ -158,8 +158,9 @@ export const AiAdvisor: React.FC = () => {
     return lines.join('\n');
   }, [projects, incomes, expenses, members]);
 
-  const loadInsights = useCallback(async () => {
+  const loadInsights = useCallback(async (forceRefresh = false) => {
     if (!user) return;
+    if (forceRefresh) clearAICache('advisor');
     setLoading(true);
     setError(null);
     try {
@@ -256,7 +257,7 @@ export const AiAdvisor: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={loadInsights}
+                      onClick={() => loadInsights(true)}
                       disabled={loading}
                       className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600"
                       title="Regenerate analysis"
@@ -329,7 +330,7 @@ export const AiAdvisor: React.FC = () => {
                     </div>
                     <p className="text-xs text-zinc-500 text-center max-w-[260px]">{error}</p>
                     <button
-                      onClick={loadInsights}
+                      onClick={() => loadInsights(true)}
                       className="mt-1 px-4 py-1.5 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100 rounded-lg transition-colors"
                     >
                       Retry
@@ -407,7 +408,7 @@ export const AiAdvisor: React.FC = () => {
                     </div>
                     <p className="text-xs text-zinc-400">No data yet</p>
                     <button
-                      onClick={loadInsights}
+                      onClick={() => loadInsights()}
                       className="mt-1 px-4 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity"
                     >
                       Generate analysis
@@ -427,7 +428,7 @@ export const AiAdvisor: React.FC = () => {
                       </span>
                     </div>
                     <button
-                      onClick={loadInsights}
+                      onClick={() => loadInsights(true)}
                       disabled={loading}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                     >
