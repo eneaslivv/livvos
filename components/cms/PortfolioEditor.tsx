@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, GripVertical, Type, Quote, Heading, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { CmsPortfolioItem, CmsViewMode, PortfolioMedia, ContentBlock } from '../../types/cms';
+import type { CmsPortfolioItem, CmsViewMode, PortfolioMedia, ContentBlock, ContentBlockType } from '../../types/cms';
 import { ImageUploader } from './ImageUploader';
 import { TagInput } from './TagInput';
+import { BlockEditor, createDefaultBlock } from './blocks/BlockEditor';
 import { GridSkeleton, ListSkeleton, EmptyState } from './CmsSkeleton';
 
 interface PortfolioEditorProps {
@@ -67,10 +68,18 @@ const emptyForm: FormState = {
   content_blocks: [],
 };
 
-const BLOCK_TYPES: { type: ContentBlock['type']; icon: typeof Type; label: string }[] = [
-  { type: 'heading', icon: Heading, label: 'Heading' },
-  { type: 'text', icon: Type, label: 'Text' },
-  { type: 'quote', icon: Quote, label: 'Quote' },
+const BASIC_BLOCK_TYPES: { type: ContentBlockType; label: string }[] = [
+  { type: 'heading', label: 'Heading' },
+  { type: 'text', label: 'Text' },
+  { type: 'quote', label: 'Quote' },
+];
+
+const SECTION_BLOCK_TYPES: { type: ContentBlockType; label: string }[] = [
+  { type: 'hero_image', label: 'Hero Image' },
+  { type: 'challenge', label: 'Challenge' },
+  { type: 'image_showcase', label: 'Gallery' },
+  { type: 'design_system', label: 'Design System' },
+  { type: 'banner', label: 'Banner' },
 ];
 
 const MAX_FEATURED = 6;
@@ -157,7 +166,11 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         display_order: editingItem.display_order ?? editingItem.sort_order ?? 0,
         published: editingItem.published ?? true,
         featured: editingItem.featured ?? false,
-        media: editingItem.media || [],
+        media: editingItem.media?.length
+          ? editingItem.media
+          : editingItem.image?.startsWith('http')
+            ? [{ url: editingItem.image, type: detectMediaType(editingItem.image), is_cover: true, caption: '' }]
+            : [],
         content_blocks: editingItem.content_blocks || [],
       });
       setShowModal(true);
@@ -768,117 +781,73 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                 </div>
 
                 {/* ── Content Blocks ── */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">
                       Content Blocks
                     </label>
-                    <div className="flex items-center gap-1">
-                      {BLOCK_TYPES.map(({ type, icon: Icon, label }) => (
-                        <button
-                          key={type}
-                          onClick={() =>
-                            setForm((f) => ({
-                              ...f,
-                              content_blocks: [
-                                ...f.content_blocks,
-                                { type, content: '', sort_order: f.content_blocks.length },
-                              ],
-                            }))
-                          }
-                          className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#78736A] border border-[#E6E2D8] rounded-md hover:border-[#E8BC59] hover:text-[#09090B] transition-colors"
-                        >
-                          <Icon size={10} />
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-[9px] text-[#78736A] mr-1 self-center">Basic:</span>
+                    {BASIC_BLOCK_TYPES.map(({ type, label }) => (
+                      <button
+                        key={type}
+                        onClick={() => setForm((f) => ({ ...f, content_blocks: [...f.content_blocks, createDefaultBlock(type, f.content_blocks.length)] }))}
+                        className="px-2 py-1 text-[10px] text-[#78736A] border border-[#E6E2D8] rounded-md hover:border-[#E8BC59] hover:text-[#09090B] transition-colors"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <span className="text-[9px] text-[#78736A] mx-1 self-center">Sections:</span>
+                    {SECTION_BLOCK_TYPES.map(({ type, label }) => (
+                      <button
+                        key={type}
+                        onClick={() => setForm((f) => ({ ...f, content_blocks: [...f.content_blocks, createDefaultBlock(type, f.content_blocks.length)] }))}
+                        className="px-2 py-1 text-[10px] text-[#E8BC59] border border-[#E8BC59]/30 rounded-md hover:border-[#E8BC59] hover:bg-[#E8BC59]/5 transition-colors"
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                   {form.content_blocks.length === 0 && (
                     <p className="text-xs text-[#09090B]/25 py-3 text-center">
-                      Add headings, text paragraphs, or quotes
+                      Add content blocks to build the project landing page
                     </p>
                   )}
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {form.content_blocks.map((block, i) => (
-                      <div
+                      <BlockEditor
                         key={i}
-                        className="flex gap-2 items-start border border-[#E6E2D8] rounded-lg p-2 bg-[#FDFBF7]"
-                      >
-                        <div className="flex flex-col items-center gap-0.5 pt-1">
-                          <GripVertical size={12} className="text-[#09090B]/20" />
-                          <span className="text-[8px] font-mono text-[#78736A] uppercase mt-0.5">
-                            {block.type === 'heading' ? 'H' : block.type === 'quote' ? 'Q' : 'T'}
-                          </span>
-                          <div className="flex flex-col gap-0.5 mt-1">
-                            {i > 0 && (
-                              <button
-                                onClick={() => {
-                                  const next = [...form.content_blocks];
-                                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                                  setForm((f) => ({ ...f, content_blocks: next.map((b, idx) => ({ ...b, sort_order: idx })) }));
-                                }}
-                                className="p-0.5 hover:bg-[#E6E2D8] rounded"
-                              >
-                                <ChevronUp size={10} className="text-[#09090B]/40" />
-                              </button>
-                            )}
-                            {i < form.content_blocks.length - 1 && (
-                              <button
-                                onClick={() => {
-                                  const next = [...form.content_blocks];
-                                  [next[i], next[i + 1]] = [next[i + 1], next[i]];
-                                  setForm((f) => ({ ...f, content_blocks: next.map((b, idx) => ({ ...b, sort_order: idx })) }));
-                                }}
-                                className="p-0.5 hover:bg-[#E6E2D8] rounded"
-                              >
-                                <ChevronDown size={10} className="text-[#09090B]/40" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          {block.type === 'heading' ? (
-                            <input
-                              value={block.content}
-                              onChange={(e) => {
-                                const next = [...form.content_blocks];
-                                next[i] = { ...next[i], content: e.target.value };
-                                setForm((f) => ({ ...f, content_blocks: next }));
-                              }}
-                              className="w-full px-2 py-1.5 text-sm font-semibold tracking-tight rounded border border-transparent focus:border-[#E8BC59] bg-transparent focus:bg-white focus:outline-none transition-colors"
-                              placeholder="Section heading..."
-                            />
-                          ) : (
-                            <textarea
-                              value={block.content}
-                              onChange={(e) => {
-                                const next = [...form.content_blocks];
-                                next[i] = { ...next[i], content: e.target.value };
-                                setForm((f) => ({ ...f, content_blocks: next }));
-                              }}
-                              rows={block.type === 'quote' ? 2 : 3}
-                              className={`w-full px-2 py-1.5 text-sm rounded border border-transparent focus:border-[#E8BC59] bg-transparent focus:bg-white focus:outline-none resize-none transition-colors ${
-                                block.type === 'quote' ? 'italic border-l-2 border-l-[#E8BC59] pl-3' : ''
-                              }`}
-                              placeholder={block.type === 'quote' ? 'Quote text...' : 'Paragraph text...'}
-                            />
-                          )}
-                        </div>
-                        <button
-                          onClick={() =>
-                            setForm((f) => ({
-                              ...f,
-                              content_blocks: f.content_blocks
-                                .filter((_, idx) => idx !== i)
-                                .map((b, idx) => ({ ...b, sort_order: idx })),
-                            }))
-                          }
-                          className="p-1 rounded hover:bg-red-50 transition-colors mt-1"
-                        >
-                          <Trash2 size={12} className="text-red-400" />
-                        </button>
-                      </div>
+                        block={block}
+                        onChange={(updated) => {
+                          const next = [...form.content_blocks];
+                          next[i] = updated;
+                          setForm((f) => ({ ...f, content_blocks: next }));
+                        }}
+                        onDelete={() =>
+                          setForm((f) => ({
+                            ...f,
+                            content_blocks: f.content_blocks
+                              .filter((_, idx) => idx !== i)
+                              .map((b, idx) => ({ ...b, sort_order: idx })),
+                          }))
+                        }
+                        onMoveUp={() => {
+                          if (i === 0) return;
+                          const next = [...form.content_blocks];
+                          [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                          setForm((f) => ({ ...f, content_blocks: next.map((b, idx) => ({ ...b, sort_order: idx })) }));
+                        }}
+                        onMoveDown={() => {
+                          if (i >= form.content_blocks.length - 1) return;
+                          const next = [...form.content_blocks];
+                          [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                          setForm((f) => ({ ...f, content_blocks: next.map((b, idx) => ({ ...b, sort_order: idx })) }));
+                        }}
+                        onUpload={onUpload}
+                        isFirst={i === 0}
+                        isLast={i === form.content_blocks.length - 1}
+                      />
                     ))}
                   </div>
                 </div>

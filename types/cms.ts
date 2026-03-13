@@ -5,11 +5,76 @@ export interface PortfolioMedia {
   caption?: string;
 }
 
-export interface ContentBlock {
-  type: 'text' | 'heading' | 'quote';
-  content: string;
+// ── Content Block Types (discriminated union) ──────────────────────
+
+interface ContentBlockBase {
   sort_order: number;
 }
+
+export interface TextBlock extends ContentBlockBase {
+  type: 'text';
+  content: string;
+}
+
+export interface HeadingBlock extends ContentBlockBase {
+  type: 'heading';
+  content: string;
+}
+
+export interface QuoteBlock extends ContentBlockBase {
+  type: 'quote';
+  content: string;
+}
+
+export interface HeroImageBlock extends ContentBlockBase {
+  type: 'hero_image';
+  image_url: string;
+  alt?: string;
+}
+
+export interface ChallengeBlock extends ContentBlockBase {
+  type: 'challenge';
+  label: string;
+  heading: string;
+  paragraphs: string[];
+  tools: string[];
+  kpis: { text: string }[];
+}
+
+export interface ImageShowcaseBlock extends ContentBlockBase {
+  type: 'image_showcase';
+  label?: string;
+  layout: 'single' | 'side_by_side' | 'wireframe';
+  images: { url: string; alt?: string; theme?: 'light' | 'dark'; caption?: string }[];
+}
+
+export interface DesignSystemBlock extends ContentBlockBase {
+  type: 'design_system';
+  label: string;
+  heading: string;
+  description?: string;
+  typeface?: { name: string; weights: { value: string; label: string }[] };
+  colors: { name: string; hex: string }[];
+}
+
+export interface BannerBlock extends ContentBlockBase {
+  type: 'banner';
+  heading: string;
+  subtext?: string;
+  background_color?: string;
+}
+
+export type ContentBlock =
+  | TextBlock
+  | HeadingBlock
+  | QuoteBlock
+  | HeroImageBlock
+  | ChallengeBlock
+  | ImageShowcaseBlock
+  | DesignSystemBlock
+  | BannerBlock;
+
+export type ContentBlockType = ContentBlock['type'];
 
 export interface CmsPortfolioItem {
   id: string;

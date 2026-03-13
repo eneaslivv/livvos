@@ -137,7 +137,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_public_products(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_public_client_logos(TEXT) TO anon, authenticated;
 
--- Update existing portfolio public function to filter by published and order by display_order
+-- Update existing portfolio public function to filter by published + featured and order by display_order
 CREATE OR REPLACE FUNCTION public.get_public_portfolio_items(p_tenant_slug TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -152,7 +152,7 @@ BEGIN
   RETURN (
     SELECT COALESCE(jsonb_agg(to_jsonb(p.*) ORDER BY p.display_order ASC, p.created_at DESC), '[]'::jsonb)
     FROM portfolio_items p
-    WHERE p.tenant_id = v_tenant_id AND p.published = true
+    WHERE p.tenant_id = v_tenant_id AND p.published = true AND p.featured = true
   );
 END;
 $$;
