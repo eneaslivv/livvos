@@ -249,9 +249,9 @@ Rules:
 - NEVER move tasks with status "done" or "in-progress" — they are locked.
 - Respect blocked_by dependencies: a blocked task MUST be scheduled AFTER its blocker task's date.
 - Balance workload across team members — use the open task counts provided to redistribute fairly.
-- Stagger due dates logically — do NOT pile multiple tasks on the same day. Spread them across the period.
-- Keep project-related tasks grouped on nearby days for focus.
-- Schedule high-priority and urgent tasks earlier in the period.
+- CRITICAL RULE — EVEN DISTRIBUTION: Spread tasks evenly across ALL available working days (Mon-Fri) in the period. Maximum 3-4 tasks per person per day. NEVER put more than 5 tasks on the same day for the same person. Calculate: total tasks ÷ available days = tasks per day. Distribute accordingly.
+- Schedule high-priority and urgent tasks earlier in the period, but still spread them out.
+- Avoid scheduling tasks on weekends unless absolutely necessary.
 - Avoid scheduling tasks during calendar events (use the event times provided).
 - Respect user planning preferences (provided as context) — these are the user's personal scheduling rules.
 - Each change MUST include the exact taskId as provided in the input — do NOT generate new IDs.
