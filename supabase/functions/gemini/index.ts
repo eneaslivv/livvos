@@ -261,8 +261,6 @@ Rules:
         temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
         maxOutputTokens: maxTokens,
         responseMimeType: 'application/json',
-        // Disable thinking for structured JSON — thinking tokens eat into output budget
-        thinkingConfig: { thinkingBudget: 0 },
       },
     }
 
@@ -334,10 +332,13 @@ Rules:
       }
     }
 
+    // Debug string for error responses (text var is not in scope here)
+    const rawDebug = parts.map((p: any) => (p.text || '').slice(0, 200)).join(' | ').slice(0, 500)
+
     if (type === 'tasks_bulk') {
       const bulk = json as TasksBulkResponse
       if (!bulk || !Array.isArray(bulk.phases) || bulk.phases.length === 0) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -345,7 +346,7 @@ Rules:
     } else if (type === 'proposal') {
       const proposal = json as ProposalResponse
       if (!proposal || !proposal.content) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -353,7 +354,7 @@ Rules:
     } else if (type === 'blog') {
       const blog = json as BlogResponse
       if (!blog || !blog.title || !blog.content) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -361,7 +362,7 @@ Rules:
     } else if (type === 'weekly_summary') {
       const summary = json as WeeklySummaryResponse
       if (!summary || !Array.isArray(summary.objectives) || !Array.isArray(summary.focus_tasks) || !Array.isArray(summary.recommendations)) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -369,7 +370,7 @@ Rules:
     } else if (type === 'advisor') {
       const advisor = json as AdvisorResponse
       if (!advisor || !Array.isArray(advisor.insights)) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -377,13 +378,13 @@ Rules:
     } else if (type === 'plan_period') {
       const plan = json as PlanPeriodResponse
       if (!plan || !Array.isArray(plan.changes)) {
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
     } else if (!json || !(json as TaskResponse).title) {
-      return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+      return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
