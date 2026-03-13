@@ -28,7 +28,10 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
 
   const handleDeploy = async () => {
     const hookUrl = currentTenant?.deploy_hook_url;
-    if (!hookUrl) return;
+    if (!hookUrl) {
+      addToast('Set up a Deploy Hook URL in Settings → General first', 'error');
+      return;
+    }
     setIsDeploying(true);
     try {
       const res = await fetch(hookUrl, { method: 'POST' });
