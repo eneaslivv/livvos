@@ -18,11 +18,17 @@ interface EmailData {
 
 // Template-specific accent colors and icons
 const templateConfig: Record<string, { accent: string; icon: string }> = {
-  task_assigned:     { accent: '#3b82f6', icon: '&#128203;' }, // blue, clipboard
-  task_completed:    { accent: '#10b981', icon: '&#9989;' },   // green, check
-  deadline_reminder: { accent: '#f59e0b', icon: '&#9200;' },   // amber, alarm
-  project_update:    { accent: '#8b5cf6', icon: '&#128640;' }, // violet, rocket
-  system_alert:      { accent: '#ef4444', icon: '&#128680;' }, // red, rotating light
+  task_assigned:      { accent: '#3b82f6', icon: '&#128203;' }, // blue, clipboard
+  task_completed:     { accent: '#10b981', icon: '&#9989;' },   // green, check
+  deadline_reminder:  { accent: '#f59e0b', icon: '&#9200;' },   // amber, alarm
+  task_overdue:       { accent: '#ef4444', icon: '&#128308;' }, // red, red circle
+  project_update:     { accent: '#8b5cf6', icon: '&#128640;' }, // violet, rocket
+  system_alert:       { accent: '#ef4444', icon: '&#128680;' }, // red, rotating light
+  role_changed:       { accent: '#8b5cf6', icon: '&#128100;' }, // violet, person
+  member_suspended:   { accent: '#f59e0b', icon: '&#9888;' },   // amber, warning
+  member_activated:   { accent: '#10b981', icon: '&#9989;' },   // green, check
+  member_removed:     { accent: '#ef4444', icon: '&#128683;' }, // red, no entry
+  team_invite:        { accent: '#3b82f6', icon: '&#128231;' }, // blue, envelope
 }
 
 function buildEmailHtml(

@@ -29,7 +29,7 @@ const typeToTemplate: Record<string, SendEmailParams['template']> = {
   system: 'system_alert',
   security: 'system_alert',
   billing: 'system_alert',
-  invite: 'system_alert',
+  invite: 'team_invite',
   lead: 'system_alert',
   activity: 'project_update',
   mention: 'task_assigned',

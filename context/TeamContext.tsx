@@ -57,7 +57,7 @@ const TeamContext = createContext<TeamContextType | undefined>(undefined);
 
 export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
-    const { isWithinResourceLimit, getResourceUsage, refreshUsage } = useTenant();
+    const { isWithinResourceLimit, getResourceUsage, refreshUsage, currentTenant } = useTenant();
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -273,6 +273,24 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', memberId);
             if (error) throw error;
             setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status } : m));
+
+            // Send email notification
+            const tenantId = currentTenant?.id;
+            const tenantName = currentTenant?.name || 'LIVV OS';
+            if (tenantId) {
+                const isSuspended = status === 'suspended';
+                notifyWithEmail({
+                    userId: memberId,
+                    tenantId,
+                    type: 'system',
+                    title: isSuspended ? 'Account Suspended' : 'Account Activated',
+                    message: isSuspended
+                        ? `Your account in ${tenantName} has been suspended. Contact your administrator if you believe this is a mistake.`
+                        : `Your account in ${tenantName} has been reactivated. You can now access the platform again.`,
+                    priority: 'high',
+                    brandName: tenantName,
+                }).catch(() => {})
+            }
         } catch (err) {
             errorLogger.error('Error updating member status', err);
             throw err;
@@ -295,8 +313,31 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .insert({ user_id: memberId, role_id: roleId });
             if (insertError) throw insertError;
 
+            // Look up role name for the notification
+            const { data: roleRow } = await supabase
+                .from('roles')
+                .select('name')
+                .eq('id', roleId)
+                .single();
+
             // Refresh to get updated role names
             await fetchTeamMembers();
+
+            // Send email notification
+            const tenantId = currentTenant?.id;
+            const tenantName = currentTenant?.name || 'LIVV OS';
+            if (tenantId) {
+                const roleName = roleRow?.name?.replace('_', ' ') || 'a new role';
+                notifyWithEmail({
+                    userId: memberId,
+                    tenantId,
+                    type: 'system',
+                    title: 'Your role has been updated',
+                    message: `Your role in ${tenantName} has been changed to ${roleName}. Your permissions have been updated accordingly.`,
+                    priority: 'medium',
+                    brandName: tenantName,
+                }).catch(() => {})
+            }
         } catch (err) {
             errorLogger.error('Error updating member role', err);
             throw err;
@@ -306,6 +347,29 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Remove member from tenant
     const removeMember = async (memberId: string) => {
         try {
+            const tenantName = currentTenant?.name || 'LIVV OS';
+
+            // Send email BEFORE removing (so we can still look up their profile)
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('email, name')
+                .eq('id', memberId)
+                .single();
+
+            if (profile?.email) {
+                sendEmail({
+                    template: 'member_removed',
+                    to: profile.email,
+                    subject: `You have been removed from ${tenantName}`,
+                    brandName: tenantName,
+                    data: {
+                        recipientName: profile.name || undefined,
+                        title: 'Account Removed',
+                        message: `You have been removed from the ${tenantName} workspace. Your tasks have been unassigned and your access has been revoked. If you believe this is a mistake, please contact your team administrator.`,
+                    },
+                }).catch(() => {})
+            }
+
             // Remove role assignments
             await supabase.from('user_roles').delete().eq('user_id', memberId);
             // Remove project memberships

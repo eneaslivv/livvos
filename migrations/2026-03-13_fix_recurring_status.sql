@@ -1,20 +1,16 @@
 -- =============================================
--- Recurring expenses: auto-renewal system
+-- Fix recurring expense statuses
+-- 1. Mark all auto-generated recurring copies as 'paid' (subscriptions auto-charge)
+-- 2. Update RPC to create future copies as 'paid'
 -- =============================================
 
--- Track which expense was the source for a recurring copy
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurring_source_id UUID REFERENCES expenses(id) ON DELETE SET NULL;
+-- Fix existing copies that were created as 'pending'
+UPDATE expenses
+SET status = 'paid', updated_at = now()
+WHERE recurring_source_id IS NOT NULL
+  AND status = 'pending';
 
--- Track the last time this recurring expense was renewed
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS last_renewed_at DATE;
-
--- Index for fast recurring lookups
-CREATE INDEX IF NOT EXISTS idx_expenses_recurring_source ON expenses(recurring_source_id);
-
--- RPC: renew_recurring_expenses
--- For each recurring expense in the caller's tenant, checks if a copy
--- already exists for the current month. If not, creates one.
--- Returns the number of new expenses created.
+-- Recreate RPC with 'paid' status for new copies
 CREATE OR REPLACE FUNCTION public.renew_recurring_expenses()
 RETURNS INTEGER AS $$
 DECLARE

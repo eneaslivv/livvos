@@ -29,7 +29,7 @@ type TaskResponse = {
 type TasksBulkResponse = {
   phases: {
     name: string
-    tasks: { title: string; priority: 'low' | 'medium' | 'high' }[]
+    tasks: { title: string; priority: 'low' | 'medium' | 'high'; subtasks?: { title: string }[] }[]
   }[]
 }
 
@@ -160,12 +160,14 @@ serve(async (req) => {
       type === 'task'
         ? 'You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string). Keep title concise.'
         : type === 'tasks_bulk'
-        ? `You are a senior project planning assistant for a creative agency. Given a description of work, break it into phases with tasks, delivery dates and budget estimates.
+        ? `You are a senior project planning assistant for a creative agency. Given a description of work, break it into phases with tasks (each with subtasks), delivery dates and budget estimates.
 Return ONLY valid JSON with this structure:
-{"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high"}]}]}
+{"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high","subtasks":[{"title":"Subtask title"}]}]}]}
 Rules:
 - Create 2-6 phases with clear, professional names
 - Each phase should have 3-8 concrete, actionable tasks
+- Each task should have 2-5 subtasks that break it into concrete, actionable steps
+- Subtask titles should be specific micro-tasks (start with a verb). Simple tasks can have fewer subtasks
 - Priorities: high for critical/blocking tasks, medium for standard, low for nice-to-have
 - Task titles should be concise and actionable (start with a verb)
 - Estimate realistic start and end dates for each phase, starting from today and spacing phases sequentially (1-3 weeks per phase typically)
@@ -202,7 +204,7 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 3000 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
     const requestPayload = {
       contents: [

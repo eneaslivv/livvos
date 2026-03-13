@@ -18,9 +18,13 @@ import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
 
 /* ─── AI Preview types ─── */
+export interface AiPreviewSubtask {
+  title: string;
+}
 export interface AiPreviewTask {
   title: string;
   priority: string;
+  subtasks?: AiPreviewSubtask[];
 }
 export interface AiPreviewPhase {
   name: string;
@@ -814,20 +818,45 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         await updateProject(selectedProject.id, { tasksGroups: [...updatedExisting, ...newPhases] });
       }
 
-      // Insert all tasks — use phase endDate as due_date if available
-      const taskInserts = aiPreview.phases.flatMap(phase =>
-        phase.tasks.map(task => addSyncedTask({
-          title: task.title,
-          completed: false,
-          project_id: selectedProject.id,
-          client_id: (selectedProject as any).client_id || null,
-          assignee_id: currentUser?.id || null,
-          priority: task.priority || 'medium',
-          group_name: phase.name,
-          due_date: phase.endDate || new Date().toISOString().slice(0, 10),
-        } as any))
-      );
-      await Promise.all(taskInserts);
+      // Insert tasks + subtasks — use supabase directly to get parent IDs back
+      let totalTasks = 0;
+      let totalSubtasks = 0;
+      for (const phase of aiPreview.phases) {
+        for (const task of phase.tasks) {
+          const { data: inserted } = await supabase.from('tasks').insert({
+            title: task.title,
+            completed: false,
+            project_id: selectedProject.id,
+            client_id: (selectedProject as any).client_id || null,
+            assignee_id: currentUser?.id || null,
+            priority: task.priority || 'medium',
+            group_name: phase.name,
+            due_date: phase.endDate || new Date().toISOString().slice(0, 10),
+            tenant_id: currentTenant?.id || null,
+            owner_id: currentUser?.id || null,
+          }).select('id').single();
+          totalTasks++;
+
+          // Insert subtasks linked to parent
+          if (task.subtasks?.length && inserted?.id) {
+            const subtaskRows = task.subtasks.map(sub => ({
+              title: sub.title,
+              completed: false,
+              project_id: selectedProject.id,
+              parent_task_id: inserted.id,
+              priority: 'medium',
+              status: 'todo',
+              assignee_id: currentUser?.id || null,
+              group_name: null,
+              due_date: phase.endDate || new Date().toISOString().slice(0, 10),
+              tenant_id: currentTenant?.id || null,
+              owner_id: currentUser?.id || null,
+            }));
+            await supabase.from('tasks').insert(subtaskRows);
+            totalSubtasks += task.subtasks.length;
+          }
+        }
+      }
 
       // Create income entries for phases with budget
       const phasesWithBudget = aiPreview.phases.filter(p => p.budget && p.budget > 0);
@@ -849,8 +878,8 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
       setTimeout(() => refreshTasks(), 1000);
 
-      const totalTasks = aiPreview.phases.reduce((sum, p) => sum + p.tasks.length, 0);
-      await logActivity({ action: 'generated tasks with AI', target: `${totalTasks} tasks in ${aiPreview.phases.length} phases`, project_title: selectedProject.title, type: 'project_update' });
+      const subtaskLabel = totalSubtasks > 0 ? ` + ${totalSubtasks} subtasks` : '';
+      await logActivity({ action: 'generated tasks with AI', target: `${totalTasks} tasks${subtaskLabel} in ${aiPreview.phases.length} phases`, project_title: selectedProject.title, type: 'project_update' });
 
       setAiPreview(null);
       setAiPrompt('');

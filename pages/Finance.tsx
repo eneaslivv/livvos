@@ -3,7 +3,7 @@ import { SlidePanel } from '../components/ui/SlidePanel';
 import {
   TrendingUp, TrendingDown, AlertTriangle, Target, PieChart,
   CreditCard, FileText, Settings, Download,
-  ChevronRight, Wallet, BarChart3, Receipt,
+  ChevronLeft, ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
   Send, ThumbsUp, ThumbsDown, ArrowRight
@@ -45,6 +45,19 @@ const fmtCurrency = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
 const fmtPercent = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+
+// Month boundary helpers
+const getMonthBounds = (year: number, month: number) => {
+  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { from, to };
+};
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const now = new Date();
+const INITIAL_MONTH_BOUNDS = getMonthBounds(now.getFullYear(), now.getMonth());
 
 const fmtDate = (d: string) => {
   const date = new Date(d + 'T12:00:00');
@@ -158,8 +171,10 @@ export const Finance: React.FC = () => {
   const [incomeDateTo, setIncomeDateTo] = useState('');
   const [expenseSearch, setExpenseSearch] = useState('');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
-  const [expenseDateFrom, setExpenseDateFrom] = useState('');
-  const [expenseDateTo, setExpenseDateTo] = useState('');
+  const [expenseViewMonth, setExpenseViewMonth] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  const [expenseDateFrom, setExpenseDateFrom] = useState(INITIAL_MONTH_BOUNDS.from);
+  const [expenseDateTo, setExpenseDateTo] = useState(INITIAL_MONTH_BOUNDS.to);
+  const [expenseCustomDateRange, setExpenseCustomDateRange] = useState(false); // true when user picks custom dates
   const [expandedIncome, setExpandedIncome] = useState<string | null>(null);
 
   // Slide panel state
@@ -213,6 +228,8 @@ export const Finance: React.FC = () => {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [proposalsLoading, setProposalsLoading] = useState(true);
   const [proposalStatusFilter, setProposalStatusFilter] = useState<'all' | ProposalStatus>('all');
+  const [leads, setLeads] = useState<{ id: string; name: string; company?: string; email?: string }[]>([]);
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProposals = async () => {
@@ -224,7 +241,15 @@ export const Finance: React.FC = () => {
       setProposals((data as Proposal[]) || []);
       setProposalsLoading(false);
     };
+    const fetchLeads = async () => {
+      const { data } = await supabase
+        .from('leads')
+        .select('id,name,company,email')
+        .order('name');
+      setLeads(data || []);
+    };
     fetchProposals();
+    fetchLeads();
   }, []);
 
   const proposalMetrics = useMemo(() => {
@@ -245,13 +270,49 @@ export const Finance: React.FC = () => {
     return proposals.filter(p => p.status === proposalStatusFilter);
   }, [proposals, proposalStatusFilter]);
 
+  const updateProposalField = useCallback(async (id: string, field: string, value: any) => {
+    await supabase.from('proposals').update({ [field]: value }).eq('id', id);
+    setProposals(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  }, []);
+
   const updateProposalStatus = useCallback(async (id: string, status: ProposalStatus) => {
     const updates: Record<string, any> = { status };
     if (status === 'approved') updates.approved_at = new Date().toISOString();
     if (status === 'rejected') updates.rejected_at = new Date().toISOString();
     await supabase.from('proposals').update(updates).eq('id', id);
     setProposals(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+
+    // Auto-sync: when approved and linked to a lead, convert lead to client
+    if (status === 'approved') {
+      const proposal = proposals.find(p => p.id === id);
+      if (proposal?.lead_id && !proposal.client_id) {
+        const lead = leads.find(l => l.id === proposal.lead_id);
+        if (lead) {
+          // Check if a client with this email already exists
+          const existingClient = lead.email ? clients.find((c: any) => c.email === lead.email) : null;
+          if (existingClient) {
+            // Link to existing client
+            await supabase.from('proposals').update({ client_id: existingClient.id }).eq('id', id);
+            setProposals(prev => prev.map(p => p.id === id ? { ...p, client_id: existingClient.id } : p));
+          } else {
+            // Create new client from lead data
+            const { data: newClient } = await supabase.from('clients').insert({
+              name: lead.name,
+              email: lead.email || null,
+              company: lead.company || null,
+              status: 'active',
+            }).select('id').single();
+            if (newClient) {
+              await supabase.from('proposals').update({ client_id: newClient.id }).eq('id', id);
+              setProposals(prev => prev.map(p => p.id === id ? { ...p, client_id: newClient.id } : p));
+            }
+          }
+          // Update lead status
+          await supabase.from('leads').update({ proposal_status: 'approved', proposal_approved_at: new Date().toISOString() }).eq('id', proposal.lead_id);
+        }
+      }
+    }
+  }, [proposals, leads, clients]);
 
   const convertProposalToIncome = useCallback((proposal: Proposal) => {
     setIncomeForm({
@@ -1388,11 +1449,13 @@ export const Finance: React.FC = () => {
             const filtPaid = filteredExpenses.filter((e: ExpenseEntry) => e.status === 'paid').reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
             const filtPending = filteredExpenses.filter((e: ExpenseEntry) => e.status === 'pending').reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
             const filtRecurring = filteredExpenses.filter((e: ExpenseEntry) => e.recurring).reduce((s: number, e: ExpenseEntry) => s + e.amount, 0);
-            const hasDateFilter = expenseDateFrom || expenseDateTo;
+            const monthLabel = !expenseCustomDateRange
+              ? `${MONTH_NAMES[expenseViewMonth.month].slice(0, 3)} ${expenseViewMonth.year}`
+              : 'Filtered';
             return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses{hasDateFilter ? ' (filtered)' : ''}</div>
+              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses · {monthLabel}</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(filtPaid + filtPending)}</div>
             </div>
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
@@ -1421,16 +1484,54 @@ export const Finance: React.FC = () => {
                   className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all" />
               </div>
               <div className="flex items-center gap-1.5">
-                <input type="date" value={expenseDateFrom} onChange={e => setExpenseDateFrom(e.target.value)}
-                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
-                <span className="text-[10px] text-zinc-400">to</span>
-                <input type="date" value={expenseDateTo} onChange={e => setExpenseDateTo(e.target.value)}
-                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
-                {(expenseDateFrom || expenseDateTo) && (
-                  <button onClick={() => { setExpenseDateFrom(''); setExpenseDateTo(''); }}
-                    className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                    Clear
-                  </button>
+                {!expenseCustomDateRange ? (
+                  <>
+                    <button onClick={() => {
+                      const prev = new Date(expenseViewMonth.year, expenseViewMonth.month - 1, 1);
+                      const m = { year: prev.getFullYear(), month: prev.getMonth() };
+                      setExpenseViewMonth(m);
+                      const b = getMonthBounds(m.year, m.month);
+                      setExpenseDateFrom(b.from);
+                      setExpenseDateTo(b.to);
+                    }} className="p-2 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all">
+                      <ChevronLeft size={14} className="text-zinc-500" />
+                    </button>
+                    <span className="px-3 py-2 text-[11px] font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg min-w-[120px] text-center">
+                      {MONTH_NAMES[expenseViewMonth.month]} {expenseViewMonth.year}
+                    </span>
+                    <button onClick={() => {
+                      const next = new Date(expenseViewMonth.year, expenseViewMonth.month + 1, 1);
+                      const m = { year: next.getFullYear(), month: next.getMonth() };
+                      setExpenseViewMonth(m);
+                      const b = getMonthBounds(m.year, m.month);
+                      setExpenseDateFrom(b.from);
+                      setExpenseDateTo(b.to);
+                    }} className="p-2 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all">
+                      <ChevronRight size={14} className="text-zinc-500" />
+                    </button>
+                    <button onClick={() => setExpenseCustomDateRange(true)}
+                      className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                      Custom
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input type="date" value={expenseDateFrom} onChange={e => setExpenseDateFrom(e.target.value)}
+                      className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
+                    <span className="text-[10px] text-zinc-400">to</span>
+                    <input type="date" value={expenseDateTo} onChange={e => setExpenseDateTo(e.target.value)}
+                      className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
+                    <button onClick={() => {
+                      setExpenseCustomDateRange(false);
+                      const m = { year: now.getFullYear(), month: now.getMonth() };
+                      setExpenseViewMonth(m);
+                      const b = getMonthBounds(m.year, m.month);
+                      setExpenseDateFrom(b.from);
+                      setExpenseDateTo(b.to);
+                    }} className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                      Reset
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -1784,6 +1885,8 @@ export const Finance: React.FC = () => {
               <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                 {filteredProposals.map(p => {
                   const client = p.client_id ? clients.find((c: any) => c.id === p.client_id) : null;
+                  const lead = p.lead_id ? leads.find(l => l.id === p.lead_id) : null;
+                  const isEditing = editingProposalId === p.id;
                   const statusStyles: Record<string, string> = {
                     draft: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400',
                     sent: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
@@ -1791,57 +1894,130 @@ export const Finance: React.FC = () => {
                     rejected: 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400',
                   };
                   return (
-                    <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                      {/* Title + client */}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{p.title}</div>
-                        <div className="text-[10px] text-zinc-400 truncate mt-0.5">
-                          {client?.name || (p.lead_id ? 'Lead' : 'No client')}
-                          {p.sent_at && ` · Sent ${fmtDate(p.sent_at.split('T')[0])}`}
+                    <div key={p.id} className="group/proposal hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                      <div className="flex items-center gap-3 px-5 py-3.5">
+                        {/* Title + client/lead */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{p.title}</div>
+                          <div className="text-[10px] text-zinc-400 truncate mt-0.5">
+                            {client?.name || (lead ? `Lead: ${lead.name}` : 'No client')}
+                            {p.sent_at && ` · Sent ${fmtDate(p.sent_at.split('T')[0])}`}
+                          </div>
+                        </div>
+
+                        {/* Amount — click to edit */}
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] text-zinc-400">$</span>
+                            <input
+                              type="number"
+                              defaultValue={p.pricing_total || ''}
+                              autoFocus
+                              onBlur={e => {
+                                const val = parseFloat(e.target.value) || null;
+                                if (val !== p.pricing_total) updateProposalField(p.id, 'pricing_total', val);
+                              }}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              className="w-24 text-sm font-semibold text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 tabular-nums"
+                              placeholder="0"
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingProposalId(p.id)}
+                            className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-text"
+                            title="Click to edit amount"
+                          >
+                            {p.pricing_total ? fmtCurrency(p.pricing_total) : '—'}
+                          </button>
+                        )}
+
+                        {/* Status badge */}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 ${statusStyles[p.status] || statusStyles.draft}`}>
+                          {p.status}
+                        </span>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Edit toggle */}
+                          <button
+                            onClick={() => setEditingProposalId(isEditing ? null : p.id)}
+                            className={`p-1.5 rounded-md transition-colors ${isEditing ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600' : 'text-zinc-300 hover:text-zinc-500 opacity-0 group-hover/proposal:opacity-100'}`}
+                            title={isEditing ? 'Done editing' : 'Edit'}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {p.status === 'sent' && (
+                            <>
+                              <button
+                                onClick={() => updateProposalStatus(p.id, 'approved')}
+                                className="p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                title="Approve"
+                              >
+                                <CheckCircle2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => updateProposalStatus(p.id, 'rejected')}
+                                className="p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                                title="Reject"
+                              >
+                                <ThumbsDown size={14} />
+                              </button>
+                            </>
+                          )}
+                          {p.status === 'approved' && p.pricing_total && (
+                            <button
+                              onClick={() => convertProposalToIncome(p)}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-[10px] font-semibold transition-colors"
+                              title="Convert to Income"
+                            >
+                              <ArrowRight size={10} />
+                              Income
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Amount */}
-                      <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
-                        {p.pricing_total ? fmtCurrency(p.pricing_total) : '—'}
-                      </div>
-
-                      {/* Status badge */}
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 ${statusStyles[p.status] || statusStyles.draft}`}>
-                        {p.status}
-                      </span>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {p.status === 'sent' && (
-                          <>
-                            <button
-                              onClick={() => updateProposalStatus(p.id, 'approved')}
-                              className="p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                              title="Approve"
+                      {/* Expanded edit row — client/lead assignment */}
+                      {isEditing && (
+                        <div className="px-5 pb-3 flex items-center gap-3 animate-in slide-in-from-top-1 duration-200">
+                          <div className="flex items-center gap-2 flex-1">
+                            <label className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider shrink-0">Client</label>
+                            <select
+                              value={p.client_id || ''}
+                              onChange={e => updateProposalField(p.id, 'client_id', e.target.value || null)}
+                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
                             >
-                              <CheckCircle2 size={14} />
-                            </button>
-                            <button
-                              onClick={() => updateProposalStatus(p.id, 'rejected')}
-                              className="p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                              title="Reject"
+                              <option value="">No client</option>
+                              {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-2 flex-1">
+                            <label className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider shrink-0">Lead</label>
+                            <select
+                              value={p.lead_id || ''}
+                              onChange={e => updateProposalField(p.id, 'lead_id', e.target.value || null)}
+                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
                             >
-                              <ThumbsDown size={14} />
-                            </button>
-                          </>
-                        )}
-                        {p.status === 'approved' && p.pricing_total && (
-                          <button
-                            onClick={() => convertProposalToIncome(p)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-[10px] font-semibold transition-colors"
-                            title="Convert to Income"
-                          >
-                            <ArrowRight size={10} />
-                            Income
-                          </button>
-                        )}
-                      </div>
+                              <option value="">No lead</option>
+                              {leads.map(l => <option key={l.id} value={l.id}>{l.name}{l.company ? ` — ${l.company}` : ''}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider shrink-0">Currency</label>
+                            <select
+                              value={p.currency || 'USD'}
+                              onChange={e => updateProposalField(p.id, 'currency', e.target.value)}
+                              className="text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
+                            >
+                              <option value="USD">USD</option>
+                              <option value="EUR">EUR</option>
+                              <option value="ARS">ARS</option>
+                              <option value="GBP">GBP</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

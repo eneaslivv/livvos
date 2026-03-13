@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from './ui/Icons';
 import { SlidePanel } from './ui/SlidePanel';
-import { PageView, AppMode, Priority } from '../types';
+import { PageView, AppMode, Priority, NavParams } from '../types';
 import { TopNavbar } from './TopNavbar';
+import { CommandPalette } from './CommandPalette';
 import { useRBAC } from '../context/RBACContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { useSupabase } from '../hooks/useSupabase';
@@ -15,7 +16,7 @@ interface LayoutProps {
   children: React.ReactNode;
   currentPage: PageView;
   currentMode: AppMode;
-  onNavigate: (page: PageView) => void;
+  onNavigate: (page: PageView, params?: NavParams) => void;
   onSwitchMode: (mode: AppMode) => void;
 }
 
@@ -698,33 +699,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         </div>
       </main>
 
-      {/* Command Palette Modal */}
-      {showCommandPalette && (
-        <div className="fixed inset-0 bg-white/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center pt-[15vh]">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
-              <Icons.Search className="text-zinc-400" size={18} />
-              <input
-                autoFocus
-                type="text"
-                placeholder="Where to? (e.g., 'New Idea', 'Project X')"
-                className="flex-1 px-3 py-1 outline-none text-sm placeholder:text-zinc-400 bg-transparent text-zinc-900 dark:text-zinc-100"
-              />
-              <span className="text-xs text-zinc-400 font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">ESC</span>
-            </div>
-            <div className="py-2">
-              <div className="px-3 py-1 text-xs font-medium text-zinc-400 uppercase tracking-wider">Switch Context</div>
-              <button onClick={() => { onSwitchMode('os'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                <Icons.Home size={14} /> Eneas OS
-              </button>
-              <button onClick={() => { onSwitchMode('sales'); setShowCommandPalette(false); }} className="w-full text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                <Icons.Chart size={14} /> Sales & Leads
-              </button>
-            </div>
-          </div>
-          <div className="absolute inset-0 -z-10" onClick={() => setShowCommandPalette(false)}></div>
-        </div>
-      )}
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        onNavigate={onNavigate}
+        onSwitchMode={onSwitchMode}
+        currentMode={currentMode}
+      />
       <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onNavigate={onNavigate} />
       <AiAdvisor />
     </div>

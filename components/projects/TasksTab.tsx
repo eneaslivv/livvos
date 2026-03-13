@@ -117,6 +117,39 @@ export const TasksTab: React.FC<TasksTabProps> = ({
     if (!aiPreview) return;
     onAiPreviewChange({ ...aiPreview, phases: aiPreview.phases.filter((_, i) => i !== pIdx) });
   };
+  const updatePreviewSubtask = (pIdx: number, tIdx: number, sIdx: number, patch: { title: string }) => {
+    if (!aiPreview) return;
+    const phases = aiPreview.phases.map((p, i) => {
+      if (i !== pIdx) return p;
+      return { ...p, tasks: p.tasks.map((t, j) => {
+        if (j !== tIdx || !t.subtasks) return t;
+        return { ...t, subtasks: t.subtasks.map((s, k) => k === sIdx ? { ...s, ...patch } : s) };
+      }) };
+    });
+    onAiPreviewChange({ ...aiPreview, phases });
+  };
+  const deletePreviewSubtask = (pIdx: number, tIdx: number, sIdx: number) => {
+    if (!aiPreview) return;
+    const phases = aiPreview.phases.map((p, i) => {
+      if (i !== pIdx) return p;
+      return { ...p, tasks: p.tasks.map((t, j) => {
+        if (j !== tIdx || !t.subtasks) return t;
+        return { ...t, subtasks: t.subtasks.filter((_, k) => k !== sIdx) };
+      }) };
+    });
+    onAiPreviewChange({ ...aiPreview, phases });
+  };
+  const addPreviewSubtask = (pIdx: number, tIdx: number) => {
+    if (!aiPreview) return;
+    const phases = aiPreview.phases.map((p, i) => {
+      if (i !== pIdx) return p;
+      return { ...p, tasks: p.tasks.map((t, j) => {
+        if (j !== tIdx) return t;
+        return { ...t, subtasks: [...(t.subtasks || []), { title: '' }] };
+      }) };
+    });
+    onAiPreviewChange({ ...aiPreview, phases });
+  };
   return (
     <div className="space-y-6">
 
@@ -160,7 +193,9 @@ export const TasksTab: React.FC<TasksTabProps> = ({
           <div className="border-t border-violet-100/50 dark:border-violet-900/20">
             <div className="px-5 py-3 flex items-center justify-between bg-violet-50/50 dark:bg-violet-950/10">
               <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">
-                {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks in {aiPreview.phases.length} phases
+                {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks
+                {(() => { const st = aiPreview.phases.reduce((s, p) => s + p.tasks.reduce((ss, t) => ss + (t.subtasks?.length || 0), 0), 0); return st > 0 ? ` + ${st} subtasks` : ''; })()}
+                {' '}in {aiPreview.phases.length} phases
                 {aiPreview.phases.some(p => p.budget) && (
                   <span className="ml-2 text-emerald-600 dark:text-emerald-400">
                     · ${aiPreview.phases.reduce((s, p) => s + (p.budget || 0), 0).toLocaleString()}
@@ -231,35 +266,68 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                       </div>
                     </div>
                   </div>
-                  {/* Tasks — editable */}
+                  {/* Tasks + Subtasks — editable */}
                   <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
                     {phase.tasks.map((task, tIdx) => (
-                      <div key={tIdx} className="group/aitask flex items-center gap-2 px-4 py-2 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10">
-                        <div className="w-4 h-4 rounded-full border-2 border-zinc-200 dark:border-zinc-700 shrink-0" />
-                        <input
-                          value={task.title}
-                          onChange={e => updatePreviewTask(pIdx, tIdx, { title: e.target.value })}
-                          className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
-                        />
-                        <select
-                          value={task.priority}
-                          onChange={e => updatePreviewTask(pIdx, tIdx, { priority: e.target.value })}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none ${
-                            task.priority === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
-                              : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-400'
-                              : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                          }`}
-                        >
-                          <option value="high">high</option>
-                          <option value="medium">medium</option>
-                          <option value="low">low</option>
-                        </select>
-                        <button
-                          onClick={() => deletePreviewTask(pIdx, tIdx)}
-                          className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aitask:opacity-100 transition-all"
-                        >
-                          <Icons.X size={11} />
-                        </button>
+                      <div key={tIdx}>
+                        {/* Parent task row */}
+                        <div className="group/aitask flex items-center gap-2 px-4 py-2 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10">
+                          <div className="w-4 h-4 rounded-full border-2 border-zinc-200 dark:border-zinc-700 shrink-0" />
+                          <input
+                            value={task.title}
+                            onChange={e => updatePreviewTask(pIdx, tIdx, { title: e.target.value })}
+                            className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                          />
+                          <select
+                            value={task.priority}
+                            onChange={e => updatePreviewTask(pIdx, tIdx, { priority: e.target.value })}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none ${
+                              task.priority === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
+                                : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-400'
+                                : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                            }`}
+                          >
+                            <option value="high">high</option>
+                            <option value="medium">medium</option>
+                            <option value="low">low</option>
+                          </select>
+                          <button
+                            onClick={() => addPreviewSubtask(pIdx, tIdx)}
+                            className="p-0.5 text-zinc-300 hover:text-violet-500 opacity-0 group-hover/aitask:opacity-100 transition-all"
+                            title="Add subtask"
+                          >
+                            <Icons.Plus size={11} />
+                          </button>
+                          <button
+                            onClick={() => deletePreviewTask(pIdx, tIdx)}
+                            className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aitask:opacity-100 transition-all"
+                          >
+                            <Icons.X size={11} />
+                          </button>
+                        </div>
+                        {/* Subtask rows */}
+                        {task.subtasks && task.subtasks.length > 0 && (
+                          <div className="ml-6 border-l-2 border-zinc-100 dark:border-zinc-800">
+                            {task.subtasks.map((sub, sIdx) => (
+                              <div key={sIdx} className="group/aisub flex items-center gap-2 pl-4 pr-4 py-1.5 hover:bg-zinc-50/30 dark:hover:bg-zinc-800/5">
+                                <div className="w-3 h-3 rounded border border-zinc-200 dark:border-zinc-700 shrink-0" />
+                                <input
+                                  value={sub.title}
+                                  onChange={e => updatePreviewSubtask(pIdx, tIdx, sIdx, { title: e.target.value })}
+                                  placeholder="Subtask title..."
+                                  autoFocus={!sub.title}
+                                  className="flex-1 text-xs text-zinc-600 dark:text-zinc-400 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                                />
+                                <button
+                                  onClick={() => deletePreviewSubtask(pIdx, tIdx, sIdx)}
+                                  className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aisub:opacity-100 transition-all"
+                                >
+                                  <Icons.X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

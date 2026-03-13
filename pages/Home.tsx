@@ -368,46 +368,93 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const progressPercent = todayTasks.length ? Math.round((completedCount / todayTasks.length) * 100) : 0;
 
     const aiInsights = React.useMemo(() => {
-        const badges: { label: string; color: string }[] = [];
+        const badges: { label: string; color: string; icon?: string }[] = [];
         const tips: string[] = [];
 
+        // ── Finance insights ──
         const pendingIncome = incomes.reduce((sum, inc) =>
             sum + (inc.installments || []).filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0), 0);
         if (pendingIncome > 0) {
-            badges.push({ label: 'Pending payments', color: 'text-amber-600 dark:text-amber-400' });
-            tips.push(`You have $${pendingIncome.toLocaleString()} in pending payments. Prioritize payment follow-ups.`);
+            badges.push({ label: `$${pendingIncome.toLocaleString()} pending`, color: 'text-amber-600 dark:text-amber-400' });
+            tips.push(`$${pendingIncome.toLocaleString()} in pending payments — follow up to improve cash flow.`);
+        }
+        const overdueInstallments = incomes.reduce((count, inc) =>
+            count + (inc.installments || []).filter(i => i.status !== 'paid' && i.due_date && i.due_date < todayStr).length, 0);
+        if (overdueInstallments > 0) {
+            tips.push(`${overdueInstallments} overdue payment${overdueInstallments > 1 ? 's' : ''} — collect ASAP.`);
         }
         if (monthlyProfit > 0) {
-            badges.push({ label: 'Positive month', color: 'text-emerald-600 dark:text-emerald-400' });
+            badges.push({ label: `+$${monthlyProfit.toLocaleString()} profit`, color: 'text-emerald-600 dark:text-emerald-400' });
         } else if (monthlyExpenses > monthlyEarnings && monthlyExpenses > 0) {
-            badges.push({ label: 'Expenses > Income', color: 'text-rose-600 dark:text-rose-400' });
-            tips.push('Expenses exceed income this month. Review subscriptions and recurring expenses.');
+            badges.push({ label: 'Negative month', color: 'text-rose-600 dark:text-rose-400' });
+            tips.push('Expenses exceed income — review recurring costs.');
         }
 
+        // ── Task insights ──
         const pendingTasks = tasks.filter(t => !t.completed);
         const highPriority = pendingTasks.filter(t => t.priority === 'high' || t.priority === 'urgent');
+        const overdueCount = overdueTasks.length;
+
+        if (overdueCount > 0) {
+            badges.push({ label: `${overdueCount} overdue`, color: 'text-red-600 dark:text-red-400' });
+            tips.push(`${overdueCount} overdue task${overdueCount > 1 ? 's' : ''} need attention today.`);
+        }
         if (highPriority.length > 0) {
             badges.push({ label: `${highPriority.length} urgent`, color: 'text-rose-600 dark:text-rose-400' });
-            tips.push(`You have ${highPriority.length} high priority task${highPriority.length > 1 ? 's' : ''}. Focus there first.`);
-        } else if (pendingTasks.length > 0 && progressPercent < 50) {
-            badges.push({ label: 'Advance tasks', color: 'text-blue-600 dark:text-blue-400' });
-            tips.push(`You completed ${progressPercent}% of your tasks. Dedicate a deep work block to advance.`);
+            if (overdueCount === 0) tips.push(`${highPriority.length} high priority task${highPriority.length > 1 ? 's' : ''} — focus there first.`);
         }
 
-        if (userVision) {
-            const visionShort = userVision.length > 60 ? userVision.substring(0, 60) + '…' : userVision;
-            badges.push({ label: 'Active goal', color: 'text-violet-600 dark:text-violet-400' });
-            if (tips.length === 0) tips.push(`Remember your vision: "${visionShort}"`);
+        // Task completion rate
+        if (todayTasks.length > 0) {
+            if (progressPercent === 100) {
+                badges.push({ label: 'All done ✓', color: 'text-emerald-600 dark:text-emerald-400' });
+            } else if (progressPercent < 30 && pendingTasks.length > 3) {
+                tips.push(`Only ${progressPercent}% done — block time for deep work.`);
+            }
         }
-        if (userThoughts && tips.length < 2) {
-            tips.push('Review your recent thoughts and turn ideas into concrete actions.');
+
+        // ── Project insights ──
+        const activeProjects = projectsRaw.filter(p => p.status === Status.Active || p.status === Status.Pending);
+        const reviewProjects = projectsRaw.filter(p => p.status === Status.Review);
+        if (activeProjects.length > 0) {
+            badges.push({ label: `${activeProjects.length} active project${activeProjects.length > 1 ? 's' : ''}`, color: 'text-blue-600 dark:text-blue-400' });
+        }
+        if (reviewProjects.length > 0) {
+            tips.push(`${reviewProjects.length} project${reviewProjects.length > 1 ? 's' : ''} in review — close them out.`);
+        }
+        const stalledProjects = projectsRaw.filter(p => typeof p.progress === 'number' && p.progress > 0 && p.progress < 30 && p.status === Status.Active);
+        if (stalledProjects.length > 0) {
+            tips.push(`${stalledProjects.length} project${stalledProjects.length > 1 ? 's are' : ' is'} under 30% progress — check blockers.`);
+        }
+
+        // ── Today's agenda ──
+        if (todayEvents.length > 0) {
+            badges.push({ label: `${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today`, color: 'text-indigo-600 dark:text-indigo-400' });
+        }
+
+        // ── Team ──
+        if (teamMembers.length > 1) {
+            const unassigned = pendingTasks.filter(t => !(t as any).assignee_id);
+            if (unassigned.length > 3) {
+                tips.push(`${unassigned.length} tasks unassigned — delegate to balance workload.`);
+            }
+        }
+
+        // ── Clients ──
+        if (clients.length > 0 && activeProjects.length === 0) {
+            tips.push('No active projects — reach out to clients for new opportunities.');
+        }
+
+        // ── Vision ──
+        if (userVision) {
+            badges.push({ label: 'Active goal', color: 'text-violet-600 dark:text-violet-400' });
         }
 
         if (badges.length === 0) badges.push({ label: 'All good', color: 'text-zinc-500' });
-        if (tips.length === 0) tips.push('No alerts for now. Continue with your current workflow.');
+        if (tips.length === 0) tips.push('Everything looks great — keep up the momentum.');
 
-        return { badges: badges.slice(0, 3), tip: tips[0] };
-    }, [tasks, incomes, monthlyProfit, monthlyEarnings, monthlyExpenses, progressPercent, userVision, userThoughts]);
+        return { badges: badges.slice(0, 5), tips: tips.slice(0, 3) };
+    }, [tasks, todayTasks, overdueTasks, todayEvents, incomes, monthlyProfit, monthlyEarnings, monthlyExpenses, progressPercent, projectsRaw, teamMembers, clients, userVision, todayStr]);
 
     const getStatusColor = (status: Status) => {
         switch (status) {
@@ -901,14 +948,21 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                             <Icons.Sparkles size={11} className="text-zinc-400" />
                             <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-400">Insights</span>
                         </div>
-                        <div className="flex flex-wrap gap-1 mb-2">
+                        <div className="flex flex-wrap gap-1.5 mb-3">
                             {aiInsights.badges.map((badge, i) => (
-                                <span key={i} className={`text-[10px] font-semibold ${badge.color}`}>
-                                    {badge.label}{i < aiInsights.badges.length - 1 && <span className="text-zinc-300 dark:text-zinc-700 mx-1">·</span>}
+                                <span key={i} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 ${badge.color}`}>
+                                    {badge.label}
                                 </span>
                             ))}
                         </div>
-                        <p className="text-[12px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{aiInsights.tip}</p>
+                        <div className="space-y-1.5">
+                            {aiInsights.tips.map((tip, i) => (
+                                <div key={i} className="flex items-start gap-1.5">
+                                    <span className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-0.5">•</span>
+                                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{tip}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Quick Actions */}

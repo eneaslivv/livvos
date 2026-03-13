@@ -331,19 +331,74 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
       const newTasks = dueTasks.filter(t => !notifiedTaskIds.has(t.id));
       if (newTasks.length === 0) return;
 
-      const rows = newTasks.map(t => ({
-        user_id: user.id,
-        tenant_id: currentTenant?.id || null,
-        type: 'deadline',
-        title: `Task due today: ${t.title}`,
-        message: 'This task is scheduled for today',
-        link: '/calendar',
-        metadata: { task_id: t.id },
-        priority: 'high',
-        read: false,
-      }));
+      const rows = newTasks.map(t => {
+        const isOverdue = t.start_date < today;
+        return {
+          user_id: user.id,
+          tenant_id: currentTenant?.id || null,
+          type: 'deadline',
+          title: isOverdue ? `Overdue: ${t.title}` : `Due today: ${t.title}`,
+          message: isOverdue ? 'This task is past its due date' : 'This task is scheduled for today',
+          link: '/calendar',
+          metadata: { task_id: t.id },
+          priority: 'high',
+          read: false,
+        };
+      });
 
       await supabase.from('notifications').insert(rows);
+
+      // Send a single digest email for all due/overdue tasks (fire-and-forget)
+      try {
+        const { data: shouldSend } = await supabase.rpc('should_send_email', {
+          p_user_id: user.id,
+          p_type: 'deadline',
+          p_priority: 'high',
+        });
+
+        if (shouldSend) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email, name')
+            .eq('id', user.id)
+            .single();
+
+          if (profile?.email) {
+            const overdue = newTasks.filter(t => t.start_date < today);
+            const dueToday = newTasks.filter(t => t.start_date === today);
+            const lines: string[] = [];
+
+            if (overdue.length > 0) {
+              lines.push(`You have ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}:`);
+              overdue.slice(0, 5).forEach(t => lines.push(`- ${t.title}`));
+            }
+            if (dueToday.length > 0) {
+              if (lines.length > 0) lines.push('');
+              lines.push(`${dueToday.length} task${dueToday.length > 1 ? 's' : ''} due today:`);
+              dueToday.slice(0, 5).forEach(t => lines.push(`- ${t.title}`));
+            }
+
+            const brandName = currentTenant?.name || 'LIVV OS';
+            await sendEmail({
+              template: overdue.length > 0 ? 'task_overdue' : 'deadline_reminder',
+              to: profile.email,
+              subject: overdue.length > 0
+                ? `${overdue.length} overdue task${overdue.length > 1 ? 's' : ''} need attention`
+                : `${dueToday.length} task${dueToday.length > 1 ? 's' : ''} due today`,
+              brandName,
+              data: {
+                recipientName: profile.name || undefined,
+                title: overdue.length > 0 ? 'Overdue Tasks' : 'Tasks Due Today',
+                message: lines.join('\n'),
+                ctaUrl: `${window.location.origin}/calendar`,
+                ctaText: 'View Calendar',
+              },
+            });
+          }
+        }
+      } catch (emailErr) {
+        if (import.meta.env.DEV) console.warn('Deadline email failed (non-blocking):', emailErr);
+      }
     } catch (err) {
       if (import.meta.env.DEV) console.warn('Error checking daily tasks:', err);
     }
