@@ -61,6 +61,23 @@ type AdvisorResponse = {
   greeting: string
 }
 
+type PlanPeriodResponse = {
+  changes: {
+    taskId: string
+    taskTitle: string
+    currentDate?: string
+    newDate?: string
+    currentTime?: string
+    newTime?: string
+    currentAssignee?: string
+    newAssignee?: string
+    currentPriority?: string
+    newPriority?: string
+    reason: string
+  }[]
+  summary: string
+}
+
 // ─── Simple in-memory rate limiter (per edge function instance) ──
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 10     // max requests per window
@@ -194,6 +211,25 @@ Rules:
 - Be concise: each item should be 1-2 sentences max
 - Respond in the SAME language as the input (Spanish if input is in Spanish, English if in English)
 - If the user provides custom instructions or extra context, incorporate them into the analysis`
+        : type === 'plan_period'
+        ? `You are a senior project manager and scheduling optimizer for a creative agency. Given a set of tasks, team members with workload data, calendar events, and user preferences, reorganize and replan tasks for optimal productivity.
+Return ONLY valid JSON with this structure:
+{"summary":"Brief explanation of your planning rationale (1-2 sentences)","changes":[{"taskId":"exact-uuid-from-input","taskTitle":"task name","currentDate":"YYYY-MM-DD","newDate":"YYYY-MM-DD","currentTime":"HH:MM or null","newTime":"HH:MM or null","currentAssignee":"name or null","newAssignee":"name or null","currentPriority":"low|medium|high|urgent","newPriority":"low|medium|high|urgent","reason":"Brief reason for this change"}]}
+Rules:
+- ONLY return changes for tasks that actually need modification. If a task is already well-placed, OMIT it completely.
+- NEVER move tasks with status "done" or "in-progress" — they are locked.
+- Respect blocked_by dependencies: a blocked task MUST be scheduled AFTER its blocker task's date.
+- Balance workload across team members — use the open task counts provided to redistribute fairly.
+- Stagger due dates logically — do NOT pile multiple tasks on the same day. Spread them across the period.
+- Keep project-related tasks grouped on nearby days for focus.
+- Schedule high-priority and urgent tasks earlier in the period.
+- Avoid scheduling tasks during calendar events (use the event times provided).
+- Respect user planning preferences (provided as context) — these are the user's personal scheduling rules.
+- Each change MUST include the exact taskId as provided in the input — do NOT generate new IDs.
+- Include "current*" fields to show the before state and "new*" fields for the after state.
+- Only include field pairs that are actually changing (e.g., if only date changes, omit assignee and priority fields).
+- Keep the total number of changes reasonable (max ~20 changes per request).
+- Respond in the SAME language as the input.`
         : type === 'advisor'
         ? `You are a senior business advisor and strategist for a creative agency / studio owner. You have access to a summary of the user's current projects, finances, team, and calendar.
 Return ONLY valid JSON with this structure:
@@ -209,7 +245,7 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
     const requestPayload = {
       contents: [
@@ -222,7 +258,7 @@ Rules:
         },
       ],
       generationConfig: {
-        temperature: type === 'tasks_bulk' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
+        temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
         maxOutputTokens: maxTokens,
         responseMimeType: 'application/json',
       },
@@ -250,7 +286,7 @@ Rules:
     const parts = data?.candidates?.[0]?.content?.parts || []
     const text = parts.map((p: any) => p.text || '').join('') || ''
 
-    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | null = null
+    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | null = null
     try {
       json = JSON.parse(text)
     } catch (_err) {
@@ -303,6 +339,14 @@ Rules:
     } else if (type === 'advisor') {
       const advisor = json as AdvisorResponse
       if (!advisor || !Array.isArray(advisor.insights)) {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'plan_period') {
+      const plan = json as PlanPeriodResponse
+      if (!plan || !Array.isArray(plan.changes)) {
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: text }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -16,6 +16,7 @@ const CACHE_TTL: Record<string, number> = {
   proposal: 30 * 60 * 1000,       // 30 min — same brief = same proposal
   blog: 30 * 60 * 1000,           // 30 min
   tasks_bulk: 10 * 60 * 1000,     // 10 min
+  plan_period: 5 * 60 * 1000,     // 5 min — plans are context-heavy
   task: 0,                         // no cache — single tasks are quick & varied
 }
 
@@ -173,6 +174,30 @@ export const generateAdvisorInsights = (input: string): Promise<AdvisorAIResult>
 
 export const generateBlogFromAI = (input: string): Promise<BlogAIResult> =>
   callGemini('blog', input, (r) => !!r?.title && !!r?.content)
+
+// ─── AI Plan Period ──────────────────────────────────────────────
+
+export type PlanChange = {
+  taskId: string
+  taskTitle: string
+  currentDate?: string
+  newDate?: string
+  currentTime?: string
+  newTime?: string
+  currentAssignee?: string
+  newAssignee?: string
+  currentPriority?: string
+  newPriority?: string
+  reason: string
+}
+
+export type PlanAIResult = {
+  changes: PlanChange[]
+  summary: string
+}
+
+export const generatePlanFromAI = (input: string): Promise<PlanAIResult> =>
+  callGemini('plan_period', input, (r) => Array.isArray(r?.changes))
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {

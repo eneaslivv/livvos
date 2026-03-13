@@ -2,15 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
+import { supabase } from '../lib/supabase';
 import { useSupabase } from '../hooks/useSupabase';
 import { TimeSlotPopover } from '../components/calendar/TimeSlotPopover';
 import { GoogleCalendarSettings } from '../components/calendar/GoogleCalendarSettings';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
-import { generateWeeklySummaryFromAI } from '../lib/ai';
+import { generateWeeklySummaryFromAI, generatePlanFromAI, PlanAIResult } from '../lib/ai';
 import { CalendarHeader } from '../components/calendar/CalendarHeader';
 import { AiWeeklySummary } from '../components/calendar/AiWeeklySummary';
+import { AiPlanPreview } from '../components/calendar/AiPlanPreview';
+import { PlanningPreferences } from '../components/calendar/PlanningPreferences';
 import { EventTaskFormPanel } from '../components/calendar/EventTaskFormPanel';
 import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
 import { WeekView } from '../components/calendar/WeekView';
@@ -152,6 +155,14 @@ export const Calendar: React.FC = () => {
   const [aiSummaryExpanded, setAiSummaryExpanded] = useState(false);
   const [aiCustomPrompt, setAiCustomPrompt] = useState('');
   const [showAiPromptInput, setShowAiPromptInput] = useState(false);
+
+  // AI Plan state
+  const [aiPlan, setAiPlan] = useState<PlanAIResult | null>(null);
+  const [aiPlanLoading, setAiPlanLoading] = useState(false);
+  const [aiPlanApplying, setAiPlanApplying] = useState(false);
+  const [aiPlanError, setAiPlanError] = useState<string | null>(null);
+  const [planPreferences, setPlanPreferences] = useState('');
+  const [showPlanPrefs, setShowPlanPrefs] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
@@ -692,6 +703,165 @@ export const Calendar: React.FC = () => {
     }
   };
 
+  // Load planning preferences on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('planning_preferences')
+      .select('preferences')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.preferences) setPlanPreferences(data.preferences);
+      });
+  }, [user?.id]);
+
+  // Generate AI Plan
+  const handleGenerateAiPlan = async () => {
+    setAiPlanLoading(true);
+    setAiPlanError(null);
+    try {
+      let startDate: string;
+      let endDate: string;
+      let periodLabel: string;
+
+      if (view === 'month') {
+        const y = currentDate.getFullYear();
+        const m = currentDate.getMonth();
+        startDate = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, m + 1, 0).getDate();
+        endDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        periodLabel = 'month';
+      } else {
+        const days = getWeekDays();
+        startDate = days[0].toISOString().split('T')[0];
+        endDate = days[6].toISOString().split('T')[0];
+        periodLabel = 'week';
+      }
+
+      // Get tasks for the period — exclude done/cancelled
+      const rangeTasks = getTasksByDateRange(startDate, endDate)
+        .filter(t => !t.completed && t.status !== 'done' && t.status !== 'cancelled' && !t.parent_task_id);
+
+      // Also get unscheduled tasks (no date)
+      const unscheduledTasks = tasks.filter(t =>
+        !t.start_date && !t.completed && t.status !== 'done' && t.status !== 'cancelled' && !t.parent_task_id
+      );
+
+      // Cap at 50 tasks (prioritize urgent/high + unscheduled)
+      const allPlanTasks = [...rangeTasks, ...unscheduledTasks].slice(0, 50);
+
+      if (allPlanTasks.length === 0) {
+        setAiPlan({ changes: [], summary: 'No pending tasks found for this period.' });
+        setAiPlanLoading(false);
+        return;
+      }
+
+      // Build task lines
+      const taskLines = allPlanTasks.map(t => {
+        const assigneeName = t.assignee_id ? getMemberName(t.assignee_id) || 'Unknown' : 'none';
+        const projectName = getProjectLabel(t);
+        const parts = [
+          `[${t.id}] "${t.title}"`,
+          t.start_date ? `date: ${t.start_date.slice(0, 10)}` : 'date: none',
+          t.start_time ? `time: ${t.start_time}` : null,
+          `assignee: ${assigneeName}`,
+          `priority: ${t.priority || 'medium'}`,
+          `status: ${t.status || 'todo'}`,
+          `project: ${projectName}`,
+          t.blocked_by ? `blocked_by: ${t.blocked_by}` : null,
+        ].filter(Boolean).join(' | ');
+        return `- ${parts}`;
+      });
+
+      const scheduled = taskLines.filter(l => !l.includes('date: none'));
+      const unscheduled = taskLines.filter(l => l.includes('date: none'));
+
+      // Events for conflict avoidance
+      const rangeEvents = getEventsByDateRange(startDate, endDate);
+      const eventLines = rangeEvents.map(e => {
+        const time = e.start_time ? ` ${e.start_time}` : '';
+        const dur = e.duration ? `-${e.duration}min` : '';
+        return `- ${e.start_date?.slice(0, 10)}${time}${dur}: ${e.title}`;
+      });
+
+      // Team workload
+      const workloadLines = teamMembers
+        .filter(m => m.status === 'active')
+        .map(m => {
+          const openCount = tasks.filter(t => t.assignee_id === m.id && !t.completed && t.status !== 'done').length;
+          return `- ${m.name || m.email}: ${openCount} open tasks`;
+        });
+
+      const inputParts = [
+        `Period: ${startDate} to ${endDate} (${periodLabel})`,
+        scheduled.length > 0 ? `\nTasks:\n${scheduled.join('\n')}` : '',
+        unscheduled.length > 0 ? `\nUnscheduled (no date):\n${unscheduled.join('\n')}` : '',
+        eventLines.length > 0 ? `\nEvents (avoid conflicts):\n${eventLines.join('\n')}` : '',
+        workloadLines.length > 0 ? `\nTeam workload:\n${workloadLines.join('\n')}` : '',
+        planPreferences.trim() ? `\nPlanning preferences:\n${planPreferences.trim()}` : '',
+      ].filter(Boolean).join('\n');
+
+      const result = await generatePlanFromAI(inputParts);
+      setAiPlan(result);
+    } catch (err: any) {
+      errorLogger.error('Error generating AI plan', err);
+      setAiPlanError(err.message || 'Error generating plan');
+    } finally {
+      setAiPlanLoading(false);
+    }
+  };
+
+  // Accept AI Plan — apply all changes
+  const handleAcceptAiPlan = async () => {
+    if (!aiPlan || aiPlan.changes.length === 0) return;
+    setAiPlanApplying(true);
+    try {
+      const resolveAssignee = (name?: string): string | null => {
+        if (!name) return null;
+        const lower = name.toLowerCase();
+        const match = teamMembers.find(m =>
+          m.name?.toLowerCase() === lower ||
+          m.email?.toLowerCase().startsWith(lower) ||
+          m.name?.toLowerCase().includes(lower)
+        );
+        return match?.id || null;
+      };
+
+      const taskMap = new Map(tasks.map(t => [t.id, t]));
+
+      const results = await Promise.allSettled(
+        aiPlan.changes.map(async (change) => {
+          const task = taskMap.get(change.taskId);
+          if (!task) throw new Error(`Task ${change.taskId} not found`);
+
+          const updates: Record<string, any> = {};
+          if (change.newDate) updates.start_date = change.newDate;
+          if (change.newTime) updates.start_time = change.newTime;
+          if (change.newPriority) updates.priority = change.newPriority;
+          if (change.newAssignee) {
+            const assigneeId = resolveAssignee(change.newAssignee);
+            if (assigneeId) updates.assignee_id = assigneeId;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await updateTask(change.taskId, updates as any);
+          }
+        })
+      );
+
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (import.meta.env.DEV) console.log(`[AiPlan] Applied: ${succeeded} OK, ${failed} failed`);
+
+      setAiPlan(null);
+    } catch (err) {
+      errorLogger.error('Error applying AI plan', err);
+    } finally {
+      setAiPlanApplying(false);
+    }
+  };
+
   const filteredEvents = calendarMode === 'content'
     ? events.filter(event => event.type === 'content')
     : events.filter(event => event.type !== 'content');
@@ -849,20 +1019,97 @@ export const Calendar: React.FC = () => {
         hasClientTimezones={hasClientTimezones}
       />
 
-      {/* AI Weekly Summary */}
-      <AiWeeklySummary
-        aiSummary={aiSummary}
-        aiSummaryLoading={aiSummaryLoading}
-        aiSummaryError={aiSummaryError}
-        aiSummaryExpanded={aiSummaryExpanded}
-        setAiSummaryExpanded={setAiSummaryExpanded}
-        showAiPromptInput={showAiPromptInput}
-        setShowAiPromptInput={setShowAiPromptInput}
-        aiCustomPrompt={aiCustomPrompt}
-        setAiCustomPrompt={setAiCustomPrompt}
-        onGenerate={handleGenerateAiSummary}
-        onClearError={() => setAiSummaryError(null)}
-      />
+      {/* AI Weekly Summary + AI Plan */}
+      <div className="flex items-start gap-3 mb-4">
+        <div className="flex-1">
+          <AiWeeklySummary
+            aiSummary={aiSummary}
+            aiSummaryLoading={aiSummaryLoading}
+            aiSummaryError={aiSummaryError}
+            aiSummaryExpanded={aiSummaryExpanded}
+            setAiSummaryExpanded={setAiSummaryExpanded}
+            showAiPromptInput={showAiPromptInput}
+            setShowAiPromptInput={setShowAiPromptInput}
+            aiCustomPrompt={aiCustomPrompt}
+            setAiCustomPrompt={setAiCustomPrompt}
+            onGenerate={handleGenerateAiSummary}
+            onClearError={() => setAiSummaryError(null)}
+          />
+        </div>
+        {!aiPlan && !aiPlanLoading && calendarMode === 'schedule' && (
+          <button
+            onClick={handleGenerateAiPlan}
+            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-violet-200 dark:border-violet-700/60 hover:border-violet-400 dark:hover:border-violet-500/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-all duration-200 shrink-0"
+          >
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+              <Icons.Sparkles size={12} className="text-white" />
+            </div>
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+              AI Plan This {view === 'month' ? 'Month' : 'Week'}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* AI Plan Loading */}
+      {aiPlanLoading && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 mb-4">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center animate-pulse">
+            <Icons.Sparkles size={12} className="text-white" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-24 bg-violet-200 dark:bg-violet-800 rounded-full overflow-hidden">
+              <div className="h-full w-1/2 bg-violet-500 rounded-full" style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+            <span className="text-[11px] font-medium text-violet-500 dark:text-violet-400">
+              Planning your {view === 'month' ? 'month' : 'week'}...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* AI Plan Error */}
+      {aiPlanError && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 mb-4">
+          <Icons.AlertCircle size={14} className="text-red-500 shrink-0" />
+          <span className="text-xs text-red-600 dark:text-red-400">{aiPlanError}</span>
+          <button
+            onClick={() => { setAiPlanError(null); handleGenerateAiPlan(); }}
+            className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* AI Plan Preview */}
+      {aiPlan && (
+        <div className="mb-4">
+          <AiPlanPreview
+            plan={aiPlan}
+            onPlanChange={setAiPlan}
+            onAccept={handleAcceptAiPlan}
+            onDiscard={() => setAiPlan(null)}
+            applying={aiPlanApplying}
+            teamMembers={teamMembers.filter(m => m.status === 'active').map(m => ({ id: m.id, name: m.name, email: m.email || '' }))}
+          />
+          <PlanningPreferences
+            expanded={showPlanPrefs}
+            onToggle={() => setShowPlanPrefs(!showPlanPrefs)}
+            preferences={planPreferences}
+            onPreferencesChange={setPlanPreferences}
+          />
+          {!showPlanPrefs && (
+            <button
+              onClick={() => setShowPlanPrefs(true)}
+              className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-violet-500 transition-colors"
+            >
+              <Icons.Settings size={10} />
+              Planning preferences
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Team member filter */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
