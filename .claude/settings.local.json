@@ -78,7 +78,32 @@
       "Bash(powershell -Command \"cmdkey /list\")",
       "Bash(powershell -Command \":*)",
       "Bash(python -m json.tool)",
-      "Bash(find /c/Users/eneas/Downloads/livv/eneas-os -name \"package.json\" -exec grep -l \"radix\\\\|headless\\\\|shadcn\\\\|recharts\\\\|select\" {} ;)"
+      "Bash(find /c/Users/eneas/Downloads/livv/eneas-os -name \"package.json\" -exec grep -l \"radix\\\\|headless\\\\|shadcn\\\\|recharts\\\\|select\" {} ;)",
+      "Bash(git log --oneline --all --grep=\"complete\\\\|task\\\\|calendar\" -i)",
+      "Bash(wc -l /c/Users/eneas/Downloads/livv/eneas-os/pages/*.tsx)",
+      "Bash(xargs wc -l)",
+      "Bash(xargs head -30)",
+      "Bash(xargs cat)",
+      "Bash(xargs -0 grep -l \"createNotification\\\\|sendSystemNotification\")",
+      "Bash(npm run build)",
+      "Bash(sed 's/\\(.*//')",
+      "Bash(sed 's/.*error //')",
+      "Bash(sed 's/:.*//')",
+      "Bash(npm ls @types/react @types/react-dom)",
+      "Bash(npm ls react-dom)",
+      "Bash(npm ls vitest)",
+      "Bash(npx vercel ls)",
+      "Bash(npx vercel ls --scope eneasaldabe-gmailcoms-projects)",
+      "Bash(claude mcp add --scope project --transport http supabase \"https://mcp.supabase.com/mcp?project_ref=ngswutcpsgdgmmjnfddi\")",
+      "Bash(SRK=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5nc3d1dGNwc2dkZ21tam5mZGRpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzU3Njc0NSwiZXhwIjoyMDgzMTUyNzQ1fQ.NVB6JeAxXLTDMCyv4Ettnx8Jl6KRJWYkp83LOJfHwNo\")",
+      "Bash(BASE=\"https://ngswutcpsgdgmmjnfddi.supabase.co/rest/v1\")",
+      "Bash(for t in profiles tenants ai_usage_log cms_products portfolio_items)",
+      "Bash(do echo -n \"$t: \")",
+      "Bash(for t in products projects tasks incomes expenses team_members)",
+      "Bash(npx vercel --prod)",
+      "Bash(npx vercel --prod --scope eneasaldabe-gmailcoms-projects)",
+      "Bash(npx vercel link --scope eneasaldabe-gmailcoms-projects -y)",
+      "Bash(npx vercel --prod --team eneasaldabe-gmailcoms-projects)"
     ]
   }
 }

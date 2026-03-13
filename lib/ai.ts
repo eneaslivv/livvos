@@ -84,11 +84,27 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
 
   // 3. Make the actual call
   const promise = (async (): Promise<T> => {
-    const { data, error } = await supabase.functions.invoke('gemini', {
-      body: { type, input },
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const session = (await supabase.auth.getSession()).data.session
+    const authToken = session?.access_token || supabaseKey
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/gemini`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ type, input }),
     })
 
-    if (error) throw new Error(error.message)
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.error || `Edge function error (${res.status})`)
+    }
+
+    const data = await res.json()
     if (!data?.result || !validate(data.result)) throw new Error('Invalid AI response')
 
     const result = data.result as T

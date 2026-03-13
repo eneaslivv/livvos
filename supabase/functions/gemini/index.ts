@@ -199,7 +199,7 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 1200 : type === 'blog' ? 1400 : type === 'tasks_bulk' ? 2000 : type === 'weekly_summary' ? 800 : type === 'advisor' ? 1200 : 256
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 3000 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
     const requestPayload = {
       contents: [
@@ -214,6 +214,7 @@ Rules:
       generationConfig: {
         temperature: type === 'tasks_bulk' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
         maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json',
       },
     }
 
@@ -235,15 +236,25 @@ Rules:
     }
 
     const data = await response.json()
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    // Extract text from all parts (gemini-2.5 may have thinking + content parts)
+    const parts = data?.candidates?.[0]?.content?.parts || []
+    const text = parts.map((p: any) => p.text || '').join('') || ''
 
     let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | null = null
     try {
       json = JSON.parse(text)
     } catch (_err) {
-      const match = text.match(/\{[\s\S]*\}/)
-      if (match) {
-        json = JSON.parse(match[0])
+      // Try extracting JSON from markdown code blocks
+      const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (codeBlock) {
+        try { json = JSON.parse(codeBlock[1].trim()) } catch {}
+      }
+      // Fallback: extract first { ... } block
+      if (!json) {
+        const match = text.match(/\{[\s\S]*\}/)
+        if (match) {
+          try { json = JSON.parse(match[0]) } catch {}
+        }
       }
     }
 
