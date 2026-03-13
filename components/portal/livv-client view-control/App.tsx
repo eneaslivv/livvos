@@ -10,7 +10,7 @@ import {
   Moon,
   Sun
 } from 'lucide-react';
-import { DashboardData } from './types';
+import { DashboardData, PortalTask } from './types';
 
 // Components
 import TimelinePulse from './components/TimelinePulse';
@@ -21,6 +21,7 @@ import LegalAssets from './components/LegalAssets';
 import ResourcesPanel from './components/ResourcesPanel';
 import SystemLogs from './components/SystemLogs';
 import ProjectTasks from './components/ProjectTasks';
+import PortalTaskDetail from './components/PortalTaskDetail';
 import Onboarding from './components/Onboarding';
 import ChatSupport from './components/ChatSupport';
 import PreferencesPanel from './components/PreferencesPanel';
@@ -107,6 +108,7 @@ const App: React.FC<ClientPortalAppProps> = ({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<PortalTask | null>(null);
 
   // Dark mode
   const [isDark, setIsDark] = useState(() => {
@@ -274,7 +276,7 @@ const App: React.FC<ClientPortalAppProps> = ({
               {/* Row 2: Tasks by Stage */}
               {data.tasks && data.tasks.length > 0 && (
                 <div className="md:col-span-12">
-                  <ProjectTasks tasks={data.tasks} />
+                  <ProjectTasks tasks={data.tasks} onTaskClick={setSelectedTask} />
                 </div>
               )}
 
@@ -307,6 +309,9 @@ const App: React.FC<ClientPortalAppProps> = ({
           </p>
         </footer>
       </div>
+
+      {/* Task detail panel */}
+      <PortalTaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} />
 
       {/* Modals */}
       <AnimatePresence>

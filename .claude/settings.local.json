@@ -103,7 +103,10 @@
       "Bash(npx vercel --prod)",
       "Bash(npx vercel --prod --scope eneasaldabe-gmailcoms-projects)",
       "Bash(npx vercel link --scope eneasaldabe-gmailcoms-projects -y)",
-      "Bash(npx vercel --prod --team eneasaldabe-gmailcoms-projects)"
+      "Bash(npx vercel --prod --team eneasaldabe-gmailcoms-projects)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_c15893fd1385b45429d705ae453dc3179e99c134 npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_c15893fd1385b45429d705ae453dc3179e99c134 npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi --no-verify-jwt)",
+      "Bash(git fetch origin)"
     ]
   }
 }

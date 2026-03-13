@@ -216,7 +216,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                 </button>
               </div>
             </div>
-            <div className="p-5 space-y-5 max-h-[500px] overflow-y-auto">
+            <div className="p-5 space-y-5">
               {aiPreview.phases.map((phase, pIdx) => (
                 <div key={pIdx} className="rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden">
                   {/* Phase header — editable */}

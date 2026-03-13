@@ -17,7 +17,7 @@ const priorityColor: Record<string, string> = {
   low: 'bg-emerald-500',
 };
 
-const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
+const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalTask) => void }> = ({ tasks, onTaskClick }) => {
   const groups = useMemo<StageGroup[]>(() => {
     const map = new Map<string, PortalTask[]>();
     for (const t of tasks) {
@@ -110,7 +110,11 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[] }> = ({ tasks }) => {
                   >
                     <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
                       {group.tasks.map(task => (
-                        <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <div
+                          key={task.id}
+                          className={`flex items-center gap-3 px-4 py-2.5${onTaskClick ? ' cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors' : ''}`}
+                          onClick={() => onTaskClick?.(task)}
+                        >
                           {/* Status circle (read-only) */}
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                             task.completed

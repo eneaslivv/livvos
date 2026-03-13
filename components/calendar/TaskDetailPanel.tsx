@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
@@ -94,6 +94,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   const totalSubtasks = subtasksForSelected.length;
   const progressPct = totalSubtasks > 0 ? Math.round((completedCount / totalSubtasks) * 100) : 0;
 
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
+    subtasks: false,
+    dependencies: true,
+    comments: true,
+  });
+  const toggle = (key: string) => setCollapsed(p => ({ ...p, [key]: !p[key] }));
+
   return (
     <SlidePanel
       isOpen={!!selectedTask}
@@ -135,10 +142,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
       }
     >
       {selectedTask && (
-        <div className="px-6 py-6">
+        <div className="px-5 py-4">
 
           {/* ─── Header: Title + Complete ─── */}
-          <div className="mb-6">
+          <div className="mb-3">
             <input
               type="text"
               value={editingTask.title || ''}
@@ -218,7 +225,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
           })()}
 
           {/* ─── Priority & Status ─── */}
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3 mb-3">
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Priority</label>
               <div className="flex gap-1.5">
@@ -272,10 +279,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-6" />
+          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
 
           {/* ─── Details grid ─── */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-3">
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Date</label>
               <input
@@ -360,10 +367,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-6" />
+          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
 
           {/* ─── Description ─── */}
-          <div className="mb-6">
+          <div className="mb-3">
             <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Description</label>
             <textarea
               value={editingTask.description || ''}
@@ -375,20 +382,31 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
           </div>
 
           {/* ─── Subtasks ─── */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                Subtasks
-              </label>
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => toggle('subtasks')}
+              className="flex items-center justify-between w-full mb-2 group"
+            >
+              <div className="flex items-center gap-1.5">
+                <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.subtasks ? 'rotate-90' : ''}`} />
+                <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer">
+                  Subtasks
+                </label>
+              </div>
               {totalSubtasks > 0 && (
                 <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {completedCount}/{totalSubtasks}
                 </span>
               )}
-            </div>
+            </button>
+
+            <AnimatePresence initial={false}>
+            {!collapsed.subtasks && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
 
             {totalSubtasks > 0 && (
-              <div className="mb-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-1 overflow-hidden">
+              <div className="mb-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-1 overflow-hidden">
                 <motion.div
                   className="bg-emerald-500 h-full rounded-full"
                   initial={false}
@@ -399,7 +417,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             )}
 
             {totalSubtasks > 0 && (
-              <div className="mb-3 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+              <div className="mb-2 rounded-xl overflow-hidden">
                 <AnimatePresence initial={false}>
                   {subtasksForSelected
                     .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
@@ -472,14 +490,31 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 </button>
               )}
             </div>
+
+              </motion.div>
+            )}
+            </AnimatePresence>
           </div>
 
           {/* ─── Dependency ─── */}
-          <div className="mb-6">
-            <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Icons.Link size={11} />
-              Dependency
-            </label>
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => toggle('dependencies')}
+              className="flex items-center gap-1.5 mb-2 group"
+            >
+              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.dependencies ? 'rotate-90' : ''}`} />
+              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer flex items-center gap-1.5">
+                <Icons.Link size={11} />
+                Dependency
+              </label>
+              {editingTask.blocked_by && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+              )}
+            </button>
+            <AnimatePresence initial={false}>
+            {!collapsed.dependencies && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <select
               value={editingTask.blocked_by || ''}
               onChange={e => setEditingTask({ ...editingTask, blocked_by: e.target.value || undefined })}
@@ -619,12 +654,33 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 </div>
               );
             })()}
+              </motion.div>
+            )}
+            </AnimatePresence>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-6" />
+          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
 
           {/* ─── Comments ─── */}
-          <TaskCommentsSection taskId={selectedTask.id} taskTitle={selectedTask.title} taskOwnerId={selectedTask.owner_id} taskAssigneeId={selectedTask.assignee_id} />
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => toggle('comments')}
+              className="flex items-center gap-1.5 mb-2 group"
+            >
+              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.comments ? 'rotate-90' : ''}`} />
+              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer">
+                Comments
+              </label>
+            </button>
+            <AnimatePresence initial={false}>
+            {!collapsed.comments && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                <TaskCommentsSection taskId={selectedTask.id} taskTitle={selectedTask.title} taskOwnerId={selectedTask.owner_id} taskAssigneeId={selectedTask.assignee_id} />
+              </motion.div>
+            )}
+            </AnimatePresence>
+          </div>
 
           {/* ─── Meta ─── */}
           <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
