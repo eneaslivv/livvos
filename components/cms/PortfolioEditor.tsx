@@ -810,9 +810,26 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                     ))}
                   </div>
                   {form.content_blocks.length === 0 && (
-                    <p className="text-xs text-[#09090B]/25 py-3 text-center">
-                      Add content blocks to build the project landing page
-                    </p>
+                    <div className="py-4 text-center space-y-3">
+                      <p className="text-xs text-[#09090B]/25">
+                        Add content blocks to build the project landing page
+                      </p>
+                      <button
+                        onClick={() => {
+                          const coverImage = form.media.find((m) => m.is_cover)?.url || form.image;
+                          const blocks: ContentBlock[] = [
+                            { type: 'hero_image', image_url: coverImage || '', alt: form.title, sort_order: 0 },
+                            { type: 'challenge', label: 'Overview', heading: form.subtitle || form.title, paragraphs: form.description ? [form.description] : [''], tools: form.tech_tags.length > 0 ? form.tech_tags : (form.services ? form.services.split(',').map((s) => s.trim()) : []), kpis: [], sort_order: 1 },
+                            { type: 'image_showcase', label: 'Gallery', layout: 'side_by_side', images: [], sort_order: 2 },
+                          ];
+                          setForm((f) => ({ ...f, content_blocks: blocks }));
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-[#E8BC59] border border-[#E8BC59]/30 rounded-lg hover:bg-[#E8BC59]/5 transition-colors"
+                      >
+                        <Plus size={14} />
+                        Quick Start — Generate page template
+                      </button>
+                    </div>
                   )}
                   <div className="space-y-3">
                     {form.content_blocks.map((block, i) => (

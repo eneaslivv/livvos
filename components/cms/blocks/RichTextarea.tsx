@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from 'react';
-import { Bold, List } from 'lucide-react';
+import React, { useRef, useCallback, useState, useMemo } from 'react';
+import { Bold, List, Eye, EyeOff } from 'lucide-react';
 
 interface Props {
   value: string;
@@ -9,8 +9,59 @@ interface Props {
   className?: string;
 }
 
+/** Render markdown-lite (bold + bullets + paragraphs) to React nodes */
+function renderRichPreview(text: string): React.ReactNode[] {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let bulletBuffer: string[] = [];
+  let key = 0;
+
+  const flushBullets = () => {
+    if (bulletBuffer.length === 0) return;
+    nodes.push(
+      <ul key={key++} className="list-disc pl-5 space-y-0.5 text-sm text-[#09090B]/80">
+        {bulletBuffer.map((b, i) => (
+          <li key={i}>{renderInline(b)}</li>
+        ))}
+      </ul>
+    );
+    bulletBuffer = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('- ')) {
+      bulletBuffer.push(line.slice(2));
+    } else {
+      flushBullets();
+      if (line.trim() === '') {
+        nodes.push(<div key={key++} className="h-2" />);
+      } else {
+        nodes.push(
+          <p key={key++} className="text-sm text-[#09090B]/80 leading-relaxed">
+            {renderInline(line)}
+          </p>
+        );
+      }
+    }
+  }
+  flushBullets();
+  return nodes;
+}
+
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i} className="font-semibold text-[#09090B]">{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
 export const RichTextarea: React.FC<Props> = ({ value, onChange, placeholder, rows = 6, className = '' }) => {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const wrapSelection = useCallback((before: string, after: string) => {
     const ta = ref.current;
@@ -92,6 +143,8 @@ export const RichTextarea: React.FC<Props> = ({ value, onChange, placeholder, ro
     }
   }, [value, onChange, toggleBold]);
 
+  const previewNodes = useMemo(() => renderRichPreview(value), [value]);
+
   return (
     <div className="rounded-lg border border-[#E6E2D8] bg-white overflow-hidden focus-within:border-[#E8BC59] transition-colors">
       {/* Toolbar */}
@@ -112,7 +165,17 @@ export const RichTextarea: React.FC<Props> = ({ value, onChange, placeholder, ro
         >
           <List size={14} />
         </button>
-        <span className="ml-auto text-[9px] text-[#78736A]/50 select-none">**bold** &nbsp; - bullets</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[9px] text-[#78736A]/50 select-none">**bold** &nbsp; - bullets</span>
+          <button
+            type="button"
+            onClick={() => setShowPreview((p) => !p)}
+            title={showPreview ? 'Hide preview' : 'Show preview'}
+            className={`p-1 rounded transition-colors ${showPreview ? 'bg-[#E8BC59]/15 text-[#E8BC59]' : 'hover:bg-[#E6E2D8]/60 text-[#78736A] hover:text-[#09090B]'}`}
+          >
+            {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
       </div>
       {/* Textarea */}
       <textarea
@@ -124,6 +187,13 @@ export const RichTextarea: React.FC<Props> = ({ value, onChange, placeholder, ro
         rows={rows}
         className={`w-full px-3 py-2.5 text-sm text-[#09090B] outline-none resize-vertical min-h-[120px] ${className}`}
       />
+      {/* Rich preview */}
+      {showPreview && value.trim() && (
+        <div className="px-3 py-3 border-t border-[#E6E2D8] bg-[#FDFBF7] space-y-1.5">
+          <span className="text-[9px] font-mono uppercase tracking-widest text-[#78736A]/40 block mb-2">Preview</span>
+          {previewNodes}
+        </div>
+      )}
     </div>
   );
 };

@@ -28,6 +28,7 @@ BEGIN
     ), '[]'::jsonb)
     FROM portfolio_items p
     WHERE p.tenant_id = v_tenant_id
+      AND p.featured = true
   );
 END;
 $$;
