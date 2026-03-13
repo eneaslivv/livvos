@@ -114,7 +114,7 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
               )}
 
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto overscroll-contain">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}

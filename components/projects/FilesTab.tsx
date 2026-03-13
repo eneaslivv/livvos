@@ -141,7 +141,7 @@ export const FilesTab: React.FC<FilesTabProps> = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-700 p-6 w-full max-w-md mx-4"
+              className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-700 p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
             >
               <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Add Link</h3>
               <div className="space-y-3">

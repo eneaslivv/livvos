@@ -51,7 +51,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
             onClose={onClose}
             size="4xl"
         >
-            <div className="h-[600px] flex overflow-hidden">
+            <div className="h-[min(600px,70vh)] flex overflow-hidden">
                 {/* Sidebar */}
                 <div className="w-64 bg-zinc-50/50 dark:bg-zinc-900/50 border-r border-zinc-200 dark:border-zinc-800 flex flex-col">
                     <div className="p-6 border-b border-zinc-100 dark:border-zinc-800/50">

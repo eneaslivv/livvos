@@ -181,7 +181,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
 
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 pb-6 space-y-4">
 
               {/* Status + Temperature row */}
               <div className="flex gap-2">

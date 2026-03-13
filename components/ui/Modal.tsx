@@ -68,7 +68,7 @@ export const Modal: React.FC<ModalProps> = ({
                             damping: 25,
                             stiffness: 300,
                         }}
-                        className={`relative w-full ${sizeClasses[size]} bg-white dark:bg-zinc-950 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col`}
+                        className={`relative w-full ${sizeClasses[size]} max-h-[90vh] bg-white dark:bg-zinc-950 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {title && (
