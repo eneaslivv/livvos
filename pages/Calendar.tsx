@@ -486,7 +486,7 @@ export const Calendar: React.FC = () => {
   // Get hours of the day
   const getHours = () => {
     const hours = [];
-    for (let i = 8; i <= 20; i++) {
+    for (let i = 0; i <= 23; i++) {
       hours.push(i);
     }
     return hours;
@@ -798,12 +798,37 @@ export const Calendar: React.FC = () => {
           return `- ${m.name || m.email}: ${openCount} open tasks`;
         });
 
+      // Productivity data — last 30 days (for adaptive planning)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const completedRecently = tasks.filter(t =>
+        t.completed_at && new Date(t.completed_at) >= thirtyDaysAgo
+      );
+      const personDays = new Map<string, Set<string>>();
+      const personCompleted = new Map<string, number>();
+      for (const t of completedRecently) {
+        const pid = t.assignee_id || 'unassigned';
+        const day = t.completed_at!.slice(0, 10);
+        if (!personDays.has(pid)) personDays.set(pid, new Set());
+        personDays.get(pid)!.add(day);
+        personCompleted.set(pid, (personCompleted.get(pid) || 0) + 1);
+      }
+      const productivityLines = teamMembers
+        .filter(m => m.status === 'active')
+        .map(m => {
+          const days = personDays.get(m.id)?.size || 1;
+          const total = personCompleted.get(m.id) || 0;
+          const avg = total > 0 ? (total / days).toFixed(1) : '0';
+          return `- ${m.name || m.email}: avg ${avg} tasks/day (${total} completed in ${days} active days)`;
+        });
+
       const inputParts = [
         `Period: ${startDate} to ${endDate} (${periodLabel})`,
         scheduled.length > 0 ? `\nTasks:\n${scheduled.join('\n')}` : '',
         unscheduled.length > 0 ? `\nUnscheduled (no date):\n${unscheduled.join('\n')}` : '',
         eventLines.length > 0 ? `\nEvents (avoid conflicts):\n${eventLines.join('\n')}` : '',
         workloadLines.length > 0 ? `\nTeam workload:\n${workloadLines.join('\n')}` : '',
+        productivityLines.length > 0 ? `\nProductivity data (last 30 days):\n${productivityLines.join('\n')}\nUse these averages as daily capacity per person. Do NOT exceed 1.5x their average.` : '',
         planPreferences.trim() ? `\nPlanning preferences:\n${planPreferences.trim()}` : '',
       ].filter(Boolean).join('\n');
 

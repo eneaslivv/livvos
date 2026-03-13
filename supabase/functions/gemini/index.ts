@@ -249,7 +249,8 @@ Rules:
 - NEVER move tasks with status "done" or "in-progress" — they are locked.
 - Respect blocked_by dependencies: a blocked task MUST be scheduled AFTER its blocker task's date.
 - Balance workload across team members — use the open task counts provided to redistribute fairly.
-- CRITICAL RULE — EVEN DISTRIBUTION: Spread tasks evenly across ALL available working days (Mon-Fri) in the period. Maximum 3-4 tasks per person per day. NEVER put more than 5 tasks on the same day for the same person. Calculate: total tasks ÷ available days = tasks per day. Distribute accordingly.
+- ADAPTIVE DISTRIBUTION: Use the "Productivity data" section to determine each person's real daily capacity. Assign tasks proportionally to their historical average. Never exceed 1.5x their daily average on any single day. If no productivity data is provided, default to max 4 tasks per person per day.
+- Spread tasks across ALL available working days (Mon-Fri) in the period. Never pile many tasks on one day.
 - Schedule high-priority and urgent tasks earlier in the period, but still spread them out.
 - Avoid scheduling tasks on weekends unless absolutely necessary.
 - Avoid scheduling tasks during calendar events (use the event times provided).
