@@ -168,6 +168,35 @@ serve(async (req) => {
       })
     }
 
+    // For plan_period: limit task lines to avoid MAX_TOKENS on output
+    let processedInput = input
+    if (type === 'plan_period') {
+      const lines = input.split('\n')
+      let taskCount = 0
+      const filtered: string[] = []
+      let inTaskSection = false
+      for (const line of lines) {
+        if (line.startsWith('Tasks:') || line.startsWith('Unscheduled')) {
+          inTaskSection = true
+          filtered.push(line)
+          continue
+        }
+        if (inTaskSection && line.startsWith('- [')) {
+          taskCount++
+          if (taskCount <= 20) filtered.push(line)
+          continue
+        }
+        if (inTaskSection && !line.startsWith('- [')) {
+          inTaskSection = false
+        }
+        filtered.push(line)
+      }
+      processedInput = filtered.join('\n')
+      if (taskCount > 20) {
+        console.log(`[gemini] plan_period: truncated ${taskCount} tasks to 20`)
+      }
+    }
+
     const apiKey = Deno.env.get('GEMINI_API_KEY')
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY' }), {
@@ -245,7 +274,7 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 8192 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
     const generationConfig: Record<string, any> = {
       temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
@@ -263,7 +292,7 @@ Rules:
           role: 'user',
           parts: [
             { text: systemPrompt },
-            { text: input },
+            { text: processedInput },
           ],
         },
       ],
