@@ -245,7 +245,7 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 8192 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
     const generationConfig: Record<string, any> = {
       temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,

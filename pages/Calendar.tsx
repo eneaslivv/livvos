@@ -748,8 +748,13 @@ export const Calendar: React.FC = () => {
         !t.start_date && !t.completed && t.status !== 'done' && t.status !== 'cancelled' && !t.parent_task_id
       );
 
-      // Cap at 50 tasks (prioritize urgent/high + unscheduled)
-      const allPlanTasks = [...rangeTasks, ...unscheduledTasks].slice(0, 50);
+      // Cap at 25 tasks to stay within Gemini output token limits
+      // Sort: urgent/high priority first, then by date
+      const sortedTasks = [...rangeTasks, ...unscheduledTasks].sort((a, b) => {
+        const prio: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+        return (prio[a.priority || 'medium'] ?? 2) - (prio[b.priority || 'medium'] ?? 2);
+      });
+      const allPlanTasks = sortedTasks.slice(0, 25);
 
       if (allPlanTasks.length === 0) {
         setAiPlan({ changes: [], summary: 'No pending tasks found for this period.' });
