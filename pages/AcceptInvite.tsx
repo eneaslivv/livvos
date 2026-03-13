@@ -111,7 +111,7 @@ export const AcceptInvite: React.FC = () => {
         if (token) {
           await supabase
             .from('invitations')
-            .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+            .update({ status: 'accepted', accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
             .eq('token', token);
         }
 
