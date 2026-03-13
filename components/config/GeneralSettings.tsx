@@ -7,12 +7,16 @@ export const GeneralSettings: React.FC = () => {
   const [workspaceName, setWorkspaceName] = useState('Eneas OS');
   const [logo, setLogo] = useState<string | null>(null);
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [deployHookUrl, setDeployHookUrl] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
+  const [savingPreview, setSavingPreview] = useState(false);
+  const [savingDeploy, setSavingDeploy] = useState(false);
 
   useEffect(() => {
-    if (currentTenant?.website_url) {
-      setWebsiteUrl(currentTenant.website_url);
-    }
+    if (currentTenant?.website_url) setWebsiteUrl(currentTenant.website_url);
+    if (currentTenant?.preview_url) setPreviewUrl(currentTenant.preview_url);
+    if (currentTenant?.deploy_hook_url) setDeployHookUrl(currentTenant.deploy_hook_url);
   }, [currentTenant]);
 
   return (
@@ -75,6 +79,62 @@ export const GeneralSettings: React.FC = () => {
                     className="px-3 py-2 text-sm font-medium text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 disabled:opacity-40 transition-colors"
                 >
                     {savingUrl ? <Icons.Loader size={16} className="animate-spin" /> : 'Save'}
+                </button>
+            </div>
+        </div>
+
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Preview URL</label>
+            <p className="text-xs text-zinc-400">Vercel/staging URL for draft preview in CMS</p>
+            <div className="flex items-center gap-2">
+                <input
+                    type="url"
+                    value={previewUrl}
+                    onChange={(e) => setPreviewUrl(e.target.value)}
+                    placeholder="https://your-site-preview.vercel.app"
+                    className="flex-1 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                />
+                <button
+                    onClick={async () => {
+                        setSavingPreview(true);
+                        try {
+                            await updateTenant({ preview_url: previewUrl || null });
+                        } finally {
+                            setSavingPreview(false);
+                        }
+                    }}
+                    disabled={savingPreview || previewUrl === (currentTenant?.preview_url || '')}
+                    className="px-3 py-2 text-sm font-medium text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 disabled:opacity-40 transition-colors"
+                >
+                    {savingPreview ? <Icons.Loader size={16} className="animate-spin" /> : 'Save'}
+                </button>
+            </div>
+        </div>
+
+        <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Deploy Hook URL</label>
+            <p className="text-xs text-zinc-400">Vercel/Netlify deploy hook — triggers a rebuild when you publish from the CMS</p>
+            <div className="flex items-center gap-2">
+                <input
+                    type="url"
+                    value={deployHookUrl}
+                    onChange={(e) => setDeployHookUrl(e.target.value)}
+                    placeholder="https://api.vercel.com/v1/integrations/deploy/..."
+                    className="flex-1 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono text-xs"
+                />
+                <button
+                    onClick={async () => {
+                        setSavingDeploy(true);
+                        try {
+                            await updateTenant({ deploy_hook_url: deployHookUrl || null });
+                        } finally {
+                            setSavingDeploy(false);
+                        }
+                    }}
+                    disabled={savingDeploy || deployHookUrl === (currentTenant?.deploy_hook_url || '')}
+                    className="px-3 py-2 text-sm font-medium text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 disabled:opacity-40 transition-colors"
+                >
+                    {savingDeploy ? <Icons.Loader size={16} className="animate-spin" /> : 'Save'}
                 </button>
             </div>
         </div>

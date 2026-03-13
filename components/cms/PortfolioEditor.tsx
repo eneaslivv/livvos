@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, GripVertical, Type, Quote, Heading, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, GripVertical, Type, Quote, Heading, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { CmsPortfolioItem, CmsViewMode, PortfolioMedia, ContentBlock } from '../../types/cms';
 import { ImageUploader } from './ImageUploader';
@@ -73,6 +73,8 @@ const BLOCK_TYPES: { type: ContentBlock['type']; icon: typeof Type; label: strin
   { type: 'quote', icon: Quote, label: 'Quote' },
 ];
 
+const MAX_FEATURED = 6;
+
 const defaultDetect = (url: string): PortfolioMedia['type'] => {
   if (/\.(mp4|webm|mov)(\?|$)/i.test(url)) return 'video';
   if (/\.gif(\?|$)/i.test(url)) return 'gif';
@@ -93,6 +95,35 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [featuredWarning, setFeaturedWarning] = useState<string | null>(null);
+  const [showValidation, setShowValidation] = useState(false);
+
+  const featuredCount = useMemo(() => items.filter((i) => i.featured).length, [items]);
+  const atFeaturedLimit = featuredCount >= MAX_FEATURED;
+
+  const toggleFeaturedQuick = async (item: CmsPortfolioItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.featured && atFeaturedLimit) {
+      setFeaturedWarning(`Max ${MAX_FEATURED} featured items. Unfeature one first.`);
+      setTimeout(() => setFeaturedWarning(null), 3000);
+      return;
+    }
+    await onSave({ featured: !item.featured }, item.id);
+  };
+
+  const validatePublish = (f: FormState) => {
+    const checks = [
+      { label: 'Title set', ok: !!f.title.trim(), required: true },
+      { label: 'Cover image uploaded', ok: !!f.image, required: true },
+      { label: 'Category selected', ok: !!f.category, required: true },
+      { label: 'Description added', ok: !!f.description.trim(), required: false },
+      { label: 'Tech tags added', ok: f.tech_tags.length > 0, required: false },
+    ];
+    return checks;
+  };
+
+  const canPublish = (f: FormState) =>
+    !!f.title.trim() && !!f.image && !!f.category;
 
   const editingItem = useMemo(
     () => items.find((i) => i.id === editingId) || null,
@@ -154,12 +185,22 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
   const handleSave = async () => {
     if (!form.title.trim()) return;
+    if (form.published && !canPublish(form)) {
+      setShowValidation(true);
+      return;
+    }
+    setShowValidation(false);
     const result = await onSave(buildData(), editingId || undefined);
     if (result) resetForm();
   };
 
   const handleSaveChanges = async () => {
     if (!form.title.trim() || !editingId) return;
+    if (form.published && !canPublish(form)) {
+      setShowValidation(true);
+      return;
+    }
+    setShowValidation(false);
     await onSave(buildData(), editingId);
   };
 
@@ -200,6 +241,14 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
+            atFeaturedLimit
+              ? 'border-red-300 bg-red-50 text-red-600'
+              : 'border-[#E8BC59]/40 bg-[#E8BC59]/10 text-[#E8BC59]'
+          }`}>
+            <Star size={10} className={atFeaturedLimit ? 'fill-red-400 text-red-400' : 'fill-[#E8BC59] text-[#E8BC59]'} />
+            {featuredCount}/{MAX_FEATURED} Featured
+          </span>
           <div className="flex items-center border border-[#E6E2D8] rounded-lg overflow-hidden">
             <button
               onClick={() => setViewMode('grid')}
@@ -311,6 +360,13 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                       )}
                       <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
+                          onClick={(e) => toggleFeaturedQuick(item, e)}
+                          className={`p-1 rounded transition-colors ${item.featured ? 'hover:bg-[#E8BC59]/10' : 'hover:bg-[#E6E2D8]'}`}
+                          title={item.featured ? 'Remove from featured' : atFeaturedLimit ? `Max ${MAX_FEATURED} featured` : 'Add to featured'}
+                        >
+                          <Star size={12} className={item.featured ? 'text-[#E8BC59] fill-[#E8BC59]' : 'text-[#09090B]/40'} />
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); setEditingId(item.id); }}
                           className="p-1 rounded hover:bg-[#E6E2D8] transition-colors"
                         >
@@ -360,6 +416,13 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                     </span>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={(e) => toggleFeaturedQuick(item, e)}
+                        className={`p-1 rounded transition-colors ${item.featured ? 'hover:bg-[#E8BC59]/10' : 'hover:bg-[#E6E2D8]'}`}
+                        title={item.featured ? 'Remove from featured' : atFeaturedLimit ? `Max ${MAX_FEATURED} featured` : 'Add to featured'}
+                      >
+                        <Star size={12} className={item.featured ? 'text-[#E8BC59] fill-[#E8BC59]' : 'text-[#09090B]/40'} />
+                      </button>
+                      <button
                         onClick={(e) => { e.stopPropagation(); setEditingId(item.id); }}
                         className="p-1 rounded hover:bg-[#E6E2D8]"
                       >
@@ -379,6 +442,21 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
           </div>
         )}
       </div>
+
+      {/* Featured limit warning toast */}
+      <AnimatePresence>
+        {featuredWarning && !showModal && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-lg border border-amber-200 bg-amber-50 shadow-lg flex items-center gap-2 text-xs text-amber-700 font-medium"
+          >
+            <AlertTriangle size={14} />
+            {featuredWarning}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Edit / Create Modal */}
       <AnimatePresence>
@@ -761,13 +839,54 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                 </div>
               </div>
 
+              {/* Publish validation checklist */}
+              {form.published && showValidation && (
+                <div className="mx-6 mb-2 p-3 rounded-lg border border-amber-200 bg-amber-50 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                    <AlertTriangle size={12} />
+                    Publish checklist
+                  </div>
+                  {validatePublish(form).map((check, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px]">
+                      {check.ok ? (
+                        <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                      ) : check.required ? (
+                        <AlertTriangle size={12} className="text-red-500 shrink-0" />
+                      ) : (
+                        <Info size={12} className="text-amber-400 shrink-0" />
+                      )}
+                      <span className={check.ok ? 'text-green-700' : check.required ? 'text-red-600 font-medium' : 'text-amber-600'}>
+                        {check.label}
+                        {!check.ok && !check.required && ' (recommended)'}
+                        {!check.ok && check.required && ' — required to publish'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Featured warning */}
+              {featuredWarning && (
+                <div className="mx-6 mb-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 flex items-center gap-2 text-xs text-amber-700">
+                  <AlertTriangle size={12} className="shrink-0" />
+                  {featuredWarning}
+                </div>
+              )}
+
               {/* Modal footer */}
               <div className="flex items-center justify-between px-6 py-4 border-t border-[#E6E2D8]">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <button
                       type="button"
-                      onClick={() => setForm((f) => ({ ...f, published: !f.published }))}
+                      onClick={() => {
+                        setForm((f) => {
+                          const next = !f.published;
+                          if (next) setShowValidation(true);
+                          else setShowValidation(false);
+                          return { ...f, published: next };
+                        });
+                      }}
                       className={`relative w-9 h-5 rounded-full transition-colors ${
                         form.published ? 'bg-green-500' : 'bg-zinc-300'
                       }`}
@@ -784,15 +903,25 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, featured: !f.featured }))}
+                    onClick={() => {
+                      if (!form.featured && atFeaturedLimit) {
+                        setFeaturedWarning(`Max ${MAX_FEATURED} featured. Unfeature one first.`);
+                        setTimeout(() => setFeaturedWarning(null), 3000);
+                        return;
+                      }
+                      setForm((f) => ({ ...f, featured: !f.featured }));
+                    }}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${
                       form.featured
                         ? 'border-[#E8BC59] bg-[#E8BC59]/10 text-[#E8BC59]'
-                        : 'border-[#E6E2D8] text-[#09090B]/30 hover:text-[#E8BC59] hover:border-[#E8BC59]/40'
+                        : atFeaturedLimit
+                          ? 'border-[#E6E2D8] text-[#09090B]/15 cursor-not-allowed'
+                          : 'border-[#E6E2D8] text-[#09090B]/30 hover:text-[#E8BC59] hover:border-[#E8BC59]/40'
                     }`}
+                    title={!form.featured && atFeaturedLimit ? `Max ${MAX_FEATURED} featured items` : ''}
                   >
                     <Star size={12} className={form.featured ? 'fill-[#E8BC59]' : ''} />
-                    <span className="text-xs font-medium">Featured</span>
+                    <span className="text-xs font-medium">Featured ({featuredCount}/{MAX_FEATURED})</span>
                   </button>
                 </div>
                 <div className="flex items-center gap-2">

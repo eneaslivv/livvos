@@ -19,6 +19,7 @@ export interface Tenant {
     banner_url?: string;
     website_url?: string | null;
     preview_url?: string | null;
+    deploy_hook_url?: string | null;
     status: 'active' | 'suspended' | 'trial' | 'setup';
     created_at: string;
     updated_at: string;

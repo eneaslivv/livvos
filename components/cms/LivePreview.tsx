@@ -20,10 +20,20 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
   const [localKey, setLocalKey] = useState(0);
   const [mode, setMode] = useState<PreviewMode>(previewUrl ? 'preview' : 'live');
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showUpdated, setShowUpdated] = useState(false);
+  const initialRef = React.useRef(true);
 
-  // Track refresh timestamps
+  // Track refresh timestamps + show "Updated!" flash
   useEffect(() => {
     setLastRefresh(new Date());
+    // Don't flash on initial mount
+    if (initialRef.current) {
+      initialRef.current = false;
+      return;
+    }
+    setShowUpdated(true);
+    const timer = setTimeout(() => setShowUpdated(false), 2000);
+    return () => clearTimeout(timer);
   }, [refreshKey]);
 
   const hasAnyUrl = websiteUrl || previewUrl;
@@ -154,6 +164,14 @@ export const LivePreview: React.FC<LivePreviewProps> = ({
           <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-2 py-1 bg-[#E8BC59]/90 rounded-md shadow-sm">
             <Eye size={10} className="text-[#09090B]" />
             <span className="text-[9px] font-semibold text-[#09090B] uppercase tracking-wide">Preview</span>
+          </div>
+        )}
+        {showUpdated && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none animate-pulse">
+            <div className="px-4 py-2 bg-green-500/90 text-white rounded-lg shadow-lg flex items-center gap-2 text-sm font-semibold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              Updated!
+            </div>
           </div>
         )}
         <iframe

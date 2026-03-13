@@ -6,6 +6,8 @@ import {
   FileText,
   Image as ImageIcon,
   Code2,
+  Rocket,
+  Loader2,
 } from 'lucide-react';
 import type { CmsSection } from '../../types/cms';
 
@@ -14,6 +16,9 @@ interface CmsSidebarProps {
   onSectionChange: (section: CmsSection) => void;
   onBack: () => void;
   onShowIntegration?: () => void;
+  onDeploy?: () => void;
+  isDeploying?: boolean;
+  hasDeployHook?: boolean;
 }
 
 const NAV_ITEMS: { id: CmsSection; label: string; icon: React.ReactNode }[] = [
@@ -28,6 +33,9 @@ export const CmsSidebar: React.FC<CmsSidebarProps> = ({
   onSectionChange,
   onBack,
   onShowIntegration,
+  onDeploy,
+  isDeploying,
+  hasDeployHook,
 }) => {
   return (
     <div className="w-[200px] min-h-screen bg-[#09090B] flex flex-col border-r border-white/5">
@@ -66,9 +74,23 @@ export const CmsSidebar: React.FC<CmsSidebarProps> = ({
         ))}
       </nav>
 
-      {/* Integration button */}
-      {onShowIntegration && (
-        <div className="px-2 pb-2">
+      {/* Deploy + Integration buttons */}
+      <div className="px-2 pb-2 space-y-1">
+        {hasDeployHook && onDeploy && (
+          <button
+            onClick={onDeploy}
+            disabled={isDeploying}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-green-500/10 text-green-400 hover:bg-green-500/20 disabled:opacity-50 transition-all"
+          >
+            {isDeploying ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Rocket size={18} />
+            )}
+            <span>{isDeploying ? 'Deploying...' : 'Deploy to Web'}</span>
+          </button>
+        )}
+        {onShowIntegration && (
           <button
             onClick={onShowIntegration}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:text-white/80 hover:bg-white/5 transition-all"
@@ -76,8 +98,8 @@ export const CmsSidebar: React.FC<CmsSidebarProps> = ({
             <Code2 size={18} />
             <span className="font-medium">API Integration</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-white/5">

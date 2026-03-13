@@ -23,7 +23,26 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
   const [activeSection, setActiveSection] = useState<CmsSection>('portfolio');
   const [previewKey, setPreviewKey] = useState(0);
   const [showIntegration, setShowIntegration] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
   const { toasts, addToast, dismissToast } = useToasts();
+
+  const handleDeploy = async () => {
+    const hookUrl = currentTenant?.deploy_hook_url;
+    if (!hookUrl) return;
+    setIsDeploying(true);
+    try {
+      const res = await fetch(hookUrl, { method: 'POST' });
+      if (res.ok) {
+        addToast('Deploy triggered! Site will update in ~1 min.', 'success');
+      } else {
+        addToast('Deploy failed — check your hook URL', 'error');
+      }
+    } catch {
+      addToast('Deploy failed — network error', 'error');
+    } finally {
+      setIsDeploying(false);
+    }
+  };
 
   const cms = useCmsContent();
 
@@ -116,6 +135,9 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
         onSectionChange={setActiveSection}
         onBack={() => onNavigate('home')}
         onShowIntegration={() => setShowIntegration(true)}
+        onDeploy={handleDeploy}
+        isDeploying={isDeploying}
+        hasDeployHook={!!currentTenant?.deploy_hook_url}
       />
 
       {/* Main content area */}
