@@ -247,6 +247,16 @@ Rules:
 
     const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
+    const generationConfig: Record<string, any> = {
+      temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
+      maxOutputTokens: maxTokens,
+    }
+    // responseMimeType: 'application/json' is incompatible with thinking mode in gemini-2.5-flash
+    // For plan_period we let thinking run and rely on robust JSON extraction from parts
+    if (type !== 'plan_period') {
+      generationConfig.responseMimeType = 'application/json'
+    }
+
     const requestPayload: Record<string, any> = {
       contents: [
         {
@@ -257,11 +267,7 @@ Rules:
           ],
         },
       ],
-      generationConfig: {
-        temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
-        maxOutputTokens: maxTokens,
-        responseMimeType: 'application/json',
-      },
+      generationConfig,
     }
 
     const response = await fetch(
