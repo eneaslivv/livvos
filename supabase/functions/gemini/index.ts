@@ -282,9 +282,11 @@ Rules:
     }
 
     const data = await response.json()
-    // Extract text from all parts (gemini-2.5 may have thinking + content parts)
+    // Extract text from content parts only (gemini-2.5 has thinking + content parts)
     const parts = data?.candidates?.[0]?.content?.parts || []
-    const text = parts.map((p: any) => p.text || '').join('') || ''
+    // Filter out thinking parts — only keep actual content
+    const contentParts = parts.filter((p: any) => !p.thought)
+    const text = contentParts.map((p: any) => p.text || '').join('') || ''
 
     let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | null = null
     try {

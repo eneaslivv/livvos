@@ -50,6 +50,26 @@ function getCached<T>(type: string, input: string): T | null {
   }
 }
 
+function evictExpiredCache(): void {
+  try {
+    const now = Date.now()
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(`${CACHE_VERSION}:`)) continue
+      try {
+        const entry: AICacheEntry = JSON.parse(localStorage.getItem(k) || '')
+        const typePart = k.split(':')[1] || ''
+        const ttl = CACHE_TTL[typePart] ?? 0
+        if (ttl === 0 || now - entry.timestamp > ttl) toRemove.push(k)
+      } catch {
+        toRemove.push(k) // corrupted entry
+      }
+    }
+    toRemove.forEach(k => localStorage.removeItem(k))
+  } catch { /* ignore */ }
+}
+
 function setCache(type: string, input: string, result: unknown): void {
   const ttl = CACHE_TTL[type] ?? 0
   if (ttl === 0) return
@@ -57,7 +77,12 @@ function setCache(type: string, input: string, result: unknown): void {
     const entry: AICacheEntry = { result, timestamp: Date.now() }
     localStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
   } catch {
-    // localStorage full or unavailable — silently skip
+    // localStorage full — evict expired entries and retry once
+    evictExpiredCache()
+    try {
+      const entry: AICacheEntry = { result, timestamp: Date.now() }
+      localStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
+    } catch { /* still full — skip */ }
   }
 }
 
