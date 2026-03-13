@@ -1,13 +1,33 @@
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Check, Circle, CreditCard } from 'lucide-react';
-import { Milestone } from '../types';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, Circle, CreditCard, ChevronDown, Flag, Clock } from 'lucide-react';
+import { Milestone, PortalTask } from '../types';
 
-const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
+const priorityColor: Record<string, string> = {
+  urgent: 'bg-red-500',
+  high: 'bg-amber-500',
+  medium: 'bg-blue-500',
+  low: 'bg-emerald-500',
+};
+
+interface LiveRoadmapProps {
+  milestones: Milestone[];
+  tasks?: PortalTask[];
+  onTaskClick?: (task: PortalTask) => void;
+}
+
+const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTaskClick }) => {
   const completed = milestones.filter(m => m.status === 'completed').length;
   const total = milestones.length;
   const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Group tasks by groupName matching milestone title
+  const getTasksForMilestone = (milestone: Milestone): PortalTask[] => {
+    return tasks.filter(t => t.groupName === milestone.title);
+  };
 
   return (
     <motion.div
@@ -38,6 +58,9 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
           const done = m.status === 'completed';
           const active = m.status === 'current';
           const isLast = idx === milestones.length - 1;
+          const milestoneTasks = getTasksForMilestone(m);
+          const hasTasks = milestoneTasks.length > 0;
+          const isExpanded = expanded === m.id;
 
           return (
             <div key={m.id} className="flex gap-3 group">
@@ -62,7 +85,10 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
 
               {/* Content */}
               <div className={`pb-4 flex-1 min-w-0 ${!done && !active ? 'opacity-50' : ''}`}>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  className={`flex items-center gap-2 flex-wrap ${hasTasks ? 'cursor-pointer' : ''}`}
+                  onClick={() => hasTasks && setExpanded(isExpanded ? null : m.id)}
+                >
                   <h4 className={`text-[13px] font-semibold leading-tight ${
                     done ? 'text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-300 dark:decoration-zinc-700' : ''
                   } ${active ? 'text-indigo-600 dark:text-indigo-400' : ''} ${!done && !active ? 'text-zinc-500 dark:text-zinc-400' : ''}`}>
@@ -72,6 +98,15 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                     <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-500 dark:text-indigo-400 text-[9px] font-bold rounded uppercase tracking-wide">
                       In Progress
                     </span>
+                  )}
+                  {hasTasks && (
+                    <motion.div
+                      animate={{ rotate: isExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="ml-auto"
+                    >
+                      <ChevronDown size={12} className="text-zinc-400 dark:text-zinc-500" />
+                    </motion.div>
                   )}
                 </div>
 
@@ -102,6 +137,62 @@ const LiveRoadmap: React.FC<{ milestones: Milestone[] }> = ({ milestones }) => {
                     </span>
                   )}
                 </div>
+
+                {/* Expanded tasks */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && hasTasks && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 space-y-0.5 rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden bg-zinc-50/50 dark:bg-zinc-800/30">
+                        {milestoneTasks.map(task => {
+                          const isOverdue = task.dueDate && !task.completed && new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10));
+                          return (
+                            <div
+                              key={task.id}
+                              className={`flex items-center gap-2.5 px-3 py-2 ${onTaskClick ? 'cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors' : ''}`}
+                              onClick={() => onTaskClick?.(task)}
+                            >
+                              <div className={`w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center shrink-0 ${
+                                task.completed
+                                  ? 'bg-[#2C0405] border-[#2C0405] text-white'
+                                  : 'border-zinc-300 dark:border-zinc-600'
+                              }`}>
+                                {task.completed && <Check size={8} strokeWidth={3} />}
+                              </div>
+                              <span className={`text-[11px] flex-1 min-w-0 truncate ${
+                                task.completed ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200'
+                              }`}>
+                                {task.title}
+                              </span>
+                              {task.priority && priorityColor[task.priority] && (
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor[task.priority]}`} />
+                              )}
+                              {task.dueDate && !task.completed && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-mono shrink-0 ${
+                                  isOverdue
+                                    ? 'text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-950/40 font-semibold'
+                                    : 'text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800'
+                                }`}>
+                                  {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                              {task.completed && task.completedAt && (
+                                <span className="text-[9px] text-[#2C0405] dark:text-[#e8a0a2] font-medium shrink-0">
+                                  {new Date(task.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           );

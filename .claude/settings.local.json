@@ -106,7 +106,11 @@
       "Bash(npx vercel --prod --team eneasaldabe-gmailcoms-projects)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_c15893fd1385b45429d705ae453dc3179e99c134 npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_c15893fd1385b45429d705ae453dc3179e99c134 npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi --no-verify-jwt)",
-      "Bash(git fetch origin)"
+      "Bash(git fetch origin)",
+      "Read(//c/Users/eneas/.supabase/**)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions list --project-ref ngswutcpsgdgmmjnfddi)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi --no-verify-jwt)"
     ]
   }
 }

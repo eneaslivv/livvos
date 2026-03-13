@@ -81,6 +81,16 @@ const defaultDetect = (url: string): PortfolioMedia['type'] => {
   return 'image';
 };
 
+/** Resolve the best cover URL for a portfolio item */
+const getCoverUrl = (item: CmsPortfolioItem): { url: string | null; type: PortfolioMedia['type'] } => {
+  const mediaCover = item.media?.find((m) => m.is_cover);
+  if (mediaCover?.url) return { url: mediaCover.url, type: mediaCover.type };
+  if (item.image && item.image.startsWith('http')) return { url: item.image, type: 'image' };
+  if (item.media?.length) return { url: item.media[0].url, type: item.media[0].type };
+  if (item.image && !item.image.startsWith('/')) return { url: item.image, type: 'image' };
+  return { url: null, type: 'image' };
+};
+
 export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   items,
   isLoading,
@@ -299,24 +309,47 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                 {viewMode === 'grid' ? (
                   <>
                     <div className="relative">
-                      {(item.image || item.cover_url) ? (
-                        <div className="h-28 bg-[#F5F3EE] overflow-hidden">
-                          <img
-                            src={item.image || item.cover_url || ''}
-                            alt={item.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className="h-28 flex items-center justify-center"
-                          style={{ backgroundColor: item.color || '#F5F3EE' }}
-                        >
-                          <span className="text-white/60 text-2xl font-bold">
-                            {item.title.charAt(0)}
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        const cover = getCoverUrl(item);
+                        if (cover.url) {
+                          if (cover.type === 'video') {
+                            return (
+                              <div className="h-28 bg-[#F5F3EE] overflow-hidden relative">
+                                <video
+                                  src={cover.url}
+                                  muted
+                                  loop
+                                  playsInline
+                                  autoPlay
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute bottom-1 left-1 bg-black/60 rounded px-1 py-0.5">
+                                  <Film size={10} className="text-white" />
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="h-28 bg-[#F5F3EE] overflow-hidden">
+                              <img
+                                src={cover.url}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            className="h-28 flex items-center justify-center"
+                            style={{ backgroundColor: item.color || '#F5F3EE' }}
+                          >
+                            <span className="text-white/60 text-2xl font-bold">
+                              {item.title.charAt(0)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {item.featured && (
                         <div className="absolute top-2 right-2">
                           <Star size={16} className="text-[#E8BC59] fill-[#E8BC59] drop-shadow" />
@@ -383,20 +416,32 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   </>
                 ) : (
                   <>
-                    {(item.image || item.cover_url) ? (
-                      <img
-                        src={item.image || item.cover_url || ''}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: item.color || '#F5F3EE' }}
-                      >
-                        <span className="text-white/60 text-sm font-bold">{item.title.charAt(0)}</span>
-                      </div>
-                    )}
+                    {(() => {
+                      const cover = getCoverUrl(item);
+                      if (cover.url) {
+                        if (cover.type === 'video') {
+                          return (
+                            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 relative">
+                              <video src={cover.url} muted className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                <Film size={10} className="text-white" />
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <img src={cover.url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                        );
+                      }
+                      return (
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: item.color || '#F5F3EE' }}
+                        >
+                          <span className="text-white/60 text-sm font-bold">{item.title.charAt(0)}</span>
+                        </div>
+                      );
+                    })()}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <h3 className="text-sm font-medium text-[#09090B] truncate">{item.title}</h3>

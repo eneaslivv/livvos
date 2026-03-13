@@ -242,16 +242,14 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                           type="date"
                           value={phase.startDate || ''}
                           onChange={e => updatePreviewPhase(pIdx, { startDate: e.target.value || undefined })}
-                          className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-[100px]"
-                          placeholder="Start"
+                          className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
                         />
                         <span className="text-[10px] text-zinc-300">—</span>
                         <input
                           type="date"
                           value={phase.endDate || ''}
                           onChange={e => updatePreviewPhase(pIdx, { endDate: e.target.value || undefined })}
-                          className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-[100px]"
-                          placeholder="End"
+                          className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
                         />
                       </div>
                       <div className="flex items-center gap-1">

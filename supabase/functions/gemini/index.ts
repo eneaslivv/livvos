@@ -250,7 +250,7 @@ Rules:
 - Respect blocked_by dependencies: a blocked task MUST be scheduled AFTER its blocker task's date.
 - Balance workload across team members — use the open task counts provided to redistribute fairly.
 - ADAPTIVE DISTRIBUTION: Use the "Productivity data" section to determine each person's real daily capacity. Assign tasks proportionally to their historical average. Never exceed 1.5x their daily average on any single day. If no productivity data is provided, default to max 4 tasks per person per day.
-- Spread tasks across ALL available working days (Mon-Fri) in the period. Never pile many tasks on one day.
+- CRITICAL: Spread tasks EVENLY across ALL available working days (Mon-Fri) in the period. NEVER put more than 4 tasks on a single day for any person. If there are 20 tasks and 5 working days, that's 4 per day MAX — distribute them evenly.
 - Schedule high-priority and urgent tasks earlier in the period, but still spread them out.
 - Avoid scheduling tasks on weekends unless absolutely necessary.
 - Avoid scheduling tasks during calendar events (use the event times provided).
@@ -259,6 +259,7 @@ Rules:
 - Include "current*" fields to show the before state and "new*" fields for the after state.
 - Only include field pairs that are actually changing (e.g., if only date changes, omit assignee and priority fields).
 - Keep the total number of changes reasonable (max ~20 changes per request).
+- CRITICAL: NEVER assign or move tasks to dates in the past. The "Today" date is provided in the input — all newDate values MUST be today or later. If a task is currently scheduled for a past date, move it to today or a future date.
 - Respond in the SAME language as the input.`
         : type === 'advisor'
         ? `You are a senior business advisor and strategist for a creative agency / studio owner. You have access to a summary of the user's current projects, finances, team, and calendar.
@@ -281,11 +282,7 @@ Rules:
       temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
       maxOutputTokens: maxTokens,
     }
-    // responseMimeType: 'application/json' is incompatible with thinking mode in gemini-2.5-flash
-    // For plan_period we let thinking run and rely on robust JSON extraction from parts
-    if (type !== 'plan_period') {
-      generationConfig.responseMimeType = 'application/json'
-    }
+    generationConfig.responseMimeType = 'application/json'
 
     const requestPayload: Record<string, any> = {
       contents: [
@@ -382,7 +379,8 @@ Rules:
     }
 
     // Debug string for error responses (text var is not in scope here)
-    const rawDebug = parts.map((p: any) => (p.text || '').slice(0, 200)).join(' | ').slice(0, 500)
+    const finishReason = data.candidates[0]?.finishReason || 'unknown'
+    const rawDebug = parts.map((p: any) => (p.text || '').slice(0, 500)).join(' | ').slice(0, 1500)
 
     if (type === 'tasks_bulk') {
       const bulk = json as TasksBulkResponse
@@ -427,8 +425,8 @@ Rules:
     } else if (type === 'plan_period') {
       const plan = json as PlanPeriodResponse
       if (!plan || !Array.isArray(plan.changes)) {
-        console.error(`[gemini] plan_period validation failed. json is ${json === null ? 'null' : typeof json}, keys: ${json ? Object.keys(json).join(',') : 'N/A'}, rawDebug: ${rawDebug}`)
-        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+        console.error(`[gemini] plan_period validation failed. finishReason=${finishReason}, json is ${json === null ? 'null' : typeof json}, keys: ${json ? Object.keys(json).join(',') : 'N/A'}, rawDebug: ${rawDebug}`)
+        return new Response(JSON.stringify({ error: 'Invalid AI response', finishReason, raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })

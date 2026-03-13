@@ -822,7 +822,10 @@ export const Calendar: React.FC = () => {
           return `- ${m.name || m.email}: avg ${avg} tasks/day (${total} completed in ${days} active days)`;
         });
 
+      const today = new Date().toISOString().split('T')[0];
+
       const inputParts = [
+        `Today: ${today}`,
         `Period: ${startDate} to ${endDate} (${periodLabel})`,
         scheduled.length > 0 ? `\nTasks:\n${scheduled.join('\n')}` : '',
         unscheduled.length > 0 ? `\nUnscheduled (no date):\n${unscheduled.join('\n')}` : '',

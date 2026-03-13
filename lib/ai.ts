@@ -127,6 +127,7 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
 
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
+      if (import.meta.env.DEV) console.error(`[AI] ${type} error:`, errBody)
       throw new Error(errBody.error || `Edge function error (${res.status})`)
     }
 

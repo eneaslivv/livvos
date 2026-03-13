@@ -36,6 +36,7 @@ export interface ProjectFile {
   type: string
   size: string
   date: string
+  url?: string
 }
 
 export interface ProjectActivity {

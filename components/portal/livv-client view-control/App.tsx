@@ -270,7 +270,7 @@ const App: React.FC<ClientPortalAppProps> = ({
                 <TimelinePulse data={data} />
               </div>
               <div className="md:col-span-5">
-                <LiveRoadmap milestones={data.milestones} />
+                <LiveRoadmap milestones={data.milestones} tasks={data.tasks} onTaskClick={setSelectedTask} />
               </div>
 
               {/* Row 2: Tasks by Stage */}
