@@ -247,7 +247,7 @@ Rules:
 
     const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 4500 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
 
-    const requestPayload = {
+    const requestPayload: Record<string, any> = {
       contents: [
         {
           role: 'user',
@@ -261,6 +261,8 @@ Rules:
         temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
         maxOutputTokens: maxTokens,
         responseMimeType: 'application/json',
+        // Disable thinking for structured JSON — thinking tokens eat into output budget
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }
 
