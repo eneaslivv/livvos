@@ -73,30 +73,36 @@ BEGIN
   END IF;
 END $$;
 
--- 4. Recreate handle_new_user trigger with robust error handling
+-- 4. Recreate handle_new_user trigger
+-- IMPORTANT: Use scalar variables (not RECORD) for the invitation lookup.
+-- PostgreSQL has a known issue where SELECT INTO RECORD from RLS-enabled
+-- tables fails inside auth.users AFTER INSERT triggers, even with
+-- SECURITY DEFINER. Scalar variables work correctly.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
-  v_invitation RECORD;
+  v_inv_id UUID;
+  v_inv_tenant_id UUID;
+  v_inv_role_id UUID;
+  v_inv_client_id UUID;
   v_role_id UUID;
   v_tenant_id UUID;
   v_name TEXT;
   v_slug TEXT;
-  v_existing_profile_id UUID;
 BEGIN
-  -- Find pending invitation for this email
-  SELECT i.id, i.tenant_id, i.role_id, i.client_id, i.type
-  INTO v_invitation
-  FROM invitations i
+  v_name := COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1));
+
+  -- Find pending invitation for this email (scalar vars, not RECORD)
+  SELECT i.id, i.tenant_id, i.role_id, i.client_id
+  INTO v_inv_id, v_inv_tenant_id, v_inv_role_id, v_inv_client_id
+  FROM public.invitations i
   WHERE i.email = NEW.email AND i.status = 'pending'
   ORDER BY i.created_at DESC
   LIMIT 1;
 
-  v_name := COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1));
-
-  IF v_invitation.id IS NOT NULL THEN
+  IF v_inv_id IS NOT NULL THEN
     -- Invited user: use invitation's tenant
-    v_tenant_id := v_invitation.tenant_id;
+    v_tenant_id := v_inv_tenant_id;
   ELSE
     -- Self-signup: create new tenant
     v_slug := regexp_replace(lower(COALESCE(v_name, 'tenant')), '[^a-z0-9]+', '-', 'g');
@@ -106,48 +112,13 @@ BEGIN
     END IF;
     v_slug := v_slug || '-' || substring(gen_random_uuid()::text, 1, 8);
 
-    INSERT INTO tenants (name, slug, owner_id, status, created_at, updated_at)
+    INSERT INTO public.tenants (name, slug, owner_id, status, created_at, updated_at)
     VALUES (COALESCE(v_name, 'My Workspace'), v_slug, NEW.id, 'active', now(), now())
     RETURNING id INTO v_tenant_id;
-
-    -- Create tenant config with defaults
-    BEGIN
-      INSERT INTO tenant_config (
-        tenant_id, branding, features, resource_limits,
-        security_settings, integrations, created_at, updated_at
-      )
-      VALUES (
-        v_tenant_id,
-        '{}'::jsonb,
-        jsonb_build_object(
-          'sales_module', true, 'team_management', true,
-          'client_portal', false, 'notifications', true,
-          'ai_assistant', false, 'analytics', true,
-          'calendar_integration', false, 'document_versioning', false,
-          'advanced_permissions', false
-        ),
-        jsonb_build_object(
-          'max_users', 5, 'max_projects', 20,
-          'max_storage_mb', 1024, 'max_api_calls_per_month', 10000
-        ),
-        jsonb_build_object(
-          'require_2fa', false, 'session_timeout_minutes', 480,
-          'password_min_length', 8, 'allow_public_sharing', false
-        ),
-        jsonb_build_object(
-          'email_provider', null, 'calendar_provider', null,
-          'payment_processor', null, 'ai_service', null
-        ),
-        now(), now()
-      );
-    EXCEPTION WHEN OTHERS THEN
-      RAISE WARNING 'tenant_config insert failed: %', SQLERRM;
-    END;
   END IF;
 
   -- Delete any orphaned profile with same email but different user id
-  -- (from previously deleted auth users)
-  DELETE FROM profiles
+  DELETE FROM public.profiles
   WHERE email = NEW.email AND id != NEW.id;
 
   -- Create or update profile
@@ -159,23 +130,19 @@ BEGIN
       tenant_id = COALESCE(EXCLUDED.tenant_id, profiles.tenant_id);
 
   -- Assign role
-  IF v_invitation.id IS NOT NULL THEN
-    -- From invitation: assign invitation role
+  IF v_inv_id IS NOT NULL THEN
     INSERT INTO public.user_roles (user_id, role_id)
-    VALUES (NEW.id, v_invitation.role_id)
+    VALUES (NEW.id, v_inv_role_id)
     ON CONFLICT DO NOTHING;
 
-    -- Link client record if applicable
-    IF v_invitation.client_id IS NOT NULL THEN
-      UPDATE clients SET auth_user_id = NEW.id WHERE id = v_invitation.client_id;
+    IF v_inv_client_id IS NOT NULL THEN
+      UPDATE public.clients SET auth_user_id = NEW.id WHERE id = v_inv_client_id;
     END IF;
 
-    -- Mark invitation as accepted
     UPDATE public.invitations
     SET status = 'accepted', updated_at = now()
-    WHERE id = v_invitation.id;
+    WHERE id = v_inv_id;
   ELSE
-    -- Self-signup: assign owner role
     SELECT id INTO v_role_id FROM public.roles WHERE name = 'owner' LIMIT 1;
     IF v_role_id IS NOT NULL THEN
       INSERT INTO public.user_roles (user_id, role_id)

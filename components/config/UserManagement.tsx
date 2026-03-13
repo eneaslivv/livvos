@@ -122,6 +122,7 @@ export const UserManagement: React.FC = () => {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [emailFailed, setEmailFailed] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   // Edit permissions
   const [editingUser, setEditingUser] = useState<MemberRow | null>(null);
@@ -273,16 +274,19 @@ export const UserManagement: React.FC = () => {
 
       // Send invite email via Edge Function
       setEmailFailed(false);
+      setEmailError('');
       try {
         await sendInviteEmail({
           clientName: inviteEmail.split('@')[0],
           clientEmail: inviteEmail,
           inviteLink: link,
           tenantName: currentTenant?.name || undefined,
+          inviteType: 'team',
         });
-      } catch (emailErr) {
+      } catch (emailErr: any) {
         errorLogger.warn('Invite email send failed (link still valid)', emailErr);
         setEmailFailed(true);
+        setEmailError(emailErr?.message || String(emailErr));
       }
 
       setInviteEmail('');
@@ -340,10 +344,12 @@ export const UserManagement: React.FC = () => {
         clientEmail: invite.email,
         inviteLink: link,
         tenantName: currentTenant?.name || undefined,
+        inviteType: 'team',
       });
-    } catch (err) {
-      errorLogger.warn('Resend invite email failed', err);
-      alert('Failed to resend email. You can copy the link instead.');
+      alert('Email sent successfully!');
+    } catch (err: any) {
+      console.error('Resend invite email failed:', err);
+      alert(`Failed to resend email: ${err?.message || err}. You can copy the link instead.`);
     } finally {
       setResendingId(null);
     }
@@ -592,9 +598,14 @@ export const UserManagement: React.FC = () => {
                   : 'Share this link with the user to let them join.'}
               </p>
               {emailFailed && (
-                <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300 max-w-md mx-auto">
-                  <Icons.AlertCircle size={15} className="text-amber-500 shrink-0" />
-                  Email could not be sent — share the link manually
+                <div className="flex flex-col items-center gap-1 mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300 max-w-md mx-auto">
+                  <div className="flex items-center gap-2">
+                    <Icons.AlertCircle size={15} className="text-amber-500 shrink-0" />
+                    Email could not be sent — share the link manually
+                  </div>
+                  {emailError && import.meta.env.DEV && (
+                    <div className="text-xs text-amber-600/70 dark:text-amber-400/70 break-all">{emailError}</div>
+                  )}
                 </div>
               )}
               <div className="flex items-center gap-2 max-w-md mx-auto mt-4">

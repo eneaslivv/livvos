@@ -387,7 +387,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
 
           if (invite?.token) {
             const inviteLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
-            sendInviteEmail({ clientName: client.name, clientEmail: client.email, inviteLink, tenantName: currentTenant.name })
+            sendInviteEmail({ clientName: client.name, clientEmail: client.email, inviteLink, tenantName: currentTenant.name, inviteType: 'client' })
               .catch(err => { if (import.meta.env.DEV) console.warn('[auto-invite] Email failed:', err); });
             await addHistoryEntry({
               client_id: client.id, user_id: user?.id || '', user_name: user?.email?.split('@')[0] || 'User',
@@ -605,7 +605,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       // Try to send email (non-blocking, with timeout)
       try {
         await withTimeout(
-          sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink, tenantName: currentTenant?.name || 'Portal' }),
+          sendInviteEmail({ clientName: selectedClient.name, clientEmail: selectedClient.email!, inviteLink, tenantName: currentTenant?.name || 'Portal', inviteType: 'client' }),
           10000, 'send email'
         );
         setEmailSent(true);

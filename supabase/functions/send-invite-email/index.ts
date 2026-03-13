@@ -8,74 +8,105 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
-function buildInviteEmailHtml(clientName: string, inviteLink: string, brandName: string): string {
-  const firstName = clientName.split(' ')[0]
+function buildEmailHtml(name: string, inviteLink: string, brandName: string, type: string): string {
+  const firstName = name.split(' ')[0]
+  const isClient = type === 'client'
+
+  const accentColor = isClient ? '#2C0405' : '#b45309'
+  const accentLight = isClient ? '#e8b4b4' : '#f59e0b'
+  const btnColor = isClient ? '#2C0405' : '#18181b'
+  const btnHover = isClient ? '#1a0203' : '#27272a'
+
+  const heading = `Hi ${firstName},`
+
+  const intro = isClient
+    ? 'You\'ve been invited to access your client portal. Track your project\'s progress, payments, documents, and communicate directly with the team.'
+    : `You've been invited to join the <strong>${brandName}</strong> team. Complete your registration to start collaborating.`
+
+  const ctaText = isClient ? 'Access Your Portal' : 'Join the Team'
+
+  const features = isClient
+    ? [
+        { label: 'Live Progress', desc: 'Track your project in real time' },
+        { label: 'Payments', desc: 'View your payment plan and status' },
+        { label: 'Documents', desc: 'Contracts, files, and credentials' },
+      ]
+    : [
+        { label: 'Projects', desc: 'Full project and task management' },
+        { label: 'Calendar', desc: 'Events, deadlines, and planning' },
+        { label: 'Team', desc: 'Real-time collaboration' },
+      ]
+
+  const featuresHtml = features.map(f => `
+    <tr>
+      <td style="padding:6px 0;">
+        <span style="font-size:13px;color:${accentLight};font-weight:600;">&#10003; ${f.label}</span>
+        <span style="font-size:12px;color:#a1a1aa;"> &mdash; ${f.desc}</span>
+      </td>
+    </tr>`).join('')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin:0;padding:0;background-color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;padding:40px 20px;">
+<body style="margin:0;padding:0;background-color:#faf9f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf9f7;padding:40px 20px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+          <!-- Header -->
           <tr>
-            <td style="background-color:#0a0a0a;padding:32px 40px;text-align:center;">
-              <div style="font-size:22px;font-weight:300;color:#ffffff;letter-spacing:2px;font-family:Georgia,serif;">
-                ${brandName}
+            <td style="background-color:#0a0a0a;padding:28px 40px;text-align:center;">
+              <div style="font-size:24px;font-weight:300;color:#ffffff;letter-spacing:3px;font-family:Georgia,'Times New Roman',serif;">
+                livv<span style="color:${accentLight};">~</span>
               </div>
             </td>
           </tr>
+
+          <!-- Body -->
           <tr>
-            <td style="padding:40px;">
-              <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#18181b;">
-                Hi ${firstName},
+            <td style="background-color:#ffffff;padding:40px;">
+              <h1 style="margin:0 0 12px;font-size:24px;font-weight:400;color:#18181b;font-family:Georgia,'Times New Roman',serif;">
+                ${heading}
               </h1>
-              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#71717a;">
-                You've been invited to access your client portal. From there you can track your project's progress, payments, documents, and communicate directly with the team.
+              <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#71717a;">
+                ${intro}
               </p>
+
+              <!-- CTA Button -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center" style="padding:8px 0 32px;">
+                  <td align="center" style="padding:4px 0 32px;">
                     <a href="${inviteLink}"
-                       style="display:inline-block;padding:14px 36px;background-color:#059669;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:999px;letter-spacing:0.3px;">
-                      Access Your Portal
+                       style="display:inline-block;padding:14px 40px;background-color:${btnColor};color:#ffffff;font-size:15px;font-weight:500;text-decoration:none;border-radius:999px;letter-spacing:0.3px;">
+                      ${ctaText} &rarr;
                     </a>
                   </td>
                 </tr>
               </table>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f4f4f5;padding-top:24px;">
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Live progress</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — Track your project in real time</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Payments</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — View your payment plan and status</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0;">
-                    <span style="font-size:13px;color:#10b981;font-weight:600;">&#10003; Documents</span>
-                    <span style="font-size:12px;color:#a1a1aa;"> — Contracts, files, and credentials</span>
-                  </td>
-                </tr>
+
+              <!-- Features -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f4f4f5;padding-top:20px;">
+                ${featuresHtml}
               </table>
-              <p style="margin:24px 0 0;font-size:12px;color:#a1a1aa;line-height:1.5;">
+
+              <!-- Fallback link -->
+              <p style="margin:28px 0 0;font-size:12px;color:#a1a1aa;line-height:1.5;">
                 If the button doesn't work, copy and paste this link into your browser:<br>
-                <a href="${inviteLink}" style="color:#059669;word-break:break-all;">${inviteLink}</a>
+                <a href="${inviteLink}" style="color:${accentColor};word-break:break-all;">${inviteLink}</a>
               </p>
             </td>
           </tr>
+
+          <!-- Footer -->
           <tr>
-            <td style="padding:20px 40px;background-color:#fafafa;border-top:1px solid #f4f4f5;text-align:center;">
-              <p style="margin:0;font-size:11px;color:#a1a1aa;">
-                Secure portal &bull; Encrypted data<br>
+            <td style="padding:20px 40px;background-color:#0a0a0a;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#71717a;">
+                Secure portal &bull; Encrypted data
+              </p>
+              <p style="margin:4px 0 0;font-size:11px;color:#52525b;">
                 &copy; ${new Date().getFullYear()} ${brandName}
               </p>
             </td>
@@ -109,7 +140,7 @@ serve(async (req) => {
       })
     }
 
-    const { client_name, client_email, invite_link, tenant_name } = await req.json()
+    const { client_name, client_email, invite_link, tenant_name, invite_type } = await req.json()
 
     if (!client_email || !invite_link) {
       return new Response(JSON.stringify({ error: 'Missing client_email or invite_link' }), {
@@ -118,8 +149,14 @@ serve(async (req) => {
       })
     }
 
-    const brandName = tenant_name || 'Eneas OS'
-    const htmlBody = buildInviteEmailHtml(client_name || client_email, invite_link, brandName)
+    const brandName = tenant_name || 'livv'
+    const type = invite_type || 'team'
+    const displayName = client_name || client_email.split('@')[0]
+    const htmlBody = buildEmailHtml(displayName, invite_link, brandName, type)
+
+    const subject = type === 'client'
+      ? `${displayName}, your portal access is ready`
+      : `${displayName}, you've been invited to the team`
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -128,9 +165,9 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${brandName} <onboarding@resend.dev>`,
+        from: `${brandName} <noreply@livv.space>`,
         to: [client_email],
-        subject: `${client_name || 'Hi'}, your portal access is ready`,
+        subject,
         html: htmlBody,
       }),
     })
