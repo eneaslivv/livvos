@@ -281,6 +281,7 @@ Rules:
 
     if (!response.ok) {
       const text = await response.text()
+      console.error(`[gemini] API error ${response.status} for type=${type}:`, text.slice(0, 500))
       return new Response(JSON.stringify({ error: text || 'Gemini request failed' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -288,8 +289,20 @@ Rules:
     }
 
     const data = await response.json()
+
+    // Check for blocked/empty responses
+    if (!data?.candidates?.length) {
+      const feedback = data?.promptFeedback || data?.blockReason || 'no candidates returned'
+      console.error(`[gemini] No candidates for type=${type}:`, JSON.stringify(feedback).slice(0, 500))
+      return new Response(JSON.stringify({ error: 'AI returned empty response', details: feedback }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // Extract text from parts — gemini-2.5 may include thinking parts
     const parts = data?.candidates?.[0]?.content?.parts || []
+    console.log(`[gemini] type=${type} parts=${parts.length} finishReason=${data.candidates[0]?.finishReason}`)
 
     // Strategy: try parsing each part as JSON individually (last valid wins),
     // then fallback to concatenated text with regex extraction
@@ -384,6 +397,7 @@ Rules:
     } else if (type === 'plan_period') {
       const plan = json as PlanPeriodResponse
       if (!plan || !Array.isArray(plan.changes)) {
+        console.error(`[gemini] plan_period validation failed. json is ${json === null ? 'null' : typeof json}, keys: ${json ? Object.keys(json).join(',') : 'N/A'}, rawDebug: ${rawDebug}`)
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
