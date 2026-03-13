@@ -282,27 +282,53 @@ Rules:
     }
 
     const data = await response.json()
-    // Extract text from content parts only (gemini-2.5 has thinking + content parts)
+    // Extract text from parts — gemini-2.5 may include thinking parts
     const parts = data?.candidates?.[0]?.content?.parts || []
-    // Filter out thinking parts — only keep actual content
-    const contentParts = parts.filter((p: any) => !p.thought)
-    const text = contentParts.map((p: any) => p.text || '').join('') || ''
 
+    // Strategy: try parsing each part as JSON individually (last valid wins),
+    // then fallback to concatenated text with regex extraction
     let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | null = null
-    try {
-      json = JSON.parse(text)
-    } catch (_err) {
-      // Try extracting JSON from markdown code blocks
-      const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-      if (codeBlock) {
-        try { json = JSON.parse(codeBlock[1].trim()) } catch {}
-      }
-      // Fallback: extract first { ... } block
-      if (!json) {
-        const match = text.match(/\{[\s\S]*\}/)
-        if (match) {
-          try { json = JSON.parse(match[0]) } catch {}
+
+    // 1. Try each part individually (response JSON is usually in the last part)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const partText = (parts[i]?.text || '').trim()
+      if (!partText || partText.length < 2) continue
+      try {
+        json = JSON.parse(partText)
+        break
+      } catch {}
+    }
+
+    // 2. Fallback: concatenate non-thinking parts and try extraction
+    if (!json) {
+      const text = parts
+        .filter((p: any) => !p.thought && !p.thoughtSignature)
+        .map((p: any) => p.text || '').join('') || ''
+
+      try {
+        json = JSON.parse(text)
+      } catch (_err) {
+        // Try extracting JSON from markdown code blocks
+        const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (codeBlock) {
+          try { json = JSON.parse(codeBlock[1].trim()) } catch {}
         }
+        // Fallback: extract first { ... } or [ ... ] block
+        if (!json) {
+          const match = text.match(/\{[\s\S]*\}/)
+          if (match) {
+            try { json = JSON.parse(match[0]) } catch {}
+          }
+        }
+      }
+    }
+
+    // 3. Last resort: concatenate ALL parts text and regex extract
+    if (!json) {
+      const allText = parts.map((p: any) => p.text || '').join('')
+      const match = allText.match(/\{[\s\S]*\}/)
+      if (match) {
+        try { json = JSON.parse(match[0]) } catch {}
       }
     }
 
