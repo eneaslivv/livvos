@@ -36,7 +36,8 @@ export const Calendar: React.FC = () => {
     moveTask,
     getEventsByDate,
     getTasksByDate,
-    getCalendarStats
+    getEventsByDateRange,
+    getTasksByDateRange
   } = useCalendar();
 
   const { members: teamMembers } = useTeam();
@@ -755,8 +756,51 @@ export const Calendar: React.FC = () => {
     return diff;
   };
 
-  // Calendar stats
-  const stats = getCalendarStats();
+  // Calendar stats — filtered by current view (week/month/day)
+  const viewStats = (() => {
+    let startDate: string;
+    let endDate: string;
+    let label: string;
+
+    if (view === 'week') {
+      const days = getWeekDays();
+      startDate = days[0].toISOString().split('T')[0];
+      endDate = days[6].toISOString().split('T')[0];
+      label = 'Weekly';
+    } else if (view === 'month') {
+      const y = currentDate.getFullYear();
+      const m = currentDate.getMonth();
+      startDate = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      endDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      label = 'Monthly';
+    } else {
+      // day view
+      const d = currentDate.toISOString().split('T')[0];
+      startDate = d;
+      endDate = d;
+      label = 'Daily';
+    }
+
+    const rangeEvents = getEventsByDateRange(startDate, endDate).filter(e => e.source !== 'google');
+    const rangeTasks = getTasksByDateRange(startDate, endDate);
+    const today = new Date().toISOString().split('T')[0];
+    const completed = rangeTasks.filter(t => t.completed).length;
+    const pending = rangeTasks.filter(t => !t.completed).length;
+    const overdue = rangeTasks.filter(t => t.start_date && t.start_date < today && !t.completed).length;
+
+    return {
+      stats: {
+        totalEvents: rangeEvents.length,
+        totalTasks: rangeTasks.length,
+        completedTasks: completed,
+        pendingTasks: pending,
+        overdueTasks: overdue,
+        completionRate: rangeTasks.length > 0 ? Math.round((completed / rangeTasks.length) * 100) : 0,
+      },
+      periodLabel: label,
+    };
+  })();
 
   if (loading && !loadingTimedOut) {
     return (
@@ -782,7 +826,7 @@ export const Calendar: React.FC = () => {
         setCalendarMode={setCalendarMode}
         view={view}
         setView={setView}
-        stats={stats}
+        stats={viewStats.stats}
         filteredEventsCount={filteredEvents.length}
         navigateCalendar={navigateCalendar}
         goToToday={goToToday}
@@ -1025,8 +1069,9 @@ export const Calendar: React.FC = () => {
         getDayEvents={getDayEvents}
         getDayTasks={getDayTasks}
         contentPlatforms={CONTENT_PLATFORMS}
-        stats={stats}
+        stats={viewStats.stats}
         filteredEventsCount={filteredEvents.length}
+        periodLabel={viewStats.periodLabel}
         toggleTaskComplete={toggleTaskComplete}
         onOpenTaskDetail={handleOpenTaskDetail}
         getMemberName={getMemberName}

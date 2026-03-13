@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { Project } from '../../context/ProjectsContext';
+import type { AiPreview } from '../../pages/Projects';
 
 export interface TasksTabProps {
   project: Project;
@@ -31,11 +32,16 @@ export interface TasksTabProps {
   onNewGroupNameChange: (val: string) => void;
   onAddGroup: () => void;
   onDeletePhase: (phaseName: string) => void;
+  onUpdatePhaseDate: (phaseName: string, field: 'startDate' | 'endDate', value: string) => void;
+  // Task dates & payments
+  onUpdateTaskDate: (taskId: string, date: string | null) => void;
+  taskPayments: Map<string, { amount: number; status: string }>;
   // AI
   aiPrompt: string;
   onAiPromptChange: (val: string) => void;
   aiGenerating: boolean;
-  aiPreview: { phases: { name: string; tasks: { title: string; priority: string }[] }[] } | null;
+  aiPreview: AiPreview | null;
+  onAiPreviewChange: (preview: AiPreview) => void;
   aiError: string | null;
   onAiGenerate: () => void;
   onAiAccept: () => void;
@@ -43,6 +49,9 @@ export interface TasksTabProps {
   // Error
   taskError: string | null;
 }
+
+const formatCurrency = (amount: number) =>
+  amount >= 1000 ? `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : `$${amount}`;
 
 export const TasksTab: React.FC<TasksTabProps> = ({
   project,
@@ -68,16 +77,46 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   onNewGroupNameChange,
   onAddGroup,
   onDeletePhase,
+  onUpdatePhaseDate,
+  onUpdateTaskDate,
+  taskPayments,
   aiPrompt,
   onAiPromptChange,
   aiGenerating,
   aiPreview,
+  onAiPreviewChange,
   aiError,
   onAiGenerate,
   onAiAccept,
   onAiDiscard,
   taskError,
 }) => {
+  // AI preview edit helpers
+  const updatePreviewPhase = (pIdx: number, patch: Partial<AiPreview['phases'][0]>) => {
+    if (!aiPreview) return;
+    const updated = { ...aiPreview, phases: aiPreview.phases.map((p, i) => i === pIdx ? { ...p, ...patch } : p) };
+    onAiPreviewChange(updated);
+  };
+  const updatePreviewTask = (pIdx: number, tIdx: number, patch: Partial<AiPreview['phases'][0]['tasks'][0]>) => {
+    if (!aiPreview) return;
+    const phases = aiPreview.phases.map((p, i) => {
+      if (i !== pIdx) return p;
+      return { ...p, tasks: p.tasks.map((t, j) => j === tIdx ? { ...t, ...patch } : t) };
+    });
+    onAiPreviewChange({ ...aiPreview, phases });
+  };
+  const deletePreviewTask = (pIdx: number, tIdx: number) => {
+    if (!aiPreview) return;
+    const phases = aiPreview.phases.map((p, i) => {
+      if (i !== pIdx) return p;
+      return { ...p, tasks: p.tasks.filter((_, j) => j !== tIdx) };
+    }).filter(p => p.tasks.length > 0);
+    onAiPreviewChange({ ...aiPreview, phases });
+  };
+  const deletePreviewPhase = (pIdx: number) => {
+    if (!aiPreview) return;
+    onAiPreviewChange({ ...aiPreview, phases: aiPreview.phases.filter((_, i) => i !== pIdx) });
+  };
   return (
     <div className="space-y-6">
 
@@ -116,12 +155,17 @@ export const TasksTab: React.FC<TasksTabProps> = ({
             </div>
           )}
         </div>
-        {/* AI Preview */}
+        {/* AI Preview — fully editable */}
         {aiPreview && (
           <div className="border-t border-violet-100/50 dark:border-violet-900/20">
             <div className="px-5 py-3 flex items-center justify-between bg-violet-50/50 dark:bg-violet-950/10">
               <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">
                 {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks in {aiPreview.phases.length} phases
+                {aiPreview.phases.some(p => p.budget) && (
+                  <span className="ml-2 text-emerald-600 dark:text-emerald-400">
+                    · ${aiPreview.phases.reduce((s, p) => s + (p.budget || 0), 0).toLocaleString()}
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-2">
                 <button onClick={onAiDiscard} className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
@@ -129,7 +173,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                 </button>
                 <button
                   onClick={onAiAccept}
-                  disabled={aiGenerating}
+                  disabled={aiGenerating || aiPreview.phases.length === 0}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-50 active:scale-95"
                 >
                   {aiGenerating ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Check size={12} />}
@@ -137,20 +181,85 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                 </button>
               </div>
             </div>
-            <div className="p-5 space-y-4 max-h-80 overflow-y-auto">
+            <div className="p-5 space-y-5 max-h-[500px] overflow-y-auto">
               {aiPreview.phases.map((phase, pIdx) => (
-                <div key={pIdx}>
-                  <div className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">{phase.name}</div>
-                  <div className="space-y-1">
+                <div key={pIdx} className="rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden">
+                  {/* Phase header — editable */}
+                  <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={phase.name}
+                        onChange={e => updatePreviewPhase(pIdx, { name: e.target.value })}
+                        className="flex-1 text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider bg-transparent border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                      />
+                      <button
+                        onClick={() => deletePreviewPhase(pIdx)}
+                        className="p-1 text-zinc-300 hover:text-red-400 transition-colors"
+                        title="Remove phase"
+                      >
+                        <Icons.X size={12} />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <Icons.Calendar size={10} className="text-zinc-400" />
+                        <input
+                          type="date"
+                          value={phase.startDate || ''}
+                          onChange={e => updatePreviewPhase(pIdx, { startDate: e.target.value || undefined })}
+                          className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-[100px]"
+                          placeholder="Start"
+                        />
+                        <span className="text-[10px] text-zinc-300">—</span>
+                        <input
+                          type="date"
+                          value={phase.endDate || ''}
+                          onChange={e => updatePreviewPhase(pIdx, { endDate: e.target.value || undefined })}
+                          className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-[100px]"
+                          placeholder="End"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-zinc-400">$</span>
+                        <input
+                          type="number"
+                          value={phase.budget || ''}
+                          onChange={e => updatePreviewPhase(pIdx, { budget: Number(e.target.value) || 0 })}
+                          className="w-20 text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-emerald-400 focus:outline-none px-0.5 py-0 tabular-nums"
+                          placeholder="Budget"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {/* Tasks — editable */}
+                  <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
                     {phase.tasks.map((task, tIdx) => (
-                      <div key={tIdx} className="flex items-center gap-3 px-3 py-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                      <div key={tIdx} className="group/aitask flex items-center gap-2 px-4 py-2 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10">
                         <div className="w-4 h-4 rounded-full border-2 border-zinc-200 dark:border-zinc-700 shrink-0" />
-                        <span className="text-sm text-zinc-800 dark:text-zinc-200 flex-1">{task.title}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full capitalize font-medium ${
-                          task.priority === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
-                            : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-400'
-                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                        }`}>{task.priority}</span>
+                        <input
+                          value={task.title}
+                          onChange={e => updatePreviewTask(pIdx, tIdx, { title: e.target.value })}
+                          className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                        />
+                        <select
+                          value={task.priority}
+                          onChange={e => updatePreviewTask(pIdx, tIdx, { priority: e.target.value })}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none ${
+                            task.priority === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
+                              : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-400'
+                              : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                          }`}
+                        >
+                          <option value="high">high</option>
+                          <option value="medium">medium</option>
+                          <option value="low">low</option>
+                        </select>
+                        <button
+                          onClick={() => deletePreviewTask(pIdx, tIdx)}
+                          className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aitask:opacity-100 transition-all"
+                        >
+                          <Icons.X size={11} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -213,24 +322,46 @@ export const TasksTab: React.FC<TasksTabProps> = ({
         const doneCount = group.tasks.filter((t: any) => t.done).length;
         const totalCount = group.tasks.length;
         const phasePct = totalCount ? Math.round(doneCount / totalCount * 100) : 0;
+        const phaseData = project.tasksGroups.find(g => g.name === group.name);
         return (
-          <div key={gIdx} className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden shadow-sm">
+          <div key={gIdx} className="group rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden shadow-sm">
             {/* Phase header */}
-            <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/30">
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${phasePct === 100 && totalCount > 0 ? 'bg-emerald-500' : phasePct > 0 ? 'bg-amber-400' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.name}</h3>
-                {totalCount > 0 && (
-                  <span className="text-[10px] text-zinc-400 tabular-nums bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{doneCount}/{totalCount}</span>
-                )}
+            <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${phasePct === 100 && totalCount > 0 ? 'bg-emerald-500' : phasePct > 0 ? 'bg-amber-400' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.name}</h3>
+                  {totalCount > 0 && (
+                    <span className="text-[10px] text-zinc-400 tabular-nums bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{doneCount}/{totalCount}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => onDeletePhase(group.name)}
+                  className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  title="Delete phase"
+                >
+                  <Icons.X size={14} />
+                </button>
               </div>
-              <button
-                onClick={() => onDeletePhase(group.name)}
-                className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                title="Delete phase"
-              >
-                <Icons.X size={14} />
-              </button>
+              {/* Phase date range */}
+              <div className="flex items-center gap-2 mt-2 ml-5">
+                <Icons.Calendar size={11} className="text-zinc-400 shrink-0" />
+                <input
+                  type="date"
+                  value={phaseData?.startDate || ''}
+                  onChange={e => onUpdatePhaseDate(group.name, 'startDate', e.target.value)}
+                  className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                  title="Phase start date"
+                />
+                <span className="text-[10px] text-zinc-300 dark:text-zinc-600">—</span>
+                <input
+                  type="date"
+                  value={phaseData?.endDate || ''}
+                  onChange={e => onUpdatePhaseDate(group.name, 'endDate', e.target.value)}
+                  className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                  title="Phase end date"
+                />
+              </div>
             </div>
 
             {/* Tasks */}
@@ -240,6 +371,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                 const subsCompleted = subs.filter((s: any) => s.completed).length;
                 const isExpanded = expandedTaskId === task.id;
                 const priorityColor = task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500';
+                const payment = taskPayments.get(task.id);
                 return (
                   <div key={task.id}>
                     <div className="group/task flex items-center gap-3 px-5 py-3 hover:bg-zinc-50/80 dark:hover:bg-zinc-800/20 transition-colors">
@@ -259,6 +391,17 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                             {task.title}
                           </span>
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
+                          {payment && (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${
+                              payment.status === 'paid'
+                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                : payment.status === 'overdue'
+                                ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
+                                : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
+                            }`}>
+                              {formatCurrency(payment.amount)} · {payment.status}
+                            </span>
+                          )}
                         </div>
                         {subs.length > 0 && (
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -270,19 +413,11 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                         )}
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {task.dueDate ? (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                            new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10)) && !task.done
-                              ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
-                              : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
-                          }`}>
-                            {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full font-medium italic">
-                            No date
-                          </span>
-                        )}
+                        <DatePickerButton
+                          value={task.dueDate || null}
+                          onChange={(date) => onUpdateTaskDate(task.id, date)}
+                          done={task.done}
+                        />
                         <button
                           onClick={() => onSetExpandedTaskId(isExpanded ? null : task.id)}
                           className={`p-1 rounded-md transition-all ${isExpanded ? 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500'}`}
@@ -408,6 +543,43 @@ export const TasksTab: React.FC<TasksTabProps> = ({
           </p>
         </div>
       )}
+    </div>
+  );
+};
+
+/* ── Inline date picker button ── */
+const DatePickerButton: React.FC<{
+  value: string | null;
+  onChange: (date: string | null) => void;
+  done: boolean;
+}> = ({ value, onChange, done }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isOverdue = value && new Date(value) < new Date(new Date().toISOString().slice(0, 10)) && !done;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => inputRef.current?.showPicker()}
+        className={`text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+          !value
+            ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+            : isOverdue
+            ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
+            : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
+        }`}
+      >
+        {value
+          ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : 'Set date'}
+      </button>
+      <input
+        ref={inputRef}
+        type="date"
+        value={value || ''}
+        onChange={e => onChange(e.target.value || null)}
+        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        tabIndex={-1}
+      />
     </div>
   );
 };

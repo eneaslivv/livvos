@@ -174,6 +174,7 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
         <div className="w-[420px] shrink-0 p-3 hidden xl:block">
           <LivePreview
             websiteUrl={currentTenant?.website_url}
+            previewUrl={currentTenant?.preview_url}
             section={activeSection}
             refreshKey={previewKey}
           />

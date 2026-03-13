@@ -20,6 +20,7 @@ export const TenantSettings: React.FC = () => {
     const [config, setConfig] = useState<TenantConfig | null>(null);
     const [branding, setBranding] = useState<TenantBranding>(defaultBranding);
     const [websiteUrl, setWebsiteUrl] = useState('');
+    const [previewUrl, setPreviewUrl] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -31,6 +32,9 @@ export const TenantSettings: React.FC = () => {
     useEffect(() => {
         if (currentTenant?.website_url) {
             setWebsiteUrl(currentTenant.website_url);
+        }
+        if (currentTenant?.preview_url) {
+            setPreviewUrl(currentTenant.preview_url);
         }
     }, [currentTenant]);
 
@@ -64,8 +68,8 @@ export const TenantSettings: React.FC = () => {
 
             if (error) throw error;
 
-            // Save website URL to tenants table
-            await updateTenant({ website_url: websiteUrl || null });
+            // Save website + preview URLs to tenants table
+            await updateTenant({ website_url: websiteUrl || null, preview_url: previewUrl || null });
 
             setMessage({ text: 'Configuration saved successfully', type: 'success' });
         } catch (err: any) {
@@ -173,20 +177,37 @@ export const TenantSettings: React.FC = () => {
                     <Icons.Globe size={20} />
                     Website
                 </h2>
-                <div>
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                        Website URL
-                    </label>
-                    <input
-                        type="url"
-                        value={websiteUrl}
-                        onChange={e => setWebsiteUrl(e.target.value)}
-                        placeholder="https://your-website.com"
-                        className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                    <p className="text-xs text-zinc-400 mt-2">
-                        Used for the live preview in the Content CMS
-                    </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                            Website URL (Production)
+                        </label>
+                        <input
+                            type="url"
+                            value={websiteUrl}
+                            onChange={e => setWebsiteUrl(e.target.value)}
+                            placeholder="https://your-website.com"
+                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        <p className="text-xs text-zinc-400 mt-2">
+                            Live domain — shows only published content
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                            Preview URL (Staging)
+                        </label>
+                        <input
+                            type="url"
+                            value={previewUrl}
+                            onChange={e => setPreviewUrl(e.target.value)}
+                            placeholder="https://your-project.vercel.app"
+                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        <p className="text-xs text-zinc-400 mt-2">
+                            Vercel/staging URL — shows drafts + published content
+                        </p>
+                    </div>
                 </div>
             </section>
 

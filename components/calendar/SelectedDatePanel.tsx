@@ -24,6 +24,7 @@ export interface SelectedDatePanelProps {
     completionRate: number;
   };
   filteredEventsCount: number;
+  periodLabel?: string;
   // Task actions
   toggleTaskComplete: (taskId: string, completed: boolean) => void;
   onOpenTaskDetail: (task: CalendarTask) => void;
@@ -45,6 +46,7 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
   contentPlatforms,
   stats,
   filteredEventsCount,
+  periodLabel,
   toggleTaskComplete,
   onOpenTaskDetail,
   getMemberName,
@@ -229,7 +231,12 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
       {/* Stats panel */}
       <div className="space-y-6">
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Summary</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Summary</h3>
+            {periodLabel && (
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{periodLabel}</span>
+            )}
+          </div>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-sm text-zinc-600 dark:text-zinc-400">

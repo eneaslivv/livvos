@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
+import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
 import { Status, PageView } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
 import { supabaseAdmin } from '../lib/supabase';
@@ -9,6 +10,10 @@ import { useRBAC } from '../context/RBACContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTenant } from '../context/TenantContext';
 import { useCalendar } from '../hooks/useCalendar';
+import { useAuth } from '../hooks/useAuth';
+import { useTeam } from '../context/TeamContext';
+import { useClients } from '../context/ClientsContext';
+import { errorLogger } from '../lib/errorLogger';
 import type { CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 
 type DbProject = {
@@ -35,7 +40,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const { user, roles } = useRBAC();
     const { incomes, expenses } = useFinance();
     const { currentTenant, updateTenant } = useTenant();
-    const { events: calendarEvents, tasks: calendarTasks, createTask: calCreateTask, updateTask: calUpdateTask } = useCalendar();
+    const { events: calendarEvents, tasks: calendarTasks, createTask: calCreateTask, updateTask: calUpdateTask, deleteTask: calDeleteTask } = useCalendar();
+    const { user: authUser } = useAuth();
+    const { members: teamMembers } = useTeam();
+    const { clients } = useClients();
     const [showFinancials, setShowFinancials] = useState(false);
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
     const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -134,7 +142,163 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [isAddingTask, setIsAddingTask] = useState(false);
     const [showCompleted, setShowCompleted] = useState(false);
+    const [selectedFocusTask, setSelectedFocusTask] = useState<CalendarTask | null>(null);
+    const [editingTask, setEditingTask] = useState<Partial<CalendarTask>>({});
+    const [savingTask, setSavingTask] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+    const [addingSubtask, setAddingSubtask] = useState(false);
     const quickInputRef = useRef<HTMLInputElement>(null);
+
+    // TaskDetailPanel helpers
+    const memberMap = teamMembers.reduce<Record<string, { name: string | null; avatar_url?: string | null }>>((acc, m) => {
+        acc[m.id] = { name: m.name, avatar_url: m.avatar_url };
+        return acc;
+    }, {});
+    const getMemberName = (id?: string) => {
+        if (!id) return null;
+        if (id === authUser?.id) return 'Me';
+        return memberMap[id]?.name || 'Member';
+    };
+    const getMemberAvatar = (id?: string) => {
+        if (!id) return null;
+        return memberMap[id]?.avatar_url || null;
+    };
+
+    const projectOptions = projectsRaw.map(p => ({ id: p.id, title: p.title, client_id: undefined as string | undefined }));
+    const clientMap = clients.reduce<Record<string, string>>((acc, c) => { acc[c.id] = c.name; return acc; }, {});
+    const getClientLabel = (task: CalendarTask) => {
+        if (!(task as any).client_id) return null;
+        return clientMap[(task as any).client_id] || null;
+    };
+
+    const subtasksForSelected = selectedFocusTask
+        ? tasks.filter((t: any) => t.parent_task_id === selectedFocusTask.id)
+        : [];
+
+    const getBlockerTask = (task: CalendarTask | null) => {
+        if (!(task as any)?.blocked_by) return null;
+        return tasks.find((t: any) => t.id === (task as any).blocked_by) || null;
+    };
+    const getDependentTasks = (taskId: string) => tasks.filter((t: any) => t.blocked_by === taskId);
+    const isTaskBlocked = (task: CalendarTask) => {
+        if (!(task as any).blocked_by) return false;
+        const blocker = tasks.find((t: any) => t.id === (task as any).blocked_by);
+        return blocker ? !blocker.completed : false;
+    };
+    const getElapsedDays = (task: CalendarTask): number | null => {
+        if (!task.completed || !(task as any).completed_at) return null;
+        const startRef = (task as any).start_date?.slice(0, 10) || (task as any).created_at?.slice(0, 10);
+        if (!startRef) return null;
+        return Math.max(1, Math.ceil(
+            (new Date((task as any).completed_at.slice(0, 10)).getTime() - new Date(startRef).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+    };
+
+    const handleOpenTaskDetail = (task: CalendarTask) => {
+        setSelectedFocusTask(task);
+        setEditingTask({
+            title: task.title,
+            description: task.description || '',
+            priority: task.priority,
+            status: (task as any).status,
+            start_date: (task as any).start_date || '',
+            start_time: (task as any).start_time || '',
+            duration: task.duration || 60,
+            project_id: (task as any).project_id || '',
+            client_id: (task as any).client_id || '',
+            assignee_id: (task as any).assignee_id || '',
+            blocked_by: (task as any).blocked_by || '',
+        } as any);
+    };
+
+    const handleSaveTaskEdit = async () => {
+        if (!selectedFocusTask || savingTask) return;
+        setSavingTask(true);
+        setSaveError(null);
+        try {
+            const updates: Partial<CalendarTask> = { ...editingTask };
+            if ((updates as any).status === 'done') updates.completed = true;
+            else if ((updates as any).status === 'cancelled') updates.completed = false;
+            else if ((updates as any).status) updates.completed = false;
+            if ('blocked_by' in updates && !(updates as any).blocked_by) (updates as any).blocked_by = null;
+            if ('project_id' in updates && !(updates as any).project_id) (updates as any).project_id = null;
+            if ('client_id' in updates && !(updates as any).client_id) (updates as any).client_id = null;
+            if ('assignee_id' in updates && !(updates as any).assignee_id) (updates as any).assignee_id = null;
+            await calUpdateTask(selectedFocusTask.id, updates);
+            setSelectedFocusTask(null);
+        } catch (err) {
+            const msg = (err as Error).message || 'Unknown error';
+            errorLogger.error('Error actualizando tarea', err);
+            setSaveError(msg);
+        } finally {
+            setSavingTask(false);
+        }
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        if (!confirm('Delete this task?')) return;
+        try {
+            await calDeleteTask(taskId);
+            setSelectedFocusTask(null);
+        } catch (err) {
+            errorLogger.error('Error eliminando tarea', err);
+        }
+    };
+
+    const toggleTaskComplete = async (taskId: string, completed: boolean) => {
+        try {
+            const completedAt = completed ? new Date().toISOString() : null;
+            await calUpdateTask(taskId, {
+                completed,
+                status: completed ? 'done' : 'todo',
+                completed_at: completedAt,
+            } as any);
+            if (selectedFocusTask?.id === taskId) {
+                setSelectedFocusTask(prev => prev ? { ...prev, completed, status: completed ? 'done' : 'todo', completed_at: completedAt } as any : prev);
+            }
+        } catch (err: any) {
+            errorLogger.error('Error actualizando tarea', err);
+        }
+    };
+
+    const handleAddSubtask = async () => {
+        if (!selectedFocusTask || !newSubtaskTitle.trim() || addingSubtask) return;
+        setAddingSubtask(true);
+        try {
+            await calCreateTask({
+                title: newSubtaskTitle.trim(),
+                owner_id: authUser?.id || '',
+                completed: false,
+                priority: selectedFocusTask.priority,
+                status: 'todo',
+                order_index: subtasksForSelected.length,
+                parent_task_id: selectedFocusTask.id,
+                project_id: (selectedFocusTask as any).project_id,
+            } as any);
+            setNewSubtaskTitle('');
+        } catch (err) {
+            errorLogger.error('Error creando subtarea', err);
+        } finally {
+            setAddingSubtask(false);
+        }
+    };
+
+    const handleToggleSubtask = async (subtaskId: string, completed: boolean) => {
+        try {
+            await calUpdateTask(subtaskId, { completed, status: completed ? 'done' : 'todo' });
+        } catch (err) {
+            errorLogger.error('Error actualizando subtarea', err);
+        }
+    };
+
+    const handleDeleteSubtask = async (subtaskId: string) => {
+        try {
+            await calDeleteTask(subtaskId);
+        } catch (err) {
+            errorLogger.error('Error eliminando subtarea', err);
+        }
+    };
 
     const handleQuickAddTask = async () => {
         const title = quickTaskTitle.trim();
@@ -429,13 +593,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                         return (
                                             <div
                                                 key={task.id}
-                                                onClick={() => toggleTask(task.id)}
+                                                onClick={() => handleOpenTaskDetail(task as CalendarTask)}
                                                 className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group"
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 group-hover:border-emerald-400 dark:group-hover:border-emerald-500 text-transparent group-hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
+                                                        className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 dark:hover:border-emerald-500 text-transparent hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors"
+                                                    >
                                                         <Icons.Check size={9} strokeWidth={3} />
-                                                    </div>
+                                                    </button>
                                                     <div>
                                                         <span className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{task.title}</span>
                                                         {projectId && <span className="text-[10px] text-zinc-400 ml-2">{projectLookup[projectId] || ''}</span>}
@@ -488,13 +655,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                                             return (
                                                                 <div
                                                                     key={task.id}
-                                                                    onClick={() => toggleTask(task.id)}
+                                                                    onClick={() => handleOpenTaskDetail(task as CalendarTask)}
                                                                     className="flex items-center justify-between px-3 py-2 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group"
                                                                 >
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-4 h-4 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
+                                                                            className="w-4 h-4 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 hover:bg-emerald-500/25 transition-colors"
+                                                                        >
                                                                             <Icons.Check size={9} strokeWidth={3} className="text-emerald-500" />
-                                                                        </div>
+                                                                        </button>
                                                                         <div>
                                                                             <span className="text-[13px] font-medium text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-300 dark:decoration-zinc-700">{task.title}</span>
                                                                             {projectId && <span className="text-[10px] text-zinc-300 dark:text-zinc-600 ml-2">{projectLookup[projectId] || ''}</span>}
@@ -797,6 +967,39 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Task Detail Panel (same as Calendar) */}
+            <TaskDetailPanel
+                selectedTask={selectedFocusTask}
+                editingTask={editingTask}
+                setEditingTask={setEditingTask}
+                savingTask={savingTask}
+                saveError={saveError}
+                onSave={handleSaveTaskEdit}
+                onClose={() => { setSelectedFocusTask(null); setSaveError(null); }}
+                onDelete={handleDeleteTask}
+                onToggleComplete={toggleTaskComplete}
+                subtasksForSelected={subtasksForSelected as CalendarTask[]}
+                newSubtaskTitle={newSubtaskTitle}
+                setNewSubtaskTitle={setNewSubtaskTitle}
+                addingSubtask={addingSubtask}
+                onAddSubtask={handleAddSubtask}
+                onToggleSubtask={handleToggleSubtask}
+                onDeleteSubtask={handleDeleteSubtask}
+                isTaskBlocked={isTaskBlocked}
+                getBlockerTask={getBlockerTask}
+                getDependentTasks={getDependentTasks}
+                getElapsedDays={getElapsedDays}
+                tasks={tasks as CalendarTask[]}
+                teamMembers={teamMembers}
+                projectOptions={projectOptions}
+                clients={clients}
+                userId={authUser?.id}
+                getMemberName={getMemberName}
+                getMemberAvatar={getMemberAvatar}
+                getClientLabel={getClientLabel}
+                onOpenTaskDetail={handleOpenTaskDetail}
+            />
         </div>
     );
 };

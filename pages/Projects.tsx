@@ -17,6 +17,22 @@ import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
 
+/* ─── AI Preview types ─── */
+export interface AiPreviewTask {
+  title: string;
+  priority: string;
+}
+export interface AiPreviewPhase {
+  name: string;
+  tasks: AiPreviewTask[];
+  startDate?: string;
+  endDate?: string;
+  budget?: number;
+}
+export interface AiPreview {
+  phases: AiPreviewPhase[];
+}
+
 /* ─── Status badge ─── */
 const StatusBadge = ({ status }: { status: ProjectStatus }) => {
   const colors = {
@@ -384,7 +400,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const [timelineNewEnd, setTimelineNewEnd] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiPreview, setAiPreview] = useState<{ phases: { name: string; tasks: { title: string; priority: string }[] }[] } | null>(null);
+  const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
   // Finance inline form state
@@ -724,6 +740,33 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     }
   };
 
+  const handleUpdateTaskDate = async (taskId: string, date: string | null) => {
+    try {
+      await updateSyncedTask(taskId, { due_date: date || null } as any);
+      setTimeout(() => refreshTasks(), 500);
+    } catch (err: any) {
+      errorLogger.error('Error updating task date', err);
+    }
+  };
+
+  // Build payment data for tasks tab
+  const taskPayments = useMemo(() => {
+    if (!selectedProject) return new Map<string, { amount: number; status: string }>();
+    const projectInc = incomes.filter(i => i.project_id === selectedProject.id);
+    const map = new Map<string, { amount: number; status: string }>();
+    for (const inc of projectInc) {
+      if (inc.linked_task_id) {
+        map.set(inc.linked_task_id, { amount: inc.total_amount, status: inc.status });
+      }
+      for (const inst of (inc.installments || [])) {
+        if (inst.linked_task_id) {
+          map.set(inst.linked_task_id, { amount: inst.amount, status: inst.status });
+        }
+      }
+    }
+    return map;
+  }, [incomes, selectedProject]);
+
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim() || !selectedProject) return;
     setAiGenerating(true);
@@ -754,16 +797,24 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     if (!aiPreview || !selectedProject) return;
     setAiGenerating(true);
     try {
-      // Create phases that don't exist yet
+      // Create phases that don't exist yet (with dates)
       const existingPhaseNames = new Set(selectedProject.tasksGroups.map(g => g.name));
       const newPhases = aiPreview.phases
         .filter(p => !existingPhaseNames.has(p.name))
-        .map(p => ({ name: p.name, tasks: [] }));
-      if (newPhases.length > 0) {
-        await updateProject(selectedProject.id, { tasksGroups: [...selectedProject.tasksGroups, ...newPhases] });
+        .map(p => ({ name: p.name, startDate: p.startDate || undefined, endDate: p.endDate || undefined, tasks: [] }));
+      // Also update dates on existing phases if AI provided them
+      const updatedExisting = selectedProject.tasksGroups.map(g => {
+        const aiPhase = aiPreview.phases.find(p => p.name === g.name);
+        if (aiPhase && (aiPhase.startDate || aiPhase.endDate)) {
+          return { ...g, startDate: aiPhase.startDate || g.startDate, endDate: aiPhase.endDate || g.endDate };
+        }
+        return g;
+      });
+      if (newPhases.length > 0 || updatedExisting.some((g, i) => g !== selectedProject.tasksGroups[i])) {
+        await updateProject(selectedProject.id, { tasksGroups: [...updatedExisting, ...newPhases] });
       }
 
-      // Insert all tasks in parallel
+      // Insert all tasks — use phase endDate as due_date if available
       const taskInserts = aiPreview.phases.flatMap(phase =>
         phase.tasks.map(task => addSyncedTask({
           title: task.title,
@@ -773,10 +824,29 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           assignee_id: currentUser?.id || null,
           priority: task.priority || 'medium',
           group_name: phase.name,
-          due_date: new Date().toISOString().slice(0, 10),
+          due_date: phase.endDate || new Date().toISOString().slice(0, 10),
         } as any))
       );
       await Promise.all(taskInserts);
+
+      // Create income entries for phases with budget
+      const phasesWithBudget = aiPreview.phases.filter(p => p.budget && p.budget > 0);
+      if (phasesWithBudget.length > 0 && createIncome) {
+        for (const phase of phasesWithBudget) {
+          await createIncome({
+            client_id: (selectedProject as any).client_id || null,
+            project_id: selectedProject.id,
+            client_name: (selectedProject as any).client_name || selectedProject.title,
+            project_name: selectedProject.title,
+            concept: `${phase.name}`,
+            total_amount: phase.budget!,
+            currency: 'USD',
+            status: 'pending',
+            due_date: phase.endDate || null,
+          } as any);
+        }
+      }
+
       setTimeout(() => refreshTasks(), 1000);
 
       const totalTasks = aiPreview.phases.reduce((sum, p) => sum + p.tasks.length, 0);
@@ -1486,10 +1556,14 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     onNewGroupNameChange={setNewGroupName}
                     onAddGroup={handleAddGroup}
                     onDeletePhase={handleDeletePhase}
+                    onUpdatePhaseDate={handleUpdatePhaseDate}
+                    onUpdateTaskDate={handleUpdateTaskDate}
+                    taskPayments={taskPayments}
                     aiPrompt={aiPrompt}
                     onAiPromptChange={setAiPrompt}
                     aiGenerating={aiGenerating}
                     aiPreview={aiPreview}
+                    onAiPreviewChange={setAiPreview}
                     aiError={aiError}
                     onAiGenerate={handleAiGenerate}
                     onAiAccept={handleAiAccept}

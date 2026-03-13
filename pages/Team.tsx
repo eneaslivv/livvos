@@ -3,6 +3,8 @@ import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
 import { useTeam, TeamMember, TeamTask } from '../context/TeamContext';
 import { useRBAC } from '../context/RBACContext';
+import { useSupabase } from '../hooks/useSupabase';
+import { useAuth } from '../hooks/useAuth';
 
 const AGENT_TYPES = [
     { value: 'ai-assistant', label: 'AI Assistant', icon: 'Brain' },
@@ -47,8 +49,10 @@ const getAgentTypeInfo = (type: string | null) => {
 type FilterTab = 'all' | 'people' | 'agents';
 
 export const Team: React.FC = () => {
-    const { members, isLoading, error, refresh, getMemberTasks, updateMemberAgent } = useTeam();
+    const { members, isLoading, error, refresh, getMemberTasks, updateMemberAgent, updateMemberStatus, updateMemberRole, removeMember } = useTeam();
     const { isAdmin } = useRBAC();
+    const { user: authUser } = useAuth();
+    const { data: rolesData } = useSupabase<{ id: string; name: string; is_system: boolean }>('roles', { subscribe: false });
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
     const [memberTasks, setMemberTasks] = useState<TeamTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
@@ -56,6 +60,7 @@ export const Team: React.FC = () => {
     const [filterTab, setFilterTab] = useState<FilterTab>('all');
     const [search, setSearch] = useState('');
     const [panelOpen, setPanelOpen] = useState(false);
+    const [actionLoading, setActionLoading] = useState(false);
 
     // Agent config state
     const [agentEditing, setAgentEditing] = useState(false);
@@ -146,6 +151,49 @@ export const Team: React.FC = () => {
             }
         } catch (err) {
             console.error('Error toggling connection:', err);
+        }
+    };
+
+    const isSelf = (member: TeamMember) => member.id === authUser?.id;
+    const isMemberOwner = (member: TeamMember) => member.role.toLowerCase() === 'owner';
+
+    const handleSuspendActivate = async (member: TeamMember) => {
+        const newStatus = member.status === 'active' ? 'suspended' : 'active';
+        setActionLoading(true);
+        try {
+            await updateMemberStatus(member.id, newStatus);
+            setSelectedMember(prev => prev ? { ...prev, status: newStatus } : null);
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Error updating status:', err);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleChangeRole = async (member: TeamMember, roleId: string) => {
+        setActionLoading(true);
+        try {
+            await updateMemberRole(member.id, roleId);
+            const role = rolesData.find(r => r.id === roleId);
+            setSelectedMember(prev => prev ? { ...prev, role: role?.name || prev.role, role_id: roleId } : null);
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Error changing role:', err);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleRemoveMember = async (member: TeamMember) => {
+        if (!confirm(`Remove ${member.name || member.email} from the team? This will unassign all their tasks and remove their access.`)) return;
+        setActionLoading(true);
+        try {
+            await removeMember(member.id);
+            setPanelOpen(false);
+            setSelectedMember(null);
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Error removing member:', err);
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -551,6 +599,65 @@ export const Team: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Member Management — role, status, remove (admin only, not self, not owner) */}
+                        {isAdmin() && !isSelf(selectedMember) && (
+                            <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
+                                    <Icons.Settings size={13} />
+                                    Member Management
+                                </h3>
+                                <div className="space-y-3">
+                                    {/* Role selector */}
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wide mb-1.5 block">Role</label>
+                                        <select
+                                            value={selectedMember.role_id || ''}
+                                            onChange={(e) => handleChangeRole(selectedMember, e.target.value)}
+                                            disabled={actionLoading || isMemberOwner(selectedMember)}
+                                            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/40 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500/30 disabled:opacity-50"
+                                        >
+                                            <option value="">No role</option>
+                                            {rolesData.map(role => (
+                                                <option key={role.id} value={role.id}>
+                                                    {role.name.replace('_', ' ')}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Status toggle + Remove */}
+                                    <div className="flex gap-2">
+                                        {!isMemberOwner(selectedMember) && (
+                                            <button
+                                                onClick={() => handleSuspendActivate(selectedMember)}
+                                                disabled={actionLoading}
+                                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all disabled:opacity-50 ${
+                                                    selectedMember.status === 'active'
+                                                        ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/40 text-amber-600 dark:text-amber-400 hover:bg-amber-100'
+                                                        : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100'
+                                                }`}
+                                            >
+                                                {selectedMember.status === 'active' ? (
+                                                    <><Icons.XCircle size={15} /> Suspend</>
+                                                ) : (
+                                                    <><Icons.CheckCircle size={15} /> Activate</>
+                                                )}
+                                            </button>
+                                        )}
+                                        {!isMemberOwner(selectedMember) && (
+                                            <button
+                                                onClick={() => handleRemoveMember(selectedMember)}
+                                                disabled={actionLoading}
+                                                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition-all disabled:opacity-50"
+                                            >
+                                                <Icons.Trash size={15} /> Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Agent Configuration Section */}
                         <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60">

@@ -160,15 +160,18 @@ serve(async (req) => {
       type === 'task'
         ? 'You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string). Keep title concise.'
         : type === 'tasks_bulk'
-        ? `You are a project planning assistant. Given a description of work, break it into phases and tasks.
+        ? `You are a senior project planning assistant for a creative agency. Given a description of work, break it into phases with tasks, delivery dates and budget estimates.
 Return ONLY valid JSON with this structure:
-{"phases":[{"name":"Phase Name","tasks":[{"title":"Task title","priority":"low|medium|high"}]}]}
+{"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high"}]}]}
 Rules:
-- Create 2-6 phases with clear names
-- Each phase should have 2-8 concrete, actionable tasks
+- Create 2-6 phases with clear, professional names
+- Each phase should have 3-8 concrete, actionable tasks
 - Priorities: high for critical/blocking tasks, medium for standard, low for nice-to-have
 - Task titles should be concise and actionable (start with a verb)
-- Respond in the same language as the input`
+- Estimate realistic start and end dates for each phase, starting from today and spacing phases sequentially (1-3 weeks per phase typically)
+- Estimate a reasonable budget for each phase in USD based on typical agency rates ($80-150/hr) — set budget to 0 if no cost info is provided
+- Respond in the same language as the input
+- Be specific and detailed — avoid generic tasks like "review" or "finalize"`
         : type === 'proposal'
         ? 'You are a proposal writer. Return ONLY valid JSON with keys: summary (string), content (string, structured with headings), timeline (array of objects with week:number, title:string, detail:string), language (en|es). Keep tone professional and clear.'
         : type === 'blog'

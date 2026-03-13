@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
 import { useTenant } from './TenantContext';
 import { ResourceLimitError } from '../lib/ResourceLimitError';
+import { notifyWithEmail } from '../lib/notifyWithEmail';
+import { sendEmail } from '../lib/sendEmail';
 
 // Types
 export interface TeamMember {
@@ -45,6 +47,9 @@ interface TeamContextType {
     assignTaskToMember: (taskId: string, memberId: string) => Promise<void>;
     getWorkloadSummary: () => { memberId: string; name: string; load: number }[];
     updateMemberAgent: (memberId: string, agentData: { is_agent: boolean; agent_type?: string | null; agent_description?: string | null; agent_connected?: boolean }) => Promise<void>;
+    updateMemberStatus: (memberId: string, status: 'active' | 'suspended') => Promise<void>;
+    updateMemberRole: (memberId: string, roleId: string) => Promise<void>;
+    removeMember: (memberId: string) => Promise<void>;
     canAddMember: () => Promise<void>;
 }
 
@@ -259,6 +264,68 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // Update member status (suspend / activate)
+    const updateMemberStatus = async (memberId: string, status: 'active' | 'suspended') => {
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ status })
+                .eq('id', memberId);
+            if (error) throw error;
+            setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status } : m));
+        } catch (err) {
+            errorLogger.error('Error updating member status', err);
+            throw err;
+        }
+    };
+
+    // Update member role
+    const updateMemberRole = async (memberId: string, roleId: string) => {
+        try {
+            // Remove existing roles for this user
+            const { error: delError } = await supabase
+                .from('user_roles')
+                .delete()
+                .eq('user_id', memberId);
+            if (delError) throw delError;
+
+            // Assign new role
+            const { error: insertError } = await supabase
+                .from('user_roles')
+                .insert({ user_id: memberId, role_id: roleId });
+            if (insertError) throw insertError;
+
+            // Refresh to get updated role names
+            await fetchTeamMembers();
+        } catch (err) {
+            errorLogger.error('Error updating member role', err);
+            throw err;
+        }
+    };
+
+    // Remove member from tenant
+    const removeMember = async (memberId: string) => {
+        try {
+            // Remove role assignments
+            await supabase.from('user_roles').delete().eq('user_id', memberId);
+            // Remove project memberships
+            await supabase.from('project_members').delete().eq('user_id', memberId);
+            // Unassign tasks
+            await supabase.from('tasks').update({ assignee_id: null }).eq('assignee_id', memberId);
+            // Remove profile from tenant (set tenant_id to null)
+            const { error } = await supabase
+                .from('profiles')
+                .update({ tenant_id: null, status: 'suspended' })
+                .eq('id', memberId);
+            if (error) throw error;
+
+            setMembers(prev => prev.filter(m => m.id !== memberId));
+        } catch (err) {
+            errorLogger.error('Error removing team member', err);
+            throw err;
+        }
+    };
+
     // Check if tenant can add another member (throws ResourceLimitError if not)
     const canAddMember = async () => {
         await refreshUsage();
@@ -288,6 +355,9 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 assignTaskToMember,
                 getWorkloadSummary,
                 updateMemberAgent,
+                updateMemberStatus,
+                updateMemberRole,
+                removeMember,
                 canAddMember,
             }}
         >
