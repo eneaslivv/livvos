@@ -278,6 +278,19 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                             onChange={e => updatePreviewTask(pIdx, tIdx, { title: e.target.value })}
                             className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
                           />
+                          {(task as any).dueDate && (
+                            <input
+                              type="date"
+                              value={(task as any).dueDate}
+                              onChange={e => updatePreviewTask(pIdx, tIdx, { dueDate: e.target.value } as any)}
+                              className="text-[10px] text-zinc-400 dark:text-zinc-500 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-24"
+                            />
+                          )}
+                          {(task as any).assignee && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-500 dark:bg-violet-500/10 dark:text-violet-400 truncate max-w-[80px]" title={(task as any).assignee}>
+                              {(task as any).assignee}
+                            </span>
+                          )}
                           <select
                             value={task.priority}
                             onChange={e => updatePreviewTask(pIdx, tIdx, { priority: e.target.value })}

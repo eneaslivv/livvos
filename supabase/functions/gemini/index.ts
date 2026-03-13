@@ -29,7 +29,10 @@ type TaskResponse = {
 type TasksBulkResponse = {
   phases: {
     name: string
-    tasks: { title: string; priority: 'low' | 'medium' | 'high'; subtasks?: { title: string }[] }[]
+    startDate?: string
+    endDate?: string
+    budget?: number
+    tasks: { title: string; priority: 'low' | 'medium' | 'high'; dueDate?: string; assignee?: string | null; subtasks?: { title: string }[] }[]
   }[]
 }
 
@@ -160,20 +163,22 @@ serve(async (req) => {
       type === 'task'
         ? 'You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string). Keep title concise.'
         : type === 'tasks_bulk'
-        ? `You are a senior project planning assistant for a creative agency. Given a description of work, break it into phases with tasks (each with subtasks), delivery dates and budget estimates.
+        ? `You are a senior project planning assistant for a creative agency. Given a project description and context, break it into phases with tasks, realistic delivery dates, and budget estimates.
 Return ONLY valid JSON with this structure:
-{"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high","subtasks":[{"title":"Subtask title"}]}]}]}
+{"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high","dueDate":"YYYY-MM-DD","assignee":"team member name or null","subtasks":[{"title":"Subtask title"}]}]}]}
 Rules:
-- Create 2-6 phases with clear, professional names
-- Each phase should have 3-8 concrete, actionable tasks
-- Each task should have 2-5 subtasks that break it into concrete, actionable steps
-- Subtask titles should be specific micro-tasks (start with a verb). Simple tasks can have fewer subtasks
-- Priorities: high for critical/blocking tasks, medium for standard, low for nice-to-have
+- Create 2-5 phases with clear, professional names
+- Each phase should have 3-6 concrete, actionable tasks (NOT more — quality over quantity)
+- Each task should have 1-3 subtasks ONLY if the task is complex enough to warrant them. Simple tasks need 0 subtasks.
+- IMPORTANT: Each task MUST have its own "dueDate" (YYYY-MM-DD) staggered within the phase date range. Space tasks evenly — do NOT give all tasks the same date.
+- If a list of team members is provided in the input, assign tasks to specific people by name using the "assignee" field. Distribute work evenly across the team based on task type. If no team is provided, set assignee to null.
+- Priorities: high for critical-path/blocking tasks, medium for standard, low for nice-to-have
 - Task titles should be concise and actionable (start with a verb)
-- Estimate realistic start and end dates for each phase, starting from today and spacing phases sequentially (1-3 weeks per phase typically)
+- If a project deadline is provided, ALL phase end dates and task due dates MUST be before that deadline. Work backwards from the deadline.
 - Estimate a reasonable budget for each phase in USD based on typical agency rates ($80-150/hr) — set budget to 0 if no cost info is provided
 - Respond in the same language as the input
-- Be specific and detailed — avoid generic tasks like "review" or "finalize"`
+- Be specific and detailed — avoid generic tasks like "review" or "finalize"
+- Focus on QUALITY: fewer well-defined tasks > many vague tasks`
         : type === 'proposal'
         ? 'You are a proposal writer. Return ONLY valid JSON with keys: summary (string), content (string, structured with headings), timeline (array of objects with week:number, title:string, detail:string), language (en|es). Keep tone professional and clear.'
         : type === 'blog'

@@ -24,6 +24,8 @@ export interface AiPreviewSubtask {
 export interface AiPreviewTask {
   title: string;
   priority: string;
+  dueDate?: string;
+  assignee?: string | null;
   subtasks?: AiPreviewSubtask[];
 }
 export interface AiPreviewPhase {
@@ -777,6 +779,19 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     setAiError(null);
     setAiPreview(null);
     try {
+      // Build context-rich input for the AI
+      const teamNames = members.map(m => m.name || m.email).filter(Boolean);
+      const contextLines = [
+        `Project: ${selectedProject.title}`,
+        selectedProject.description ? `Description: ${selectedProject.description}` : '',
+        (selectedProject as any).deadline ? `Deadline: ${(selectedProject as any).deadline}` : '',
+        (selectedProject as any).client_name ? `Client: ${(selectedProject as any).client_name}` : '',
+        teamNames.length > 0 ? `Team members: ${teamNames.join(', ')}` : '',
+        `Today: ${new Date().toISOString().slice(0, 10)}`,
+        '',
+        `Task request: ${aiPrompt.trim()}`,
+      ].filter(Boolean).join('\n');
+
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini`, {
         method: 'POST',
@@ -784,7 +799,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ type: 'tasks_bulk', input: aiPrompt.trim() }),
+        body: JSON.stringify({ type: 'tasks_bulk', input: contextLines }),
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'AI generation failed');
@@ -818,20 +833,38 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         await updateProject(selectedProject.id, { tasksGroups: [...updatedExisting, ...newPhases] });
       }
 
+      // Build a name→id map for team member assignment
+      const memberMap = new Map<string, string>();
+      for (const m of members) {
+        if (m.name) memberMap.set(m.name.toLowerCase(), m.id);
+        if (m.email) memberMap.set(m.email.toLowerCase(), m.id);
+      }
+      const resolveAssignee = (name?: string | null): string | null => {
+        if (!name) return currentUser?.id || null;
+        const lower = name.toLowerCase();
+        // Try exact match first, then partial
+        for (const [key, id] of memberMap) {
+          if (key === lower || key.includes(lower) || lower.includes(key)) return id;
+        }
+        return currentUser?.id || null;
+      };
+
       // Insert tasks + subtasks — use supabase directly to get parent IDs back
       let totalTasks = 0;
       let totalSubtasks = 0;
       for (const phase of aiPreview.phases) {
         for (const task of phase.tasks) {
+          const taskAssignee = resolveAssignee((task as any).assignee);
+          const taskDueDate = (task as any).dueDate || phase.endDate || new Date().toISOString().slice(0, 10);
           const { data: inserted } = await supabase.from('tasks').insert({
             title: task.title,
             completed: false,
             project_id: selectedProject.id,
             client_id: (selectedProject as any).client_id || null,
-            assignee_id: currentUser?.id || null,
+            assignee_id: taskAssignee,
             priority: task.priority || 'medium',
             group_name: phase.name,
-            due_date: phase.endDate || new Date().toISOString().slice(0, 10),
+            due_date: taskDueDate,
             tenant_id: currentTenant?.id || null,
             owner_id: currentUser?.id || null,
           }).select('id').single();
@@ -846,9 +879,9 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
               parent_task_id: inserted.id,
               priority: 'medium',
               status: 'todo',
-              assignee_id: currentUser?.id || null,
+              assignee_id: taskAssignee,
               group_name: null,
-              due_date: phase.endDate || new Date().toISOString().slice(0, 10),
+              due_date: taskDueDate,
               tenant_id: currentTenant?.id || null,
               owner_id: currentUser?.id || null,
             }));
