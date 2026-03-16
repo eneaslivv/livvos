@@ -4,6 +4,11 @@ import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Underline from '@tiptap/extension-underline';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import Image from '@tiptap/extension-image';
 import { supabase } from '../lib/supabase';
 
 interface SharedDoc {
@@ -26,6 +31,11 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
       TaskList,
       TaskItem.configure({ nested: true }),
       Underline,
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      Image.configure({ inline: false, allowBase64: true }),
     ],
     editable: false,
     content: null,
@@ -85,6 +95,15 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
+      <style>{`
+        .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; overflow: hidden; }
+        .ProseMirror th, .ProseMirror td { border: 1px solid #e4e4e7; padding: 8px 12px; text-align: left; vertical-align: top; min-width: 80px; }
+        .dark .ProseMirror th, .dark .ProseMirror td { border-color: #3f3f46; }
+        .ProseMirror th { background: #f4f4f5; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.03em; color: #71717a; }
+        .dark .ProseMirror th { background: #27272a; color: #a1a1aa; }
+        .ProseMirror td { font-size: 0.9em; }
+        .ProseMirror img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }
+      `}</style>
       {/* Header */}
       <div className="border-b border-zinc-100 dark:border-zinc-800/60 px-6 py-4">
         <div className="max-w-3xl mx-auto">

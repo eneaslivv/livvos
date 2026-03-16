@@ -42,6 +42,19 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = ({ editor }) => {
       { icon: <Icons.Code size={15} />, action: () => editor.chain().focus().toggleCodeBlock().run(), isActive: editor.isActive('codeBlock'), title: 'Code Block' },
       { icon: <Icons.Minus size={15} />, action: () => editor.chain().focus().setHorizontalRule().run(), isActive: false, title: 'Divider' },
     ],
+    // Table & Image
+    [
+      { icon: <Icons.Table size={15} />, action: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), isActive: editor.isActive('table'), title: 'Insert Table' },
+      {
+        icon: <Icons.Image size={15} />,
+        action: () => {
+          const url = prompt('Image URL:');
+          if (url) editor.chain().focus().setImage({ src: url }).run();
+        },
+        isActive: false,
+        title: 'Insert Image',
+      },
+    ],
   ];
 
   return (

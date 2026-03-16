@@ -6,6 +6,11 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import Image from '@tiptap/extension-image';
 import { Icons } from '../ui/Icons';
 import { DocumentToolbar } from './DocumentToolbar';
 import { useDocuments } from '../../context/DocumentsContext';
@@ -73,6 +78,11 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: 'Start writing...' }),
       Underline,
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      Image.configure({ inline: false, allowBase64: true }),
     ],
     content: doc?.content && Object.keys(doc.content).length > 0 ? doc.content : undefined,
     editorProps: {
@@ -210,6 +220,19 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
 
   return createPortal(
     <div className="fixed inset-0 z-50 bg-white dark:bg-zinc-950 flex flex-col">
+      <style>{`
+        .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; overflow: hidden; }
+        .ProseMirror th, .ProseMirror td { border: 1px solid #e4e4e7; padding: 8px 12px; text-align: left; vertical-align: top; min-width: 80px; position: relative; }
+        .dark .ProseMirror th, .dark .ProseMirror td { border-color: #3f3f46; }
+        .ProseMirror th { background: #f4f4f5; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.03em; color: #71717a; }
+        .dark .ProseMirror th { background: #27272a; color: #a1a1aa; }
+        .ProseMirror td { font-size: 0.9em; }
+        .ProseMirror .selectedCell { background: #dbeafe; }
+        .dark .ProseMirror .selectedCell { background: #1e3a5f; }
+        .ProseMirror img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }
+        .ProseMirror .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: #3b82f6; pointer-events: none; }
+        .ProseMirror.resize-cursor { cursor: col-resize; }
+      `}</style>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">

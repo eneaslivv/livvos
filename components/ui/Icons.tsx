@@ -105,7 +105,8 @@ import {
   ListChecks,
   Quote,
   Code,
-  Minus
+  Minus,
+  Table2
 } from 'lucide-react';
 
 export const Icons = {
@@ -218,5 +219,6 @@ export const Icons = {
   ListChecks,
   Quote,
   Code,
-  Minus
+  Minus,
+  Table: Table2
 };
