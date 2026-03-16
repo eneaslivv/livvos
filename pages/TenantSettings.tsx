@@ -26,7 +26,7 @@ export const TenantSettings: React.FC = () => {
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, variant: 'light' | 'dark' = 'light') => {
         const file = e.target.files?.[0];
         if (!file || !currentTenant) return;
         if (file.size > 2 * 1024 * 1024) {
@@ -38,15 +38,17 @@ export const TenantSettings: React.FC = () => {
         setMessage(null);
         try {
             const ext = file.name.split('.').pop();
-            const path = `logos/${currentTenant.id}.${ext}`;
+            const suffix = variant === 'dark' ? '-dark' : '';
+            const path = `logos/${currentTenant.id}${suffix}.${ext}`;
             await supabase.storage.from('documents').remove([path]);
             const { error: upErr } = await supabase.storage.from('documents').upload(path, file, { upsert: true });
             if (upErr) throw upErr;
             const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
             const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`;
-            await updateTenant({ logo_url: logoUrl });
-            updateBranding('logo', logoUrl);
-            setMessage({ text: 'Logo uploaded successfully', type: 'success' });
+            const field = variant === 'dark' ? 'logo_url_dark' : 'logo_url';
+            await updateTenant({ [field]: logoUrl });
+            if (variant === 'light') updateBranding('logo', logoUrl);
+            setMessage({ text: `${variant === 'dark' ? 'Dark' : 'Light'} logo uploaded`, type: 'success' });
         } catch (err: any) {
             setMessage({ text: err?.message || 'Error uploading logo', type: 'error' });
         } finally {
@@ -55,19 +57,21 @@ export const TenantSettings: React.FC = () => {
         }
     };
 
-    const handleRemoveLogo = async () => {
+    const handleRemoveLogo = async (variant: 'light' | 'dark' = 'light') => {
         if (!currentTenant) return;
         setUploadingLogo(true);
         try {
+            const suffix = variant === 'dark' ? '-dark' : '';
             const { data: files } = await supabase.storage.from('documents').list('logos', {
-                search: currentTenant.id,
+                search: `${currentTenant.id}${suffix}`,
             });
             if (files?.length) {
                 await supabase.storage.from('documents').remove(files.map(f => `logos/${f.name}`));
             }
-            await updateTenant({ logo_url: null as any });
-            updateBranding('logo', '');
-            setMessage({ text: 'Logo removed', type: 'success' });
+            const field = variant === 'dark' ? 'logo_url_dark' : 'logo_url';
+            await updateTenant({ [field]: null as any });
+            if (variant === 'light') updateBranding('logo', '');
+            setMessage({ text: `${variant === 'dark' ? 'Dark' : 'Light'} logo removed`, type: 'success' });
         } catch (err: any) {
             setMessage({ text: err?.message || 'Error removing logo', type: 'error' });
         } finally {
@@ -205,50 +209,72 @@ export const TenantSettings: React.FC = () => {
                         />
                     </div>
 
-                    {/* Logo Upload */}
-                    <div>
-                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    {/* Logo Upload — Light & Dark */}
+                    <div className="col-span-full">
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
                             Logo
                         </label>
-                        <div className="flex items-center gap-4">
-                            <div className="relative group w-16 h-16 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden bg-zinc-50 dark:bg-zinc-800 shrink-0">
-                                {(currentTenant?.logo_url || branding.logo) ? (
-                                    <img
-                                        src={currentTenant?.logo_url || branding.logo}
-                                        alt="Logo"
-                                        className="w-full h-full object-contain p-1"
-                                    />
-                                ) : (
-                                    <Icons.Image size={24} className="text-zinc-400" />
-                                )}
-                                <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                                    {uploadingLogo ? (
-                                        <Icons.Loader size={16} className="text-white animate-spin" />
-                                    ) : (
-                                        <Icons.Upload size={16} className="text-white" />
-                                    )}
-                                    <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                                        className="hidden"
-                                        disabled={uploadingLogo}
-                                        onChange={handleLogoUpload}
-                                    />
-                                </label>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-xs text-zinc-400">
-                                    PNG, JPG, WebP or SVG. Max 2MB.
+                        <p className="text-xs text-zinc-400 mb-4">
+                            Upload a light mode logo and a dark mode logo for proper contrast on both themes. PNG, JPG, WebP or SVG. Max 2MB.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Light mode logo */}
+                            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
+                                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-3 flex items-center gap-1.5">
+                                    <Icons.Sun size={13} /> Light mode
                                 </p>
-                                {(currentTenant?.logo_url || branding.logo) && (
-                                    <button
-                                        type="button"
-                                        onClick={handleRemoveLogo}
-                                        disabled={uploadingLogo}
-                                        className="text-xs text-red-500 hover:text-red-600 text-left disabled:opacity-50"
-                                    >
-                                        Remove logo
-                                    </button>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-14 h-14 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                                        {(currentTenant?.logo_url) ? (
+                                            <img src={currentTenant.logo_url} alt="Logo light" className="w-full h-full object-contain p-1.5" />
+                                        ) : (
+                                            <Icons.Image size={20} className="text-zinc-300" />
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${uploadingLogo ? 'opacity-50 pointer-events-none' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                                            <Icons.Upload size={13} />
+                                            Upload
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" disabled={uploadingLogo} onChange={e => handleLogoUpload(e, 'light')} />
+                                        </label>
+                                        {currentTenant?.logo_url && (
+                                            <button type="button" onClick={() => handleRemoveLogo('light')} disabled={uploadingLogo} className="text-[11px] text-red-500 hover:text-red-600 text-left disabled:opacity-50">
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Dark mode logo */}
+                            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 p-4">
+                                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-3 flex items-center gap-1.5">
+                                    <Icons.Moon size={13} /> Dark mode
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-14 h-14 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-900 flex items-center justify-center overflow-hidden shrink-0">
+                                        {(currentTenant?.logo_url_dark) ? (
+                                            <img src={currentTenant.logo_url_dark} alt="Logo dark" className="w-full h-full object-contain p-1.5" />
+                                        ) : currentTenant?.logo_url ? (
+                                            <img src={currentTenant.logo_url} alt="Logo fallback" className="w-full h-full object-contain p-1.5 invert" />
+                                        ) : (
+                                            <Icons.Image size={20} className="text-zinc-600" />
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${uploadingLogo ? 'opacity-50 pointer-events-none' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                                            <Icons.Upload size={13} />
+                                            Upload
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" disabled={uploadingLogo} onChange={e => handleLogoUpload(e, 'dark')} />
+                                        </label>
+                                        {currentTenant?.logo_url_dark && (
+                                            <button type="button" onClick={() => handleRemoveLogo('dark')} disabled={uploadingLogo} className="text-[11px] text-red-500 hover:text-red-600 text-left disabled:opacity-50">
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                {!currentTenant?.logo_url_dark && currentTenant?.logo_url && (
+                                    <p className="text-[10px] text-zinc-400 mt-2">Using inverted light logo as fallback</p>
                                 )}
                             </div>
                         </div>

@@ -14,6 +14,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
   const [tenantLogo, setTenantLogo] = useState<string | null>(null)
+  const [tenantLogoDark, setTenantLogoDark] = useState<string | null>(null)
   const [tenantName, setTenantName] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,9 +27,10 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
   }, [])
 
   useEffect(() => {
-    supabase.from('tenants').select('logo_url, name').eq('status', 'active').limit(1).single()
+    supabase.from('tenants').select('logo_url, logo_url_dark, name').eq('status', 'active').limit(1).single()
       .then(({ data }) => {
         if (data?.logo_url) setTenantLogo(data.logo_url)
+        if (data?.logo_url_dark) setTenantLogoDark(data.logo_url_dark)
         if (data?.name) setTenantName(data.name)
       })
   }, [])
@@ -98,8 +100,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           <div className="absolute inset-0 bg-gradient-to-br from-[#2C0405]/20 via-transparent to-transparent" />
 
           <div className="relative z-10">
-            {tenantLogo ? (
-              <img src={tenantLogo} alt={tenantName || ''} className="h-10 object-contain" />
+            {(tenantLogoDark || tenantLogo) ? (
+              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-10 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
             ) : (
               <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
                 livv<span className="text-[#e8b4b4]">~</span>

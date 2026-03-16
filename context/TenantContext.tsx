@@ -16,6 +16,7 @@ export interface Tenant {
     slug: string;
     owner_id: string;
     logo_url?: string;
+    logo_url_dark?: string;
     banner_url?: string;
     website_url?: string | null;
     preview_url?: string | null;
