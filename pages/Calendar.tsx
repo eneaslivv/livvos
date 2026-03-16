@@ -272,6 +272,15 @@ export const Calendar: React.FC = () => {
   const [editingTask, setEditingTask] = useState<Partial<CalendarTask>>({});
   const [savingTask, setSavingTask] = useState(false);
 
+  // Keep selectedTask in sync with the tasks array (so quick updates reflect)
+  useEffect(() => {
+    if (!selectedTask) return;
+    const updated = tasks.find(t => t.id === selectedTask.id);
+    if (updated && updated !== selectedTask) {
+      setSelectedTask(updated);
+    }
+  }, [tasks]);
+
   // Subtask state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);

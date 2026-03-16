@@ -242,8 +242,12 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                     key={p.value}
                     type="button"
                     onClick={() => {
+                      const prevPriority = editingTask.priority;
                       setEditingTask({ ...editingTask, priority: p.value });
-                      if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { priority: p.value });
+                      if (selectedTask && onQuickUpdate) {
+                        onQuickUpdate(selectedTask.id, { priority: p.value })
+                          ?.catch?.(() => setEditingTask(prev => ({ ...prev, priority: prevPriority })));
+                      }
                     }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
                       editingTask.priority === p.value
@@ -271,10 +275,12 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                     key={s.value}
                     type="button"
                     onClick={() => {
+                      const prevStatus = editingTask.status;
                       setEditingTask({ ...editingTask, status: s.value });
                       if (selectedTask && onQuickUpdate) {
                         const completed = s.value === 'done';
-                        onQuickUpdate(selectedTask.id, { status: s.value, completed });
+                        onQuickUpdate(selectedTask.id, { status: s.value, completed })
+                          ?.catch?.(() => setEditingTask(prev => ({ ...prev, status: prevStatus })));
                       }
                     }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${

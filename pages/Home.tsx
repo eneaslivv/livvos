@@ -150,6 +150,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const [addingSubtask, setAddingSubtask] = useState(false);
     const quickInputRef = useRef<HTMLInputElement>(null);
 
+    // Keep selectedFocusTask in sync with the tasks array (so quick updates reflect)
+    useEffect(() => {
+        if (!selectedFocusTask) return;
+        const updated = tasks.find((t: any) => t.id === selectedFocusTask.id);
+        if (updated && updated !== selectedFocusTask) {
+            setSelectedFocusTask(updated as CalendarTask);
+        }
+    }, [tasks]);
+
     // TaskDetailPanel helpers
     const memberMap = teamMembers.reduce<Record<string, { name: string | null; avatar_url?: string | null }>>((acc, m) => {
         acc[m.id] = { name: m.name, avatar_url: m.avatar_url };
