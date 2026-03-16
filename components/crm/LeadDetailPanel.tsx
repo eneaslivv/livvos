@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Lead } from '../../types';
 import { Icons } from '../ui/Icons';
 
@@ -146,14 +147,14 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
   const inputClass = 'w-full px-2.5 py-1.5 text-[13px] bg-zinc-50/80 dark:bg-zinc-900/50 border border-zinc-150 dark:border-zinc-800/60 rounded-lg outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-300 dark:placeholder:text-zinc-600';
   const selectClass = 'w-full px-2 py-1.5 text-[13px] bg-zinc-50/80 dark:bg-zinc-900/50 border border-zinc-150 dark:border-zinc-800/60 rounded-lg outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors text-zinc-800 dark:text-zinc-200 appearance-none cursor-pointer';
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
       <div
         className={`absolute inset-0 bg-black/10 dark:bg-black/30 backdrop-blur-[2px] transition-opacity duration-250 ${overlayOpacity}`}
         onClick={onClose}
       />
       <aside
-        className={`relative h-full w-full max-w-md bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.3)] transition-transform duration-250 ease-out ${panelTranslate} motion-reduce:transition-none`}
+        className={`relative h-full max-h-screen w-full max-w-md bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.3)] transition-transform duration-250 ease-out ${panelTranslate} motion-reduce:transition-none overflow-hidden`}
       >
         <div className="h-full flex flex-col">
 
@@ -180,7 +181,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
           </div>
 
           {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
             <div className="px-5 py-4 pb-6 space-y-4">
 
               {/* Status + Temperature row */}
@@ -399,6 +400,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
           </div>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 };

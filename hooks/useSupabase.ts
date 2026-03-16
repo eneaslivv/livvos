@@ -522,6 +522,12 @@ export function useSupabase<T = any>(table: string, options: UseSupabaseOptions 
   const remove = async (id: string) => {
     try {
       errorLogger.supabase.query(table, 'remove', id)
+      // Optimistic removal — update UI + cache immediately
+      setData((prev) => {
+        const next = prev.filter((item: any) => item.id !== id)
+        dataCache.set(cacheKey, next)
+        return next
+      })
       const { error: err } = await supabase.from(table).delete().eq('id', id)
       if (err) {
         errorLogger.supabase.error(table, 'remove', err)

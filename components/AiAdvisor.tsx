@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './ui/Icons';
 import { generateAdvisorInsights, clearAICache, AdvisorInsight } from '../lib/ai';
@@ -239,6 +240,7 @@ export const AiAdvisor: React.FC = () => {
       </motion.button>
 
       {/* ─── Slide Panel ─── */}
+      {createPortal(
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-[60] overflow-hidden">
@@ -259,7 +261,7 @@ export const AiAdvisor: React.FC = () => {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute inset-y-0 right-0 w-screen max-w-md bg-white dark:bg-zinc-900 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.4)] flex flex-col"
+              className="absolute inset-y-0 right-0 w-screen max-w-md max-h-screen bg-white dark:bg-zinc-900 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden"
             >
               {/* ── Header ── */}
               <div className="px-6 pt-6 pb-5 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
@@ -312,7 +314,7 @@ export const AiAdvisor: React.FC = () => {
               </div>
 
               {/* ── Content ── */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto min-h-0">
                 {loading ? (
                   <div className="flex flex-col items-center justify-center h-full gap-5 px-6">
                     <LoadingOrb />
@@ -462,7 +464,8 @@ export const AiAdvisor: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body)}
     </>
   );
 };

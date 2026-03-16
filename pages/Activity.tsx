@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from '../components/ui/Icons';
 import { Card } from '../components/ui/Card';
 import { useSupabase } from '../hooks/useSupabase';
@@ -880,13 +881,13 @@ export const Activity: React.FC = () => {
       </div>
 
       {/* Activity Details Sidebar */}
-      {selectedActivityId && (
+      {selectedActivityId && createPortal(
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div
             className={`absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-300 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}
             onClick={closeSidebar}
           />
-          <div className={`absolute inset-y-0 right-0 max-w-lg w-full bg-white dark:bg-zinc-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className={`absolute inset-y-0 right-0 max-w-lg w-full max-h-screen bg-white dark:bg-zinc-900 shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-zinc-100 dark:border-zinc-800">
               <div className="flex items-center gap-2">
@@ -905,7 +906,7 @@ export const Activity: React.FC = () => {
             </div>
 
             {/* Content */}
-            <div ref={sidebarContentRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div ref={sidebarContentRef} className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6">
               {selectedActivity && (
                 <>
                   {/* Original Post */}
@@ -1007,7 +1008,8 @@ export const Activity: React.FC = () => {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

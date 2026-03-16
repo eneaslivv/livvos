@@ -8,6 +8,7 @@ import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
 import { EmailPreferences } from './EmailPreferences';
 import { useRBAC } from '../../context/RBACContext';
+import { supabase } from '../../lib/supabase';
 import type { PageView } from '../../types';
 
 interface ConfigurationModalProps {
@@ -95,8 +96,11 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
 
                     <div className="p-4 border-t border-zinc-200 dark:border-zinc-800">
                         <button
-                            onClick={onClose}
-                            className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 transition-colors w-full px-2"
+                            onClick={async () => {
+                                await supabase.auth.signOut();
+                                onClose();
+                            }}
+                            className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-red-600 dark:hover:text-red-400 transition-colors w-full px-2"
                         >
                             <Icons.LogOut size={14} />
                             Sign out

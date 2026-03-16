@@ -6,6 +6,7 @@ import { ImageUploader } from './ImageUploader';
 import { TagInput } from './TagInput';
 import { BlockEditor, createDefaultBlock } from './blocks/BlockEditor';
 import { GridSkeleton, ListSkeleton, EmptyState } from './CmsSkeleton';
+import { captureVideoThumbnail } from '../../lib/videoThumbnail';
 
 interface PortfolioEditorProps {
   items: CmsPortfolioItem[];
@@ -116,6 +117,27 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [featuredWarning, setFeaturedWarning] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
+  const [generatingThumb, setGeneratingThumb] = useState(false);
+
+  /** Auto-capture a video frame, upload it, and set as card thumbnail */
+  const autoGenerateVideoThumbnail = async (videoUrl: string) => {
+    setGeneratingThumb(true);
+    try {
+      const thumbFile = await captureVideoThumbnail(videoUrl);
+      if (thumbFile) {
+        const thumbUrl = await onUpload(thumbFile);
+        if (thumbUrl) {
+          setForm((f) => ({ ...f, image: thumbUrl }));
+          return thumbUrl;
+        }
+      }
+    } catch {
+      // Silent fail — user can still upload manually
+    } finally {
+      setGeneratingThumb(false);
+    }
+    return null;
+  };
 
   const featuredCount = useMemo(() => items.filter((i) => i.featured).length, [items]);
   const atFeaturedLimit = featuredCount >= MAX_FEATURED;
@@ -185,7 +207,12 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
   const buildData = (): Partial<CmsPortfolioItem> => {
     const coverMedia = form.media.find((m) => m.is_cover);
-    const coverImage = form.image || coverMedia?.url || null;
+    let coverImage = coverMedia?.url || form.image || form.media[0]?.url || null;
+    // If coverImage is a video, fall back to the first static image in media
+    if (coverImage && /\.(mp4|webm|mov)(\?|$)/i.test(coverImage)) {
+      const staticImg = form.media.find((m) => m.type === 'image' || m.type === 'gif');
+      coverImage = staticImg?.url || coverImage;
+    }
     return {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
@@ -717,15 +744,22 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                           </span>
                           {/* Cover star */}
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const isVideoMedia = m.type === 'video';
                               setForm((f) => ({
                                 ...f,
                                 media: f.media.map((item, idx) => ({
                                   ...item,
                                   is_cover: idx === i,
                                 })),
-                              }))
-                            }
+                                // If static image, set as card thumbnail directly
+                                ...(!isVideoMedia ? { image: m.url } : {}),
+                              }));
+                              // If video, auto-generate thumbnail for card
+                              if (isVideoMedia) {
+                                autoGenerateVideoThumbnail(m.url);
+                              }
+                            }}
                             className="absolute top-1 right-1 p-0.5"
                           >
                             <Star
@@ -759,21 +793,44 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                       ))}
                     </div>
                   )}
+                  {/* Auto-generating thumbnail indicator */}
+                  {generatingThumb && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
+                      <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                      <span>Generating card thumbnail from video...</span>
+                    </div>
+                  )}
+                  {/* Persistent warning if image field is still a video (auto-gen failed) */}
+                  {!generatingThumb && form.image && /\.(mp4|webm|mov)(\?|$)/i.test(form.image) && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-700">
+                      <AlertTriangle size={12} className="shrink-0" />
+                      <span>
+                        <strong>Auto-thumbnail failed.</strong> Upload a static screenshot (JPG/PNG) to use as the card image on the public site.
+                      </span>
+                    </div>
+                  )}
                   <ImageUploader
                     value={null}
                     onChange={(url) => {
                       if (!url) return;
                       const mediaType = detectMediaType(url);
                       const isFirst = form.media.length === 0;
+                      const isVideo = mediaType === 'video';
+                      const shouldSetImage = isFirst && !isVideo;
                       setForm((f) => ({
                         ...f,
                         media: [
                           ...f.media,
                           { url, type: mediaType, is_cover: isFirst, caption: '' },
                         ],
-                        // Also set as main image if first upload
-                        ...(isFirst ? { image: url } : {}),
+                        ...(shouldSetImage ? { image: url } : {}),
+                        // If existing image is a video and this is a static image, replace it
+                        ...(!isFirst && !isVideo && f.image && /\.(mp4|webm|mov)(\?|$)/i.test(f.image) ? { image: url } : {}),
                       }));
+                      // Auto-generate thumbnail from video for card cover
+                      if (isVideo) {
+                        autoGenerateVideoThumbnail(url);
+                      }
                     }}
                     onUpload={(file) => onUpload(file)}
                     label={form.media.length > 0 ? 'Add more media' : 'Upload images, videos or GIFs'}
