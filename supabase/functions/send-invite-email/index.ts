@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
-function buildEmailHtml(name: string, inviteLink: string, brandName: string, type: string): string {
+function buildEmailHtml(name: string, inviteLink: string, brandName: string, type: string, logoUrl?: string): string {
   const firstName = name.split(' ')[0]
   const isClient = type === 'client'
 
@@ -59,9 +59,11 @@ function buildEmailHtml(name: string, inviteLink: string, brandName: string, typ
           <!-- Header -->
           <tr>
             <td style="background-color:#0a0a0a;padding:28px 40px;text-align:center;">
-              <div style="font-size:24px;font-weight:300;color:#ffffff;letter-spacing:3px;font-family:Georgia,'Times New Roman',serif;">
+              ${logoUrl
+                ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
+                : `<div style="font-size:24px;font-weight:300;color:#ffffff;letter-spacing:3px;font-family:Georgia,'Times New Roman',serif;">
                 livv<span style="color:${accentLight};">~</span>
-              </div>
+              </div>`}
             </td>
           </tr>
 
@@ -140,7 +142,7 @@ serve(async (req) => {
       })
     }
 
-    const { client_name, client_email, invite_link, tenant_name, invite_type } = await req.json()
+    const { client_name, client_email, invite_link, tenant_name, invite_type, logo_url } = await req.json()
 
     if (!client_email || !invite_link) {
       return new Response(JSON.stringify({ error: 'Missing client_email or invite_link' }), {
@@ -152,7 +154,7 @@ serve(async (req) => {
     const brandName = tenant_name || 'livv'
     const type = invite_type || 'team'
     const displayName = client_name || client_email.split('@')[0]
-    const htmlBody = buildEmailHtml(displayName, invite_link, brandName, type)
+    const htmlBody = buildEmailHtml(displayName, invite_link, brandName, type, logo_url)
 
     const subject = type === 'client'
       ? `${displayName}, your portal access is ready`

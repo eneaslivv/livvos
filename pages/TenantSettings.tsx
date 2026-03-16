@@ -23,7 +23,57 @@ export const TenantSettings: React.FC = () => {
     const [previewUrl, setPreviewUrl] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !currentTenant) return;
+        if (file.size > 2 * 1024 * 1024) {
+            setMessage({ text: 'Logo must be under 2MB', type: 'error' });
+            e.target.value = '';
+            return;
+        }
+        setUploadingLogo(true);
+        setMessage(null);
+        try {
+            const ext = file.name.split('.').pop();
+            const path = `logos/${currentTenant.id}.${ext}`;
+            await supabase.storage.from('documents').remove([path]);
+            const { error: upErr } = await supabase.storage.from('documents').upload(path, file, { upsert: true });
+            if (upErr) throw upErr;
+            const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+            const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+            await updateTenant({ logo_url: logoUrl });
+            updateBranding('logo', logoUrl);
+            setMessage({ text: 'Logo uploaded successfully', type: 'success' });
+        } catch (err: any) {
+            setMessage({ text: err?.message || 'Error uploading logo', type: 'error' });
+        } finally {
+            setUploadingLogo(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleRemoveLogo = async () => {
+        if (!currentTenant) return;
+        setUploadingLogo(true);
+        try {
+            const { data: files } = await supabase.storage.from('documents').list('logos', {
+                search: currentTenant.id,
+            });
+            if (files?.length) {
+                await supabase.storage.from('documents').remove(files.map(f => `logos/${f.name}`));
+            }
+            await updateTenant({ logo_url: null as any });
+            updateBranding('logo', '');
+            setMessage({ text: 'Logo removed', type: 'success' });
+        } catch (err: any) {
+            setMessage({ text: err?.message || 'Error removing logo', type: 'error' });
+        } finally {
+            setUploadingLogo(false);
+        }
+    };
 
     useEffect(() => {
         loadTenantConfig();
@@ -155,18 +205,53 @@ export const TenantSettings: React.FC = () => {
                         />
                     </div>
 
-                    {/* Logo URL */}
+                    {/* Logo Upload */}
                     <div>
                         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                            Logo URL
+                            Logo
                         </label>
-                        <input
-                            type="text"
-                            value={branding.logo}
-                            onChange={e => updateBranding('logo', e.target.value)}
-                            placeholder="/logo.svg"
-                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        />
+                        <div className="flex items-center gap-4">
+                            <div className="relative group w-16 h-16 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden bg-zinc-50 dark:bg-zinc-800 shrink-0">
+                                {(currentTenant?.logo_url || branding.logo) ? (
+                                    <img
+                                        src={currentTenant?.logo_url || branding.logo}
+                                        alt="Logo"
+                                        className="w-full h-full object-contain p-1"
+                                    />
+                                ) : (
+                                    <Icons.Image size={24} className="text-zinc-400" />
+                                )}
+                                <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                                    {uploadingLogo ? (
+                                        <Icons.Loader size={16} className="text-white animate-spin" />
+                                    ) : (
+                                        <Icons.Upload size={16} className="text-white" />
+                                    )}
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                        className="hidden"
+                                        disabled={uploadingLogo}
+                                        onChange={handleLogoUpload}
+                                    />
+                                </label>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <p className="text-xs text-zinc-400">
+                                    PNG, JPG, WebP or SVG. Max 2MB.
+                                </p>
+                                {(currentTenant?.logo_url || branding.logo) && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRemoveLogo}
+                                        disabled={uploadingLogo}
+                                        className="text-xs text-red-500 hover:text-red-600 text-left disabled:opacity-50"
+                                    >
+                                        Remove logo
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

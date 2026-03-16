@@ -13,6 +13,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
   const [mode, setMode] = useState<'signin' | 'signup' | 'magic' | 'forgot'>('signin')
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [tenantLogo, setTenantLogo] = useState<string | null>(null)
+  const [tenantName, setTenantName] = useState<string | null>(null)
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -21,6 +23,14 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
     return () => {
       sub.subscription.unsubscribe()
     }
+  }, [])
+
+  useEffect(() => {
+    supabase.from('tenants').select('logo_url, name').eq('status', 'active').limit(1).single()
+      .then(({ data }) => {
+        if (data?.logo_url) setTenantLogo(data.logo_url)
+        if (data?.name) setTenantName(data.name)
+      })
   }, [])
 
   const handleSubmit = async () => {
@@ -88,9 +98,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
           <div className="absolute inset-0 bg-gradient-to-br from-[#2C0405]/20 via-transparent to-transparent" />
 
           <div className="relative z-10">
-            <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-              livv<span className="text-[#e8b4b4]">~</span>
-            </span>
+            {tenantLogo ? (
+              <img src={tenantLogo} alt={tenantName || ''} className="h-10 object-contain" />
+            ) : (
+              <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
+                livv<span className="text-[#e8b4b4]">~</span>
+              </span>
+            )}
           </div>
 
           <div className="relative z-10 space-y-6">
@@ -268,9 +282,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
         <div className="relative z-10">
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-              livv<span className="text-amber-500">~</span>
-            </span>
+            {tenantLogo ? (
+              <img src={tenantLogo} alt={tenantName || ''} className="h-10 object-contain" />
+            ) : (
+              <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
+                livv<span className="text-amber-500">~</span>
+              </span>
+            )}
           </div>
         </div>
 
