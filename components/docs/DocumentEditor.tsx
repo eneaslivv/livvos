@@ -106,8 +106,10 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
         if (!items) return false;
+        // Only intercept if clipboard has a real image file (not HTML with tables/text)
+        const hasHTML = event.clipboardData?.types.includes('text/html');
         for (const item of Array.from(items)) {
-          if (item.type.startsWith('image/')) {
+          if (item.type.startsWith('image/') && item.kind === 'file' && !hasHTML) {
             event.preventDefault();
             const file = item.getAsFile();
             if (file) uploadImage(file).then(url => {
@@ -118,6 +120,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
             return true;
           }
         }
+        // Let Tiptap handle HTML paste (tables, formatted text, etc.)
         return false;
       },
       handleDrop: (view, event) => {
