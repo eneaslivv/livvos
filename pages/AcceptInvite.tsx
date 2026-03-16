@@ -117,7 +117,32 @@ export const AcceptInvite: React.FC = () => {
 
         window.location.href = inviteType === 'client' ? '/?portal=client' : '/';
       } else if (authData.user && !authData.session) {
-        // Email confirmation required
+        // Email confirmation required — auto-confirm via Edge Function since user came from invitation
+        try {
+          const confirmRes = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/confirm-invite-signup`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+              body: JSON.stringify({ email, token }),
+            }
+          );
+          const confirmData = await confirmRes.json();
+
+          if (confirmData.ok) {
+            // Email confirmed — now sign in automatically
+            const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+            if (!signInErr) {
+              const profileReady = await waitForProfile(authData.user.id);
+              if (profileReady) {
+                window.location.href = inviteType === 'client' ? '/?portal=client' : '/';
+                return;
+              }
+            }
+          }
+        } catch {
+          // Silent fail — show manual message as fallback
+        }
         setSuccessMessage(
           'Account created. Check your email to confirm your account before signing in.'
         );

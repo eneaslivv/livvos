@@ -882,7 +882,10 @@ export const Calendar: React.FC = () => {
           if (change.newPriority) updates.priority = change.newPriority;
           if (change.newAssignee) {
             const assigneeId = resolveAssignee(change.newAssignee);
-            if (assigneeId) updates.assignee_id = assigneeId;
+            if (assigneeId) {
+              updates.assignee_id = assigneeId;
+              updates.assignee_ids = [assigneeId];
+            }
           }
 
           if (Object.keys(updates).length > 0) {
