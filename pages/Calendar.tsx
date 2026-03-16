@@ -322,7 +322,8 @@ export const Calendar: React.FC = () => {
     duration: 60,
     project_id: '',
     client_id: '',
-    assignee_id: ''
+    assignee_id: '',
+    assignee_ids: [] as string[],
   });
 
   // Open task detail panel
@@ -339,6 +340,7 @@ export const Calendar: React.FC = () => {
       project_id: task.project_id || '',
       client_id: task.client_id || '',
       assignee_id: task.assignee_id || '',
+      assignee_ids: task.assignee_ids || [],
       blocked_by: task.blocked_by || '',
     });
   };
@@ -359,6 +361,10 @@ export const Calendar: React.FC = () => {
       if ('blocked_by' in updates && !updates.blocked_by) (updates as any).blocked_by = null;
       if ('project_id' in updates && !updates.project_id) (updates as any).project_id = null;
       if ('client_id' in updates && !(updates as any).client_id) (updates as any).client_id = null;
+      // Sync assignee_id from assignee_ids
+      if (updates.assignee_ids) {
+        updates.assignee_id = updates.assignee_ids[0] || undefined;
+      }
       if ('assignee_id' in updates && !updates.assignee_id) (updates as any).assignee_id = null;
       if (import.meta.env.DEV) console.log('[TaskEdit] saving:', JSON.stringify(updates, null, 2));
       await updateTask(selectedTask.id, updates);
@@ -572,7 +578,8 @@ export const Calendar: React.FC = () => {
         duration: newTaskData.duration || 60,
         project_id: newTaskData.project_id || undefined,
         client_id: newTaskData.client_id || undefined,
-        assignee_id: newTaskData.assignee_id || undefined,
+        assignee_id: newTaskData.assignee_ids?.[0] || newTaskData.assignee_id || undefined,
+        assignee_ids: newTaskData.assignee_ids || [],
         completed: false,
         order_index: 0,
       } as any);
@@ -587,7 +594,8 @@ export const Calendar: React.FC = () => {
         duration: 60,
         project_id: '',
         client_id: '',
-        assignee_id: ''
+        assignee_id: '',
+        assignee_ids: [],
       });
       setShowNewTaskForm(false);
     } catch (err) {

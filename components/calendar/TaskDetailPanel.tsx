@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
+import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
 import { CalendarTask } from '../../hooks/useCalendar';
 import { TaskCommentsSection } from './TaskCommentsSection';
 
@@ -353,17 +354,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
 
             <div className="col-span-2">
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Assignee</label>
-              <select
-                value={editingTask.assignee_id || ''}
-                onChange={e => setEditingTask({ ...editingTask, assignee_id: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
-              >
-                <option value="">Unassigned</option>
-                {teamMembers.filter(m => m.status === 'active').map(m => (
-                  <option key={m.id} value={m.id}>{m.id === userId ? `${m.name || m.email} (Me)` : (m.name || m.email)}</option>
-                ))}
-              </select>
+              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Assignees</label>
+              <MultiAssigneeSelect
+                value={editingTask.assignee_ids || (editingTask.assignee_id ? [editingTask.assignee_id] : [])}
+                onChange={ids => setEditingTask({ ...editingTask, assignee_ids: ids, assignee_id: ids[0] || undefined })}
+                teamMembers={teamMembers}
+                currentUserId={userId}
+              />
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
+import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
 
 interface ContentPlatformConfig {
   label: string;
@@ -75,6 +76,7 @@ export interface EventTaskFormPanelProps {
     project_id: string;
     client_id: string;
     assignee_id: string;
+    assignee_ids?: string[];
   };
   setNewTaskData: React.Dispatch<React.SetStateAction<any>>;
   // Handlers
@@ -456,25 +458,16 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
               </div>
             </div>
 
-            {/* Assignee */}
+            {/* Assignees */}
             <div>
               <label className="block text-[10px] font-medium text-zinc-400 mb-1">Assign to</label>
-              <select
-                value={newTaskData.assignee_id}
-                onChange={(e) => setNewTaskData((prev: any) => ({ ...prev, assignee_id: e.target.value }))}
-                className={`w-full px-2.5 py-1.5 border rounded-lg outline-none text-xs transition-all ${
-                  newTaskData.assignee_id
-                    ? 'bg-sky-50 dark:bg-sky-500/10 border-sky-300 dark:border-sky-500/40 text-sky-700 dark:text-sky-400'
-                    : 'bg-white dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-                }`}
-              >
-                <option value="">Unassigned</option>
-                {teamMembers.filter(m => m.status === 'active').map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.id === userId ? `${member.name || member.email} (Me)` : (member.name || member.email)}
-                  </option>
-                ))}
-              </select>
+              <MultiAssigneeSelect
+                value={newTaskData.assignee_ids || (newTaskData.assignee_id ? [newTaskData.assignee_id] : [])}
+                onChange={(ids) => setNewTaskData((prev: any) => ({ ...prev, assignee_ids: ids, assignee_id: ids[0] || '' }))}
+                teamMembers={teamMembers}
+                currentUserId={userId}
+                compact
+              />
             </div>
 
             {/* Description */}

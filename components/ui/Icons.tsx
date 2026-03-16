@@ -97,7 +97,15 @@ import {
   ToggleRight,
   Workflow,
   Inbox,
-  Globe
+  Globe,
+  ArrowLeft,
+  Copy,
+  Strikethrough,
+  ListOrdered,
+  ListChecks,
+  Quote,
+  Code,
+  Minus
 } from 'lucide-react';
 
 export const Icons = {
@@ -202,5 +210,13 @@ export const Icons = {
   ToggleRight,
   Workflow,
   Inbox,
-  Globe
+  Globe,
+  ArrowLeft,
+  Copy,
+  Strikethrough,
+  ListOrdered,
+  ListChecks,
+  Quote,
+  Code,
+  Minus
 };

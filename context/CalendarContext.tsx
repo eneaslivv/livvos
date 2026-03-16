@@ -43,6 +43,7 @@ export interface CalendarTask {
   duration?: number
   status: 'todo' | 'in-progress' | 'done' | 'cancelled'
   assignee_id?: string
+  assignee_ids: string[]
   client_id?: string
   project_id?: string
   order_index: number
@@ -112,6 +113,9 @@ const normalizeTask = (task: any): CalendarTask => ({
   duration: task.duration ?? undefined,
   status: task.status ?? 'todo',
   assignee_id: task.assigned_to ?? task.assignee_id ?? undefined,
+  assignee_ids: task.assignee_ids?.length
+    ? task.assignee_ids
+    : (task.assigned_to || task.assignee_id) ? [task.assigned_to || task.assignee_id] : [],
   client_id: task.client_id ?? undefined,
   project_id: task.project_id ?? undefined,
   order_index: task.order_index ?? 0,
@@ -350,6 +354,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Ensure tenant_id is resolved before inserting (awaits once, then cached)
       const tenantId = await resolveTenantId()
 
+      const assigneeIds = taskData.assignee_ids?.length ? taskData.assignee_ids : (taskData.assignee_id ? [taskData.assignee_id] : [])
       const payload: any = {
         title: taskData.title,
         description: taskData.description,
@@ -358,7 +363,8 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         status: taskData.status,
         project_id: taskData.project_id || null,
         client_id: taskData.client_id || null,
-        assigned_to: taskData.assignee_id || null,
+        assigned_to: assigneeIds[0] || null,
+        assignee_ids: assigneeIds,
         owner_id: taskData.owner_id || null,
         due_date: taskData.start_date || null,
         start_date: taskData.start_date || null,
@@ -376,14 +382,14 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
 
-          // Notify assignee (fire-and-forget)
-          const assigneeId = data.assigned_to || data.assignee_id
-          if (assigneeId && assigneeId !== taskData.owner_id) {
-            const tenantId = data.tenant_id || currentPayload.tenant_id
-            if (tenantId) {
+          // Notify all assignees (fire-and-forget)
+          const allAssignees: string[] = data.assignee_ids?.length ? data.assignee_ids : (data.assigned_to ? [data.assigned_to] : [])
+          const tenantIdForNotify = data.tenant_id || currentPayload.tenant_id
+          if (tenantIdForNotify) {
+            allAssignees.filter((aid: string) => aid !== taskData.owner_id).forEach((aid: string) => {
               notifyWithEmail({
-                userId: assigneeId,
-                tenantId,
+                userId: aid,
+                tenantId: tenantIdForNotify,
                 type: 'task',
                 title: `New task assigned: ${data.title}`,
                 message: data.description || 'You have been assigned a new task.',
@@ -391,7 +397,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 link: '/calendar',
                 actionText: 'View Task',
               }).catch(() => {})
-            }
+            })
           }
 
           return normalized
@@ -419,6 +425,11 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const payload: any = { ...updates }
     // Map frontend field names to DB column names
+    if ('assignee_ids' in payload) {
+      const ids: string[] = payload.assignee_ids || []
+      payload.assignee_ids = ids
+      payload.assigned_to = ids[0] || null // keep legacy column in sync
+    }
     if ('assignee_id' in payload) {
       payload.assigned_to = payload.assignee_id || null
       delete payload.assignee_id
@@ -450,15 +461,16 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === id ? normalized : t))
 
-          // Notify assignee when task is assigned to someone new
-          const newAssignee = updates.assignee_id
-          const oldAssignee = backup?.assignee_id
-          if (newAssignee && newAssignee !== oldAssignee) {
-            const tenantId = cachedTenantIdRef.current
-            if (tenantId) {
+          // Notify NEW assignees when task assignment changes
+          const newIds = normalized.assignee_ids || []
+          const oldIds = backup?.assignee_ids || []
+          const addedAssignees = newIds.filter((id: string) => !oldIds.includes(id))
+          const tenantIdNotif = cachedTenantIdRef.current
+          if (tenantIdNotif && addedAssignees.length > 0) {
+            addedAssignees.forEach((uid: string) => {
               supabase.from('notifications').insert({
-                user_id: newAssignee,
-                tenant_id: tenantId,
+                user_id: uid,
+                tenant_id: tenantIdNotif,
                 type: 'task',
                 title: `Task assigned: ${normalized.title}`,
                 message: `You have been assigned a new task`,
@@ -470,18 +482,17 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }).then(({ error: nErr }) => {
                 if (nErr && import.meta.env.DEV) console.warn('Failed to create assignment notification:', nErr.message)
               })
-            }
+            })
           }
 
-          // Notify assignee when task status changes (completed/cancelled)
-          if (backup?.assignee_id && updates.status && updates.status !== backup.status) {
+          // Notify all assignees when task status changes (completed/cancelled)
+          if (updates.status && updates.status !== backup?.status) {
             const statusMsg = updates.status === 'done' ? 'completed' : updates.status === 'cancelled' ? 'cancelled' : null
-            if (statusMsg && backup.assignee_id !== backup.owner_id) {
-              const tenantId = cachedTenantIdRef.current
-              if (tenantId) {
+            if (statusMsg && tenantIdNotif) {
+              (backup?.assignee_ids || []).filter((uid: string) => uid !== backup?.owner_id).forEach((uid: string) => {
                 supabase.from('notifications').insert({
-                  user_id: backup.assignee_id,
-                  tenant_id: tenantId,
+                  user_id: uid,
+                  tenant_id: tenantIdNotif,
                   type: 'task',
                   title: `Task ${statusMsg}: ${normalized.title}`,
                   message: `A task assigned to you has been ${statusMsg}`,
@@ -493,7 +504,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 }).then(({ error: nErr }) => {
                   if (nErr && import.meta.env.DEV) console.warn('Failed to create status notification:', nErr.message)
                 })
-              }
+              })
             }
           }
 

@@ -7,6 +7,8 @@ import { useProjects } from '../context/ProjectsContext';
 import { ProposalsPanel } from '../components/docs/ProposalsPanel';
 import { BlogPanel } from '../components/docs/BlogPanel';
 import { PasswordsPanel } from '../components/docs/PasswordsPanel';
+import { DocumentEditor } from '../components/docs/DocumentEditor';
+import { DocumentCard } from '../components/docs/DocumentCard';
 
 export const Docs: React.FC = () => {
   const {
@@ -23,7 +25,10 @@ export const Docs: React.FC = () => {
     updateFile,
     updateFolder,
     deleteFolder,
-    deleteFile
+    deleteFile,
+    documents,
+    createDocument,
+    deleteDocument
   } = useDocuments();
   const { clients } = useClients();
   const { projects } = useProjects();
@@ -54,6 +59,7 @@ export const Docs: React.FC = () => {
   const [folderError, setFolderError] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -252,7 +258,7 @@ export const Docs: React.FC = () => {
     { id: 'passwords' as const, label: 'Passwords', icon: Icons.Lock },
   ];
 
-  if (loading && !loadingTimedOut && !folders.length && !files.length && activeTab === 'documents') {
+  if (loading && !loadingTimedOut && !folders.length && !files.length && !documents.length && activeTab === 'documents') {
     return (
       <div className="max-w-7xl mx-auto p-4 sm:p-6 flex justify-center items-center h-64">
         <div className="text-center">
@@ -321,6 +327,21 @@ export const Docs: React.FC = () => {
               >
                 <Icons.Folder size={15} />
                 <span className="hidden sm:inline">New Folder</span>
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    const doc = await createDocument();
+                    setEditingDocumentId(doc.id);
+                  } catch (err: any) {
+                    alert(err.message);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
+              >
+                <Icons.Docs size={15} />
+                <span className="hidden sm:inline">New Doc</span>
               </button>
 
               <label className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
@@ -589,7 +610,7 @@ export const Docs: React.FC = () => {
             </div>
           )}
 
-          {folders.length === 0 && files.length === 0 ? (
+          {folders.length === 0 && files.length === 0 && documents.length === 0 ? (
             /* Empty state with action buttons */
             <div className="text-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
               <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -683,6 +704,16 @@ export const Docs: React.FC = () => {
                     <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600 group-hover:text-blue-400 transition-colors" />
                   </motion.div>
                 )
+              ))}
+
+              {/* Documents (rich-text) */}
+              {documents.map((doc, i) => (
+                <DocumentCard
+                  key={doc.id}
+                  document={doc}
+                  view={view}
+                  onClick={() => setEditingDocumentId(doc.id)}
+                />
               ))}
 
               {/* Files */}
@@ -973,6 +1004,14 @@ export const Docs: React.FC = () => {
         </motion.div>
       )}
       </AnimatePresence>
+
+      {/* Document Editor Overlay */}
+      {editingDocumentId && (
+        <DocumentEditor
+          documentId={editingDocumentId}
+          onClose={() => setEditingDocumentId(null)}
+        />
+      )}
     </div>
   );
 };

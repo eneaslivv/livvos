@@ -323,9 +323,19 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         }
     };
 
+    // Filter: only tasks assigned to the current user (or created by them when unassigned)
+    const myTasks = tasks.filter(t => {
+        if (!authUser) return false;
+        const ids: string[] = t.assignee_ids || [];
+        if (ids.length > 0) return ids.includes(authUser.id);
+        const assignee = t.assignee_id || t.assigned_to;
+        if (assignee) return assignee === authUser.id;
+        return t.owner_id === authUser.id;
+    });
+
     // Filter: today's tasks = incomplete (carry over) + completed today (user timezone)
     const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in user's timezone
-    const todayTasks = tasks.filter(t => {
+    const todayTasks = myTasks.filter(t => {
         if (!t.completed) return true; // all pending tasks always show
         // completed tasks: only show if completed_at is today (user's local date)
         const completedAt = (t as any).completed_at;
@@ -340,12 +350,20 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         .filter(e => e.start_date === todayStr)
         .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
 
+    const isMyTask = (t: CalendarTask) => {
+        if (!authUser) return false;
+        const ids: string[] = t.assignee_ids || [];
+        if (ids.length > 0) return ids.includes(authUser.id);
+        if (t.assignee_id) return t.assignee_id === authUser.id;
+        return t.owner_id === authUser.id;
+    };
+
     const todayCalendarTasks = calendarTasks
-        .filter(t => t.start_date === todayStr && !t.completed)
+        .filter(t => t.start_date === todayStr && !t.completed && isMyTask(t))
         .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
 
     const overdueTasks = calendarTasks
-        .filter(t => t.start_date && t.start_date < todayStr && !t.completed)
+        .filter(t => t.start_date && t.start_date < todayStr && !t.completed && isMyTask(t))
         .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
 
     // Merge today's agenda: events + calendar tasks, sorted by time

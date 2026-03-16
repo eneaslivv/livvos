@@ -88,7 +88,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 Promise.allSettled([
                     supabase.from('profiles').select('*').order('name'),
                     supabase.from('user_roles').select('user_id, roles(id, name)'),
-                    supabase.from('tasks').select('assignee_id, completed'),
+                    supabase.from('tasks').select('assignee_id, assignee_ids, completed'),
                     supabase.from('project_members').select('member_id'),
                 ]),
                 timeout,
@@ -118,16 +118,16 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ? tasksResult.value.data : null;
             if (tasks) {
                 tasks.forEach((task: any) => {
-                    if (task.assignee_id) {
-                        if (!taskCounts[task.assignee_id]) {
-                            taskCounts[task.assignee_id] = { open: 0, completed: 0 };
-                        }
+                    // Support multi-assignee: count task for each assignee
+                    const ids: string[] = task.assignee_ids?.length ? task.assignee_ids : (task.assignee_id ? [task.assignee_id] : []);
+                    ids.forEach((aid: string) => {
+                        if (!taskCounts[aid]) taskCounts[aid] = { open: 0, completed: 0 };
                         if (task.completed) {
-                            taskCounts[task.assignee_id].completed++;
+                            taskCounts[aid].completed++;
                         } else {
-                            taskCounts[task.assignee_id].open++;
+                            taskCounts[aid].open++;
                         }
-                    }
+                    });
                 });
             }
 

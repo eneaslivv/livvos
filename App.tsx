@@ -39,6 +39,7 @@ const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module =>
 const loadAcceptProjectShare = () => import('./pages/AcceptProjectShare').then(module => ({ default: module.AcceptProjectShare }));
 const loadSharedProjectView = () => import('./pages/SharedProjectView').then(module => ({ default: module.SharedProjectView }));
 const loadPublicPortalView = () => import('./pages/PublicPortalView').then(module => ({ default: module.PublicPortalView }));
+const loadSharedDocument = () => import('./pages/SharedDocument').then(module => ({ default: module.SharedDocument }));
 const loadContentCms = () => import('./pages/ContentCms').then(module => ({ default: module.ContentCms }));
 
 const Home = React.lazy(loadHome);
@@ -60,6 +61,7 @@ const GoogleCallback = React.lazy(loadGoogleCallback);
 const AcceptProjectShare = React.lazy(loadAcceptProjectShare);
 const SharedProjectView = React.lazy(loadSharedProjectView);
 const PublicPortalView = React.lazy(loadPublicPortalView);
+const SharedDocument = React.lazy(loadSharedDocument);
 const ContentCms = React.lazy(loadContentCms);
 
 const scheduleIdle = (callback: () => void) => {
@@ -701,6 +703,8 @@ const App: React.FC = () => {
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
   const viewSharedProjectId = new URLSearchParams(window.location.search).get('view_shared_project');
   const publicPortalToken = new URLSearchParams(window.location.search).get('public_portal');
+  const sharedDocMatch = window.location.hash.match(/^#shared-doc\/(.+)$/);
+  const sharedDocToken = sharedDocMatch ? sharedDocMatch[1] : null;
   // Google OAuth callback detection
   const urlParams = new URLSearchParams(window.location.search);
   const googleCode = urlParams.get('code');
@@ -812,6 +816,14 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <AcceptInvite />
+      </Suspense>
+    );
+  }
+
+  if (sharedDocToken) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <SharedDocument token={sharedDocToken} />
       </Suspense>
     );
   }

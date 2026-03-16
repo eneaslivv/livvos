@@ -6,3 +6,4 @@ export * from './activity';
 export * from './crm';
 export * from './rbac';
 export * from './cms';
+export * from './documents';

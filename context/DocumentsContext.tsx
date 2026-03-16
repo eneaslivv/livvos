@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { useTenant } from './TenantContext'
 import { ResourceLimitError } from '../lib/ResourceLimitError'
+import type { Document } from '../types/documents'
 
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -50,6 +51,7 @@ export interface File {
 interface DocumentsContextType {
   folders: Folder[]
   files: File[]
+  documents: Document[]
   allFolders: Folder[]
   breadcrumbs: Folder[]
   currentFolderId: string | null
@@ -63,6 +65,9 @@ interface DocumentsContextType {
   updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
+  createDocument: (title?: string, options?: { folderId?: string | null; clientId?: string | null; projectId?: string | null }) => Promise<Document>
+  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'is_favorite' | 'share_enabled'>>) => Promise<void>
+  deleteDocument: (id: string) => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -76,6 +81,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [allFolders, setAllFolders] = useState<Folder[]>([])
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<Folder[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -105,8 +111,16 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         filesQuery = filesQuery.is('folder_id', null)
       }
 
-      const [foldersRes, filesRes] = await withTimeout(
-        Promise.all([Promise.resolve(foldersQuery), Promise.resolve(filesQuery)]),
+      // Load rich-text documents for the current level
+      let docsQuery = supabase.from('documents').select('*').order('updated_at', { ascending: false })
+      if (currentFolderId) {
+        docsQuery = docsQuery.eq('folder_id', currentFolderId)
+      } else {
+        docsQuery = docsQuery.is('folder_id', null)
+      }
+
+      const [foldersRes, filesRes, docsRes] = await withTimeout(
+        Promise.all([Promise.resolve(foldersQuery), Promise.resolve(filesQuery), Promise.resolve(docsQuery)]),
         15000,
         'load documents'
       )
@@ -123,6 +137,13 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         else throw filesRes.error
       } else {
         setFiles(filesRes.data || [])
+      }
+
+      if (docsRes.error) {
+        if (docsRes.error.code === 'PGRST116') setDocuments([])
+        else throw docsRes.error
+      } else {
+        setDocuments(docsRes.data || [])
       }
 
       // Build breadcrumbs
@@ -156,6 +177,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       .channel('documents-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, () => { loadDocuments() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, () => { loadDocuments() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => { loadDocuments() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadDocuments])
@@ -306,6 +328,52 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setAllFolders(prev => prev.filter(f => f.id !== id))
   }
 
+  const createDocument = async (
+    title: string = 'Untitled Document',
+    options?: { folderId?: string | null; clientId?: string | null; projectId?: string | null }
+  ): Promise<Document> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+
+    let effectiveTenantId = tenantId
+    if (!effectiveTenantId) {
+      const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
+      effectiveTenantId = profile?.tenant_id
+    }
+    if (!effectiveTenantId) throw new Error('Tenant not available. Reload the page.')
+
+    const { folderId = null, clientId = null, projectId = null } = options || {}
+
+    const { data, error: err } = await supabase.from('documents').insert({
+      title,
+      owner_id: user.id,
+      tenant_id: effectiveTenantId,
+      folder_id: folderId ?? currentFolderId,
+      client_id: clientId,
+      project_id: projectId,
+    }).select().single()
+
+    if (err) throw new Error(`Error creating document: ${err.message}`)
+    if (!data) throw new Error('Document was not created.')
+    setDocuments(prev => [data, ...prev])
+    return data
+  }
+
+  const updateDocument = async (
+    id: string,
+    updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'folder_id' | 'is_favorite' | 'share_enabled'>>
+  ) => {
+    const { error: err } = await supabase.from('documents').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id)
+    if (err) throw new Error(`Error updating document: ${err.message}`)
+    setDocuments(prev => prev.map(d => d.id === id ? { ...d, ...updates, updated_at: new Date().toISOString() } : d))
+  }
+
+  const deleteDocument = async (id: string) => {
+    const { error: err } = await supabase.from('documents').delete().eq('id', id)
+    if (err) throw new Error(`Error deleting document: ${err.message}`)
+    setDocuments(prev => prev.filter(d => d.id !== id))
+  }
+
   const deleteFile = async (id: string, url: string) => {
     const { error: dbError } = await supabase.from('files').delete().eq('id', id)
     if (dbError) throw dbError
@@ -318,8 +386,9 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   return (
     <DocumentsContext.Provider value={{
-      folders, files, allFolders, breadcrumbs, currentFolderId, loading, error, isInitialized,
+      folders, files, documents, allFolders, breadcrumbs, currentFolderId, loading, error, isInitialized,
       setCurrentFolderId, createFolder, uploadFile, updateFile, updateFolder, deleteFolder, deleteFile,
+      createDocument, updateDocument, deleteDocument,
       refresh: async () => loadDocuments()
     }}>
       {children}
