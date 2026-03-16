@@ -13,6 +13,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import { Icons } from '../ui/Icons';
 import { DocumentToolbar } from './DocumentToolbar';
+import { supabase } from '../../lib/supabase';
 import { useDocuments } from '../../context/DocumentsContext';
 import { useClients } from '../../context/ClientsContext';
 import { useProjects } from '../../context/ProjectsContext';
@@ -69,6 +70,19 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   // Tasks linked to this document
   const linkedTasks = useMemo(() => tasks.filter((t: any) => t.document_id === documentId), [tasks, documentId]);
 
+  // Upload an image file to Supabase Storage and return its public URL
+  const uploadImage = useCallback(async (file: File): Promise<string | null> => {
+    const ext = file.name.split('.').pop() || 'png';
+    const path = `doc-images/${documentId}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true });
+    if (error) {
+      if (import.meta.env.DEV) console.error('Image upload failed:', error);
+      return null;
+    }
+    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+    return urlData.publicUrl;
+  }, [documentId]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -88,6 +102,41 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     editorProps: {
       attributes: {
         class: 'prose prose-zinc dark:prose-invert max-w-none outline-none min-h-[300px] px-8 py-6',
+      },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (file) uploadImage(file).then(url => {
+              if (url) view.dispatch(view.state.tr.replaceSelectionWith(
+                view.state.schema.nodes.image.create({ src: url })
+              ));
+            });
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (view, event) => {
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return false;
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+          event.preventDefault();
+          const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          uploadImage(file).then(url => {
+            if (url && pos) {
+              const node = view.state.schema.nodes.image.create({ src: url });
+              const tr = view.state.tr.insert(pos.pos, node);
+              view.dispatch(tr);
+            }
+          });
+          return true;
+        }
+        return false;
       },
     },
     onUpdate: ({ editor: e }) => {
@@ -276,7 +325,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       </div>
 
       {/* Toolbar */}
-      <DocumentToolbar editor={editor} />
+      <DocumentToolbar editor={editor} onImageUpload={uploadImage} />
 
       {/* Content area */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
