@@ -1233,6 +1233,7 @@ export const Calendar: React.FC = () => {
         onClose={() => { setSelectedTask(null); setSaveError(null); }}
         onDelete={handleDeleteTask}
         onToggleComplete={toggleTaskComplete}
+        onQuickUpdate={(id, updates) => updateTask(id, updates)}
         subtasksForSelected={subtasksForSelected}
         newSubtaskTitle={newSubtaskTitle}
         setNewSubtaskTitle={setNewSubtaskTitle}

@@ -65,7 +65,7 @@ interface DocumentsContextType {
   updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
-  createDocument: (title?: string, options?: { folderId?: string | null; clientId?: string | null; projectId?: string | null }) => Promise<Document>
+  createDocument: (title?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Document>
   updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'is_favorite' | 'share_enabled'>>) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
   refresh: () => Promise<void>
@@ -113,11 +113,6 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // Load rich-text documents for the current level
       let docsQuery = supabase.from('documents').select('*').order('updated_at', { ascending: false })
-      if (currentFolderId) {
-        docsQuery = docsQuery.eq('folder_id', currentFolderId)
-      } else {
-        docsQuery = docsQuery.is('folder_id', null)
-      }
 
       const [foldersRes, filesRes, docsRes] = await withTimeout(
         Promise.all([Promise.resolve(foldersQuery), Promise.resolve(filesQuery), Promise.resolve(docsQuery)]),
@@ -330,7 +325,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const createDocument = async (
     title: string = 'Untitled Document',
-    options?: { folderId?: string | null; clientId?: string | null; projectId?: string | null }
+    options?: { clientId?: string | null; projectId?: string | null }
   ): Promise<Document> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not authenticated')
@@ -342,13 +337,12 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     if (!effectiveTenantId) throw new Error('Tenant not available. Reload the page.')
 
-    const { folderId = null, clientId = null, projectId = null } = options || {}
+    const { clientId = null, projectId = null } = options || {}
 
     const { data, error: err } = await supabase.from('documents').insert({
       title,
       owner_id: user.id,
       tenant_id: effectiveTenantId,
-      folder_id: folderId ?? currentFolderId,
       client_id: clientId,
       project_id: projectId,
     }).select().single()
@@ -361,7 +355,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const updateDocument = async (
     id: string,
-    updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'folder_id' | 'is_favorite' | 'share_enabled'>>
+    updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'is_favorite' | 'share_enabled'>>
   ) => {
     const { error: err } = await supabase.from('documents').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id)
     if (err) throw new Error(`Error updating document: ${err.message}`)

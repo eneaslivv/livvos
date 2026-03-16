@@ -208,6 +208,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             project_id: (task as any).project_id || '',
             client_id: (task as any).client_id || '',
             assignee_id: (task as any).assignee_id || '',
+            assignee_ids: task.assignee_ids || [],
             blocked_by: (task as any).blocked_by || '',
         } as any);
     };
@@ -1051,6 +1052,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 onClose={() => { setSelectedFocusTask(null); setSaveError(null); }}
                 onDelete={handleDeleteTask}
                 onToggleComplete={toggleTaskComplete}
+                onQuickUpdate={(id, updates) => calUpdateTask(id, updates)}
                 subtasksForSelected={subtasksForSelected as CalendarTask[]}
                 newSubtaskTitle={newSubtaskTitle}
                 setNewSubtaskTitle={setNewSubtaskTitle}

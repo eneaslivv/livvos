@@ -10,6 +10,7 @@ export interface CalendarTask extends Task {
   assigneeId?: string;
   subtasks?: Subtask[];
   comments?: Comment[];
+  document_id?: string;
 }
 
 export interface CalendarEvent {

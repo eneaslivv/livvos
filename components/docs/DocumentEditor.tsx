@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -11,6 +11,9 @@ import { DocumentToolbar } from './DocumentToolbar';
 import { useDocuments } from '../../context/DocumentsContext';
 import { useClients } from '../../context/ClientsContext';
 import { useProjects } from '../../context/ProjectsContext';
+import { useCalendar } from '../../context/CalendarContext';
+import { useTeam } from '../../context/TeamContext';
+import { useAuth } from '../../hooks/useAuth';
 import type { Document } from '../../types/documents';
 
 interface DocumentEditorProps {
@@ -18,10 +21,32 @@ interface DocumentEditorProps {
   onClose: () => void;
 }
 
+// Extract task item text from Tiptap JSON content
+interface DocTaskItem { text: string; checked: boolean }
+const extractTaskItems = (content: Record<string, any>): DocTaskItem[] => {
+  const items: DocTaskItem[] = [];
+  const walk = (node: any) => {
+    if (node.type === 'taskItem') {
+      const text = (node.content || [])
+        .filter((c: any) => c.type === 'paragraph')
+        .flatMap((p: any) => (p.content || []).map((t: any) => t.text || ''))
+        .join('')
+        .trim();
+      if (text) items.push({ text, checked: !!node.attrs?.checked });
+    }
+    if (node.content) node.content.forEach(walk);
+  };
+  walk(content);
+  return items;
+};
+
 export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onClose }) => {
   const { documents, updateDocument, deleteDocument } = useDocuments();
   const { clients } = useClients();
   const { projects } = useProjects();
+  const { tasks, createTask, updateTask } = useCalendar();
+  const { members } = useTeam();
+  const { user } = useAuth();
 
   const doc = documents.find(d => d.id === documentId);
   const [title, setTitle] = useState(doc?.title || 'Untitled Document');
@@ -32,8 +57,12 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const [saving, setSaving] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+
+  // Tasks linked to this document
+  const linkedTasks = useMemo(() => tasks.filter((t: any) => t.document_id === documentId), [tasks, documentId]);
 
   const editor = useEditor({
     extensions: [
@@ -121,6 +150,53 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     } catch {
       setDeleting(false);
     }
+  };
+
+  // Sync document checklist items as real tasks
+  const handleSyncTasks = async () => {
+    if (!editor || !user) return;
+    setSyncing(true);
+    try {
+      const docTasks = extractTaskItems(editor.getJSON());
+
+      for (const item of docTasks) {
+        // Check if task already exists (match by title + document_id)
+        const existing = linkedTasks.find(t => t.title === item.text);
+        if (existing) {
+          // Update completion status if changed
+          if (existing.completed !== item.checked) {
+            await updateTask(existing.id, {
+              completed: item.checked,
+              status: item.checked ? 'done' : 'todo',
+            });
+          }
+        } else {
+          // Create new task linked to this document
+          await createTask({
+            title: item.text,
+            completed: item.checked,
+            status: item.checked ? 'done' : 'todo',
+            priority: 'medium',
+            owner_id: user.id,
+            assignee_ids: [],
+            order_index: 0,
+            document_id: documentId,
+            client_id: doc?.client_id || undefined,
+            project_id: doc?.project_id || undefined,
+          } as any);
+        }
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('Task sync failed:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Assign a team member to a linked task
+  const handleAssignTask = async (taskId: string, memberId: string) => {
+    const ids = memberId ? [memberId] : [];
+    await updateTask(taskId, { assignee_ids: ids, assignee_id: memberId || undefined });
   };
 
   // Cleanup save timer
@@ -262,6 +338,57 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
                     {copied ? <Icons.Check size={13} className="text-emerald-500" /> : <Icons.Copy size={13} />}
                     {copied ? 'Copied!' : 'Copy share link'}
                   </button>
+                )}
+              </div>
+
+              {/* Tasks sync */}
+              <div>
+                <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-2">Tasks</label>
+                <button
+                  onClick={handleSyncTasks}
+                  disabled={syncing}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 transition-colors"
+                >
+                  {syncing ? (
+                    <>
+                      <div className="w-3 h-3 border border-zinc-300 border-t-zinc-500 rounded-full animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <Icons.RefreshCw size={13} />
+                      Sync checklist to tasks
+                    </>
+                  )}
+                </button>
+                {linkedTasks.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {linkedTasks.map(t => (
+                      <div key={t.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg bg-white dark:bg-zinc-800/30 border border-zinc-100 dark:border-zinc-800">
+                        <div className="mt-0.5">
+                          {t.completed
+                            ? <Icons.Check size={13} className="text-emerald-500" />
+                            : <Icons.Circle size={13} className="text-zinc-300" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[11px] leading-tight truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                            {t.title}
+                          </p>
+                          <select
+                            value={t.assignee_ids?.[0] || ''}
+                            onChange={e => handleAssignTask(t.id, e.target.value)}
+                            className="mt-1 w-full text-[10px] px-1.5 py-0.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded text-zinc-500 dark:text-zinc-400 outline-none"
+                          >
+                            <option value="">Unassigned</option>
+                            {members.filter(m => m.status === 'active').map(m => (
+                              <option key={m.id} value={m.id}>{m.name || m.email}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

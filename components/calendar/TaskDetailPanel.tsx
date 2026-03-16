@@ -35,6 +35,7 @@ export interface TaskDetailPanelProps {
   onClose: () => void;
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
+  onQuickUpdate?: (taskId: string, updates: Partial<CalendarTask>) => void;
   // Subtasks
   subtasksForSelected: CalendarTask[];
   newSubtaskTitle: string;
@@ -77,6 +78,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   onAddSubtask,
   onToggleSubtask,
   onDeleteSubtask,
+  onQuickUpdate,
   isTaskBlocked,
   getBlockerTask,
   getDependentTasks,
@@ -239,7 +241,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                   <button
                     key={p.value}
                     type="button"
-                    onClick={() => setEditingTask({ ...editingTask, priority: p.value })}
+                    onClick={() => {
+                      setEditingTask({ ...editingTask, priority: p.value });
+                      if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { priority: p.value });
+                    }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
                       editingTask.priority === p.value
                         ? p.active
@@ -265,7 +270,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                   <button
                     key={s.value}
                     type="button"
-                    onClick={() => setEditingTask({ ...editingTask, status: s.value })}
+                    onClick={() => {
+                      setEditingTask({ ...editingTask, status: s.value });
+                      if (selectedTask && onQuickUpdate) {
+                        const completed = s.value === 'done';
+                        onQuickUpdate(selectedTask.id, { status: s.value, completed });
+                      }
+                    }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
                       editingTask.status === s.value
                         ? s.active
