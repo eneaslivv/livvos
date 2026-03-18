@@ -206,17 +206,17 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
 
       {/* Finance summary cards in header */}
       {clientFinanceSummary.totalInvoiced > 0 && (
-        <div className="grid grid-cols-3 gap-2 mt-4">
-          <div className="p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl">
-            <p className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Invoiced</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+          <div className="p-3 sm:p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl">
+            <p className="text-[10px] sm:text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Invoiced</p>
             <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">{fmtMoney(clientFinanceSummary.totalInvoiced)}</p>
           </div>
-          <div className="p-2.5 bg-emerald-50/70 dark:bg-emerald-500/10 rounded-xl">
-            <p className="text-[9px] font-semibold text-emerald-600/60 uppercase tracking-wider">Collected</p>
+          <div className="p-3 sm:p-2.5 bg-emerald-50/70 dark:bg-emerald-500/10 rounded-xl">
+            <p className="text-[10px] sm:text-[9px] font-semibold text-emerald-600/60 uppercase tracking-wider">Collected</p>
             <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{fmtMoney(clientFinanceSummary.totalPaid)}</p>
           </div>
-          <div className="p-2.5 bg-amber-50/70 dark:bg-amber-500/10 rounded-xl">
-            <p className="text-[9px] font-semibold text-amber-600/60 uppercase tracking-wider">Pending</p>
+          <div className="p-3 sm:p-2.5 bg-amber-50/70 dark:bg-amber-500/10 rounded-xl">
+            <p className="text-[10px] sm:text-[9px] font-semibold text-amber-600/60 uppercase tracking-wider">Pending</p>
             <p className="text-sm font-bold text-amber-700 dark:text-amber-400 mt-0.5">{fmtMoney(clientFinanceSummary.totalPending)}</p>
           </div>
         </div>

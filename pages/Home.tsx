@@ -550,25 +550,25 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-0.5">
                         {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                     </p>
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
                     <button
                         onClick={() => setIsThoughtsOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold hover:opacity-90 transition-opacity shrink-0"
                     >
                         <Icons.Brain size={12} /> Thoughts
                     </button>
                     <button
                         onClick={() => setIsVisionOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 text-[11px] font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 text-[11px] font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
                     >
                         <Icons.Lightbulb size={12} /> Vision
                     </button>
                     <button
                         onClick={() => setCurrentFocusMode((prev) => (prev + 1) % FOCUS_MODES.length)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 text-[11px] font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 text-[11px] font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
                     >
                         {FOCUS_MODES[currentFocusMode].icon}
                         {FOCUS_MODES[currentFocusMode].label}

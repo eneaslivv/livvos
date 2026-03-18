@@ -67,7 +67,7 @@ export const ClientListSidebar: React.FC<ClientListSidebarProps> = ({
               <button
                 key={s}
                 onClick={() => onStatusFilterChange(s)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                className={`px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs sm:text-[10px] font-medium transition-colors ${
                   statusFilter === s
                     ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
                     : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
@@ -80,7 +80,7 @@ export const ClientListSidebar: React.FC<ClientListSidebarProps> = ({
         </div>
 
         {/* Client list */}
-        <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+        <div className="max-h-[calc(100vh-340px)] sm:max-h-[calc(100vh-280px)] overflow-y-auto">
           {filteredClients.length > 0 ? (
             <div className="p-2 space-y-1">
               {filteredClients.map((client) => {
