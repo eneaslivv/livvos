@@ -124,10 +124,15 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       errorLogger.log('Fetching clients from Supabase...')
-      const { data, error: err } = await supabase
+      const tenantId = await resolveTenantId()
+      let query = supabase
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false })
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId)
+      }
+      const { data, error: err } = await query
 
       if (err) {
         if (err.code === 'PGRST116' || err.code === '42P01') {
