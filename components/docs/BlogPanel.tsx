@@ -33,6 +33,7 @@ export const BlogPanel: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [draftInput, setDraftInput] = useState('');
 
   const selected = useMemo(() => posts.find(p => p.id === selectedId) || null, [posts, selectedId]);
@@ -97,6 +98,7 @@ export const BlogPanel: React.FC = () => {
   const generateWithAI = async () => {
     if (!selected) return;
     setIsSaving(true);
+    setAiError(null);
     try {
       const prompt = `Write a blog post based on this brief:\n${draftInput || selected.excerpt || ''}`;
       const result = await generateBlogFromAI(prompt);
@@ -107,6 +109,10 @@ export const BlogPanel: React.FC = () => {
         language: result.language || selected.language || 'en',
         slug: slugify(result.title)
       });
+    } catch (err: any) {
+      setAiError(err?.isRateLimit
+        ? 'AI ocupada — intenta en un minuto.'
+        : err?.message || 'Error generando blog con AI.');
     } finally {
       setIsSaving(false);
     }
@@ -193,6 +199,9 @@ export const BlogPanel: React.FC = () => {
                 Publish
               </button>
             </div>
+            {aiError && (
+              <div className="text-xs text-red-600 dark:text-red-400 mt-1">{aiError}</div>
+            )}
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-zinc-500 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">

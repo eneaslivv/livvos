@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, x-custom-version, apikey, content-type',
 }
 
-const DAILY_QUOTA = 50 // max AI calls per tenant per day
+const DAILY_QUOTA = 200 // max AI calls per tenant per day (safe with paid tier ~$0.002/call)
 
 function getSupabaseAdmin() {
   return createClient(
@@ -285,20 +285,18 @@ Rules:
     generationConfig.responseMimeType = 'application/json'
 
     const requestPayload: Record<string, any> = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [
         {
           role: 'user',
-          parts: [
-            { text: systemPrompt },
-            { text: processedInput },
-          ],
+          parts: [{ text: processedInput }],
         },
       ],
       generationConfig,
     }
 
     // Fetch with retry on 429 (rate limit)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
     const geminiBody = JSON.stringify(requestPayload)
     const MAX_RETRIES = 3
     let response: Response | null = null
@@ -312,8 +310,11 @@ Rules:
 
       if (response.status !== 429 || attempt === MAX_RETRIES) break
 
-      // Exponential backoff: 2s, 4s, 8s
-      const delay = Math.pow(2, attempt + 1) * 1000
+      // Use Retry-After header if present, otherwise exponential backoff
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
+      const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 1) * 1000
+      const jitter = Math.floor(Math.random() * 2000)
+      const delay = baseDelay + jitter
       console.log(`[gemini] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
       await new Promise(r => setTimeout(r, delay))
     }

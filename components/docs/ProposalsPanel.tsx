@@ -148,6 +148,7 @@ export const ProposalsPanel: React.FC = () => {
   const [createProjectType, setCreateProjectType] = useState('web');
   const [createLanguage, setCreateLanguage] = useState<'en' | 'es'>('en');
   const [createComplexity, setCreateComplexity] = useState('standard');
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
 
   const selectedProposal = useMemo(
     () => proposals.find(p => p.id === selectedId) || null,
@@ -330,6 +331,7 @@ export const ProposalsPanel: React.FC = () => {
 
     const prompt = `Project type: ${selectedProposal.project_type || 'web'}\nLanguage: ${language}\nSections: ${sections.join(', ')}\nBrief: ${brief}\nDeliverables: ${(selectedService?.deliverables || []).join(', ')}\nTech stack: ${(selectedService?.tech_stack || []).join(', ')}\nTimeline (weeks): ${timeline.weeks}\nPricing model: ${pricingModel}\nBase price: ${basePrice}\nComplexity: ${complexity} (${factor}x)\nPortfolio references: ${portfolio.filter(p => selectedPortfolioIds.includes(p.id)).map(p => `${p.title} (${p.url})`).join('; ')}\nTone: ${matchingTemplate?.tone || 'confident'}\nOutput should read like a professional contract-style proposal with clear headings and concise sections.\n`;
 
+    setAiWarning(null);
     generateProposalFromAI(prompt).then((result) => {
       handleUpdate({
         pricing_snapshot: {
@@ -353,6 +355,7 @@ export const ProposalsPanel: React.FC = () => {
         language,
         consent_text: consent || selectedProposal.consent_text
       });
+      setAiWarning('AI no disponible — se usó la plantilla predeterminada.');
     });
   };
 
@@ -589,6 +592,9 @@ export const ProposalsPanel: React.FC = () => {
                   Send link
                 </button>
               </div>
+              {aiWarning && (
+                <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">{aiWarning}</div>
+              )}
             </div>
 
             {publicUrl && selectedProposal.public_enabled && (

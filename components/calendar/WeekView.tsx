@@ -45,6 +45,9 @@ export interface WeekViewProps {
   // Timezone
   activeTimezone?: string | null;
   clientTimezoneMap?: Record<string, string>;
+  // Phase grouping
+  groupTasksByPhase?: boolean;
+  getDayTaskGroups?: (date: string) => { groupName: string; tasks: CalendarTask[]; completedCount: number; totalCount: number }[];
 }
 
 export const WeekView: React.FC<WeekViewProps> = ({
@@ -73,10 +76,18 @@ export const WeekView: React.FC<WeekViewProps> = ({
   onOpenTaskDetail,
   activeTimezone,
   clientTimezoneMap,
+  groupTasksByPhase,
+  getDayTaskGroups,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nowRowRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(new Date());
+  const [expandedPhase, setExpandedPhase] = useState<string | null>(null); // "date|groupName"
+
+  // Reset expanded phase when week changes
+  useEffect(() => {
+    setExpandedPhase(null);
+  }, [weekDays[0]?.toISOString()]);
 
   // Auto-scroll to current hour on mount
   useEffect(() => {
@@ -155,6 +166,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
         {weekDays.map((day, dayIndex) => {
           const dateStr = day.toISOString().split('T')[0];
           const unscheduledTasks = getDayTasks(dateStr).filter(t => !t.start_time);
+          const phaseGroups = groupTasksByPhase && getDayTaskGroups ? getDayTaskGroups(dateStr) : null;
           return (
             <div
               key={dayIndex}
@@ -164,7 +176,64 @@ export const WeekView: React.FC<WeekViewProps> = ({
               onDragOver={onDragOver}
               onDrop={(e) => onTaskDrop(e, dateStr)}
             >
-              {unscheduledTasks.map(task => {
+              {/* Grouped by phase */}
+              {phaseGroups ? phaseGroups.map(group => {
+                const phaseKey = `${dateStr}|${group.groupName}`;
+                const isExpanded = expandedPhase === phaseKey;
+                const pct = group.totalCount > 0 ? (group.completedCount / group.totalCount) * 100 : 0;
+                return (
+                  <div key={group.groupName} className="mb-0.5">
+                    {/* Phase pill */}
+                    <div
+                      className="text-[10px] px-2 py-1 rounded-lg cursor-pointer border transition-all bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200/60 dark:border-indigo-700/40 hover:bg-indigo-100 dark:hover:bg-indigo-800/30"
+                      onClick={() => setExpandedPhase(isExpanded ? null : phaseKey)}
+                    >
+                      <div className="font-medium flex items-center gap-1 text-indigo-700 dark:text-indigo-300 truncate">
+                        <Icons.ChevronRight size={8} className={`shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        <span className="truncate">{group.groupName}</span>
+                        <span className="ml-auto text-[8px] font-semibold shrink-0 tabular-nums">
+                          {group.completedCount}/{group.totalCount}
+                        </span>
+                        <div className="w-8 h-1.5 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden shrink-0">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Expanded tasks */}
+                    {isExpanded && (
+                      <div className="mt-0.5 ml-1 border-l-2 border-indigo-200 dark:border-indigo-700/50 pl-1">
+                        {group.tasks.map(task => {
+                          const tc = getTaskColor(task);
+                          return (
+                            <div
+                              key={task.id}
+                              draggable
+                              onDragStart={(e) => onTaskDragStart(e, task.id)}
+                              onDragEnd={() => setDraggingTaskId(null)}
+                              className={`text-[9px] px-1.5 py-0.5 rounded mb-px cursor-grab active:cursor-grabbing transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 ${task.completed ? 'opacity-60' : ''}`}
+                              onClick={() => onOpenTaskDetail(task)}
+                            >
+                              <div className={`flex items-center gap-1 ${tc.text} truncate`}>
+                                {task.completed ? (
+                                  <Icons.CheckCircle size={7} className="text-emerald-500 shrink-0" />
+                                ) : (
+                                  <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                                )}
+                                <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }) : (
+              /* Flat individual tasks */
+              unscheduledTasks.map(task => {
                 const tc = getTaskColor(task);
                 const overdue = getOverdueDays(task);
                 return (
@@ -202,7 +271,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
           );
         })}

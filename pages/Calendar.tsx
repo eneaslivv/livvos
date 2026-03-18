@@ -66,6 +66,11 @@ export const Calendar: React.FC = () => {
   // 'all' = see all, 'me' = only my tasks, uuid = specific member
   const [taskFilter, setTaskFilter] = useState<'all' | 'me' | string>('all');
 
+  // Group tasks by phase toggle
+  const [groupTasksByPhase, setGroupTasksByPhase] = useState<boolean>(
+    () => localStorage.getItem('cal-group-phases') === '1'
+  );
+
   // Timezone state
   const [showTimezones, setShowTimezones] = useState(() => localStorage.getItem('cal-tz-bar') === '1');
   const [activeTimezone, setActiveTimezone] = useState<string | null>(null);
@@ -962,6 +967,23 @@ export const Calendar: React.FC = () => {
     return allTasks.filter(t => t.assignee_id === taskFilter);
   };
 
+  // Group tasks by phase for collapsed view
+  const getDayTaskGroups = (date: string) => {
+    const dayTasks = getDayTasks(date).filter(t => !t.start_time);
+    const groupMap = new Map<string, CalendarTask[]>();
+    for (const task of dayTasks) {
+      const g = task.group_name || 'General';
+      if (!groupMap.has(g)) groupMap.set(g, []);
+      groupMap.get(g)!.push(task);
+    }
+    return Array.from(groupMap.entries()).map(([groupName, tasks]) => ({
+      groupName,
+      tasks,
+      completedCount: tasks.filter(t => t.completed || t.status === 'done').length,
+      totalCount: tasks.length,
+    }));
+  };
+
   // Helper: how many days overdue is a task
   const getOverdueDays = (task: CalendarTask) => {
     if (!task.start_date || task.completed || task.status === 'done' || task.status === 'cancelled') return 0;
@@ -1170,6 +1192,23 @@ export const Calendar: React.FC = () => {
       {/* Team member filter */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          <button
+            onClick={() => {
+              const next = !groupTasksByPhase;
+              setGroupTasksByPhase(next);
+              localStorage.setItem('cal-group-phases', next ? '1' : '0');
+            }}
+            className={`flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-full transition-all shrink-0 ${
+              groupTasksByPhase
+                ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60'
+            }`}
+            title="Group tasks by phase"
+          >
+            <Icons.Layers size={11} />
+            Phases
+          </button>
+          <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
           <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filter:</span>
           {[
             { id: 'all', label: 'All' },
@@ -1346,6 +1385,8 @@ export const Calendar: React.FC = () => {
           onOpenTaskDetail={handleOpenTaskDetail}
           activeTimezone={activeTimezone}
           clientTimezoneMap={clientTimezoneMap}
+          groupTasksByPhase={groupTasksByPhase}
+          getDayTaskGroups={getDayTaskGroups}
         />
       )}
 

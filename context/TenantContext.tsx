@@ -559,7 +559,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                         notifications: true,
                         ai_assistant: false,
                         analytics: true,
-                        calendar_integration: false,
+                        calendar_integration: true,
                         client_portal: false,
                         document_versioning: false,
                         advanced_permissions: false
@@ -687,7 +687,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                 notifications: true,
                 ai_assistant: false,
                 analytics: true,
-                calendar_integration: false,
+                calendar_integration: true,
                 client_portal: false,
                 document_versioning: false,
                 advanced_permissions: false

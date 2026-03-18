@@ -36,6 +36,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const editingItem = useMemo(
     () => items.find((i) => i.id === editingId) || null,
@@ -89,6 +90,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   const handleAIGenerate = async () => {
     if (!form.title.trim()) return;
     setIsGenerating(true);
+    setGenerateError(null);
     try {
       const result = await generateBlogFromAI(form.title);
       if (result) {
@@ -99,8 +101,10 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
           excerpt: result.excerpt || f.excerpt,
         }));
       }
-    } catch {
-      if (import.meta.env.DEV) console.error('[CMS] AI generation failed');
+    } catch (err: any) {
+      setGenerateError(err?.isRateLimit
+        ? 'AI ocupada — intenta en un minuto.'
+        : err?.message || 'Error generando con AI.');
     }
     setIsGenerating(false);
   };
@@ -214,6 +218,9 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                 <button onClick={resetForm} className="text-xs text-[#09090B]/40 hover:text-[#09090B]">Cancel</button>
               </div>
             </div>
+            {generateError && (
+              <div className="text-xs text-red-600 mb-2">{generateError}</div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

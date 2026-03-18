@@ -89,6 +89,35 @@ function setCache(type: string, input: string, result: unknown): void {
   }
 }
 
+// ─── Request throttle ────────────────────────────────────────────
+// Minimum gap between API requests to prevent bursting multiple
+// components at once (e.g., AiAdvisor + WeeklySummary on page load).
+
+let lastRequestTime = 0
+const MIN_REQUEST_INTERVAL = 2000 // 2 seconds between requests
+
+async function throttle(): Promise<void> {
+  const now = Date.now()
+  const elapsed = now - lastRequestTime
+  if (elapsed < MIN_REQUEST_INTERVAL) {
+    await new Promise(r => setTimeout(r, MIN_REQUEST_INTERVAL - elapsed))
+  }
+  lastRequestTime = Date.now()
+}
+
+// ─── Fetch with retry on 429 ────────────────────────────────────
+
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
+  const delays = [5_000, 15_000]
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options)
+    if (res.status !== 429 || attempt === maxRetries) return res
+    if (import.meta.env.DEV) console.log(`[AI] 429, retrying in ${delays[attempt]}ms (attempt ${attempt + 1}/${maxRetries})`)
+    await new Promise(r => setTimeout(r, delays[attempt]))
+  }
+  throw new Error('Max retries exceeded')
+}
+
 // ─── In-flight deduplication ─────────────────────────────────────
 // If the same request is already in-flight, return the same promise
 // instead of making a duplicate API call.
@@ -125,7 +154,10 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
       authToken = refreshed.session?.access_token || supabaseKey
     }
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/gemini`, {
+    // Throttle to avoid bursting when multiple components load simultaneously
+    await throttle()
+
+    const res = await fetchWithRetry(`${supabaseUrl}/functions/v1/gemini`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -138,7 +170,10 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
       if (import.meta.env.DEV) console.error(`[AI] ${type} error:`, errBody)
-      throw new Error(errBody.error || `Edge function error (${res.status})`)
+      const err = new Error(errBody.error || `Edge function error (${res.status})`) as any
+      err.isRateLimit = res.status === 429
+      err.status = res.status
+      throw err
     }
 
     const data = await res.json()
