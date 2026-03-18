@@ -101,7 +101,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
 
           <div className="relative z-10">
             {(tenantLogoDark || tenantLogo) ? (
-              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-10 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
+              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-14 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
             ) : (
               <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
                 livv<span className="text-[#e8b4b4]">~</span>
@@ -285,7 +285,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         <div className="relative z-10">
           <div className="flex items-center gap-2">
             {tenantLogo ? (
-              <img src={tenantLogo} alt={tenantName || ''} className="h-10 object-contain" />
+              <img src={tenantLogo} alt={tenantName || ''} className="h-14 object-contain" />
             ) : (
               <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
                 livv<span className="text-amber-500">~</span>
