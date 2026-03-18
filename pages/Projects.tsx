@@ -934,7 +934,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     if (profileErr) { alert('Error searching user: ' + profileErr.message); return; }
     if (!profiles || profiles.length === 0) { alert('No user found with that email. Ask them to sign in at least once.'); return; }
     const memberId = profiles[0].user_id;
-    const { error: insertErr } = await supabase.from('project_members').insert({ project_id: selectedProject.id, member_id: memberId });
+    const { error: insertErr } = await supabase.from('project_members').insert({ project_id: selectedProject.id, member_id: memberId, tenant_id: currentTenant?.id || null });
     if (insertErr) { alert('Error inviting: ' + insertErr.message); return; }
     setInviteEmail('');
     setIsShareModalOpen(false);
@@ -1369,14 +1369,14 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             </button>
           )}
           {/* Header */}
-          <div className="px-8 py-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
+          <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 mb-1.5">
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">{selectedProject ? `PRJ-${selectedProject.id.slice(0, 6)}` : '—'}</span>
                 {selectedProject && <StatusBadge status={selectedProject.status} />}
               </div>
-              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 truncate">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
-              <div className="flex items-center gap-4 mt-1.5 text-xs text-zinc-400">
+              <h1 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-zinc-100 break-words">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1.5 text-xs text-zinc-400">
                 {selectedProject && (
                   <>
                     {selectedClient ? (
@@ -1400,13 +1400,13 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 )}
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-1.5 sm:gap-2 shrink-0">
               <button onClick={() => setIsShareModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                 Share
               </button>
               <button onClick={() => setIsClientPreviewMode(true)}
-                className="px-3 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors">
+                className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors">
                 Project View
               </button>
             </div>
@@ -1422,7 +1422,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden border-b border-zinc-100 dark:border-zinc-800"
               >
-                <div className="px-8 py-4">
+                <div className="px-4 sm:px-6 md:px-8 py-4">
                   <div className="max-w-lg p-5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Share Project</h3>
@@ -1557,7 +1557,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           </AnimatePresence>
 
           {/* ── Tab Bar ── */}
-          <div className="px-8 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+          <div className="px-4 sm:px-6 md:px-8 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
             <TabBar tabs={tabDefs} active={activeTab} onChange={setActiveTab} />
           </div>
 
@@ -1570,7 +1570,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.2 }}
-                className="p-8"
+                className="p-4 sm:p-6 md:p-8"
               >
                 {/* ── Overview Tab ── */}
                 {activeTab === 'overview' && selectedProject && (

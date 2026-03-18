@@ -144,12 +144,13 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         action: event,
         target: user?.email || 'unknown',
         type: 'security',
-        details: details || {}
+        details: details || {},
+        user_id: user?.id || null,
       });
     } catch (error) {
       errorLogger.error('Error logging security event', error);
     }
-  }, [user?.email]);
+  }, [user?.email, user?.id]);
 
   const checkCredentialAccess = useCallback(async (credentialId: string): Promise<boolean> => {
     try {

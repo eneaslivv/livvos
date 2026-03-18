@@ -59,6 +59,7 @@ export interface CalendarTask {
 export interface CalendarLabel {
   id: string
   owner_id: string
+  tenant_id?: string
   name: string
   color: string
   created_at: string
@@ -572,7 +573,9 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }
 
   const createLabel = async (labelData: Omit<CalendarLabel, 'id' | 'created_at'>) => {
-    const { data, error: err } = await supabase.from('calendar_labels').insert(labelData).select().single()
+    const tenantId = await resolveTenantId()
+    const insertData = { ...labelData, ...(tenantId && { tenant_id: tenantId }) }
+    const { data, error: err } = await supabase.from('calendar_labels').insert(insertData).select().single()
     if (err) throw err
     setLabels(prev => [...prev, data])
     return data

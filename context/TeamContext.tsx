@@ -373,7 +373,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Remove role assignments
             await supabase.from('user_roles').delete().eq('user_id', memberId);
             // Remove project memberships
-            await supabase.from('project_members').delete().eq('user_id', memberId);
+            await supabase.from('project_members').delete().eq('member_id', memberId);
             // Unassign tasks
             await supabase.from('tasks').update({ assignee_id: null }).eq('assignee_id', memberId);
             // Remove profile from tenant (set tenant_id to null)

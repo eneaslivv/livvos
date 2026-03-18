@@ -536,15 +536,19 @@ class CredentialManager {
     metadata?: any
   ): Promise<void> {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let tenantId: string | null = null;
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single();
+        if (profile) tenantId = profile.tenant_id;
+      }
       await supabase.from('activity_logs').insert({
         action: `${action}_credential`,
         target: credentialName,
         type: 'security',
         details: metadata,
-        meta: {
-          timestamp: new Date().toISOString(),
-          credentialName
-        }
+        ...(user && { user_id: user.id }),
+        ...(tenantId && { tenant_id: tenantId }),
       });
     } catch (error) {
       // Don't throw here - logging failure shouldn't break the main operation
