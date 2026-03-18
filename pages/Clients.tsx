@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import { useClients, Client, ClientMessage, ClientTask, ClientHistory } from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
@@ -38,6 +39,7 @@ type DetailTab = 'info' | 'projects' | 'finance' | 'messages' | 'tasks' | 'histo
 export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParams) => void }> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
+  const isMobile = useIsMobile();
   const {
     clients, loading, error,
     createClient, updateClient, deleteClient,
@@ -973,22 +975,35 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ─── Left: Client List ─── */}
-        <ClientListSidebar
-          clients={clients}
-          incomes={incomes}
-          selectedClient={selectedClient}
-          searchQuery={searchQuery}
-          statusFilter={statusFilter}
-          onSelectClient={setSelectedClient}
-          onSearchChange={setSearchQuery}
-          onStatusFilterChange={setStatusFilter}
-        />
+        {/* ─── Left: Client List (hidden on mobile when client selected) ─── */}
+        {(!isMobile || !selectedClient) && (
+          <ClientListSidebar
+            clients={clients}
+            incomes={incomes}
+            selectedClient={selectedClient}
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            onSelectClient={setSelectedClient}
+            onSearchChange={setSearchQuery}
+            onStatusFilterChange={setStatusFilter}
+          />
+        )}
 
-        {/* ─── Right: Client Detail ─── */}
-        <div className="lg:col-span-8 xl:col-span-9">
+        {/* ─── Right: Client Detail (full-width on mobile) ─── */}
+        {(!isMobile || selectedClient) && (
+        <div className={isMobile ? 'col-span-1' : 'lg:col-span-8 xl:col-span-9'}>
           {selectedClient ? (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 overflow-hidden">
+              {/* Mobile back button */}
+              {isMobile && (
+                <button
+                  onClick={() => setSelectedClient(null)}
+                  className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors w-full border-b border-zinc-100 dark:border-zinc-800/60"
+                >
+                  <Icons.ChevronLeft size={18} />
+                  Back to clients
+                </button>
+              )}
               {/* Client header */}
               <ClientDetailHeader
                 client={selectedClient}
@@ -1200,6 +1215,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ─── New Client SlidePanel ─── */}

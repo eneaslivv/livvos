@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { Icons } from './Icons';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 export interface SlidePanelProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
   children,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -59,6 +61,12 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
     };
   }, [isOpen, handleEscape]);
 
+  const handleDragEnd = (_: any, info: PanInfo) => {
+    if (info.offset.y > 100 || info.velocity.y > 500) {
+      onClose();
+    }
+  };
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (
@@ -76,18 +84,34 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
           {/* Panel */}
           <motion.div
             ref={panelRef}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={isMobile ? { y: '100%' } : { x: '100%' }}
+            animate={isMobile ? { y: 0 } : { x: 0 }}
+            exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{
               duration: 0.4,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className={`absolute top-0 right-0 bottom-0 w-screen ${widthClasses[width]} bg-white dark:bg-zinc-900 shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.05)] dark:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.3)] border-l border-zinc-100 dark:border-zinc-800 flex flex-col`}
+            drag={isMobile ? 'y' : false}
+            dragConstraints={{ top: 0 }}
+            dragElastic={0.2}
+            onDragEnd={isMobile ? handleDragEnd : undefined}
+            className={
+              isMobile
+                ? 'absolute bottom-0 left-0 right-0 max-h-[92vh] bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl flex flex-col'
+                : `absolute top-0 right-0 bottom-0 w-screen ${widthClasses[width]} bg-white dark:bg-zinc-900 shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.05)] dark:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.3)] border-l border-zinc-100 dark:border-zinc-800 flex flex-col`
+            }
+            style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
           >
+            {/* Mobile drag handle */}
+            {isMobile && (
+              <div className="flex justify-center pt-3 pb-1 shrink-0 cursor-grab active:cursor-grabbing touch-none">
+                <div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+              </div>
+            )}
+
             {/* Header */}
             {(title || headerRight) && (
-              <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
+              <div className={`flex items-center justify-between ${isMobile ? 'px-5 py-3' : 'px-6 py-5'} border-b border-zinc-100 dark:border-zinc-800/60 shrink-0`}>
                 <div className="flex-1 min-w-0">
                   {title && (
                     <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 truncate">
@@ -125,7 +149,7 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
 
             {/* Footer */}
             {footer && (
-              <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900 shrink-0">
+              <div className={`${isMobile ? 'px-5 py-3' : 'px-6 py-4'} border-t border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900 shrink-0`}>
                 {footer}
               </div>
             )}

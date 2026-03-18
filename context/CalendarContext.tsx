@@ -50,6 +50,7 @@ export interface CalendarTask {
   parent_task_id?: string
   blocked_by?: string
   document_id?: string
+  group_name?: string
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -123,6 +124,7 @@ const normalizeTask = (task: any): CalendarTask => ({
   parent_task_id: task.parent_task_id ?? undefined,
   blocked_by: task.blocked_by ?? undefined,
   document_id: task.document_id ?? undefined,
+  group_name: task.group_name || 'General',
   created_at: task.created_at ?? new Date().toISOString(),
   updated_at: task.updated_at ?? new Date().toISOString(),
   completed_at: task.completed_at ?? null,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import { useProjects, Project, ProjectStatus } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { errorLogger } from '../lib/errorLogger';
@@ -340,6 +341,7 @@ interface SidebarGroup {
 /*  MAIN COMPONENT                                             */
 /* ════════════════════════════════════════════════════════════ */
 export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) => {
+  const isMobile = useIsMobile();
   const { projects, loading, error, createProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
   const { members } = useTeam();
@@ -1171,9 +1173,10 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
       <div className="flex flex-1 gap-4 overflow-hidden">
         {/* ════════════════════════════════════════ */}
-        {/*  SIDEBAR                                 */}
+        {/*  SIDEBAR (hidden on mobile when project selected) */}
         {/* ════════════════════════════════════════ */}
-        <div className="w-[280px] shrink-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden">
+        {(!isMobile || !selectedId) && (
+        <div className={`${isMobile ? 'w-full' : 'w-[280px] shrink-0'} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden`}>
           {/* Sidebar header */}
           <div className="px-4 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
             <div className="flex items-center justify-between mb-3">
@@ -1348,11 +1351,23 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             ))}
           </div>
         </div>
+        )}
 
         {/* ════════════════════════════════════════ */}
-        {/*  DETAIL PANEL                            */}
+        {/*  DETAIL PANEL (hidden on mobile when no project, full-width when selected) */}
         {/* ════════════════════════════════════════ */}
+        {(!isMobile || selectedId) && (
         <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden">
+          {/* Mobile back button */}
+          {isMobile && selectedId && (
+            <button
+              onClick={() => setSelectedId(null)}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors w-full border-b border-zinc-100 dark:border-zinc-800/60 shrink-0"
+            >
+              <Icons.ChevronLeft size={18} />
+              Back to projects
+            </button>
+          )}
           {/* Header */}
           <div className="px-8 py-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
             <div className="min-w-0">
@@ -1686,6 +1701,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             </AnimatePresence>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

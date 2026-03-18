@@ -14,6 +14,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
 import { errorLogger } from '../lib/errorLogger';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import type { CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 
 type DbProject = {
@@ -37,6 +38,7 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
+    const isMobile = useIsMobile();
     const { user, roles } = useRBAC();
     const { incomes, expenses } = useFinance();
     const { currentTenant, updateTenant } = useTenant();
@@ -494,10 +496,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     };
 
     return (
-        <div className="space-y-6 pb-10 max-w-[1600px] mx-auto relative pt-6">
+        <div className={`space-y-6 max-w-[1600px] mx-auto relative ${isMobile ? 'pb-6 pt-4' : 'pb-10 pt-6'}`}>
 
             {/* Banner */}
-            <div className="w-full h-40 md:h-48 rounded-2xl overflow-hidden relative group border border-zinc-200/60 dark:border-zinc-800">
+            <div className={`w-full ${isMobile ? 'h-32' : 'h-40 md:h-48'} rounded-2xl overflow-hidden relative group border border-zinc-200/60 dark:border-zinc-800`}>
                 <img
                     src={currentTenant?.banner_url || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=2000"}
                     alt=""
@@ -601,6 +603,54 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 </div>
             </SlidePanel>
 
+            {/* Mobile: Metrics + Profit inline before tasks */}
+            {isMobile && (
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Tasks</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{tasks.length}</div>
+                            <div className="text-[10px] text-zinc-400 mt-0.5">total</div>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Done</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{completedCount}</div>
+                            <div className="text-[10px] text-emerald-500 mt-0.5">{progressPercent}% complete</div>
+                        </div>
+                    </div>
+                    <div className="bg-zinc-900 dark:bg-zinc-100 px-4 py-3.5 rounded-xl relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-2">
+                            <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Monthly Profit</span>
+                            <button onClick={() => setShowFinancials(!showFinancials)} className="text-zinc-500 hover:text-zinc-300 dark:hover:text-zinc-600 transition-colors">
+                                {showFinancials ? <Icons.EyeOff size={13} /> : <Icons.Eye size={13} />}
+                            </button>
+                        </div>
+                        <div className="text-xl font-bold text-white dark:text-zinc-900 tracking-tight leading-none mb-1.5">
+                            {showFinancials ? `$${monthlyProfit.toLocaleString()}` : '•••••'}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px]">
+                            <span className="text-emerald-400 dark:text-emerald-600 font-medium">+${showFinancials ? monthlyEarnings.toLocaleString() : '••'}</span>
+                            <span className="text-rose-400 dark:text-rose-500 font-medium">-${showFinancials ? monthlyExpenses.toLocaleString() : '••'}</span>
+                        </div>
+                    </div>
+                    {/* Mobile Quick Actions — horizontal scroll */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                        {[
+                            { icon: <Icons.Plus size={15} />, label: 'New Task', key: 'New Task' },
+                            { icon: <Icons.Calendar size={15} />, label: 'Calendar', key: 'Schedule' },
+                            { icon: <Icons.Docs size={15} />, label: 'Docs', key: 'Docs' },
+                            { icon: <Icons.Mail size={15} />, label: 'CRM', key: 'CRM' },
+                        ].map((a) => (
+                            <button key={a.key} onClick={() => handleQuickAction(a.key)}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-all shrink-0 text-[11px] font-medium">
+                                {a.icon}
+                                {a.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Main Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 
@@ -669,17 +719,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                             <div
                                                 key={task.id}
                                                 onClick={() => handleOpenTaskDetail(task as CalendarTask)}
-                                                className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group"
+                                                className={`flex items-center justify-between rounded-lg transition-all cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group ${isMobile ? 'px-3 py-3.5' : 'px-3 py-2.5'}`}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
-                                                        className="w-4 h-4 rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 dark:hover:border-emerald-500 text-transparent hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors"
+                                                        className={`rounded-full border-[1.5px] border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 dark:hover:border-emerald-500 text-transparent hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors ${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`}
                                                     >
-                                                        <Icons.Check size={9} strokeWidth={3} />
+                                                        <Icons.Check size={isMobile ? 11 : 9} strokeWidth={3} />
                                                     </button>
                                                     <div>
-                                                        <span className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{task.title}</span>
+                                                        <span className={`font-medium text-zinc-900 dark:text-zinc-100 ${isMobile ? 'text-sm' : 'text-[13px]'}`}>{task.title}</span>
                                                         {projectId && <span className="text-[10px] text-zinc-400 ml-2">{projectLookup[projectId] || ''}</span>}
                                                     </div>
                                                 </div>
@@ -823,74 +873,114 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
                             {/* Today's timeline */}
                             {todayAgenda.length > 0 ? (
-                                <div className="space-y-0.5">
-                                    {todayAgenda.map((entry) => {
-                                        const isEvent = entry.type === 'event';
-                                        const item = entry.item;
-                                        const timeLabel = entry.time !== '99:99' ? entry.time.slice(0, 5) : '';
-                                        const duration = (item as any).duration;
-                                        const eventType = isEvent ? (item as CalendarEvent).type : null;
+                                isMobile ? (
+                                    /* Mobile: horizontal scroll cards */
+                                    <div className="flex gap-2.5 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+                                        {todayAgenda.map((entry) => {
+                                            const isEvent = entry.type === 'event';
+                                            const item = entry.item;
+                                            const timeLabel = entry.time !== '99:99' ? entry.time.slice(0, 5) : '';
+                                            const duration = (item as any).duration;
+                                            const eventType = isEvent ? (item as CalendarEvent).type : null;
+                                            const typeColors: Record<string, string> = {
+                                                'meeting': 'border-blue-500', 'call': 'border-emerald-500', 'deadline': 'border-red-500',
+                                                'work-block': 'border-purple-500', 'note': 'border-amber-500', 'content': 'border-pink-500',
+                                            };
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    onClick={() => onNavigate('calendar')}
+                                                    className={`shrink-0 w-[160px] p-3 rounded-xl border-l-[3px] bg-white dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/60 cursor-pointer active:scale-[0.98] transition-transform ${
+                                                        isEvent ? (typeColors[eventType || ''] || 'border-l-blue-500') : 'border-l-zinc-400'
+                                                    }`}
+                                                >
+                                                    {timeLabel && (
+                                                        <span className="text-[10px] font-mono font-medium text-zinc-400 block mb-1">{timeLabel}</span>
+                                                    )}
+                                                    <span className="text-[13px] font-medium text-zinc-800 dark:text-zinc-200 line-clamp-2 leading-tight">{item.title}</span>
+                                                    <div className="flex items-center gap-2 mt-1.5">
+                                                        {duration && (
+                                                            <span className="text-[10px] text-zinc-400">{duration >= 60 ? `${Math.floor(duration / 60)}h${duration % 60 ? duration % 60 + 'm' : ''}` : `${duration}m`}</span>
+                                                        )}
+                                                        {isEvent && eventType && (
+                                                            <span className="text-[10px] font-medium text-zinc-400 capitalize">{eventType === 'work-block' ? 'bloque' : eventType}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    /* Desktop: vertical list */
+                                    <div className="space-y-0.5">
+                                        {todayAgenda.map((entry) => {
+                                            const isEvent = entry.type === 'event';
+                                            const item = entry.item;
+                                            const timeLabel = entry.time !== '99:99' ? entry.time.slice(0, 5) : '';
+                                            const duration = (item as any).duration;
+                                            const eventType = isEvent ? (item as CalendarEvent).type : null;
 
-                                        const typeColors: Record<string, string> = {
-                                            'meeting': 'bg-blue-500',
-                                            'call': 'bg-emerald-500',
-                                            'deadline': 'bg-red-500',
-                                            'work-block': 'bg-purple-500',
-                                            'note': 'bg-amber-500',
-                                            'content': 'bg-pink-500',
-                                        };
+                                            const typeColors: Record<string, string> = {
+                                                'meeting': 'bg-blue-500',
+                                                'call': 'bg-emerald-500',
+                                                'deadline': 'bg-red-500',
+                                                'work-block': 'bg-purple-500',
+                                                'note': 'bg-amber-500',
+                                                'content': 'bg-pink-500',
+                                            };
 
-                                        return (
-                                            <div
-                                                key={item.id}
-                                                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
-                                                onClick={() => onNavigate('calendar')}
-                                            >
-                                                {/* Time column */}
-                                                <div className="w-10 shrink-0 text-right">
-                                                    {timeLabel ? (
-                                                        <span className="text-[11px] font-mono font-medium text-zinc-500 dark:text-zinc-400">{timeLabel}</span>
-                                                    ) : (
-                                                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600">--:--</span>
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                                                    onClick={() => onNavigate('calendar')}
+                                                >
+                                                    {/* Time column */}
+                                                    <div className="w-10 shrink-0 text-right">
+                                                        {timeLabel ? (
+                                                            <span className="text-[11px] font-mono font-medium text-zinc-500 dark:text-zinc-400">{timeLabel}</span>
+                                                        ) : (
+                                                            <span className="text-[10px] text-zinc-300 dark:text-zinc-600">--:--</span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Color indicator */}
+                                                    <div className={`w-1 h-8 rounded-full shrink-0 ${
+                                                        isEvent ? (typeColors[eventType || ''] || 'bg-blue-500') : 'bg-zinc-400'
+                                                    }`} />
+
+                                                    {/* Content */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            {!isEvent && <Icons.Check size={10} className="text-zinc-400 shrink-0" />}
+                                                            <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                                                {item.title}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            {isEvent && eventType && (
+                                                                <span className="text-[9px] font-medium text-zinc-400 capitalize">{eventType === 'work-block' ? 'bloque' : eventType}</span>
+                                                            )}
+                                                            {duration && (
+                                                                <span className="text-[9px] text-zinc-400">{duration >= 60 ? `${Math.floor(duration / 60)}h${duration % 60 ? duration % 60 + 'm' : ''}` : `${duration}m`}</span>
+                                                            )}
+                                                            {(item as CalendarEvent).location && (
+                                                                <span className="text-[9px] text-zinc-400 truncate">{(item as CalendarEvent).location}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Priority dot for tasks */}
+                                                    {!isEvent && (item as CalendarTask).priority && (
+                                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                                            (item as CalendarTask).priority === 'urgent' ? 'bg-red-500' : (item as CalendarTask).priority === 'high' ? 'bg-amber-500' : (item as CalendarTask).priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500'
+                                                        }`} />
                                                     )}
                                                 </div>
-
-                                                {/* Color indicator */}
-                                                <div className={`w-1 h-8 rounded-full shrink-0 ${
-                                                    isEvent ? (typeColors[eventType || ''] || 'bg-blue-500') : 'bg-zinc-400'
-                                                }`} />
-
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-1.5">
-                                                        {!isEvent && <Icons.Check size={10} className="text-zinc-400 shrink-0" />}
-                                                        <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-200 truncate">
-                                                            {item.title}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        {isEvent && eventType && (
-                                                            <span className="text-[9px] font-medium text-zinc-400 capitalize">{eventType === 'work-block' ? 'bloque' : eventType}</span>
-                                                        )}
-                                                        {duration && (
-                                                            <span className="text-[9px] text-zinc-400">{duration >= 60 ? `${Math.floor(duration / 60)}h${duration % 60 ? duration % 60 + 'm' : ''}` : `${duration}m`}</span>
-                                                        )}
-                                                        {(item as CalendarEvent).location && (
-                                                            <span className="text-[9px] text-zinc-400 truncate">{(item as CalendarEvent).location}</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Priority dot for tasks */}
-                                                {!isEvent && (item as CalendarTask).priority && (
-                                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                                        (item as CalendarTask).priority === 'urgent' ? 'bg-red-500' : (item as CalendarTask).priority === 'high' ? 'bg-amber-500' : (item as CalendarTask).priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500'
-                                                    }`} />
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )
                             ) : overdueTasks.length === 0 ? (
                                 <p className="text-xs text-zinc-400 py-3 text-center">Sin eventos ni tareas para hoy</p>
                             ) : null}
@@ -933,8 +1023,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
                 </div>
 
-                {/* Right Column */}
-                <div className="xl:col-span-4 space-y-4 sticky top-24">
+                {/* Right Column — hidden on mobile (metrics/profit shown above grid) */}
+                <div className={`xl:col-span-4 space-y-4 sticky top-24 ${isMobile ? 'hidden' : ''}`}>
 
                     {/* Metrics Row */}
                     <div className="grid grid-cols-2 gap-3">
@@ -993,7 +1083,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         </div>
                     </div>
 
-                    {/* Quick Actions */}
+                    {/* Quick Actions — desktop only (mobile shown above grid) */}
                     <div className="grid grid-cols-4 gap-2">
                         {[
                             { icon: <Icons.Plus size={15} />, label: 'New Task', key: 'New Task' },
@@ -1049,6 +1139,31 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Mobile: AI Insights below main content */}
+            {isMobile && (
+                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-4">
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                        <Icons.Sparkles size={11} className="text-zinc-400" />
+                        <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-400">Insights</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                        {aiInsights.badges.map((badge, i) => (
+                            <span key={i} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 ${badge.color}`}>
+                                {badge.label}
+                            </span>
+                        ))}
+                    </div>
+                    <div className="space-y-1.5">
+                        {aiInsights.tips.map((tip, i) => (
+                            <div key={i} className="flex items-start gap-1.5">
+                                <span className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-0.5">•</span>
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{tip}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Task Detail Panel (same as Calendar) */}
             <TaskDetailPanel

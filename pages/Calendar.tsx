@@ -21,9 +21,12 @@ import { MonthView } from '../components/calendar/MonthView';
 import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
 import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
 import { TimezoneBar } from '../components/calendar/TimezoneBar';
+import { DayAgendaView } from '../components/calendar/DayAgendaView';
 import { Icons } from '../components/ui/Icons';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 export const Calendar: React.FC = () => {
+  const isMobile = useIsMobile();
   const { user } = useAuth();
   const {
     events,
@@ -165,7 +168,7 @@ export const Calendar: React.FC = () => {
   const [showPlanPrefs, setShowPlanPrefs] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  const [view, setView] = useState<'day' | 'week' | 'month'>(isMobile ? 'day' : 'week');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
@@ -1282,6 +1285,29 @@ export const Calendar: React.FC = () => {
           mode={calendarMode}
           onSelect={handleSlotSelect}
           onClose={() => setSlotPopover(null)}
+        />
+      )}
+
+      {/* Day/Agenda View (mobile) */}
+      {view === 'day' && (
+        <DayAgendaView
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          getDayEvents={getDayEvents}
+          getDayTasks={getDayTasks}
+          getTaskColor={getTaskColor}
+          getOverdueDays={getOverdueDays}
+          getClientLabel={getClientLabel}
+          getMemberName={getMemberName}
+          onOpenTaskDetail={handleOpenTaskDetail}
+          onSlotClick={(e, dateStr, hour) => {
+            setSlotPopover({
+              clickX: e.clientX,
+              clickY: e.clientY,
+              date: dateStr,
+              hour: hour,
+            });
+          }}
         />
       )}
 

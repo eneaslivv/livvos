@@ -13,6 +13,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { supabase } from '../lib/supabase';
 import { AiAdvisor } from './AiAdvisor';
+import { BottomTabBar } from './ui/BottomTabBar';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -454,7 +456,7 @@ const CreateTaskModal = ({
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
   const { currentTenant, hasFeature } = useTenant();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -583,27 +585,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         projects={taskProjects}
       />
 
-      {/* Mobile Menu Button */}
-      <div className="md:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2.5 bg-white dark:bg-zinc-900 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
-        >
-          {isMobileMenuOpen ? <Icons.Close size={20} /> : <Icons.Menu size={20} />}
-        </button>
-      </div>
-
-      {/* 
-         SIDEBAR
+      {/*
+         SIDEBAR — hidden on mobile, bottom tab bar used instead
       */}
       <aside className={`
+        hidden md:flex
         fixed z-50 h-[calc(100vh-32px)] top-4 bottom-4 left-4
-        bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 
+        bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800
         shadow-2xl shadow-zinc-200/50 dark:shadow-black/80
-        rounded-[2rem] flex flex-col items-center py-6 gap-2
+        rounded-[2rem] flex-col items-center py-6 gap-2
         transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
         overflow-hidden
-        ${isMobileMenuOpen ? 'translate-x-0 w-[240px]' : '-translate-x-[120%] md:translate-x-0'}
         ${isSidebarExpanded ? 'md:w-[240px]' : 'md:w-[72px]'}
       `}>
 
@@ -653,10 +645,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               {Array.from({ length: navSkeletonCount }).map((_, index) => (
                 <div
                   key={index}
-                  className={`h-11 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`}
+                  className={`h-11 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded ? 'w-full' : 'w-12 mx-auto'}`}
                 />
               ))}
-              <div className={`h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 mt-3 ${isSidebarExpanded || isMobileMenuOpen ? 'w-full' : 'w-12 mx-auto'}`} />
+              <div className={`h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 mt-3 ${isSidebarExpanded ? 'w-full' : 'w-12 mx-auto'}`} />
             </div>
           )}
           {isInitialized && currentNavItems.map(item => (
@@ -666,10 +658,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               icon={item.icon}
               label={item.label}
               active={currentPage === item.id || (item.id === 'team_clients' && (currentPage === 'team' || currentPage === 'clients'))}
-              expanded={isSidebarExpanded || isMobileMenuOpen}
+              expanded={isSidebarExpanded}
               onClick={() => {
                 onNavigate(item.id);
-                setIsMobileMenuOpen(false);
+
               }}
             />
           ))}
@@ -683,10 +675,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               icon={<Icons.Shield />}
               label="Platform"
               active={currentPage === 'platform_admin'}
-              expanded={isSidebarExpanded || isMobileMenuOpen}
+              expanded={isSidebarExpanded}
               onClick={() => {
                 onNavigate('platform_admin');
-                setIsMobileMenuOpen(false);
+
               }}
             />
           )}
@@ -716,8 +708,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       {/* Main Content Area */}
       <main
         className={`
-            flex-1 h-screen overflow-y-auto relative scroll-smooth bg-zinc-50 dark:bg-black 
+            flex-1 h-screen overflow-y-auto relative scroll-smooth bg-zinc-50 dark:bg-black
             transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
+            pb-20 md:pb-0
             ${isSidebarExpanded ? 'md:ml-[256px]' : 'md:ml-[88px]'}
         `}
       >
@@ -746,6 +739,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       />
       <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onNavigate={onNavigate} />
       <AiAdvisor />
+
+      {/* Mobile Bottom Tab Bar */}
+      {isMobile && (
+        <BottomTabBar
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          isDarkMode={isDarkMode}
+          onToggleTheme={toggleTheme}
+        />
+      )}
     </div>
   );
 };
