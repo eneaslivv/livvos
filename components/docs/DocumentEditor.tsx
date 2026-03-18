@@ -8,7 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
+import { TableCellCheckbox } from './extensions/TableCellCheckbox';
 import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import { Icons } from '../ui/Icons';
@@ -27,7 +27,14 @@ interface DocumentEditorProps {
   onClose: () => void;
 }
 
-// Extract task item text from Tiptap JSON content
+// Helper: extract all text from a TipTap node recursively
+const extractNodeText = (node: any): string => {
+  if (node.text) return node.text;
+  if (!node.content) return '';
+  return node.content.map(extractNodeText).join('').trim();
+};
+
+// Extract task item text from Tiptap JSON content (checklists)
 interface DocTaskItem { text: string; checked: boolean }
 const extractTaskItems = (content: Record<string, any>): DocTaskItem[] => {
   const items: DocTaskItem[] = [];
@@ -39,6 +46,42 @@ const extractTaskItems = (content: Record<string, any>): DocTaskItem[] => {
         .join('')
         .trim();
       if (text) items.push({ text, checked: !!node.attrs?.checked });
+    }
+    if (node.content) node.content.forEach(walk);
+  };
+  walk(content);
+  return items;
+};
+
+// Extract tasks from table rows that have a checkbox cell
+const extractTableTasks = (content: Record<string, any>): DocTaskItem[] => {
+  const items: DocTaskItem[] = [];
+  const walk = (node: any) => {
+    if (node.type === 'table') {
+      const rows = node.content || [];
+      for (const row of rows) {
+        const cells = row.content || [];
+        // Skip header rows (all tableHeader cells)
+        if (cells.every((c: any) => c.type === 'tableHeader')) continue;
+        // Find the cell with a checked attribute
+        const checkboxCell = cells.find((c: any) => c.attrs?.checked !== null && c.attrs?.checked !== undefined);
+        if (!checkboxCell) continue;
+        // Find the best title: first non-numeric, non-checkbox cell with text
+        const checkboxIdx = cells.indexOf(checkboxCell);
+        let titleText = '';
+        for (let i = 0; i < cells.length; i++) {
+          if (i === checkboxIdx) continue;
+          const text = extractNodeText(cells[i]);
+          // Skip cells that are just numbers (like the # column)
+          if (text && !/^\d+(\.\d+)?$/.test(text)) {
+            titleText = text;
+            break;
+          }
+        }
+        if (titleText) {
+          items.push({ text: titleText, checked: !!checkboxCell.attrs.checked });
+        }
+      }
     }
     if (node.content) node.content.forEach(walk);
   };
@@ -66,6 +109,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const [syncing, setSyncing] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+  const isSyncingBackRef = useRef(false);
 
   // Tasks linked to this document
   const linkedTasks = useMemo(() => tasks.filter((t: any) => t.document_id === documentId), [tasks, documentId]);
@@ -94,7 +138,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       Underline,
       Table.configure({ resizable: true }),
       TableRow,
-      TableCell,
+      TableCellCheckbox,
       TableHeader,
       Image.configure({ inline: false, allowBase64: true }),
     ],
@@ -143,7 +187,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       },
     },
     onUpdate: ({ editor: e }) => {
-      if (!initializedRef.current) return;
+      if (!initializedRef.current || isSyncingBackRef.current) return;
       debouncedSave(e.getJSON(), e.getText());
     },
   });
@@ -153,6 +197,83 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     const timer = setTimeout(() => { initializedRef.current = true; }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Bidirectional sync: when a linked task's completion changes externally, update document checkboxes
+  useEffect(() => {
+    if (!editor || !linkedTasks.length || !initializedRef.current) return;
+    const json = editor.getJSON();
+
+    // Build a map of task title → completed from linked tasks
+    const taskMap = new Map(linkedTasks.map(t => [t.title, t.completed]));
+
+    let changed = false;
+
+    // Walk and update taskItem nodes (checklists)
+    const updateChecklist = (node: any): any => {
+      if (node.type === 'taskItem') {
+        const text = (node.content || [])
+          .filter((c: any) => c.type === 'paragraph')
+          .flatMap((p: any) => (p.content || []).map((t: any) => t.text || ''))
+          .join('').trim();
+        const taskCompleted = taskMap.get(text);
+        if (taskCompleted !== undefined && !!node.attrs?.checked !== taskCompleted) {
+          changed = true;
+          return { ...node, attrs: { ...node.attrs, checked: taskCompleted } };
+        }
+      }
+      if (node.content) {
+        const newContent = node.content.map(updateChecklist);
+        if (newContent !== node.content) return { ...node, content: newContent };
+      }
+      return node;
+    };
+
+    // Walk and update table cell checkboxes
+    const updateTableCells = (node: any): any => {
+      if (node.type === 'table') {
+        const rows = (node.content || []).map((row: any) => {
+          const cells = row.content || [];
+          if (cells.every((c: any) => c.type === 'tableHeader')) return row;
+          const checkboxCell = cells.find((c: any) => c.attrs?.checked !== null && c.attrs?.checked !== undefined);
+          if (!checkboxCell) return row;
+          const checkboxIdx = cells.indexOf(checkboxCell);
+          let titleText = '';
+          for (let i = 0; i < cells.length; i++) {
+            if (i === checkboxIdx) continue;
+            const text = extractNodeText(cells[i]);
+            if (text && !/^\d+(\.\d+)?$/.test(text)) { titleText = text; break; }
+          }
+          const taskCompleted = taskMap.get(titleText);
+          if (taskCompleted !== undefined && !!checkboxCell.attrs.checked !== taskCompleted) {
+            changed = true;
+            const newCells = cells.map((c: any) =>
+              c === checkboxCell ? { ...c, attrs: { ...c.attrs, checked: taskCompleted } } : c
+            );
+            return { ...row, content: newCells };
+          }
+          return row;
+        });
+        return { ...node, content: rows };
+      }
+      if (node.content) {
+        const newContent = node.content.map((child: any) => {
+          const updated = updateChecklist(child);
+          return updateTableCells(updated);
+        });
+        return { ...node, content: newContent };
+      }
+      return node;
+    };
+
+    const updatedJson = updateTableCells(json);
+    if (changed) {
+      isSyncingBackRef.current = true;
+      editor.commands.setContent(updatedJson);
+      // Save the synced state
+      debouncedSave(updatedJson, editor.getText());
+      requestAnimationFrame(() => { isSyncingBackRef.current = false; });
+    }
+  }, [linkedTasks]);
 
   const debouncedSave = useCallback((content: Record<string, any>, text: string) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -214,12 +335,14 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     }
   };
 
-  // Sync document checklist items as real tasks
+  // Sync document checklist items + table rows as real tasks
   const handleSyncTasks = async () => {
     if (!editor || !user) return;
     setSyncing(true);
     try {
-      const docTasks = extractTaskItems(editor.getJSON());
+      const checklistTasks = extractTaskItems(editor.getJSON());
+      const tableTasks = extractTableTasks(editor.getJSON());
+      const docTasks = [...checklistTasks, ...tableTasks];
 
       for (const item of docTasks) {
         // Check if task already exists (match by title + document_id)
@@ -284,6 +407,14 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
         .ProseMirror img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }
         .ProseMirror .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: #3b82f6; pointer-events: none; }
         .ProseMirror.resize-cursor { cursor: col-resize; }
+        .ProseMirror td.has-checkbox { padding-left: 32px; }
+        .ProseMirror td .cell-checkbox {
+          position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+          width: 16px; height: 16px; cursor: pointer; accent-color: #10b981;
+          margin: 0; border-radius: 3px;
+        }
+        .ProseMirror td[data-checked="true"] .cell-content { color: #a1a1aa; text-decoration: line-through; }
+        .dark .ProseMirror td[data-checked="true"] .cell-content { color: #52525b; }
       `}</style>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
@@ -432,7 +563,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
                   ) : (
                     <>
                       <Icons.RefreshCw size={13} />
-                      Sync checklist to tasks
+                      Sync to tasks
                     </>
                   )}
                 </button>

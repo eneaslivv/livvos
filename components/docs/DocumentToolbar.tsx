@@ -67,6 +67,33 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = ({ editor, onImag
     // Table & Image
     [
       { icon: <Icons.Table size={15} />, action: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), isActive: editor.isActive('table'), title: 'Insert Table' },
+      ...(editor.isActive('table') ? [{
+        icon: <Icons.SquareCheck size={15} />,
+        action: () => {
+          const { state } = editor;
+          const { $from } = state.selection;
+          // Walk up to find tableCell node
+          for (let d = $from.depth; d > 0; d--) {
+            const node = $from.node(d);
+            if (node.type.name === 'tableCell') {
+              const pos = $from.before(d);
+              const currentChecked = node.attrs.checked;
+              const newChecked = currentChecked === null || currentChecked === undefined ? false : null;
+              editor.view.dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: newChecked }));
+              break;
+            }
+          }
+        },
+        isActive: (() => {
+          const { $from } = editor.state.selection;
+          for (let d = $from.depth; d > 0; d--) {
+            const node = $from.node(d);
+            if (node.type.name === 'tableCell') return node.attrs.checked !== null && node.attrs.checked !== undefined;
+          }
+          return false;
+        })(),
+        title: 'Toggle cell checkbox',
+      }] : []),
       { icon: <Icons.Image size={15} />, action: handleImagePick, isActive: false, title: 'Insert Image' },
     ],
   ];
