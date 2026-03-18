@@ -117,13 +117,15 @@ serve(async (req) => {
       const tenantId = profile.tenant_id
       if (!tenantId) continue
 
-      // Get tenant name
+      // Get tenant name + logo
       const { data: tenant } = await supabase
         .from('tenants')
-        .select('name')
+        .select('name, logo_url, logo_url_dark')
         .eq('id', tenantId)
         .single()
       const tenantName = tenant?.name || 'LIVV OS'
+      // Prefer dark-mode logo for dark email header; fallback to regular logo
+      const tenantLogo = tenant?.logo_url_dark || tenant?.logo_url || null
 
       // Create notifications for each overdue task
       for (const task of tasks.overdue) {
@@ -230,7 +232,7 @@ serve(async (req) => {
                   message: lines.join('<br/>'),
                   ctaUrl: `${Deno.env.get('APP_URL') || 'https://app.livv.systems'}/calendar`,
                   ctaText: 'View Calendar',
-                }, tenantName),
+                }, tenantName, tenantLogo),
               }),
             })
             sentCount++
@@ -275,7 +277,8 @@ serve(async (req) => {
 function buildReminderHtml(
   template: string,
   data: { recipientName?: string; title: string; message: string; ctaUrl?: string; ctaText?: string },
-  brandName: string
+  brandName: string,
+  logoUrl?: string | null
 ): string {
   const configs: Record<string, { accent: string; icon: string }> = {
     task_overdue:       { accent: '#ef4444', icon: '&#128308;' },
@@ -308,7 +311,10 @@ function buildReminderHtml(
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
           <tr>
             <td style="background-color:#0a0a0a;padding:32px 40px;text-align:center;">
-              <div style="font-size:22px;font-weight:300;color:#ffffff;letter-spacing:2px;font-family:Georgia,serif;">${brandName}</div>
+              ${logoUrl
+                ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;object-fit:contain;" />`
+                : `<div style="font-size:22px;font-weight:300;color:#ffffff;letter-spacing:2px;font-family:Georgia,serif;">${brandName}</div>`
+              }
             </td>
           </tr>
           <tr>
