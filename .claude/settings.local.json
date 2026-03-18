@@ -110,7 +110,24 @@
       "Read(//c/Users/eneas/.supabase/**)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions list --project-ref ngswutcpsgdgmmjnfddi)",
-      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi --no-verify-jwt)"
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy gemini --project-ref ngswutcpsgdgmmjnfddi --no-verify-jwt)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy send-invite-email --project-ref ngswutcpsgdgmmjnfddi)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy send-invite-email)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ad61fb41780094d346e5e20efc8519b12abb20ac npx supabase functions deploy)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f''Total items: {len\\(data\\)}''\\); [print\\(f'' - {item.get\\(\"\"title\"\",\"\"?\"\"\\)} | featured={item.get\\(\"\"featured\"\",\"\"?\"\"\\)}''\\) for item in data]\")",
+      "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(f'' OK: {len\\(d[0].get\\(\"\"content_blocks\"\",[]\\)\\)} blocks''\\)\")",
+      "Bash(sort -t: -k1 -n)",
+      "Bash(npm cache clean --force)",
+      "Bash(npm ls @tiptap/react)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_24909b2dfee085090644702b5b3584f60356facf npx supabase functions deploy confirm-invite-signup --project-ref ngswutcpsgdgmmjnfddi)",
+      "Bash(npm ls @tiptap/core)",
+      "Bash(vercel ls --limit 3)",
+      "Bash(vercel ls)",
+      "Bash(vercel ls --team team_nRwvViFzIIjl9b3wvGaERtCF)",
+      "Bash(vercel link -y --scope eneasaldabe-gmailcoms-projects)",
+      "Read(//c/Users/eneas/.claude/projects/c--Users-eneas-Downloads-livv-eneas-os/memory/**)",
+      "Bash(npx netlify deploy --prod --dir=dist)",
+      "Bash(npx vercel --prod --team team_nRwvViFzIIjl9b3wvGaERtCF)"
     ]
   }
 }
