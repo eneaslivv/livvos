@@ -114,7 +114,8 @@ export const WeekView: React.FC<WeekViewProps> = ({
   const todayDayIndex = weekDays.findIndex(d => d.toISOString().split('T')[0] === todayStr);
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto min-w-0">
+      <div className="min-w-[700px]">
       {/* Day headers */}
       <div className="grid grid-cols-8 border-b border-zinc-200 dark:border-zinc-800">
         <div className="p-4 border-r border-zinc-200 dark:border-zinc-800"></div>
@@ -431,6 +432,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
             )}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );

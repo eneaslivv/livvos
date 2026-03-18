@@ -52,10 +52,11 @@ export const MonthView: React.FC<MonthViewProps> = ({
   onOpenTaskDetail,
 }) => {
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto min-w-0">
+      <div className="min-w-[600px]">
       <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800">
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-          <div key={day} className="p-3 text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          <div key={day} className="p-2 sm:p-3 text-center text-[10px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400">
             {day}
           </div>
         ))}
@@ -77,7 +78,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
               onDoubleClick={(e) => onSlotDoubleClick(e, dateStr)}
               onDragOver={onDragOver}
               onDrop={(e) => onTaskDrop(e, dateStr)}
-              className={`min-h-[120px] p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+              className={`min-h-[80px] sm:min-h-[120px] p-1.5 sm:p-2 border-b border-r border-zinc-100 dark:border-zinc-800 cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
                 isSelected
                   ? 'bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
                   : isCurrentMonth ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/40'
@@ -153,6 +154,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

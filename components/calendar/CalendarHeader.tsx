@@ -65,16 +65,16 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   hasClientTimezones,
 }) => {
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div>
-        <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendar</h1>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+      <div className="shrink-0">
+        <h1 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendar</h1>
         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
           {calendarMode === 'content'
             ? `${filteredEventsCount} scheduled contents`
             : `${stats.totalEvents} events · ${stats.totalTasks} tasks · ${stats.completedTasks} completed`}
         </p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {/* Mode toggle: Schedule / Content */}
         <ToggleGroup
           options={[
@@ -151,6 +151,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         {/* View toggle: Week / Month */}
         <ToggleGroup
           options={[
+            { id: 'day' as const, label: 'Day' },
             { id: 'week' as const, label: 'Week' },
             { id: 'month' as const, label: 'Month' },
           ]}

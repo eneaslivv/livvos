@@ -97,8 +97,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onDeleteExpense,
 }) => {
   return (
-    <div className="grid grid-cols-3 gap-6">
-      <div className="col-span-2 space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="lg:col-span-2 space-y-4 sm:space-y-6">
         {/* Description (editable) */}
         <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
           <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
@@ -111,7 +111,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           />
         </div>
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
             <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider mb-2">Progress</div>
             <div className="flex items-end gap-3">
@@ -287,7 +287,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </span>
             )}
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
             <div>
               <div className="text-[10px] text-zinc-400 font-medium mb-0.5">Invoiced</div>
               <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">

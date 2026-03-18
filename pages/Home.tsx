@@ -1084,7 +1084,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     </div>
 
                     {/* Quick Actions — desktop only (mobile shown above grid) */}
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
                             { icon: <Icons.Plus size={15} />, label: 'New Task', key: 'New Task' },
                             { icon: <Icons.Calendar size={15} />, label: 'Calendar', key: 'Schedule' },

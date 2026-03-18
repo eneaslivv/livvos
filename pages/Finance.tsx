@@ -1626,7 +1626,7 @@ export const Finance: React.FC = () => {
       {activeTab === 'budgets' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Allocated</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(totalAllocated)}</div>
@@ -2263,7 +2263,7 @@ export const Finance: React.FC = () => {
               </div>
 
               {/* Amount + installments in a row */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total Amount *{editingIncomeId ? ' (read-only)' : ''}</label>
                   <div className="relative">
@@ -2344,7 +2344,7 @@ export const Finance: React.FC = () => {
               </div>
 
               {/* Period + Dates */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Period</label>
                   <select value={budgetForm.period} onChange={e => setBudgetForm(p => ({ ...p, period: e.target.value as typeof p.period }))}
