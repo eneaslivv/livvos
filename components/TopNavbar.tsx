@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Icons } from './ui/Icons';
 import { useRBAC } from '../context/RBACContext';
+import { useTenant } from '../context/TenantContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { NotificationBell } from './NotificationBell';
 import type { PageView } from '../types';
@@ -15,14 +16,24 @@ interface TopNavbarProps {
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, onOpenTask, onNavigate }) => {
     const { user } = useRBAC();
+    const { currentTenant } = useTenant();
     const [isConfigOpen, setIsConfigOpen] = useState(false);
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const tenantLogo = isDarkMode && currentTenant?.logo_url_dark ? currentTenant.logo_url_dark : (currentTenant?.logo_url || currentTenant?.logo_url_dark);
 
     return (
         <header className="w-full px-4 md:px-5 bg-zinc-50/60 dark:bg-black/60 backdrop-blur-2xl rounded-full">
             <div className="flex items-center justify-between h-11 w-full">
 
-                {/* Left: Search Bar */}
-                <div className="flex items-center gap-4 min-w-0">
+                {/* Left: Logo + Search Bar */}
+                <div className="flex items-center gap-3 min-w-0">
+                    {tenantLogo && (
+                        <img
+                            src={tenantLogo}
+                            alt={currentTenant?.name || ''}
+                            className="h-6 max-w-[80px] object-contain shrink-0 md:hidden"
+                        />
+                    )}
                     <div
                         onClick={onOpenSearch}
                         className="group relative flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full cursor-text transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-56"

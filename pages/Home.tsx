@@ -5,7 +5,7 @@ import { SlidePanel } from '../components/ui/SlidePanel';
 import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
 import { Status, PageView } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
-import { supabaseAdmin } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { useRBAC } from '../context/RBACContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTenant } from '../context/TenantContext';
@@ -519,11 +519,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                 const ext = file.name.split('.').pop();
                                 const path = `banners/${currentTenant.id}.${ext}`;
                                 if (import.meta.env.DEV) console.log('[Banner] uploading to', path, 'tenant:', currentTenant.id);
-                                const { error: rmErr } = await supabaseAdmin.storage.from('documents').remove([path]);
+                                const { error: rmErr } = await supabase.storage.from('tenant-assets').remove([path]);
                                 if (rmErr && import.meta.env.DEV) console.warn('[Banner] remove error (non-fatal):', rmErr.message);
-                                const { error: upErr } = await supabaseAdmin.storage.from('documents').upload(path, file, { upsert: true });
+                                const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true });
                                 if (upErr) { console.error('[Banner] upload error:', upErr); throw upErr; }
-                                const { data: urlData } = supabaseAdmin.storage.from('documents').getPublicUrl(path);
+                                const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
                                 if (import.meta.env.DEV) console.log('[Banner] public URL:', urlData.publicUrl);
                                 await updateTenant({ banner_url: `${urlData.publicUrl}?v=${Date.now()}` });
                                 if (import.meta.env.DEV) console.log('[Banner] tenant updated OK');
@@ -1030,10 +1030,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                         try {
                                             const ext = file.name.split('.').pop();
                                             const path = `logos/${currentTenant.id}.${ext}`;
-                                            await supabaseAdmin.storage.from('documents').remove([path]);
-                                            const { error: upErr } = await supabaseAdmin.storage.from('documents').upload(path, file, { upsert: true });
+                                            await supabase.storage.from('tenant-assets').remove([path]);
+                                            const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true });
                                             if (upErr) throw upErr;
-                                            const { data: urlData } = supabaseAdmin.storage.from('documents').getPublicUrl(path);
+                                            const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
                                             await updateTenant({ logo_url: `${urlData.publicUrl}?v=${Date.now()}` });
                                         } catch (err: any) {
                                             setUploadError(err?.message || 'Error'); setTimeout(() => setUploadError(null), 4000);

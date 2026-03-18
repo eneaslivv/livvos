@@ -10,6 +10,8 @@ import { useSupabase } from '../hooks/useSupabase';
 import { generateTaskFromAI } from '../lib/ai';
 import { useTeam } from '../context/TeamContext';
 import { useAuth } from '../hooks/useAuth';
+import { useTenant } from '../context/TenantContext';
+import { supabase } from '../lib/supabase';
 import { AiAdvisor } from './AiAdvisor';
 
 interface LayoutProps {
@@ -42,6 +44,7 @@ const ACTIVE_THEMES: Record<string, string> = {
   finance: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
   sales_leads: 'bg-purple-100 text-purple-900 dark:bg-purple-500/20 dark:text-purple-300 shadow-sm',
   sales_analytics: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-300 shadow-sm',
+  platform_admin: 'bg-red-100 text-red-900 dark:bg-red-500/20 dark:text-red-300 shadow-sm',
 };
 
 const NavItem: React.FC<{
@@ -450,10 +453,12 @@ const CreateTaskModal = ({
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
+  const { currentTenant, hasFeature } = useTenant();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   // Global Task Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -473,6 +478,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   useEffect(() => {
     localStorage.setItem('sidebarExpanded', String(isSidebarExpanded));
   }, [isSidebarExpanded]);
+
+  // Check if user is platform admin
+  useEffect(() => {
+    supabase.rpc('is_platform_admin').then(({ data }) => {
+      if (data === true) setIsPlatformAdmin(true);
+    });
+  }, []);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -516,7 +528,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         if (e.key === '1' && currentMode !== 'os') {
           e.preventDefault();
           onSwitchMode('os');
-        } else if (e.key === '2' && currentMode !== 'sales') {
+        } else if (e.key === '2' && currentMode !== 'sales' && hasFeature('sales_module')) {
           e.preventDefault();
           onSwitchMode('sales');
         }
@@ -535,23 +547,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     }
   };
 
-  const osNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any } }[] = [
+  const osNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
-    { id: 'projects', label: 'Projects', icon: <Icons.Briefcase />, permission: { module: 'projects', action: 'view' } },
-    { id: 'team_clients', label: 'Team/Clients', icon: <Icons.Users />, permission: { module: 'team', action: 'view' } },
-    { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' } },
+    { id: 'projects', label: 'Projects', icon: <Icons.Briefcase />, permission: { module: 'projects', action: 'view' }, feature: 'projects_module' },
+    { id: 'team_clients', label: 'Team/Clients', icon: <Icons.Users />, permission: { module: 'team', action: 'view' }, feature: 'team_management' },
+    { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
     { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
-    { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' } },
+    { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
   ];
 
-  const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any } }[] = [
-    { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' } },
-    { id: 'sales_leads', label: 'Leads Inbox', icon: <Icons.Mail />, permission: { module: 'sales', action: 'view_leads' } },
-    { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' } },
-    { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' } },
+  const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
+    { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
+    { id: 'sales_leads', label: 'Leads Inbox', icon: <Icons.Mail />, permission: { module: 'sales', action: 'view_leads' }, feature: 'sales_module' },
+    { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
+    { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
   ];
 
   const currentNavItems = (currentMode === 'os' ? osNavItems : salesNavItems).filter(item => {
+    if (item.feature && !hasFeature(item.feature)) return false;
     if (!item.permission) return true;
     if (!isInitialized) return true;
     return hasPermission(item.permission.module, item.permission.action);
@@ -594,8 +607,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         ${isSidebarExpanded ? 'md:w-[240px]' : 'md:w-[72px]'}
       `}>
 
+        {/* Tenant Logo */}
+        {(currentTenant?.logo_url || currentTenant?.logo_url_dark) && (
+          <div className={`flex items-center justify-center w-[calc(100%-24px)] mx-3 mb-3 shrink-0 ${isSidebarExpanded ? 'h-14' : 'h-10'}`}>
+            <img
+              src={isDarkMode && currentTenant.logo_url_dark ? currentTenant.logo_url_dark : (currentTenant.logo_url || currentTenant.logo_url_dark)}
+              alt={currentTenant.name}
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+        )}
+
         {/* Workspace Switcher */}
-        <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0">
+        {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0">
           <button
             onClick={() => onSwitchMode(currentMode === 'os' ? 'sales' : 'os')}
             className={`w-full flex items-center p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
@@ -620,7 +644,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Switch View</div>
             </div>
           </button>
-        </div>
+        </div>}
 
         {/* Navigation Items */}
         <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto no-scrollbar mask-image-linear-gradient mt-4 items-center">
@@ -653,6 +677,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
         {/* Bottom Actions */}
         <div className="w-full flex flex-col gap-1 shrink-0 mt-2 items-center">
+          {isPlatformAdmin && (
+            <NavItem
+              id="platform_admin"
+              icon={<Icons.Shield />}
+              label="Platform"
+              active={currentPage === 'platform_admin'}
+              expanded={isSidebarExpanded || isMobileMenuOpen}
+              onClick={() => {
+                onNavigate('platform_admin');
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
           <button
             onClick={toggleTheme}
             className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-300 dark:hover:bg-amber-500/10 transition-colors group/btn shrink-0"

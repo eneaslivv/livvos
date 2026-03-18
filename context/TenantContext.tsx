@@ -31,13 +31,16 @@ export interface TenantConfig {
     tenant_id: string;
     branding: TenantBranding;
     features: {
-        sales_module: boolean;
+        projects_module: boolean;
         team_management: boolean;
-        client_portal: boolean;
+        sales_module: boolean;
+        finance_module: boolean;
+        documents_module: boolean;
         notifications: boolean;
         ai_assistant: boolean;
         analytics: boolean;
         calendar_integration: boolean;
+        client_portal: boolean;
         document_versioning: boolean;
         advanced_permissions: boolean;
     };
@@ -113,6 +116,9 @@ interface TenantContextType {
     resetToDefaults: () => Promise<void>;
     exportTenantData: () => Promise<any>;
     getTenantHealth: () => Promise<{ status: 'healthy' | 'warning' | 'critical'; issues: string[] }>;
+
+    // Platform admin viewing
+    isViewingAsTenant: boolean;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -146,6 +152,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     const [tenantUsage, setTenantUsage] = useState<TenantUsage | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isViewingAsTenant, setIsViewingAsTenant] = useState(false);
     const hasLoadedRef = useRef(false);
 
     const buildTenantSlug = useCallback((value: string) => {
@@ -249,11 +256,12 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             // Get user's tenant from profile
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
-                .select('id, name, email, tenant_id')
+                .select('id, name, email, tenant_id, original_tenant_id')
                 .eq('id', user.id)
                 .single();
 
             let tenantId = profile?.tenant_id;
+            setIsViewingAsTenant(!!profile?.original_tenant_id);
 
             if (profileError || !tenantId) {
                 if (import.meta.env.DEV) console.warn('Profile/tenant not found, auto-provisioning...');
@@ -543,13 +551,16 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
                     tenant_id: data.id,
                     branding: defaultBranding,
                     features: {
-                        sales_module: true,
+                        projects_module: true,
                         team_management: true,
-                        client_portal: false,
+                        sales_module: true,
+                        finance_module: true,
+                        documents_module: true,
                         notifications: true,
                         ai_assistant: false,
                         analytics: true,
                         calendar_integration: false,
+                        client_portal: false,
                         document_versioning: false,
                         advanced_permissions: false
                     },
@@ -668,13 +679,16 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         await updateConfig({
             branding: defaultBranding,
             features: {
-                sales_module: true,
+                projects_module: true,
                 team_management: true,
-                client_portal: false,
+                sales_module: true,
+                finance_module: true,
+                documents_module: true,
                 notifications: true,
                 ai_assistant: false,
                 analytics: true,
                 calendar_integration: false,
+                client_portal: false,
                 document_versioning: false,
                 advanced_permissions: false
             }
@@ -794,6 +808,9 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         resetToDefaults,
         exportTenantData,
         getTenantHealth,
+
+        // Platform admin viewing
+        isViewingAsTenant,
     };
 
     return (

@@ -41,6 +41,7 @@ const loadSharedProjectView = () => import('./pages/SharedProjectView').then(mod
 const loadPublicPortalView = () => import('./pages/PublicPortalView').then(module => ({ default: module.PublicPortalView }));
 const loadSharedDocument = () => import('./pages/SharedDocument').then(module => ({ default: module.SharedDocument }));
 const loadContentCms = () => import('./pages/ContentCms').then(module => ({ default: module.ContentCms }));
+const loadPlatformAdmin = () => import('./pages/PlatformAdmin').then(module => ({ default: module.PlatformAdmin }));
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -63,6 +64,7 @@ const SharedProjectView = React.lazy(loadSharedProjectView);
 const PublicPortalView = React.lazy(loadPublicPortalView);
 const SharedDocument = React.lazy(loadSharedDocument);
 const ContentCms = React.lazy(loadContentCms);
+const PlatformAdmin = React.lazy(loadPlatformAdmin);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -399,10 +401,11 @@ const getSkeletonForPage = (page: PageView): React.ReactNode => {
 const ProtectedRoute: React.FC<{
   permission?: { module: any, action: any };
   role?: string;
-  features?: string[];
+  feature?: string;
   children: React.ReactNode;
-}> = ({ permission, role, features, children }) => {
+}> = ({ permission, role, feature, children }) => {
   const { hasPermission, hasRole, user, isInitialized } = useRBAC();
+  const { hasFeature } = useTenant();
 
   // Wait for RBAC to be initialized
   if (!isInitialized) {
@@ -422,6 +425,20 @@ const ProtectedRoute: React.FC<{
         </div>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Authentication Required</h2>
         <p className="text-zinc-500 mt-2">Please sign in to access this page.</p>
+      </div>
+    );
+  }
+
+  // Check feature gating
+  if (feature && !hasFeature(feature as any)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center">
+        <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-4">
+          <span className="text-2xl">~</span>
+        </div>
+        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">No disponible</h2>
+        <p className="text-zinc-500 mt-2">Esta funcionalidad no esta incluida en tu plan actual.</p>
+        <p className="text-zinc-400 text-sm mt-1">Contacta al administrador para habilitarla.</p>
       </div>
     );
   }
@@ -511,7 +528,7 @@ const AppContent: React.FC<{
   navParams: NavParams | null;
 }> = ({ currentPage, appMode, handleNavigate, handleSwitchMode, showDebug, navParams }) => {
   const { isInitialized, hasRole } = useRBAC();
-  const { isLoading: tenantLoading, currentTenant } = useTenant();
+  const { isLoading: tenantLoading, currentTenant, isViewingAsTenant } = useTenant();
 
   // Safety timeout: force ready after 8s to avoid permanent skeleton
   const [forceReady, setForceReady] = useState(false);
@@ -594,6 +611,24 @@ const AppContent: React.FC<{
         getSkeletonForPage(currentPage)
       ) : (
         <>
+          {/* Platform Admin: Viewing as another tenant banner */}
+          {isViewingAsTenant && (
+            <div className="sticky top-0 z-50 flex items-center justify-between px-4 py-2 bg-amber-100 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-800">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Viewing as: <span className="font-bold">{currentTenant?.name}</span>
+              </p>
+              <button
+                onClick={async () => {
+                  await supabase.rpc('platform_return_to_home_tenant')
+                  window.location.reload()
+                }}
+                className="px-3 py-1 text-xs font-medium text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-800 rounded-lg hover:bg-amber-300 dark:hover:bg-amber-700 transition-colors"
+              >
+                Return to Home
+              </button>
+            </div>
+          )}
+
           {/* Home */}
           {visitedPages.has('home') && (
             <KeepAlivePage page="home" active={currentPage === 'home'}>
@@ -604,7 +639,7 @@ const AppContent: React.FC<{
           {/* Projects */}
           {visitedPages.has('projects') && (
             <KeepAlivePage page="projects" active={currentPage === 'projects'}>
-              <ProtectedRoute permission={{ module: 'projects', action: 'view' }}>
+              <ProtectedRoute permission={{ module: 'projects', action: 'view' }} feature="projects_module">
                 <Projects navProjectId={navParams?.projectId} />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -613,7 +648,7 @@ const AppContent: React.FC<{
           {/* Team / Clients (shared TeamClients component) */}
           {hasVisitedTeamClients && (
             <KeepAlivePage page="clients" active={isTeamClientsActive}>
-              <ProtectedRoute permission={{ module: 'team', action: 'view' }}>
+              <ProtectedRoute permission={{ module: 'team', action: 'view' }} feature="team_management">
                 <TeamClients initialTab={getTeamClientsTab(currentPage)} onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -622,7 +657,7 @@ const AppContent: React.FC<{
           {/* Calendar */}
           {visitedPages.has('calendar') && (
             <KeepAlivePage page="calendar" active={currentPage === 'calendar'}>
-              <ProtectedRoute permission={{ module: 'calendar', action: 'view' }}>
+              <ProtectedRoute permission={{ module: 'calendar', action: 'view' }} feature="calendar_integration">
                 <Calendar />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -631,7 +666,7 @@ const AppContent: React.FC<{
           {/* Docs */}
           {visitedPages.has('docs') && (
             <KeepAlivePage page="docs" active={currentPage === 'docs'}>
-              <ProtectedRoute permission={{ module: 'documents', action: 'view' }}>
+              <ProtectedRoute permission={{ module: 'documents', action: 'view' }} feature="documents_module">
                 <Docs />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -649,7 +684,7 @@ const AppContent: React.FC<{
           {/* Finance */}
           {visitedPages.has('finance') && (
             <KeepAlivePage page="finance" active={currentPage === 'finance'}>
-              <ProtectedRoute permission={{ module: 'finance', action: 'view' }}>
+              <ProtectedRoute permission={{ module: 'finance', action: 'view' }} feature="finance_module">
                 <Finance />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -658,7 +693,7 @@ const AppContent: React.FC<{
           {/* Sales (shared Sales component with dynamic view) */}
           {hasVisitedSales && (
             <KeepAlivePage page="sales_dashboard" active={isSalesActive}>
-              <ProtectedRoute permission={{ module: 'sales', action: 'view_dashboard' }}>
+              <ProtectedRoute permission={{ module: 'sales', action: 'view_dashboard' }} feature="sales_module">
                 <Sales view={getSalesView(currentPage)} onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
@@ -679,6 +714,13 @@ const AppContent: React.FC<{
               <ProtectedRoute role="owner">
                 <TenantSettings />
               </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
+          {/* Platform Admin */}
+          {visitedPages.has('platform_admin') && (
+            <KeepAlivePage page="platform_admin" active={currentPage === 'platform_admin'}>
+              <PlatformAdmin />
             </KeepAlivePage>
           )}
         </>
