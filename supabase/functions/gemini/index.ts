@@ -298,7 +298,7 @@ Rules:
     }
 
     // Fetch with retry on 429 (rate limit)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
     const geminiBody = JSON.stringify(requestPayload)
     const MAX_RETRIES = 3
     let response: Response | null = null
