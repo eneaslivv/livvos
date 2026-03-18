@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, AlertTriangle, CheckCircle2, Info, Save } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { CmsPortfolioItem, CmsViewMode, PortfolioMedia, ContentBlock, ContentBlockType } from '../../types/cms';
 import { ImageUploader } from './ImageUploader';
@@ -118,6 +118,29 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const [featuredWarning, setFeaturedWarning] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const [generatingThumb, setGeneratingThumb] = useState(false);
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string>(JSON.stringify(emptyForm));
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const DRAFT_KEY_PREFIX = 'portfolio-draft-';
+  const draftKey = editingId ? `${DRAFT_KEY_PREFIX}${editingId}` : `${DRAFT_KEY_PREFIX}new`;
+
+  const isDirty = useMemo(() => {
+    return JSON.stringify(form) !== initialFormSnapshot;
+  }, [form, initialFormSnapshot]);
+
+  const loadDraft = useCallback((key: string): FormState | null => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) return JSON.parse(saved) as FormState;
+    } catch { /* corrupted draft */ }
+    return null;
+  }, []);
+
+  const clearDraft = useCallback((key?: string) => {
+    try { localStorage.removeItem(key || draftKey); } catch {}
+  }, [draftKey]);
 
   /** Auto-capture a video frame, upload it, and set as card thumbnail */
   const autoGenerateVideoThumbnail = async (videoUrl: string) => {
@@ -173,7 +196,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
   useEffect(() => {
     if (editingItem) {
-      setForm({
+      const dbForm: FormState = {
         title: editingItem.title || '',
         subtitle: editingItem.subtitle || '',
         category: editingItem.category || editingItem.project_type || 'Web',
@@ -194,15 +217,57 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             ? [{ url: editingItem.image, type: detectMediaType(editingItem.image), is_cover: true, caption: '' }]
             : [],
         content_blocks: editingItem.content_blocks || [],
-      });
+      };
+      // Check for a saved draft
+      const key = `${DRAFT_KEY_PREFIX}${editingItem.id}`;
+      const draft = loadDraft(key);
+      if (draft) {
+        setForm(draft);
+        setDraftRestored(true);
+      } else {
+        setForm(dbForm);
+      }
+      setInitialFormSnapshot(JSON.stringify(dbForm));
       setShowModal(true);
     }
   }, [editingItem]);
+
+  // Auto-save draft to localStorage (debounced 1.5s)
+  useEffect(() => {
+    if (!showModal) return;
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        const json = JSON.stringify(form);
+        if (json.length < 50_000) {
+          localStorage.setItem(draftKey, json);
+        }
+      } catch { /* quota exceeded — silent */ }
+    }, 1500);
+    return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
+  }, [form, showModal, draftKey]);
 
   const resetForm = () => {
     setEditingId(null);
     setForm(emptyForm);
     setShowModal(false);
+    setShowCloseConfirm(false);
+    setDraftRestored(false);
+    setInitialFormSnapshot(JSON.stringify(emptyForm));
+  };
+
+  const safeClose = () => {
+    if (isDirty) {
+      setShowCloseConfirm(true);
+    } else {
+      clearDraft();
+      resetForm();
+    }
+  };
+
+  const discardAndClose = () => {
+    clearDraft();
+    resetForm();
   };
 
   const buildData = (): Partial<CmsPortfolioItem> => {
@@ -241,7 +306,10 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     }
     setShowValidation(false);
     const result = await onSave(buildData(), editingId || undefined);
-    if (result) resetForm();
+    if (result) {
+      clearDraft();
+      resetForm();
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -252,6 +320,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     }
     setShowValidation(false);
     await onSave(buildData(), editingId);
+    clearDraft();
   };
 
   const handleDelete = async (id: string) => {
@@ -262,7 +331,15 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
   const openNew = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    const key = `${DRAFT_KEY_PREFIX}new`;
+    const draft = loadDraft(key);
+    if (draft) {
+      setForm(draft);
+      setDraftRestored(true);
+    } else {
+      setForm(emptyForm);
+    }
+    setInitialFormSnapshot(JSON.stringify(emptyForm));
     setShowModal(true);
   };
 
@@ -552,7 +629,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
-            onClick={(e) => { if (e.target === e.currentTarget) resetForm(); }}
+            onClick={(e) => { if (e.target === e.currentTarget) safeClose(); }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -563,11 +640,19 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             >
               {/* Modal header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E6E2D8]">
-                <h3 className="text-sm font-semibold text-[#09090B] tracking-tight">
-                  {editingId ? 'Edit Project' : 'New Project'}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-[#09090B] tracking-tight">
+                    {editingId ? 'Edit Project' : 'New Project'}
+                  </h3>
+                  {isDirty && (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full">
+                      <Save size={9} />
+                      Unsaved
+                    </span>
+                  )}
+                </div>
                 <button
-                  onClick={resetForm}
+                  onClick={safeClose}
                   className="p-1.5 rounded-lg hover:bg-[#E6E2D8]/50 transition-colors"
                 >
                   <X size={16} className="text-[#09090B]/40" />
@@ -576,6 +661,26 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
               {/* Modal body */}
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {/* Draft restored banner */}
+                {draftRestored && (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
+                    <div className="flex items-center gap-2">
+                      <Save size={12} className="shrink-0" />
+                      <span>Draft restored from your last session.</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        clearDraft();
+                        setDraftRestored(false);
+                        // Reset to initial (DB) state
+                        setForm(JSON.parse(initialFormSnapshot));
+                      }}
+                      className="text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                    >
+                      Discard draft
+                    </button>
+                  </div>
+                )}
                 {/* ── Basic Info ── */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1014,7 +1119,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={resetForm}
+                    onClick={safeClose}
                     className="px-4 py-2 text-xs font-medium text-[#78736A] border border-[#E6E2D8] rounded-full hover:bg-[#F5F3EE] transition-colors"
                   >
                     Cancel
@@ -1078,6 +1183,44 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   className="px-3 py-1.5 text-xs bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
                 >
                   Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Unsaved changes confirmation */}
+      <AnimatePresence>
+        {showCloseConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-xl p-5 shadow-xl max-w-sm w-full mx-4"
+            >
+              <h3 className="text-sm font-semibold text-[#09090B]">Unsaved changes</h3>
+              <p className="text-xs text-[#78736A] mt-1">
+                You have unsaved changes. Your draft has been saved and will be restored next time you open this project.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => setShowCloseConfirm(false)}
+                  className="px-3 py-1.5 text-xs border border-[#E6E2D8] rounded-full hover:bg-[#F5F3EE] transition-colors"
+                >
+                  Keep editing
+                </button>
+                <button
+                  onClick={discardAndClose}
+                  className="px-3 py-1.5 text-xs bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                >
+                  Discard & close
                 </button>
               </div>
             </motion.div>
