@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Icons } from '../components/ui/Icons'
 import { usePlatformAdmin, type PlatformTenant, type CreateTenantParams } from '../hooks/usePlatformAdmin'
+import { ALL_FEATURES, FEATURE_LABELS, getFeaturesForPlan, getResourceLimitsForPlan, type PlanFeatures, type PlanResourceLimits } from '../config/planDefaults'
 
 type Tab = 'dashboard' | 'tenants' | 'create'
 
@@ -388,6 +389,14 @@ const TenantDetailPanel: React.FC<{
   const [notes, setNotes] = useState(tenant.notes || '')
   const [contactEmail, setContactEmail] = useState(tenant.contact_email || '')
   const [contactName, setContactName] = useState(tenant.contact_name || '')
+  const [features, setFeatures] = useState<PlanFeatures>(() => {
+    const defaults = getFeaturesForPlan(tenant.plan)
+    return tenant.features ? { ...defaults, ...tenant.features } as PlanFeatures : defaults
+  })
+  const [resourceLimits, setResourceLimits] = useState<PlanResourceLimits>(() => {
+    const defaults = getResourceLimitsForPlan(tenant.plan)
+    return tenant.resource_limits ? { ...defaults, ...tenant.resource_limits } as PlanResourceLimits : defaults
+  })
   const [suspendReason, setSuspendReason] = useState('')
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -399,14 +408,24 @@ const TenantDetailPanel: React.FC<{
     setNotes(tenant.notes || '')
     setContactEmail(tenant.contact_email || '')
     setContactName(tenant.contact_name || '')
+    const fDefaults = getFeaturesForPlan(tenant.plan)
+    setFeatures(tenant.features ? { ...fDefaults, ...tenant.features } as PlanFeatures : fDefaults)
+    const rDefaults = getResourceLimitsForPlan(tenant.plan)
+    setResourceLimits(tenant.resource_limits ? { ...rDefaults, ...tenant.resource_limits } as PlanResourceLimits : rDefaults)
     setSuspendReason('')
     setShowSuspendConfirm(false)
   }, [tenant.id])
 
+  const handlePlanChange = (newPlan: string) => {
+    setPlan(newPlan)
+    setFeatures(getFeaturesForPlan(newPlan))
+    setResourceLimits(getResourceLimitsForPlan(newPlan))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await onUpdate(tenant.id, { plan, notes, contact_email: contactEmail, contact_name: contactName })
+      await onUpdate(tenant.id, { plan, notes, contact_email: contactEmail, contact_name: contactName, features, resource_limits: resourceLimits })
     } finally {
       setSaving(false)
     }
@@ -458,13 +477,54 @@ const TenantDetailPanel: React.FC<{
           <label className="text-[11px] font-medium text-zinc-500 uppercase">Plan</label>
           <select
             value={plan}
-            onChange={e => setPlan(e.target.value)}
+            onChange={e => handlePlanChange(e.target.value)}
             className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
           >
             <option value="starter">Starter</option>
             <option value="professional">Professional</option>
             <option value="enterprise">Enterprise</option>
           </select>
+        </div>
+
+        {/* Feature Toggles */}
+        <div>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Features</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {ALL_FEATURES.map(key => (
+              <label key={key} className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 py-1 px-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={features[key] ?? false}
+                  onChange={e => setFeatures(prev => ({ ...prev, [key]: e.target.checked }))}
+                  className="rounded border-zinc-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                />
+                {FEATURE_LABELS[key]}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Resource Limits */}
+        <div>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Resource Limits</label>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ['max_users', 'Max Users'],
+              ['max_projects', 'Max Projects'],
+              ['max_storage_mb', 'Storage (MB)'],
+              ['max_api_calls_per_month', 'API Calls/mo'],
+            ] as const).map(([key, label]) => (
+              <div key={key}>
+                <label className="text-[10px] text-zinc-400">{label}</label>
+                <input
+                  type="number"
+                  value={resourceLimits[key]}
+                  onChange={e => setResourceLimits(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))}
+                  className="w-full mt-0.5 px-2 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         <div>
@@ -601,6 +661,8 @@ const CreateTenantTab: React.FC<{
   const [plan, setPlan] = useState('starter')
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
+  const [features, setFeatures] = useState<PlanFeatures>(getFeaturesForPlan('starter'))
+  const [resourceLimits, setResourceLimits] = useState<PlanResourceLimits>(getResourceLimitsForPlan('starter'))
   const [creating, setCreating] = useState(false)
   const [slugEdited, setSlugEdited] = useState(false)
 
@@ -611,13 +673,20 @@ const CreateTenantTab: React.FC<{
     }
   }, [name, slugEdited])
 
+  const handlePlanChange = (newPlan: string) => {
+    setPlan(newPlan)
+    setFeatures(getFeaturesForPlan(newPlan))
+    setResourceLimits(getResourceLimitsForPlan(newPlan))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || !slug.trim() || !ownerEmail.trim()) return
     setCreating(true)
     try {
-      await onCreate({ name: name.trim(), slug: slug.trim(), ownerEmail: ownerEmail.trim(), plan, contactName: contactName.trim(), contactEmail: contactEmail.trim() })
+      await onCreate({ name: name.trim(), slug: slug.trim(), ownerEmail: ownerEmail.trim(), plan, contactName: contactName.trim(), contactEmail: contactEmail.trim(), features, resourceLimits })
       setName(''); setSlug(''); setOwnerEmail(''); setPlan('starter'); setContactName(''); setContactEmail(''); setSlugEdited(false)
+      setFeatures(getFeaturesForPlan('starter')); setResourceLimits(getResourceLimitsForPlan('starter'))
     } finally {
       setCreating(false)
     }
@@ -671,13 +740,54 @@ const CreateTenantTab: React.FC<{
             <label className="text-[11px] font-medium text-zinc-500 uppercase">Plan</label>
             <select
               value={plan}
-              onChange={e => setPlan(e.target.value)}
+              onChange={e => handlePlanChange(e.target.value)}
               className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
               <option value="starter">Starter</option>
               <option value="professional">Professional</option>
               <option value="enterprise">Enterprise</option>
             </select>
+          </div>
+
+          {/* Feature Toggles */}
+          <div>
+            <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Features</label>
+            <div className="grid grid-cols-2 gap-1.5 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg p-3">
+              {ALL_FEATURES.map(key => (
+                <label key={key} className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 py-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={features[key] ?? false}
+                    onChange={e => setFeatures(prev => ({ ...prev, [key]: e.target.checked }))}
+                    className="rounded border-zinc-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                  />
+                  {FEATURE_LABELS[key]}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Resource Limits */}
+          <div>
+            <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Resource Limits</label>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                ['max_users', 'Max Users'],
+                ['max_projects', 'Max Projects'],
+                ['max_storage_mb', 'Storage (MB)'],
+                ['max_api_calls_per_month', 'API Calls/mo'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="text-[10px] text-zinc-400">{label}</label>
+                  <input
+                    type="number"
+                    value={resourceLimits[key]}
+                    onChange={e => setResourceLimits(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))}
+                    className="w-full mt-0.5 px-2 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

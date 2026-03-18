@@ -23,6 +23,8 @@ export interface PlatformTenant {
   task_count: number
   owner_email: string | null
   last_activity: string | null
+  features: Record<string, boolean> | null
+  resource_limits: Record<string, number> | null
 }
 
 export interface PlatformDashboard {
@@ -43,6 +45,8 @@ export interface CreateTenantParams {
   plan?: string
   contactEmail?: string
   contactName?: string
+  features?: Record<string, boolean>
+  resourceLimits?: Record<string, number>
 }
 
 export function usePlatformAdmin() {
@@ -102,6 +106,8 @@ export function usePlatformAdmin() {
         p_plan: params.plan || 'starter',
         p_contact_email: params.contactEmail || null,
         p_contact_name: params.contactName || null,
+        p_features: params.features || null,
+        p_resource_limits: params.resourceLimits || null,
       })
       if (error) throw error
       // Refresh dashboard after creating

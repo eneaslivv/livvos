@@ -27,11 +27,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
   }, [])
 
   useEffect(() => {
-    supabase.from('tenants').select('logo_url, logo_url_dark, name').eq('status', 'active').limit(1).single()
+    supabase.rpc('get_tenant_branding')
       .then(({ data }) => {
-        if (data?.logo_url) setTenantLogo(data.logo_url)
-        if (data?.logo_url_dark) setTenantLogoDark(data.logo_url_dark)
-        if (data?.name) setTenantName(data.name)
+        const tenant = Array.isArray(data) ? data[0] : data
+        if (tenant?.logo_url) setTenantLogo(tenant.logo_url)
+        if (tenant?.logo_url_dark) setTenantLogoDark(tenant.logo_url_dark)
+        if (tenant?.name) setTenantName(tenant.name)
       })
   }, [])
 
@@ -103,9 +104,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
             {(tenantLogoDark || tenantLogo) ? (
               <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-14 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
             ) : (
-              <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-                livv<span className="text-[#e8b4b4]">~</span>
-              </span>
+              <div className="flex items-center gap-3">
+                <img src="/icon.svg" alt="LIVV" className="w-10 h-10 rounded-lg" />
+                <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
+                  livv<span className="text-[#e8b4b4]">~</span>
+                </span>
+              </div>
             )}
           </div>
 
@@ -283,13 +287,16 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         <div className="absolute inset-0 bg-gradient-to-br from-amber-900/10 via-transparent to-transparent" />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-2">
-            {tenantLogo ? (
-              <img src={tenantLogo} alt={tenantName || ''} className="h-14 object-contain" />
+          <div className="flex items-center gap-3">
+            {(tenantLogoDark || tenantLogo) ? (
+              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-14 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
             ) : (
-              <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-                livv<span className="text-amber-500">~</span>
-              </span>
+              <>
+                <img src="/icon.svg" alt="LIVV" className="w-10 h-10 rounded-lg" />
+                <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
+                  livv<span className="text-amber-500">~</span>
+                </span>
+              </>
             )}
           </div>
         </div>
