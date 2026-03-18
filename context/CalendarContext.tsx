@@ -185,10 +185,22 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
 
+      const tenantId = await resolveTenantId()
+
+      const eventsQuery = supabase.from('calendar_events').select('*').order('start_date', { ascending: true })
+      const tasksQuery = supabase.from('tasks').select('*').order('created_at', { ascending: false })
+      const labelsQuery = supabase.from('calendar_labels').select('*').order('name', { ascending: true })
+
+      if (tenantId) {
+        eventsQuery.eq('tenant_id', tenantId)
+        tasksQuery.eq('tenant_id', tenantId)
+        labelsQuery.eq('tenant_id', tenantId)
+      }
+
       const [eventsResult, tasksResult, labelsResult] = await Promise.all([
-        safeQuery(supabase.from('calendar_events').select('*').order('start_date', { ascending: true })),
-        safeQuery(supabase.from('tasks').select('*').order('created_at', { ascending: false })),
-        safeQuery(supabase.from('calendar_labels').select('*').order('name', { ascending: true })),
+        safeQuery(eventsQuery),
+        safeQuery(tasksQuery),
+        safeQuery(labelsQuery),
       ])
 
       setEvents(eventsResult as CalendarEvent[])
