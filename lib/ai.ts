@@ -75,7 +75,10 @@ function setCache(type: string, input: string, result: unknown): void {
   if (ttl === 0) return
   try {
     const entry: AICacheEntry = { result, timestamp: Date.now() }
-    localStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
+    const value = JSON.stringify(entry)
+    // Skip caching if response is too large (>50KB) to avoid filling localStorage
+    if (value.length > 50_000) return
+    localStorage.setItem(cacheKey(type, input), value)
   } catch {
     // localStorage full — evict expired entries and retry once
     evictExpiredCache()
@@ -112,8 +115,15 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
   const promise = (async (): Promise<T> => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const session = (await supabase.auth.getSession()).data.session
-    const authToken = session?.access_token || supabaseKey
+    // Force token refresh to avoid 401 from stale/expired JWTs
+    let authToken: string
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      authToken = session.access_token
+    } else {
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      authToken = refreshed.session?.access_token || supabaseKey
+    }
 
     const res = await fetch(`${supabaseUrl}/functions/v1/gemini`, {
       method: 'POST',

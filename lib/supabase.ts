@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 export function cleanupLocalStorage() {
   try {
     // Proactive: remove known bloat keys even before quota is hit
-    const bloatPrefixes = ['ld:', 'launchdarkly', 'lD_', 'intercom', 'analytics', '_dd_', 'ajs_', 'debug']
+    const bloatPrefixes = ['ld:', 'launchdarkly', 'lD_', 'intercom', 'analytics', '_dd_', 'ajs_', 'debug', 'ai_v']
     const keysToRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)

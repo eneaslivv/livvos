@@ -297,25 +297,40 @@ Rules:
       generationConfig,
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
+    // Fetch with retry on 429 (rate limit)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const geminiBody = JSON.stringify(requestPayload)
+    const MAX_RETRIES = 3
+    let response: Response | null = null
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      response = await fetch(geminiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestPayload),
-      }
-    )
+        body: geminiBody,
+      })
 
-    if (!response.ok) {
-      const text = await response.text()
-      console.error(`[gemini] API error ${response.status} for type=${type}:`, text.slice(0, 500))
-      return new Response(JSON.stringify({ error: text || 'Gemini request failed' }), {
-        status: 500,
+      if (response.status !== 429 || attempt === MAX_RETRIES) break
+
+      // Exponential backoff: 2s, 4s, 8s
+      const delay = Math.pow(2, attempt + 1) * 1000
+      console.log(`[gemini] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+
+    if (!response!.ok) {
+      const text = await response!.text()
+      console.error(`[gemini] API error ${response!.status} for type=${type}:`, text.slice(0, 500))
+      const userMessage = response!.status === 429
+        ? 'API rate limit exceeded. Please wait a minute and try again.'
+        : text || 'Gemini request failed'
+      return new Response(JSON.stringify({ error: userMessage }), {
+        status: response!.status === 429 ? 429 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const data = await response.json()
+    const data = await response!.json()
 
     // Check for blocked/empty responses
     if (!data?.candidates?.length) {
