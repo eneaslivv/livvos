@@ -559,7 +559,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col"
             >
               {/* Modal header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E6E2D8]">
@@ -662,8 +662,8 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                     <textarea
                       value={form.description}
                       onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                      rows={3}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] placeholder:text-[#09090B]/25 focus:outline-none focus:border-[#E8BC59] resize-none transition-colors"
+                      rows={6}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] placeholder:text-[#09090B]/25 focus:outline-none focus:border-[#E8BC59] resize-y transition-colors"
                       placeholder="Describe the project..."
                     />
                   </div>
@@ -713,16 +713,16 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   </div>
                 </div>
 
-                {/* ── Media Gallery ── */}
-                <div className="space-y-2 mt-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">
-                      Media Gallery
-                      <span className="ml-2 text-[#09090B]/30 normal-case tracking-normal">
-                        images, videos, gifs — click star to set cover
-                      </span>
-                    </label>
-                  </div>
+                {/* ── Project Content (unified section) ── */}
+                <div className="space-y-4">
+                  <label className="text-xs font-semibold text-[#09090B] tracking-tight">Project Content</label>
+
+                  {/* ── Media Gallery sub-section ── */}
+                  <div className="bg-[#FDFBF7] rounded-xl border border-[#E6E2D8] p-4 space-y-2">
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#09090B]">Media Gallery</h4>
+                      <p className="text-[11px] text-[#78736A] mt-0.5">Upload images, videos & GIFs for the project gallery. Click ★ to set the cover image.</p>
+                    </div>
                   {form.media.length > 0 && (
                     <div className="grid grid-cols-3 gap-2">
                       {form.media.map((m, i) => (
@@ -835,15 +835,14 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                     onUpload={(file) => onUpload(file)}
                     label={form.media.length > 0 ? 'Add more media' : 'Upload images, videos or GIFs'}
                   />
-                </div>
-
-                {/* ── Content Blocks ── */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">
-                      Content Blocks
-                    </label>
                   </div>
+
+                  {/* ── Page Builder sub-section ── */}
+                  <div className="bg-[#FDFBF7] rounded-xl border border-[#E6E2D8] p-4 space-y-3">
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#09090B]">Page Builder</h4>
+                      <p className="text-[11px] text-[#78736A] mt-0.5">Compose the public project page using content blocks.</p>
+                    </div>
                   <div className="flex flex-wrap gap-1">
                     <span className="text-[9px] text-[#78736A] mr-1 self-center">Basic:</span>
                     {BASIC_BLOCK_TYPES.map(({ type, label }) => (
@@ -923,6 +922,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                         isLast={i === form.content_blocks.length - 1}
                       />
                     ))}
+                  </div>
                   </div>
                 </div>
               </div>
