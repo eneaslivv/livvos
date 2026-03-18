@@ -20,6 +20,7 @@ interface NotifyParams {
   actionText?: string
   metadata?: Record<string, any>
   brandName?: string
+  logoUrl?: string
 }
 
 const typeToTemplate: Record<string, SendEmailParams['template']> = {
@@ -82,6 +83,8 @@ export const notifyWithEmail = async (params: NotifyParams): Promise<void> => {
       to: profile.email,
       subject: params.title,
       brandName: params.brandName || 'LIVV OS',
+      logoUrl: params.logoUrl,
+      tenantId: params.tenantId,
       data: {
         recipientName: profile.full_name || undefined,
         title: params.title,

@@ -49,6 +49,7 @@ export interface CalendarTask {
   order_index: number
   parent_task_id?: string
   blocked_by?: string
+  document_id?: string
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -121,6 +122,7 @@ const normalizeTask = (task: any): CalendarTask => ({
   order_index: task.order_index ?? 0,
   parent_task_id: task.parent_task_id ?? undefined,
   blocked_by: task.blocked_by ?? undefined,
+  document_id: task.document_id ?? undefined,
   created_at: task.created_at ?? new Date().toISOString(),
   updated_at: task.updated_at ?? new Date().toISOString(),
   completed_at: task.completed_at ?? null,
@@ -372,6 +374,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         duration: taskData.duration || null,
         ...(taskData.parent_task_id && { parent_task_id: taskData.parent_task_id }),
         ...(taskData.blocked_by && { blocked_by: taskData.blocked_by }),
+        ...(taskData.document_id && { document_id: taskData.document_id }),
         ...(tenantId && { tenant_id: tenantId }),
       }
 

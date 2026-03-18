@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Icons } from '../ui/Icons';
 import { CalendarEvent, CalendarTask } from '../../hooks/useCalendar';
 import { convertHourToTz, tzCity, tzNow } from '../../lib/timezone';
@@ -74,6 +74,34 @@ export const WeekView: React.FC<WeekViewProps> = ({
   activeTimezone,
   clientTimezoneMap,
 }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nowRowRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(new Date());
+
+  // Auto-scroll to current hour on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (nowRowRef.current && scrollRef.current) {
+        const container = scrollRef.current;
+        const row = nowRowRef.current;
+        // Scroll so current hour is near the top with some padding
+        container.scrollTop = row.offsetTop - 48;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Update "now" every minute for the indicator line
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const todayStr = now.toISOString().split('T')[0];
+  const todayDayIndex = weekDays.findIndex(d => d.toISOString().split('T')[0] === todayStr);
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
       {/* Day headers */}
@@ -181,10 +209,10 @@ export const WeekView: React.FC<WeekViewProps> = ({
       </div>
 
       {/* Calendar body (hours) */}
-      <div className="max-h-[420px] overflow-y-auto">
+      <div ref={scrollRef} className="max-h-[420px] overflow-y-auto">
         {hours.map((hour) => (
-          <div key={hour} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800">
-            <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800">
+          <div key={hour} ref={hour === currentHour ? nowRowRef : undefined} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800 relative">
+            <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800 relative">
               <div>{hour.toString().padStart(2, '0')}:00</div>
               {activeTimezone && (() => {
                 const { time, dayOffset } = convertHourToTz(hour, activeTimezone);
@@ -314,6 +342,24 @@ export const WeekView: React.FC<WeekViewProps> = ({
                 </div>
               );
             })}
+            {/* Current time indicator */}
+            {hour === currentHour && todayDayIndex >= 0 && (
+              <div
+                className="absolute left-0 right-0 pointer-events-none z-10"
+                style={{ top: `${(currentMinute / 60) * 100}%` }}
+              >
+                <div className="flex items-center">
+                  <div className="w-[calc(12.5%)] flex justify-end pr-1">
+                    <span className="text-[9px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded">
+                      {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-[2px] bg-red-500 relative">
+                    <div className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-red-500" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

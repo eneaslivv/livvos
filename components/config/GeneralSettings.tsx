@@ -37,11 +37,10 @@ export const GeneralSettings: React.FC = () => {
     try {
       const ext = file.name.split('.').pop();
       const suffix = variant === 'dark' ? '-dark' : '';
-      const path = `logos/${currentTenant.id}${suffix}.${ext}`;
-      await supabase.storage.from('documents').remove([path]);
-      const { error: upErr } = await supabase.storage.from('documents').upload(path, file, { upsert: true });
+      const path = `logos/${currentTenant.id}${suffix}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file);
       if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+      const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
       const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`;
       const field = variant === 'dark' ? 'logo_url_dark' : 'logo_url';
       await updateTenant({ [field]: logoUrl });
@@ -59,11 +58,11 @@ export const GeneralSettings: React.FC = () => {
     setUploadingLogo(variant);
     try {
       const suffix = variant === 'dark' ? '-dark' : '';
-      const { data: files } = await supabase.storage.from('documents').list('logos', {
+      const { data: files } = await supabase.storage.from('tenant-assets').list('logos', {
         search: `${currentTenant.id}${suffix}`,
       });
       if (files?.length) {
-        await supabase.storage.from('documents').remove(files.map(f => `logos/${f.name}`));
+        await supabase.storage.from('tenant-assets').remove(files.map(f => `logos/${f.name}`));
       }
       const field = variant === 'dark' ? 'logo_url_dark' : 'logo_url';
       await updateTenant({ [field]: null as any });

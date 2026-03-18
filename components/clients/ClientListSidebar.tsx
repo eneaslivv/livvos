@@ -113,7 +113,7 @@ export const ClientListSidebar: React.FC<ClientListSidebarProps> = ({
                         } : undefined}
                       >
                         {client.avatar_url ? (
-                          <img src={client.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+                          <img src={client.avatar_url} alt="" className="w-9 h-9 rounded-full object-contain p-0.5" />
                         ) : getInitials(client.name)}
                       </div>
                       <div className="flex-1 min-w-0">

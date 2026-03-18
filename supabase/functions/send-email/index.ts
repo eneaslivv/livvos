@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const allowedOrigin = Deno.env.get('ALLOWED_ORIGINS') || '*'
 const corsHeaders = {
@@ -34,7 +35,8 @@ const templateConfig: Record<string, { accent: string; icon: string }> = {
 function buildEmailHtml(
   template: string,
   data: EmailData,
-  brandName: string
+  brandName: string,
+  logoUrl?: string
 ): string {
   const config = templateConfig[template] || templateConfig.system_alert
   const firstName = data.recipient_name?.split(' ')[0] || ''
@@ -66,9 +68,10 @@ function buildEmailHtml(
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
           <tr>
             <td style="background-color:#0a0a0a;padding:32px 40px;text-align:center;">
-              <div style="font-size:22px;font-weight:300;color:#ffffff;letter-spacing:2px;font-family:Georgia,serif;">
-                ${brandName}
-              </div>
+              ${logoUrl
+                ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;object-fit:contain;" />`
+                : `<div style="font-size:22px;font-weight:300;color:#ffffff;letter-spacing:2px;font-family:Georgia,serif;">${brandName}</div>`
+              }
             </td>
           </tr>
           <tr>
@@ -121,7 +124,7 @@ serve(async (req) => {
       })
     }
 
-    const { template, to, subject, brand_name, data } = await req.json()
+    const { template, to, subject, brand_name, logo_url, tenant_id, data } = await req.json()
 
     if (!to || !subject || !data?.title) {
       return new Response(
@@ -130,8 +133,20 @@ serve(async (req) => {
       )
     }
 
-    const brandName = brand_name || 'LIVV OS'
-    const htmlBody = buildEmailHtml(template || 'system_alert', data, brandName)
+    // Resolve logo: use provided logo_url, or look up from tenant
+    let resolvedLogo = logo_url || undefined
+    let brandName = brand_name || 'LIVV OS'
+    if (!resolvedLogo && tenant_id) {
+      try {
+        const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+        const { data: tenant } = await sb.from('tenants').select('name, logo_url, logo_url_dark').eq('id', tenant_id).single()
+        if (tenant?.logo_url_dark) resolvedLogo = tenant.logo_url_dark
+        else if (tenant?.logo_url) resolvedLogo = tenant.logo_url
+        if (tenant?.name && !brand_name) brandName = tenant.name
+      } catch (_) { /* ignore */ }
+    }
+
+    const htmlBody = buildEmailHtml(template || 'system_alert', data, brandName, resolvedLogo)
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',

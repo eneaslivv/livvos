@@ -5,6 +5,8 @@ export interface SendEmailParams {
   to: string
   subject: string
   brandName?: string
+  logoUrl?: string
+  tenantId?: string
   data: {
     recipientName?: string
     title: string
@@ -21,6 +23,8 @@ export const sendEmail = async (params: SendEmailParams): Promise<{ ok: boolean;
       to: params.to,
       subject: params.subject,
       brand_name: params.brandName,
+      logo_url: params.logoUrl,
+      tenant_id: params.tenantId,
       data: {
         recipient_name: params.data.recipientName,
         title: params.data.title,
