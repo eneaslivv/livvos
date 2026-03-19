@@ -25,6 +25,9 @@ export interface SelectedDatePanelProps {
   };
   filteredEventsCount: number;
   periodLabel?: string;
+  // Event actions
+  onEditEvent?: (event: CalendarEvent) => void;
+  onDeleteEvent?: (eventId: string) => void;
   // Task actions
   toggleTaskComplete: (taskId: string, completed: boolean) => void;
   onOpenTaskDetail: (task: CalendarTask) => void;
@@ -47,6 +50,8 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
   stats,
   filteredEventsCount,
   periodLabel,
+  onEditEvent,
+  onDeleteEvent,
   toggleTaskComplete,
   onOpenTaskDetail,
   getMemberName,
@@ -81,13 +86,14 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                   getDayEvents(selectedDate).map((event) => (
                     <div
                       key={event.id}
-                      className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg"
+                      className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg group cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
+                      onClick={() => onEditEvent?.(event)}
                     >
                       <div
-                        className="w-3 h-3 rounded-full"
+                        className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: event.color || '#3b82f6' }}
                       />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
                           {event.title}
                           {event.source === 'google' && (
@@ -112,6 +118,24 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                           ? (contentPlatforms[event.location || '']?.label || event.location || 'content')
                           : event.type}
                       </div>
+                      {event.source !== 'google' && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onEditEvent?.(event); }}
+                            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                            title="Edit event"
+                          >
+                            <Icons.Edit size={13} className="text-zinc-400" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onDeleteEvent?.(event.id); }}
+                            className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
+                            title="Delete event"
+                          >
+                            <Icons.Trash size={13} className="text-red-400" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (

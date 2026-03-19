@@ -475,22 +475,55 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-// Per-page error fallback (keeps the rest of the app functional)
-const PageErrorFallback: React.FC<{ page: string }> = ({ page }) => (
-  <div className="flex flex-col items-center justify-center h-64 text-center">
-    <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full mb-3">
-      <span className="text-xl">!</span>
-    </div>
-    <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Error loading {page}</h3>
-    <p className="text-sm text-zinc-500 mt-1">Something went wrong in this section.</p>
-    <button
-      onClick={() => window.location.reload()}
-      className="mt-3 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg transition-colors"
-    >
-      Reload page
-    </button>
-  </div>
-);
+// Per-page error boundary with retry support
+class PageErrorBoundary extends React.Component<
+  { page: string; children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { page: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    if (import.meta.env.DEV) {
+      console.error(`[${this.props.page}] ErrorBoundary:`, error, info.componentStack);
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full mb-3">
+            <span className="text-xl">!</span>
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Error loading {this.props.page}</h3>
+          <p className="text-sm text-zinc-500 mt-1">Something went wrong in this section.</p>
+          {import.meta.env.DEV && this.state.error && (
+            <p className="text-xs text-red-500 mt-1 font-mono max-w-md truncate">{this.state.error.message}</p>
+          )}
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-medium rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg transition-colors"
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Keep-alive page slot: mounts once, stays mounted, hidden via CSS when inactive.
 // Each page gets its own ErrorBoundary so a crash in one doesn't bring down the app.
@@ -500,11 +533,11 @@ const KeepAlivePage: React.FC<{
   children: React.ReactNode;
 }> = ({ page, active, children }) => (
   <div style={active ? undefined : { display: 'none' }}>
-    <ErrorBoundary fallback={<PageErrorFallback page={page} />}>
+    <PageErrorBoundary page={page}>
       <Suspense fallback={getSkeletonForPage(page)}>
         {children}
       </Suspense>
-    </ErrorBoundary>
+    </PageErrorBoundary>
   </div>
 );
 

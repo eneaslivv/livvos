@@ -177,6 +177,7 @@ export const Calendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<'schedule' | 'content'>('schedule');
 
   const [newEventData, setNewEventData] = useState({
@@ -579,6 +580,57 @@ export const Calendar: React.FC = () => {
     } catch (err) {
       errorLogger.error('Error creando contenido', err);
       alert('Error creating content: ' + (err as Error).message);
+    }
+  };
+
+  // Open event for editing
+  const handleEditEvent = (event: CalendarEvent) => {
+    if (event.source === 'google') return; // Can't edit Google events
+    setEditingEventId(event.id);
+    setNewEventData({
+      title: event.title || '',
+      description: event.description || '',
+      start_date: event.start_date || '',
+      start_time: event.start_time || '',
+      duration: event.duration || 60,
+      type: (event.type || 'meeting') as CalendarEvent['type'],
+      color: event.color || '#3b82f6',
+      location: event.location || '',
+    });
+    setShowNewEventForm(true);
+  };
+
+  // Update existing event
+  const handleUpdateEvent = async () => {
+    if (!editingEventId || !newEventData.title.trim()) return;
+    try {
+      await updateEvent(editingEventId, {
+        ...newEventData,
+        all_day: !newEventData.start_time,
+      });
+      setEditingEventId(null);
+      setNewEventData({ title: '', description: '', start_date: '', start_time: '', duration: 60, type: 'meeting', color: '#3b82f6', location: '' });
+      setShowNewEventForm(false);
+    } catch (err) {
+      errorLogger.error('Error updating event', err);
+      alert('Error updating event: ' + (err as Error).message);
+    }
+  };
+
+  // Delete event
+  const handleDeleteEvent = async (eventId?: string) => {
+    const id = eventId || editingEventId;
+    if (!id) return;
+    if (!confirm('Delete this event?')) return;
+    try {
+      await deleteEvent(id);
+      if (editingEventId === id) {
+        setEditingEventId(null);
+        setShowNewEventForm(false);
+      }
+    } catch (err) {
+      errorLogger.error('Error deleting event', err);
+      alert('Error deleting event: ' + (err as Error).message);
     }
   };
 
@@ -1252,7 +1304,7 @@ export const Calendar: React.FC = () => {
       {/* Event/Task creation panel */}
       <EventTaskFormPanel
         isOpen={showNewEventForm || showNewTaskForm}
-        onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); }}
+        onClose={() => { setShowNewEventForm(false); setShowNewTaskForm(false); setEditingEventId(null); }}
         showNewEventForm={showNewEventForm}
         showNewTaskForm={showNewTaskForm}
         calendarMode={calendarMode}
@@ -1265,6 +1317,9 @@ export const Calendar: React.FC = () => {
         onCreateEvent={handleCreateEvent}
         onCreateContent={handleCreateContent}
         onCreateTask={handleCreateTask}
+        editingEventId={editingEventId}
+        onUpdateEvent={handleUpdateEvent}
+        onDeleteEvent={() => handleDeleteEvent()}
         contentPlatforms={CONTENT_PLATFORMS}
         contentStatuses={CONTENT_STATUSES}
         projectOptions={projectOptions}
@@ -1440,6 +1495,8 @@ export const Calendar: React.FC = () => {
         stats={viewStats.stats}
         filteredEventsCount={filteredEvents.length}
         periodLabel={viewStats.periodLabel}
+        onEditEvent={handleEditEvent}
+        onDeleteEvent={(id) => handleDeleteEvent(id)}
         toggleTaskComplete={toggleTaskComplete}
         onOpenTaskDetail={handleOpenTaskDetail}
         getMemberName={getMemberName}

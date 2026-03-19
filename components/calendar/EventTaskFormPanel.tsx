@@ -83,6 +83,10 @@ export interface EventTaskFormPanelProps {
   onCreateEvent: () => void;
   onCreateContent: () => void;
   onCreateTask: () => void;
+  // Edit mode
+  editingEventId?: string | null;
+  onUpdateEvent?: () => void;
+  onDeleteEvent?: () => void;
   // Config
   contentPlatforms: Record<string, ContentPlatformConfig>;
   contentStatuses: ContentStatusConfig[];
@@ -107,6 +111,9 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
   onCreateEvent,
   onCreateContent,
   onCreateTask,
+  editingEventId,
+  onUpdateEvent,
+  onDeleteEvent,
   contentPlatforms,
   contentStatuses,
   projectOptions,
@@ -118,7 +125,7 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
     <SlidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title={showNewEventForm ? (calendarMode === 'content' ? 'New Content' : 'New Event') : 'New Task'}
+      title={showNewEventForm ? (editingEventId ? (calendarMode === 'content' ? 'Edit Content' : 'Edit Event') : (calendarMode === 'content' ? 'New Content' : 'New Event')) : 'New Task'}
       width="sm"
     >
       <div className="p-5">
@@ -287,7 +294,18 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
 
             {/* Actions */}
             <div className="flex items-center justify-between pt-0.5">
-              <p className="text-[10px] text-zinc-400">Enter to create</p>
+              {editingEventId && onDeleteEvent ? (
+                <button
+                  type="button"
+                  onClick={onDeleteEvent}
+                  className="px-3 py-1.5 text-[11px] font-medium text-red-500 hover:text-red-700 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-1"
+                >
+                  <Icons.Trash size={12} />
+                  Delete
+                </button>
+              ) : (
+                <p className="text-[10px] text-zinc-400">Enter to create</p>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -298,12 +316,18 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={calendarMode === 'content' ? onCreateContent : onCreateEvent}
+                  onClick={editingEventId && onUpdateEvent
+                    ? onUpdateEvent
+                    : (calendarMode === 'content' ? onCreateContent : onCreateEvent)
+                  }
                   disabled={calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()}
                   className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
                 >
                   <Icons.Calendar size={12} />
-                  {calendarMode === 'content' ? 'Create' : 'Create Event'}
+                  {editingEventId
+                    ? (calendarMode === 'content' ? 'Update' : 'Update Event')
+                    : (calendarMode === 'content' ? 'Create' : 'Create Event')
+                  }
                 </button>
               </div>
             </div>
