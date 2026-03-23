@@ -13,8 +13,10 @@ import { useCalendar } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
+import { parseLocalDate, todayLocal } from '../lib/dateUtils';
 import { errorLogger } from '../lib/errorLogger';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { DailyBriefingModal } from '../components/home/DailyBriefingModal';
 import type { CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 
 type DbProject = {
@@ -58,7 +60,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         const paidThisMonth = (inc.installments || [])
             .filter(inst => inst.status === 'paid' && inst.paid_date)
             .reduce((sum, inst) => {
-                const pDate = new Date(inst.paid_date + 'T12:00:00');
+                const pDate = parseLocalDate(inst.paid_date);
                 if (pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) return sum + inst.amount;
                 return sum;
             }, 0);
@@ -67,7 +69,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
     const monthlyExpenses = expenses.reduce((acc, exp) => {
         if (exp.status === 'paid' && exp.date) {
-            const expDate = new Date(exp.date + 'T12:00:00');
+            const expDate = parseLocalDate(exp.date);
             if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) return acc + exp.amount;
         }
         return acc;
@@ -317,7 +319,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         if (!title || isAddingTask) return;
         setIsAddingTask(true);
         try {
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = todayLocal();
             await calCreateTask({
                 title,
                 completed: false,
@@ -346,18 +348,18 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     });
 
     // Filter: today's tasks = incomplete (carry over) + completed today (user timezone)
-    const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in user's timezone
+    const todayDateStr = todayLocal();
     const todayTasks = myTasks.filter(t => {
         if (!t.completed) return true; // all pending tasks always show
         // completed tasks: only show if completed_at is today (user's local date)
         const completedAt = (t as any).completed_at;
         if (!completedAt) return false; // no completion timestamp → hide (old completed task)
         const completedDate = new Date(completedAt).toLocaleDateString('en-CA');
-        return completedDate === todayLocal;
+        return completedDate === todayDateStr;
     });
 
     // ─── Calendar: today's events + overdue tasks ───
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayLocal();
     const todayEvents = calendarEvents
         .filter(e => e.start_date === todayStr)
         .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
@@ -497,6 +499,22 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
     return (
         <div className={`space-y-6 max-w-[1600px] mx-auto relative ${isMobile ? 'pb-6 pt-4' : 'pb-10 pt-6'}`}>
+
+            {/* Daily Briefing Modal */}
+            {authUser && (
+                <DailyBriefingModal
+                    userId={authUser.id}
+                    userName={userName}
+                    overdueTasks={overdueTasks}
+                    todayTasks={todayTasks.filter(t => !t.completed)}
+                    todayEvents={todayEvents}
+                    allTasks={myTasks.filter(t => !t.completed)}
+                    projects={projectsRaw.map(p => ({ id: p.id, title: p.title }))}
+                    onUpdateTask={calUpdateTask}
+                    onCreateTask={calCreateTask}
+                    onClose={() => {}}
+                />
+            )}
 
             {/* Banner */}
             <div className={`w-full ${isMobile ? 'h-32' : 'h-40 md:h-48'} rounded-2xl overflow-hidden relative group border border-zinc-200/60 dark:border-zinc-800`}>

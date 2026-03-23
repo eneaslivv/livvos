@@ -145,6 +145,158 @@ export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange }) =>
           ))}
         </div>
       </div>
+
+      {/* Spacing */}
+      <div className="p-3 rounded-lg border border-[#E6E2D8] bg-[#FAF8F3]/50 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">Spacing scale</label>
+          <button
+            onClick={() => {
+              const sizes = block.spacing?.sizes || [];
+              onChange({ ...block, spacing: { sizes: [...sizes, { px: 8, rem: '0.5rem' }] } });
+            }}
+            className="flex items-center gap-1 text-[10px] font-medium text-[#E8BC59] hover:text-[#d4a94d]"
+          >
+            <Plus size={12} /> Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {(block.spacing?.sizes || []).map((s, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="number"
+                value={s.px}
+                onChange={(e) => {
+                  const sizes = [...(block.spacing?.sizes || [])];
+                  sizes[i] = { ...sizes[i], px: Number(e.target.value) };
+                  onChange({ ...block, spacing: { sizes } });
+                }}
+                placeholder="8"
+                className="w-16 px-2 py-1 rounded border border-[#E6E2D8] bg-white text-xs text-[#09090B] font-mono focus:border-[#E8BC59] outline-none"
+              />
+              <span className="text-[10px] text-[#78736A]">px</span>
+              <input
+                type="text"
+                value={s.rem}
+                onChange={(e) => {
+                  const sizes = [...(block.spacing?.sizes || [])];
+                  sizes[i] = { ...sizes[i], rem: e.target.value };
+                  onChange({ ...block, spacing: { sizes } });
+                }}
+                placeholder="0.5rem"
+                className="w-20 px-2 py-1 rounded border border-[#E6E2D8] bg-white text-xs text-[#09090B] font-mono focus:border-[#E8BC59] outline-none"
+              />
+              <button
+                onClick={() => {
+                  const sizes = (block.spacing?.sizes || []).filter((_, idx) => idx !== i);
+                  onChange({ ...block, spacing: { sizes } });
+                }}
+                className="text-[#09090B]/30 hover:text-red-500"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Components */}
+      <div className="p-3 rounded-lg border border-[#E6E2D8] bg-[#FAF8F3]/50 space-y-3">
+        <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">Components</label>
+
+        {/* Buttons */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono text-[#78736A]">Buttons</span>
+            <button
+              onClick={() => {
+                const btns = block.components?.buttons || [];
+                onChange({ ...block, components: { ...block.components, buttons: [...btns, { label: 'Action', variant: 'primary' }] } });
+              }}
+              className="flex items-center gap-1 text-[10px] font-medium text-[#E8BC59] hover:text-[#d4a94d]"
+            >
+              <Plus size={12} /> Add
+            </button>
+          </div>
+          {(block.components?.buttons || []).map((btn, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={btn.label}
+                onChange={(e) => {
+                  const btns = [...(block.components?.buttons || [])];
+                  btns[i] = { ...btns[i], label: e.target.value };
+                  onChange({ ...block, components: { ...block.components, buttons: btns } });
+                }}
+                placeholder="Button label"
+                className="flex-1 px-2 py-1 rounded border border-[#E6E2D8] bg-white text-xs text-[#09090B] focus:border-[#E8BC59] outline-none"
+              />
+              <select
+                value={btn.variant || 'primary'}
+                onChange={(e) => {
+                  const btns = [...(block.components?.buttons || [])];
+                  btns[i] = { ...btns[i], variant: e.target.value as 'primary' | 'secondary' | 'outline' };
+                  onChange({ ...block, components: { ...block.components, buttons: btns } });
+                }}
+                className="px-2 py-1 rounded border border-[#E6E2D8] bg-white text-xs text-[#09090B] focus:border-[#E8BC59] outline-none"
+              >
+                <option value="primary">Primary</option>
+                <option value="secondary">Secondary</option>
+                <option value="outline">Outline</option>
+              </select>
+              <button
+                onClick={() => {
+                  const btns = (block.components?.buttons || []).filter((_, idx) => idx !== i);
+                  onChange({ ...block, components: { ...block.components, buttons: btns } });
+                }}
+                className="text-[#09090B]/30 hover:text-red-500"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Inputs */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono text-[#78736A]">Inputs</span>
+            <button
+              onClick={() => {
+                const inputs = block.components?.inputs || [];
+                onChange({ ...block, components: { ...block.components, inputs: [...inputs, { placeholder: 'Type...' }] } });
+              }}
+              className="flex items-center gap-1 text-[10px] font-medium text-[#E8BC59] hover:text-[#d4a94d]"
+            >
+              <Plus size={12} /> Add
+            </button>
+          </div>
+          {(block.components?.inputs || []).map((inp, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={inp.placeholder}
+                onChange={(e) => {
+                  const inputs = [...(block.components?.inputs || [])];
+                  inputs[i] = { ...inputs[i], placeholder: e.target.value };
+                  onChange({ ...block, components: { ...block.components, inputs } });
+                }}
+                placeholder="Placeholder text"
+                className="flex-1 px-2 py-1 rounded border border-[#E6E2D8] bg-white text-xs text-[#09090B] focus:border-[#E8BC59] outline-none"
+              />
+              <button
+                onClick={() => {
+                  const inputs = (block.components?.inputs || []).filter((_, idx) => idx !== i);
+                  onChange({ ...block, components: { ...block.components, inputs } });
+                }}
+                className="text-[#09090B]/30 hover:text-red-500"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

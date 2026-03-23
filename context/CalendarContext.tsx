@@ -615,7 +615,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const totalTasks = tasks.length
     const completedTasks = tasks.filter(task => task.completed).length
     const pendingTasks = tasks.filter(task => !task.completed).length
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toLocaleDateString('en-CA')
     const overdueTasks = tasks.filter(task => task.start_date && task.start_date < today && !task.completed).length
 
     return {

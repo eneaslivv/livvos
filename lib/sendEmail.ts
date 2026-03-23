@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 export interface SendEmailParams {
-  template: 'task_assigned' | 'task_completed' | 'deadline_reminder' | 'task_overdue' | 'project_update' | 'system_alert' | 'role_changed' | 'member_suspended' | 'member_activated' | 'member_removed' | 'team_invite'
+  template: 'task_assigned' | 'task_completed' | 'deadline_reminder' | 'task_overdue' | 'project_update' | 'system_alert' | 'role_changed' | 'member_suspended' | 'member_activated' | 'member_removed' | 'team_invite' | 'welcome' | 'daily_schedule' | 'weekly_digest'
   to: string
   subject: string
   brandName?: string

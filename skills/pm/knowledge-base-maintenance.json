@@ -1,0 +1,186 @@
+{
+  "name": "knowledge-base-maintenance",
+  "description": "Capture project learnings, maintain decision logs, organize documentation, and build institutional knowledge from project activities",
+  "priority": "LOW",
+  "expectedDuration": "20-40 minutes",
+  "requiredAgents": ["pm-agent", "document-agent"],
+  "requiredPermissions": ["documents.create", "documents.manage", "projects.read"],
+  "dependencies": [],
+
+  "objectives": [
+    "Capture decisions, rationale, and context from project activities",
+    "Maintain a decision log linking decisions to outcomes",
+    "Extract lessons learned from completed milestones and retros",
+    "Organize project documentation for discoverability",
+    "Build searchable knowledge base from recurring patterns",
+    "Surface relevant past decisions when similar situations arise"
+  ],
+
+  "prerequisites": [
+    "Document management system accessible",
+    "Project history with decisions and outcomes available",
+    "Meeting notes and action item records"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Decision Capture",
+      "description": "Extract and log decisions from project activities",
+      "commands": [
+        "SCAN meeting summaries for decisions made",
+        "EXTRACT decision context: what was decided, why, who, when",
+        "DOCUMENT alternatives considered and reasons for rejection",
+        "LINK decisions to relevant tasks, requirements, or risks",
+        "TAG decisions by category (technical, process, scope, resource)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Decision log entries with full context"
+    },
+    {
+      "step": 2,
+      "action": "Lessons Learned Extraction",
+      "description": "Capture learnings from completed work",
+      "commands": [
+        "REVIEW completed milestones for what went well/poorly",
+        "IDENTIFY patterns in blockers and their resolutions",
+        "DOCUMENT estimation accuracy for future calibration",
+        "CAPTURE process improvements suggested by team",
+        "NOTE technical discoveries or gotchas encountered"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Lessons learned document with actionable takeaways"
+    },
+    {
+      "step": 3,
+      "action": "Documentation Organization",
+      "description": "Ensure project documentation is organized and discoverable",
+      "commands": [
+        "AUDIT existing documentation for completeness",
+        "IDENTIFY gaps: missing docs for key processes or decisions",
+        "ORGANIZE docs by category and lifecycle phase",
+        "ENSURE naming conventions are consistent",
+        "CREATE index or table of contents for project documentation"
+      ],
+      "agent": ["pm-agent", "document-agent"],
+      "expectedOutput": "Organized documentation with index"
+    },
+    {
+      "step": 4,
+      "action": "Pattern Recognition",
+      "description": "Identify recurring patterns for knowledge base",
+      "commands": [
+        "ANALYZE past decisions for reusable patterns",
+        "DOCUMENT common risk-mitigation strategies that worked",
+        "CREATE templates from successful project artifacts",
+        "BUILD FAQ from recurring team questions",
+        "IDENTIFY anti-patterns to avoid in future projects"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Knowledge base entries with patterns and templates"
+    },
+    {
+      "step": 5,
+      "action": "Knowledge Retrieval Setup",
+      "description": "Make knowledge base searchable and contextually relevant",
+      "commands": [
+        "TAG knowledge entries with relevant keywords and domains",
+        "LINK related entries for cross-referencing",
+        "CREATE triggers for surfacing relevant knowledge",
+        "SET review schedule for keeping entries current",
+        "ARCHIVE outdated entries with historical notes"
+      ],
+      "agent": ["pm-agent", "document-agent"],
+      "expectedOutput": "Searchable knowledge base with retrieval triggers"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "Key decisions documented with context and rationale",
+      "Lessons learned captured at milestone boundaries",
+      "Documentation is organized and findable",
+      "Knowledge base entries are accurate and current"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Decision retrieval",
+        "test": "Search for a past technical decision about authentication",
+        "expected": "Decision found with context, alternatives, and outcome"
+      },
+      {
+        "scenario": "Pattern application",
+        "test": "New project encounters similar blocker to past project",
+        "expected": "Relevant lesson surfaced with proven resolution"
+      }
+    ],
+    "successIndicators": [
+      "Team references knowledge base for past decisions",
+      "Recurring mistakes reduced due to documented lessons",
+      "Onboarding time reduced via accessible documentation"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Decision context too sparse to be useful",
+        "solution": "Generate clarifying questions for decision-maker"
+      },
+      {
+        "error": "Knowledge base growing unwieldy",
+        "solution": "Apply archival policy, consolidate related entries"
+      }
+    ],
+    "rollbackProcedure": [
+      "SAVE entries as draft for review",
+      "FLAG low-confidence entries for human validation"
+    ],
+    "escalationCriteria": [
+      "Critical decision undocumented and context lost",
+      "Knowledge base contains contradictory information",
+      "Documentation audit reveals significant gaps"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Decision Documentation Rate",
+      "target": ">90%",
+      "measurement": "Key decisions documented vs total decisions made"
+    },
+    {
+      "name": "Knowledge Reuse",
+      "target": ">3 references/month",
+      "measurement": "Times knowledge base consulted for decisions"
+    },
+    {
+      "name": "Documentation Coverage",
+      "target": ">85%",
+      "measurement": "Key processes with up-to-date documentation"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "document-agent",
+      "message": "Store and organize knowledge base entries",
+      "data": ["entries", "categories", "tags", "relationships"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch project history for lessons learned extraction",
+      "data": ["completed_milestones", "resolved_blockers", "estimation_data"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Knowledge Base",
+      "type": "Living documentation",
+      "content": ["decision_log", "lessons_learned", "patterns", "templates", "faq"]
+    }
+  ]
+}

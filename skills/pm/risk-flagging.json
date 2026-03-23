@@ -1,0 +1,190 @@
+{
+  "name": "risk-flagging",
+  "description": "Proactively identify project risks from data signals, categorize by severity, assess impact probability, and recommend mitigations",
+  "priority": "HIGH",
+  "expectedDuration": "15-30 minutes",
+  "requiredAgents": ["pm-agent", "project-agent"],
+  "requiredPermissions": ["projects.read", "tasks.read", "team.read"],
+  "dependencies": [],
+
+  "objectives": [
+    "Scan project data for risk signals (delays, blockers, scope changes, resource issues)",
+    "Categorize risks by type (schedule, resource, technical, external, scope)",
+    "Assess probability and impact for each risk",
+    "Recommend mitigation strategies with effort estimates",
+    "Maintain a living risk register updated with each assessment",
+    "Trigger alerts for high-severity risks"
+  ],
+
+  "prerequisites": [
+    "Active project with tasks, assignments, and timeline data",
+    "Historical project data for pattern recognition",
+    "Team capacity information available"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Signal Detection",
+      "description": "Scan project data for risk indicators",
+      "commands": [
+        "CHECK tasks overdue or approaching deadline with low completion",
+        "DETECT velocity decline trends (last 3 data points)",
+        "IDENTIFY blocked tasks with no resolution path",
+        "SCAN for scope additions without timeline adjustments",
+        "CHECK team over-allocation or single points of failure",
+        "DETECT external dependency delays",
+        "MONITOR communication gaps (no updates in >3 days)"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "List of detected risk signals with data evidence"
+    },
+    {
+      "step": 2,
+      "action": "Risk Classification",
+      "description": "Categorize and assess each identified risk",
+      "commands": [
+        "CLASSIFY risk type: schedule, resource, technical, external, scope, quality",
+        "ASSESS probability: high (>70%), medium (30-70%), low (<30%)",
+        "ASSESS impact: critical (project failure), major (milestone miss), moderate (delay), minor (inconvenience)",
+        "CALCULATE risk score: probability x impact",
+        "RANK risks by score for prioritization"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Classified risk register with probability/impact ratings"
+    },
+    {
+      "step": 3,
+      "action": "Impact Analysis",
+      "description": "Determine what happens if each risk materializes",
+      "commands": [
+        "MAP risk to affected tasks, milestones, and deliverables",
+        "CALCULATE timeline impact if risk materializes",
+        "IDENTIFY cascade effects through dependency chains",
+        "ASSESS cost impact (additional resources, delays, penalties)",
+        "DETERMINE affected stakeholders"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Impact assessment per risk with affected areas"
+    },
+    {
+      "step": 4,
+      "action": "Mitigation Planning",
+      "description": "Propose mitigation strategies for top risks",
+      "commands": [
+        "GENERATE mitigation options for each high/critical risk",
+        "ESTIMATE effort and cost per mitigation option",
+        "IDENTIFY risk owner (person responsible for monitoring)",
+        "SET trigger conditions for mitigation activation",
+        "DEFINE contingency plans if mitigation fails",
+        "RECOMMEND preventive actions for medium risks"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Mitigation plan with options, owners, and triggers"
+    },
+    {
+      "step": 5,
+      "action": "Risk Report & Alerts",
+      "description": "Generate risk report and trigger appropriate alerts",
+      "commands": [
+        "COMPILE risk register with all assessments",
+        "GENERATE summary for stakeholder briefing",
+        "TRIGGER alerts for critical and high risks",
+        "UPDATE risk trends (new, increasing, stable, decreasing, resolved)",
+        "SCHEDULE next risk review checkpoint"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Risk report with alerts and trend tracking"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All data-detectable risks identified",
+      "Risk classifications are accurate and consistent",
+      "Mitigations are actionable and proportionate",
+      "Critical risks trigger immediate alerts"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Schedule risk detection",
+        "test": "Project with 3 overdue critical-path tasks",
+        "expected": "High schedule risk flagged with timeline impact and mitigation options"
+      },
+      {
+        "scenario": "Resource risk detection",
+        "test": "Key team member at 150% capacity",
+        "expected": "Resource risk flagged with redistribution recommendations"
+      }
+    ],
+    "successIndicators": [
+      "Risks identified before they become issues",
+      "No surprise project failures from undetected risks",
+      "Stakeholders informed proactively"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Insufficient data for reliable risk assessment",
+        "solution": "Flag as potential risk with low confidence, request more data"
+      },
+      {
+        "error": "Too many low-severity risks creating noise",
+        "solution": "Apply threshold filter, only surface medium+ risks in reports"
+      }
+    ],
+    "rollbackProcedure": [
+      "ARCHIVE risk assessment as draft",
+      "SUPPRESS alerts if assessment was incorrect",
+      "NOTE false positive for calibration"
+    ],
+    "escalationCriteria": [
+      "Critical risk with no viable mitigation",
+      "Multiple high risks materializing simultaneously",
+      "Risk threatens contractual commitments"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Risk Detection Rate",
+      "target": ">80%",
+      "measurement": "Risks identified proactively vs discovered as incidents"
+    },
+    {
+      "name": "False Positive Rate",
+      "target": "<20%",
+      "measurement": "Flagged risks that never materialized and were non-issues"
+    },
+    {
+      "name": "Mitigation Effectiveness",
+      "target": ">70%",
+      "measurement": "Mitigated risks that were successfully prevented or reduced"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch project health data for risk assessment",
+      "data": ["tasks_status", "velocity_data", "dependency_graph", "milestone_status"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Send risk alerts to project stakeholders",
+      "data": ["risk_items", "severity_level", "recommended_actions"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Risk Register",
+      "type": "Living document",
+      "content": ["risk_items", "classifications", "impact_assessments", "mitigations", "trends"]
+    }
+  ]
+}

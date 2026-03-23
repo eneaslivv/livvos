@@ -55,6 +55,11 @@ export interface DesignSystemBlock extends ContentBlockBase {
   description?: string;
   typeface?: { name: string; weights: { value: string; label: string }[] };
   colors: { name: string; hex: string }[];
+  spacing?: { sizes: { px: number; rem: string }[] };
+  components?: {
+    buttons?: { label: string; variant?: 'primary' | 'secondary' | 'outline' }[];
+    inputs?: { placeholder: string }[];
+  };
 }
 
 export interface BannerBlock extends ContentBlockBase {

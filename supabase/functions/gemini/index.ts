@@ -78,6 +78,21 @@ type PlanPeriodResponse = {
   summary: string
 }
 
+type StandupAction = {
+  type: 'complete' | 'create' | 'update_status' | 'flag_blocked'
+  taskId?: string
+  taskTitle: string
+  newTask?: { title: string; priority: 'low' | 'medium' | 'high'; dueDate?: string; projectName?: string }
+  updates?: { status?: string; priority?: string }
+  reason: string
+}
+
+type StandupResponse = {
+  summary: string
+  actions: StandupAction[]
+  risks: { type: string; title: string; description: string; severity: 'low' | 'medium' | 'high' }[]
+}
+
 // ─── Simple in-memory rate limiter (per edge function instance) ──
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 10     // max requests per window
@@ -168,9 +183,35 @@ serve(async (req) => {
       })
     }
 
-    // For plan_period: limit task lines to avoid MAX_TOKENS on output
+    // For plan_period / standup: limit task lines to avoid MAX_TOKENS on output
     let processedInput = input
-    if (type === 'plan_period') {
+    if (type === 'standup') {
+      // Limit active tasks context to 30 lines
+      const lines = input.split('\n')
+      let taskCount = 0
+      const filtered: string[] = []
+      let inTaskSection = false
+      for (const line of lines) {
+        if (line.startsWith('Active tasks:')) {
+          inTaskSection = true
+          filtered.push(line)
+          continue
+        }
+        if (inTaskSection && line.startsWith('- [')) {
+          taskCount++
+          if (taskCount <= 30) filtered.push(line)
+          continue
+        }
+        if (inTaskSection && !line.startsWith('- [')) {
+          inTaskSection = false
+        }
+        filtered.push(line)
+      }
+      processedInput = filtered.join('\n')
+      if (taskCount > 30) {
+        console.log(`[gemini] standup: truncated ${taskCount} tasks to 30`)
+      }
+    } else if (type === 'plan_period') {
       const lines = input.split('\n')
       let taskCount = 0
       const filtered: string[] = []
@@ -261,6 +302,25 @@ Rules:
 - Keep the total number of changes reasonable (max ~20 changes per request).
 - CRITICAL: NEVER assign or move tasks to dates in the past. The "Today" date is provided in the input — all newDate values MUST be today or later. If a task is currently scheduled for a past date, move it to today or a future date.
 - Respond in the SAME language as the input.`
+        : type === 'standup'
+        ? `You are a PM standup assistant. The user is reporting what they worked on today. You receive their freeform standup update along with their current active task list (with real database IDs).
+
+Your job: analyze their update and propose task actions.
+
+Return ONLY valid JSON with this structure:
+{"summary":"1-2 sentence standup summary","actions":[{"type":"complete|create|update_status|flag_blocked","taskId":"exact-uuid-from-task-list","taskTitle":"task name","newTask":{"title":"...","priority":"low|medium|high","dueDate":"YYYY-MM-DD","projectName":"..."},"updates":{"status":"in-progress|todo"},"reason":"Why this action"}],"risks":[{"type":"deadline_risk|blocker|scope_creep|overload","title":"Short title","description":"1 sentence","severity":"low|medium|high"}]}
+
+Rules:
+- For "complete" and "update_status" and "flag_blocked" actions: use ONLY taskId values from the provided task list. NEVER invent IDs.
+- Match the user's natural language to task titles using fuzzy matching. If the user says "finished the homepage" and there's a task "[abc-123] Homepage redesign", match to that task.
+- For "create" actions: only create new tasks when the user mentions work NOT covered by any existing task. Include newTask object with title, priority, and optional dueDate/projectName.
+- For "update_status": use when user mentions starting or progressing on a task (set status to "in-progress").
+- For "flag_blocked": use when user mentions being stuck or blocked on something.
+- Detect risks: if user mentions being overwhelmed (overload), deadline concerns (deadline_risk), new unplanned work (scope_creep), or being stuck (blocker).
+- Keep summary concise and professional.
+- If the user's update is vague and you can't match to specific tasks, return fewer actions and note it in the summary.
+- Respond in the SAME language as the user's input.
+- omit taskId for "create" actions, omit newTask for non-create actions, omit updates for non-update_status actions.`
         : type === 'advisor'
         ? `You are a senior business advisor and strategist for a creative agency / studio owner. You have access to a summary of the user's current projects, finances, team, and calendar.
 Return ONLY valid JSON with this structure:
@@ -276,10 +336,10 @@ Rules:
 - Always include at least one forward-looking recommendation`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'standup' ? 4096 : 512
 
     const generationConfig: Record<string, any> = {
-      temperature: type === 'tasks_bulk' || type === 'plan_period' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
+      temperature: type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
       maxOutputTokens: maxTokens,
     }
     generationConfig.responseMimeType = 'application/json'
@@ -295,28 +355,41 @@ Rules:
       generationConfig,
     }
 
-    // Fetch with retry on 429 (rate limit)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    // Fetch with retry on 429 (rate limit) + model fallback
+    const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
     const geminiBody = JSON.stringify(requestPayload)
     const MAX_RETRIES = 3
     let response: Response | null = null
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: geminiBody,
-      })
+    for (let modelIdx = 0; modelIdx < MODELS.length; modelIdx++) {
+      const model = MODELS[modelIdx]
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-      if (response.status !== 429 || attempt === MAX_RETRIES) break
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: geminiBody,
+        })
 
-      // Use Retry-After header if present, otherwise exponential backoff
-      const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
-      const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 1) * 1000
-      const jitter = Math.floor(Math.random() * 2000)
-      const delay = baseDelay + jitter
-      console.log(`[gemini] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
-      await new Promise(r => setTimeout(r, delay))
+        if (response.status !== 429 || attempt === MAX_RETRIES) break
+
+        // Use Retry-After header if present, otherwise exponential backoff starting higher
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
+        const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 2) * 1000 // 4s, 8s, 16s
+        const jitter = Math.floor(Math.random() * 2000)
+        const delay = baseDelay + jitter
+        console.log(`[gemini] 429 on ${model}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+        await new Promise(r => setTimeout(r, delay))
+      }
+
+      // If this model succeeded or returned a non-429 error, use it
+      if (response!.status !== 429) break
+
+      // If rate-limited on this model and there's a fallback, try next model
+      if (modelIdx < MODELS.length - 1) {
+        console.log(`[gemini] ${model} exhausted retries with 429, falling back to ${MODELS[modelIdx + 1]}`)
+      }
     }
 
     if (!response!.ok) {
@@ -349,7 +422,7 @@ Rules:
 
     // Strategy: try parsing each part as JSON individually (last valid wins),
     // then fallback to concatenated text with regex extraction
-    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | null = null
+    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | StandupResponse | null = null
 
     // 1. Try each part individually (response JSON is usually in the last part)
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -443,6 +516,14 @@ Rules:
       if (!plan || !Array.isArray(plan.changes)) {
         console.error(`[gemini] plan_period validation failed. finishReason=${finishReason}, json is ${json === null ? 'null' : typeof json}, keys: ${json ? Object.keys(json).join(',') : 'N/A'}, rawDebug: ${rawDebug}`)
         return new Response(JSON.stringify({ error: 'Invalid AI response', finishReason, raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'standup') {
+      const standup = json as StandupResponse
+      if (!standup || !standup.summary || !Array.isArray(standup.actions)) {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })

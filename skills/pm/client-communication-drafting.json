@@ -1,0 +1,168 @@
+{
+  "name": "client-communication-drafting",
+  "description": "Draft professional client-facing communications: status updates, milestone reports, delay notifications, and meeting summaries",
+  "priority": "MEDIUM",
+  "expectedDuration": "10-25 minutes",
+  "requiredAgents": ["pm-agent", "project-agent"],
+  "requiredPermissions": ["projects.read", "tasks.read", "documents.create"],
+  "dependencies": [],
+
+  "objectives": [
+    "Draft clear, professional status updates for clients",
+    "Communicate delays or blockers with context and resolution plans",
+    "Summarize milestone completions with deliverable highlights",
+    "Maintain appropriate tone (confident but honest)",
+    "Include next steps and expected dates",
+    "Adapt communication style to client relationship"
+  ],
+
+  "prerequisites": [
+    "Project status data available (tasks, milestones, timeline)",
+    "Client contact and communication history accessible",
+    "Tenant branding for email formatting"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Context Gathering",
+      "description": "Collect all relevant project data for the communication",
+      "commands": [
+        "QUERY project progress: completed, in-progress, upcoming tasks",
+        "CHECK for blockers, delays, or risks to communicate",
+        "REVIEW last client communication for continuity",
+        "IDENTIFY achievements and milestones reached",
+        "NOTE any decisions needed from client"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "Communication context package with all relevant data"
+    },
+    {
+      "step": 2,
+      "action": "Communication Type Selection",
+      "description": "Determine the right communication format",
+      "commands": [
+        "CLASSIFY communication type: status update, milestone report, delay notice, meeting summary, scope change request",
+        "SELECT appropriate template and tone",
+        "DETERMINE urgency level (routine, important, urgent)",
+        "IDENTIFY audience (primary client contact, stakeholder group, executive)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Communication type and template selected"
+    },
+    {
+      "step": 3,
+      "action": "Draft Generation",
+      "description": "Write the communication draft",
+      "commands": [
+        "WRITE opening with greeting and purpose",
+        "INCLUDE progress summary with key metrics",
+        "ADDRESS any issues with context and resolution plan",
+        "LIST next steps with owners and expected dates",
+        "ADD closing with availability for questions",
+        "KEEP concise: status updates <300 words, reports <500 words"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Draft communication ready for PM review"
+    },
+    {
+      "step": 4,
+      "action": "Review & Polish",
+      "description": "Review draft for tone, accuracy, and completeness",
+      "commands": [
+        "VERIFY all facts and dates are accurate",
+        "CHECK tone is appropriate for the situation",
+        "ENSURE no internal jargon or sensitive details leaked",
+        "ADD formatting for readability (bullet points, headers)",
+        "FLAG sections needing PM input before sending"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Polished communication draft with review notes"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "Communication is factually accurate",
+      "Tone matches the situation (positive for milestones, honest for delays)",
+      "Next steps are clearly defined",
+      "No internal-only information included",
+      "Length is appropriate for communication type"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Weekly status update",
+        "test": "Generate status update for a project on track",
+        "expected": "Concise update highlighting progress and next steps"
+      },
+      {
+        "scenario": "Delay notification",
+        "test": "Generate communication for a 1-week delay",
+        "expected": "Honest explanation with root cause, impact, and recovery plan"
+      }
+    ],
+    "successIndicators": [
+      "PM approves draft with minimal edits",
+      "Client responds positively or acknowledges",
+      "No follow-up questions about missing information"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Insufficient project data for meaningful update",
+        "solution": "Generate partial draft, flag gaps for PM to fill"
+      },
+      {
+        "error": "Multiple conflicting status signals",
+        "solution": "Present both perspectives, let PM choose framing"
+      }
+    ],
+    "rollbackProcedure": [
+      "SAVE draft without sending",
+      "FLAG for manual PM review"
+    ],
+    "escalationCriteria": [
+      "Communication involves contract disputes or legal issues",
+      "Client relationship at risk due to severe delays",
+      "Sensitive information handling required"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Draft Approval Rate",
+      "target": ">80%",
+      "measurement": "Drafts approved by PM with <3 edits"
+    },
+    {
+      "name": "Communication Timeliness",
+      "target": "Same day",
+      "measurement": "Draft generated within hours of trigger event"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch project status data for client communication",
+      "data": ["project_id", "date_range", "milestone_status"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Send approved communication to client",
+      "data": ["draft_content", "recipient", "delivery_method"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Communication Draft",
+      "type": "Formatted text",
+      "content": ["subject_line", "body", "next_steps", "review_notes"]
+    }
+  ]
+}

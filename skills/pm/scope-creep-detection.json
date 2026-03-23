@@ -1,0 +1,173 @@
+{
+  "name": "scope-creep-detection",
+  "description": "Monitor project scope changes, detect unauthorized expansion, quantify impact, and recommend corrective actions",
+  "priority": "HIGH",
+  "expectedDuration": "15-30 minutes",
+  "requiredAgents": ["pm-agent", "project-agent"],
+  "requiredPermissions": ["projects.read", "tasks.read"],
+  "dependencies": ["intake-scoping"],
+
+  "objectives": [
+    "Compare current task list against original scoping document",
+    "Detect tasks added after initial scope was approved",
+    "Quantify scope expansion in effort hours and timeline impact",
+    "Categorize additions as legitimate change requests vs uncontrolled creep",
+    "Recommend corrective action (accept, defer, remove, re-scope)",
+    "Generate scope change report for stakeholder review"
+  ],
+
+  "prerequisites": [
+    "Original scoping document with defined requirements exists",
+    "Active project with task history",
+    "Baseline task count and effort estimate available"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Baseline Comparison",
+      "description": "Compare current state against original scope",
+      "commands": [
+        "LOAD original scoping document requirements",
+        "QUERY all current tasks including recently added",
+        "DIFF current tasks against baseline requirements",
+        "IDENTIFY tasks not traceable to original requirements",
+        "CALCULATE net addition in task count and effort"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Delta report: original scope vs current scope"
+    },
+    {
+      "step": 2,
+      "action": "Change Classification",
+      "description": "Categorize each scope addition",
+      "commands": [
+        "CLASSIFY additions: approved change request, bug fix, missed requirement, pure creep",
+        "CHECK if additions went through change control process",
+        "IDENTIFY who added the scope and when",
+        "ASSESS business justification for each addition",
+        "FLAG additions without approval or justification"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Classified list of scope changes with approval status"
+    },
+    {
+      "step": 3,
+      "action": "Impact Analysis",
+      "description": "Quantify impact of scope changes on timeline and resources",
+      "commands": [
+        "CALCULATE total additional effort from scope changes",
+        "PROJECT new completion date including additions",
+        "ASSESS impact on team workload and capacity",
+        "IDENTIFY dependencies affected by scope changes",
+        "DETERMINE if critical path has shifted"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "Impact report with revised timeline projection"
+    },
+    {
+      "step": 4,
+      "action": "Recommendation Generation",
+      "description": "Propose corrective actions for scope management",
+      "commands": [
+        "RECOMMEND action per addition: accept, defer to next phase, remove, negotiate",
+        "PROPOSE revised timeline if scope accepted",
+        "SUGGEST scope trade-offs (add X, defer Y)",
+        "DRAFT change request for stakeholder approval",
+        "DEFINE guardrails to prevent future uncontrolled creep"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Action plan with options for stakeholder decision"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All scope additions identified and classified",
+      "Impact quantified in hours and days",
+      "Recommendations are actionable and specific",
+      "Report is stakeholder-friendly"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Minor creep detection",
+        "test": "Project with 2-3 undocumented task additions",
+        "expected": "Additions detected, classified, impact calculated"
+      },
+      {
+        "scenario": "Significant scope expansion",
+        "test": "Project with >30% task increase vs baseline",
+        "expected": "Alert generated, re-scoping recommended"
+      }
+    ],
+    "successIndicators": [
+      "Scope creep detected before it impacts deadlines",
+      "Stakeholders informed of scope changes proactively",
+      "Corrective action taken before project goes off-track"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "No baseline scoping document available",
+        "solution": "Use initial task list as baseline, flag lack of formal scope"
+      },
+      {
+        "error": "Cannot distinguish between bug fixes and scope creep",
+        "solution": "Apply heuristic: if task addresses existing feature = bug fix, new feature = creep"
+      }
+    ],
+    "rollbackProcedure": [
+      "ARCHIVE scope analysis as draft",
+      "CONTINUE monitoring without action",
+      "SCHEDULE manual scope review"
+    ],
+    "escalationCriteria": [
+      "Scope expanded >25% without any change requests",
+      "Timeline impact exceeds 2 weeks",
+      "Scope changes affect committed deliverables to clients"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Detection Speed",
+      "target": "<48 hours",
+      "measurement": "Time from scope addition to detection"
+    },
+    {
+      "name": "Classification Accuracy",
+      "target": ">85%",
+      "measurement": "Correct categorization of scope changes"
+    },
+    {
+      "name": "Creep Prevention",
+      "target": "<10% uncontrolled growth",
+      "measurement": "Scope growth without formal approval"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch current task list and historical changes for scope analysis",
+      "data": ["project_id", "baseline_date", "current_tasks"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Alert stakeholders of significant scope creep detected",
+      "data": ["scope_report", "impact_summary", "recommended_actions"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Scope Creep Report",
+      "type": "Analysis document",
+      "content": ["baseline_vs_current", "change_classification", "impact_analysis", "recommendations"]
+    }
+  ]
+}

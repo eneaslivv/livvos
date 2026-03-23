@@ -11,7 +11,8 @@ import { LivePreview } from '../components/cms/LivePreview';
 import { IntegrationSnippet } from '../components/cms/IntegrationSnippet';
 import { CmsToastContainer, useToasts } from '../components/cms/CmsToast';
 import type { PageView } from '../types';
-import type { CmsSection } from '../types/cms';
+import type { CmsSection, CmsPortfolioItem } from '../types/cms';
+import { PortfolioRenderer } from '../components/cms/PortfolioRenderer';
 
 interface ContentCmsProps {
   onNavigate: (page: PageView) => void;
@@ -24,6 +25,7 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
   const [previewKey, setPreviewKey] = useState(0);
   const [showIntegration, setShowIntegration] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
+  const [previewItem, setPreviewItem] = useState<CmsPortfolioItem | null>(null);
   const { toasts, addToast, dismissToast } = useToasts();
 
   const handleDeploy = async () => {
@@ -161,6 +163,7 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
                   onDelete={wrappedDeletePortfolio}
                   onUpload={(file) => cms.uploadImage(file, 'portfolio')}
                   detectMediaType={cms.detectMediaType}
+                  onPreview={setPreviewItem}
                 />
               )}
               {activeSection === 'products' && (
@@ -208,6 +211,13 @@ export const ContentCms: React.FC<ContentCmsProps> = ({ onNavigate }) => {
 
       {/* Toast notifications */}
       <CmsToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Portfolio case study preview overlay */}
+      {previewItem && (
+        <div className="fixed inset-0 z-[60] bg-white overflow-auto">
+          <PortfolioRenderer item={previewItem} onBack={() => setPreviewItem(null)} />
+        </div>
+      )}
 
       {/* Integration snippet modal */}
       <IntegrationSnippet

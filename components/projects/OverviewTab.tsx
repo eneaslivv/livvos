@@ -4,10 +4,11 @@ import { Icons } from '../ui/Icons';
 import { Project, ProjectStatus } from '../../context/ProjectsContext';
 import { Client } from '../../context/ClientsContext';
 import { TeamMember } from '../../context/TeamContext';
+import { parseLocalDate } from '../../lib/dateUtils';
 
 const fmtShortDate = (d: string | null | undefined) => {
   if (!d) return '—';
-  const date = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+  const date = d.includes('T') ? new Date(d) : parseLocalDate(d);
   return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 };
 

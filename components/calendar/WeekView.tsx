@@ -48,6 +48,7 @@ export interface WeekViewProps {
   // Phase grouping
   groupTasksByPhase?: boolean;
   getDayTaskGroups?: (date: string) => { groupName: string; tasks: CalendarTask[]; completedCount: number; totalCount: number }[];
+  getClientInfo?: (clientId: string) => { name: string; avatar: string | null; color: string | null } | null;
 }
 
 export const WeekView: React.FC<WeekViewProps> = ({
@@ -78,6 +79,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
   clientTimezoneMap,
   groupTasksByPhase,
   getDayTaskGroups,
+  getClientInfo,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nowRowRef = useRef<HTMLDivElement>(null);
@@ -190,6 +192,24 @@ export const WeekView: React.FC<WeekViewProps> = ({
                       onClick={() => setExpandedPhase(isExpanded ? null : phaseKey)}
                     >
                       <div className="font-medium flex items-center gap-1 text-indigo-700 dark:text-indigo-300 truncate">
+                        {(() => {
+                          const cid = group.tasks.find(t => t.client_id)?.client_id;
+                          if (!cid || !getClientInfo) return null;
+                          const info = getClientInfo(cid);
+                          if (!info) return null;
+                          if (info.avatar) {
+                            return <img src={info.avatar} alt="" title={info.name} className="w-4 h-4 rounded-full object-contain shrink-0" />;
+                          }
+                          return (
+                            <span
+                              className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[6px] font-bold bg-indigo-200 dark:bg-indigo-700 text-indigo-700 dark:text-indigo-200"
+                              style={info.color ? { backgroundColor: info.color + '26', color: info.color } : undefined}
+                              title={info.name}
+                            >
+                              {info.name.charAt(0).toUpperCase()}
+                            </span>
+                          );
+                        })()}
                         <Icons.ChevronRight size={8} className={`shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         <span className="truncate">{group.groupName}</span>
                         <span className="ml-auto text-[8px] font-semibold shrink-0 tabular-nums">

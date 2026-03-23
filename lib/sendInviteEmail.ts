@@ -5,6 +5,7 @@ interface SendInviteEmailParams {
   tenantName?: string
   inviteType?: 'team' | 'client'
   logoUrl?: string
+  tenantId?: string
 }
 
 export const sendInviteEmail = async (params: SendInviteEmailParams): Promise<{ ok: boolean; message_id?: string }> => {
@@ -27,6 +28,7 @@ export const sendInviteEmail = async (params: SendInviteEmailParams): Promise<{ 
       tenant_name: params.tenantName,
       invite_type: params.inviteType || 'team',
       logo_url: params.logoUrl,
+      tenant_id: params.tenantId,
     }),
   })
 

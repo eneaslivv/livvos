@@ -1,0 +1,197 @@
+{
+  "name": "task-decomposition",
+  "description": "Break down project requirements into granular, actionable tasks with estimates, dependencies, and assignments",
+  "priority": "HIGH",
+  "expectedDuration": "20-45 minutes",
+  "requiredAgents": ["pm-agent", "project-agent", "team-agent"],
+  "requiredPermissions": ["tasks.create", "tasks.assign", "projects.manage"],
+  "dependencies": ["intake-scoping"],
+
+  "objectives": [
+    "Decompose high-level requirements into atomic, actionable tasks",
+    "Estimate effort per task using t-shirt sizing or story points",
+    "Map dependencies between tasks (blockers, predecessors)",
+    "Assign tasks to team members based on skills and availability",
+    "Group tasks into logical milestones or sprints",
+    "Identify critical path through dependency chain"
+  ],
+
+  "prerequisites": [
+    "Scoping document with defined requirements exists",
+    "Team member profiles with skills/capacity available",
+    "Project timeline constraints known"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Requirement Breakdown",
+      "description": "Split each requirement into implementable work items",
+      "commands": [
+        "PARSE scoping document requirements",
+        "SPLIT each requirement into 2-8 hour tasks",
+        "ENSURE each task has a single clear deliverable",
+        "WRITE task descriptions with context and expected outcome",
+        "TAG tasks by type (feature, bug, chore, spike)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "List of atomic tasks with descriptions and types"
+    },
+    {
+      "step": 2,
+      "action": "Effort Estimation",
+      "description": "Estimate effort for each task",
+      "commands": [
+        "APPLY t-shirt sizing (XS/S/M/L/XL) to each task",
+        "CONVERT sizes to hour ranges for timeline planning",
+        "FLAG tasks needing spike/investigation before estimation",
+        "IDENTIFY tasks that could be parallelized",
+        "CALCULATE total effort and compare against timeline"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Tasks with effort estimates and total project effort"
+    },
+    {
+      "step": 3,
+      "action": "Dependency Mapping",
+      "description": "Identify and document task dependencies",
+      "commands": [
+        "MAP predecessor/successor relationships",
+        "IDENTIFY blocking dependencies (hard blocks)",
+        "NOTE soft dependencies (recommended order)",
+        "CALCULATE critical path through dependency graph",
+        "FLAG circular dependencies or bottlenecks"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Dependency graph with critical path identified"
+    },
+    {
+      "step": 4,
+      "action": "Assignment & Scheduling",
+      "description": "Assign tasks to team members and schedule into milestones",
+      "commands": [
+        "CHECK team member availability and current workload",
+        "MATCH task requirements to team member skills",
+        "DISTRIBUTE work evenly considering capacity",
+        "GROUP tasks into milestones or sprint iterations",
+        "SET due dates based on dependencies and capacity"
+      ],
+      "agent": ["pm-agent", "team-agent"],
+      "expectedOutput": "Assigned task board with milestones and due dates"
+    },
+    {
+      "step": 5,
+      "action": "Task Creation in System",
+      "description": "Create tasks in the project management system",
+      "commands": [
+        "CREATE tasks in projects system with all metadata",
+        "SET priorities based on critical path and business value",
+        "LINK dependencies between tasks",
+        "ASSIGN team members and set due dates",
+        "CREATE milestone markers for tracking"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "All tasks created and visible in project board"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "Every requirement maps to at least one task",
+      "No task exceeds 8 hours of estimated effort",
+      "All dependencies are documented and non-circular",
+      "Every task has an assignee and due date",
+      "Critical path is identified and reasonable"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Large feature decomposition",
+        "test": "Decompose a multi-week feature into tasks",
+        "expected": "15-30 tasks with clear dependencies and assignments"
+      },
+      {
+        "scenario": "Resource constraint handling",
+        "test": "Decompose when team has limited availability",
+        "expected": "Tasks scheduled within capacity, bottlenecks flagged"
+      }
+    ],
+    "successIndicators": [
+      "All tasks completable within estimates",
+      "No missed requirements discovered post-decomposition",
+      "Team agrees assignments are fair and achievable"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Task too large to estimate accurately",
+        "solution": "Create a spike task for investigation, then re-decompose"
+      },
+      {
+        "error": "Circular dependency detected",
+        "solution": "Review dependency chain, identify which can be decoupled"
+      },
+      {
+        "error": "Total effort exceeds available capacity",
+        "solution": "Propose scope reduction or timeline extension with options"
+      }
+    ],
+    "rollbackProcedure": [
+      "ARCHIVE task list as draft",
+      "FLAG decomposition as incomplete",
+      "DOCUMENT what blocked completion"
+    ],
+    "escalationCriteria": [
+      "Effort exceeds timeline by >50% with no scope flexibility",
+      "Key skills not available on team for critical tasks",
+      "Requirements too ambiguous to decompose further"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Decomposition Coverage",
+      "target": "100%",
+      "measurement": "Requirements with mapped tasks vs total requirements"
+    },
+    {
+      "name": "Estimate Accuracy",
+      "target": "<25% variance",
+      "measurement": "Actual hours vs estimated hours per task"
+    },
+    {
+      "name": "Dependency Completeness",
+      "target": "100%",
+      "measurement": "No unplanned blockers during execution"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Create tasks in project system from decomposition",
+      "data": ["task_list", "dependencies", "assignments", "milestones"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "team-agent",
+      "message": "Verify team capacity and skill matching for assignments",
+      "data": ["required_skills", "effort_estimates", "timeline"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Task Breakdown",
+      "type": "Task list with metadata",
+      "content": ["task_descriptions", "effort_estimates", "dependencies", "assignments"]
+    },
+    {
+      "name": "Critical Path Analysis",
+      "type": "Dependency graph",
+      "content": ["critical_path", "parallel_tracks", "bottlenecks"]
+    }
+  ]
+}

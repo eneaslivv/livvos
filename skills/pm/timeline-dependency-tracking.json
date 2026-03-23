@@ -1,0 +1,187 @@
+{
+  "name": "timeline-dependency-tracking",
+  "description": "Monitor project timelines, track dependency chains, detect schedule risks, and auto-adjust projected dates",
+  "priority": "HIGH",
+  "expectedDuration": "15-30 minutes",
+  "requiredAgents": ["pm-agent", "project-agent"],
+  "requiredPermissions": ["projects.read", "tasks.read", "tasks.manage"],
+  "dependencies": ["task-decomposition"],
+
+  "objectives": [
+    "Track task dependencies and cascade delay impacts",
+    "Calculate critical path and identify schedule risks",
+    "Auto-adjust projected dates when predecessors slip",
+    "Generate Gantt-style timeline visualization data",
+    "Alert on tasks approaching or exceeding deadlines",
+    "Recommend schedule optimizations (parallelization, reordering)"
+  ],
+
+  "prerequisites": [
+    "Tasks with dependencies and due dates exist",
+    "Team member assignments in place",
+    "Baseline schedule established"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Dependency Graph Construction",
+      "description": "Build and validate the task dependency graph",
+      "commands": [
+        "QUERY all tasks with their dependency relationships",
+        "BUILD directed acyclic graph (DAG) of dependencies",
+        "DETECT circular dependencies and flag errors",
+        "IDENTIFY orphan tasks (no dependencies, no dependents)",
+        "MAP external dependencies (other teams, third-party)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Validated dependency graph with all relationships"
+    },
+    {
+      "step": 2,
+      "action": "Critical Path Analysis",
+      "description": "Calculate critical path and schedule flexibility",
+      "commands": [
+        "CALCULATE earliest start/finish for all tasks (forward pass)",
+        "CALCULATE latest start/finish for all tasks (backward pass)",
+        "IDENTIFY critical path (zero float tasks)",
+        "COMPUTE slack/float for non-critical tasks",
+        "HIGHLIGHT tasks where delay = project delay"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Critical path with float calculations per task"
+    },
+    {
+      "step": 3,
+      "action": "Schedule Risk Detection",
+      "description": "Identify tasks at risk of slipping",
+      "commands": [
+        "CHECK tasks approaching due date with <50% completion",
+        "DETECT tasks already past due date",
+        "CALCULATE cascade impact of delayed tasks on dependents",
+        "COMPARE current velocity against required velocity",
+        "FLAG milestones at risk based on current progress"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "Risk register with impact assessments"
+    },
+    {
+      "step": 4,
+      "action": "Date Auto-Adjustment",
+      "description": "Recalculate projected dates based on actual progress",
+      "commands": [
+        "RECALCULATE downstream due dates when predecessors slip",
+        "PROPOSE new dates maintaining dependency order",
+        "IDENTIFY where schedule compression is possible",
+        "SUGGEST tasks that can be fast-tracked or parallelized",
+        "GENERATE before/after timeline comparison"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Revised schedule with justification for changes"
+    },
+    {
+      "step": 5,
+      "action": "Timeline Report",
+      "description": "Generate timeline status report",
+      "commands": [
+        "CREATE timeline overview with milestones",
+        "INCLUDE on-track, at-risk, and off-track indicators",
+        "ADD schedule variance metrics (planned vs actual)",
+        "LIST upcoming deadlines in next 7/14/30 days",
+        "PROVIDE optimization recommendations"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Timeline health report with action items"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All dependencies accurately represented",
+      "Critical path calculation is correct",
+      "Date adjustments maintain dependency order",
+      "Risk flags trigger before deadlines are missed"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Predecessor delay cascade",
+        "test": "Delay a critical path task by 3 days",
+        "expected": "All downstream dates auto-adjusted, PM alerted"
+      },
+      {
+        "scenario": "Schedule optimization",
+        "test": "Identify parallelizable tasks on a sequential schedule",
+        "expected": "Recommendations to shorten timeline via parallelization"
+      }
+    ],
+    "successIndicators": [
+      "No surprise deadline misses",
+      "Schedule risks detected >5 days before deadline",
+      "Timeline adjustments communicated proactively"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Circular dependency in task graph",
+        "solution": "Identify cycle, recommend which dependency to remove"
+      },
+      {
+        "error": "Tasks missing due dates or estimates",
+        "solution": "Flag incomplete tasks, use defaults for projection"
+      }
+    ],
+    "rollbackProcedure": [
+      "REVERT date adjustments if incorrect",
+      "RESTORE previous schedule baseline",
+      "ALERT PM to review manually"
+    ],
+    "escalationCriteria": [
+      "Critical path delay >1 week with no mitigation options",
+      "Multiple milestones at risk simultaneously",
+      "External dependency delayed with no alternative"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Risk Detection Lead Time",
+      "target": ">5 days",
+      "measurement": "Days between risk detection and actual deadline"
+    },
+    {
+      "name": "Schedule Accuracy",
+      "target": "<10% variance",
+      "measurement": "Projected completion vs actual completion"
+    },
+    {
+      "name": "Dependency Completeness",
+      "target": "100%",
+      "measurement": "All task relationships documented"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch tasks with dependencies and status for timeline analysis",
+      "data": ["project_id", "task_dependencies", "status_history"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Alert on schedule risks and deadline changes",
+      "data": ["risk_items", "affected_stakeholders", "urgency_level"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Timeline Report",
+      "type": "Analysis with projections",
+      "content": ["critical_path", "risk_register", "date_adjustments", "optimization_recommendations"]
+    }
+  ]
+}

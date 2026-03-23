@@ -1,0 +1,192 @@
+{
+  "name": "meeting-prep-followup",
+  "description": "Prepare meeting agendas with context, generate post-meeting summaries, track action items, and ensure follow-through",
+  "priority": "MEDIUM",
+  "expectedDuration": "15-30 minutes",
+  "requiredAgents": ["pm-agent", "project-agent", "calendar-agent"],
+  "requiredPermissions": ["calendar.read", "tasks.create", "documents.create", "projects.read"],
+  "dependencies": [],
+
+  "objectives": [
+    "Generate meeting agendas with relevant project context",
+    "Compile pre-read materials and data points for attendees",
+    "Produce structured meeting notes with decisions and action items",
+    "Create follow-up tasks from action items with assignments",
+    "Track action item completion across meetings",
+    "Maintain meeting history for reference"
+  ],
+
+  "prerequisites": [
+    "Calendar event with attendees exists",
+    "Project context available for agenda topics",
+    "Previous meeting notes accessible (if recurring meeting)"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Pre-Meeting Preparation",
+      "description": "Build agenda and gather context for the meeting",
+      "commands": [
+        "IDENTIFY meeting type (standup, sprint review, client sync, planning)",
+        "PULL relevant project metrics and status updates",
+        "CHECK action items from previous meeting of same type",
+        "COMPILE open decisions that need resolution",
+        "LIST topics requiring discussion with time estimates",
+        "GATHER data/visuals needed for presentation"
+      ],
+      "agent": ["pm-agent", "calendar-agent"],
+      "expectedOutput": "Meeting agenda with context and pre-read materials"
+    },
+    {
+      "step": 2,
+      "action": "Agenda Structuring",
+      "description": "Format the agenda with time allocation",
+      "commands": [
+        "ORGANIZE topics by priority (decisions first, FYIs last)",
+        "ALLOCATE time per topic based on complexity",
+        "ASSIGN topic owners/presenters",
+        "ADD carryover items from previous meetings",
+        "INCLUDE parking lot for deferred topics"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Structured agenda with time blocks and owners"
+    },
+    {
+      "step": 3,
+      "action": "Post-Meeting Summary",
+      "description": "Generate meeting summary from notes or transcript",
+      "commands": [
+        "CAPTURE key decisions made during meeting",
+        "EXTRACT action items with owners and deadlines",
+        "NOTE topics deferred to next meeting",
+        "SUMMARIZE discussion highlights per agenda item",
+        "IDENTIFY follow-up meetings or escalations needed"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Structured meeting summary with decisions and action items"
+    },
+    {
+      "step": 4,
+      "action": "Action Item Creation",
+      "description": "Convert action items into tracked tasks",
+      "commands": [
+        "CREATE tasks for each action item with assignee and due date",
+        "LINK tasks to relevant project or milestone",
+        "SET priority based on meeting context",
+        "TAG tasks as meeting-originated for tracking",
+        "SCHEDULE follow-up check on action items"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "Action items created as tasks in project system"
+    },
+    {
+      "step": 5,
+      "action": "Follow-Through Tracking",
+      "description": "Monitor action item completion before next meeting",
+      "commands": [
+        "CHECK completion status of previous meeting action items",
+        "FLAG overdue action items for escalation",
+        "PREPARE carryover list for next meeting",
+        "CALCULATE action item completion rate",
+        "NOTIFY owners of approaching deadlines"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Action item status report with carryover items"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "Agenda covers all necessary topics with time allocation",
+      "Meeting summary captures all decisions accurately",
+      "Every action item has an owner and deadline",
+      "Follow-up tracking catches overdue items"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Sprint planning meeting prep",
+        "test": "Generate agenda for a sprint planning session",
+        "expected": "Agenda includes backlog items, velocity data, capacity"
+      },
+      {
+        "scenario": "Action item tracking",
+        "test": "Check action items from 3 previous meetings",
+        "expected": "Status report showing completed, pending, and overdue items"
+      }
+    ],
+    "successIndicators": [
+      "Meetings start with prepared agenda",
+      "No action items lost between meetings",
+      "Action item completion rate >80%"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "No previous meeting context available",
+        "solution": "Generate agenda from project status alone, note first meeting"
+      },
+      {
+        "error": "Meeting notes too vague for action item extraction",
+        "solution": "Generate clarifying questions for meeting organizer"
+      }
+    ],
+    "rollbackProcedure": [
+      "SAVE draft agenda/summary for manual completion",
+      "FLAG items needing human review"
+    ],
+    "escalationCriteria": [
+      "Critical decisions not documented or unclear",
+      "Action items repeatedly carried over without completion",
+      "Meeting outcomes conflict with project plan"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Agenda Preparation Time",
+      "target": "<10 minutes",
+      "measurement": "Time from trigger to completed agenda"
+    },
+    {
+      "name": "Action Item Tracking",
+      "target": ">90% tracked",
+      "measurement": "Action items created as tasks vs total identified"
+    },
+    {
+      "name": "Follow-Through Rate",
+      "target": ">80%",
+      "measurement": "Action items completed by next meeting"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "calendar-agent",
+      "message": "Fetch meeting details and attendees for preparation",
+      "data": ["event_id", "attendees", "meeting_type"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Create action item tasks from meeting outcomes",
+      "data": ["action_items", "project_id", "assignees"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Meeting Agenda",
+      "type": "Structured document",
+      "content": ["topics", "time_allocation", "pre_read_materials", "carryover_items"]
+    },
+    {
+      "name": "Meeting Summary",
+      "type": "Structured document",
+      "content": ["decisions", "action_items", "discussion_highlights", "deferred_topics"]
+    }
+  ]
+}

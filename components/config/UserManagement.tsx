@@ -283,6 +283,7 @@ export const UserManagement: React.FC = () => {
           tenantName: currentTenant?.name || undefined,
           inviteType: 'team',
           logoUrl: currentTenant?.logo_url || undefined,
+          tenantId: currentTenant?.id,
         });
       } catch (emailErr: any) {
         errorLogger.warn('Invite email send failed (link still valid)', emailErr);
@@ -347,6 +348,7 @@ export const UserManagement: React.FC = () => {
         tenantName: currentTenant?.name || undefined,
         inviteType: 'team',
         logoUrl: currentTenant?.logo_url || undefined,
+        tenantId: currentTenant?.id,
       });
       alert('Email sent successfully!');
     } catch (err: any) {

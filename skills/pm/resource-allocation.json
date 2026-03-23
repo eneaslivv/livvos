@@ -1,0 +1,187 @@
+{
+  "name": "resource-allocation",
+  "description": "Analyze team capacity, optimize task assignments based on skills and workload, and detect over/under-allocation",
+  "priority": "MEDIUM",
+  "expectedDuration": "20-40 minutes",
+  "requiredAgents": ["pm-agent", "team-agent", "project-agent"],
+  "requiredPermissions": ["team.read", "tasks.read", "tasks.assign", "projects.read"],
+  "dependencies": ["task-decomposition"],
+
+  "objectives": [
+    "Assess team capacity across active projects",
+    "Match task requirements to team member skills",
+    "Detect over-allocated and under-utilized team members",
+    "Recommend task reassignments to balance workload",
+    "Project capacity availability for upcoming work",
+    "Track utilization trends over time"
+  ],
+
+  "prerequisites": [
+    "Team member profiles with skills and roles exist",
+    "Tasks with assignments and effort estimates",
+    "Working hours and availability known"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Capacity Assessment",
+      "description": "Calculate available capacity per team member",
+      "commands": [
+        "QUERY team members with roles and working hours",
+        "CALCULATE total available hours per person per week",
+        "SUBTRACT time for meetings, overhead, and leave",
+        "QUERY current task assignments with effort estimates",
+        "COMPUTE allocated hours vs available hours per person"
+      ],
+      "agent": ["pm-agent", "team-agent"],
+      "expectedOutput": "Capacity matrix: available vs allocated per team member"
+    },
+    {
+      "step": 2,
+      "action": "Workload Analysis",
+      "description": "Analyze current workload distribution",
+      "commands": [
+        "CALCULATE workload percentage per person (allocated/available)",
+        "FLAG over-allocated members (>100% capacity)",
+        "FLAG under-utilized members (<50% capacity)",
+        "IDENTIFY workload imbalances across the team",
+        "CHECK for skill concentration risk (single points of failure)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Workload heatmap with over/under-allocation alerts"
+    },
+    {
+      "step": 3,
+      "action": "Skill Matching",
+      "description": "Verify task-to-person skill alignment",
+      "commands": [
+        "MAP required skills per task to team member capabilities",
+        "IDENTIFY tasks assigned to people lacking required skills",
+        "FIND better skill matches for misaligned tasks",
+        "DETECT single points of failure (only 1 person with key skill)",
+        "SUGGEST cross-training opportunities"
+      ],
+      "agent": ["pm-agent", "team-agent"],
+      "expectedOutput": "Skill alignment report with reassignment suggestions"
+    },
+    {
+      "step": 4,
+      "action": "Optimization Recommendations",
+      "description": "Propose workload rebalancing",
+      "commands": [
+        "GENERATE reassignment recommendations to balance workload",
+        "RESPECT skill requirements and dependencies",
+        "MINIMIZE disruption (prefer small moves over large reshuffles)",
+        "CALCULATE improvement metrics (before vs after balancing)",
+        "IDENTIFY tasks that could be deferred to reduce overload"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Rebalancing plan with specific reassignment proposals"
+    },
+    {
+      "step": 5,
+      "action": "Capacity Forecasting",
+      "description": "Project future capacity for upcoming work",
+      "commands": [
+        "PROJECT task completion dates based on current velocity",
+        "CALCULATE when team members will have freed capacity",
+        "IDENTIFY capacity windows for new project intake",
+        "FLAG upcoming capacity crunches or idle periods",
+        "RECOMMEND hiring or contracting needs"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Capacity forecast with availability windows"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All team members accounted for in capacity calculation",
+      "Over-allocation detected and flagged",
+      "Reassignment recommendations respect skill requirements",
+      "Forecast aligns with known project timelines"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Over-allocation detection",
+        "test": "Team member with tasks totaling 60 hours in a 40-hour week",
+        "expected": "Over-allocation flagged with redistribution suggestions"
+      },
+      {
+        "scenario": "New project staffing",
+        "test": "Check capacity for a new 3-week project",
+        "expected": "Available team members identified with capacity windows"
+      }
+    ],
+    "successIndicators": [
+      "No burnout from over-allocation",
+      "Tasks completed on time due to proper resourcing",
+      "Team utilization in healthy range (70-90%)"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Incomplete team availability data",
+        "solution": "Use default working hours, flag members needing updates"
+      },
+      {
+        "error": "Tasks missing effort estimates",
+        "solution": "Apply average effort by task type, flag for estimation"
+      }
+    ],
+    "rollbackProcedure": [
+      "REVERT any automated reassignments",
+      "RESTORE original assignments",
+      "FLAG for manual PM review"
+    ],
+    "escalationCriteria": [
+      "Team-wide over-allocation with no rebalancing options",
+      "Critical skills unavailable for priority tasks",
+      "Sustained over-allocation >2 consecutive weeks"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Team Utilization",
+      "target": "70-90%",
+      "measurement": "Average allocated hours vs available hours"
+    },
+    {
+      "name": "Over-Allocation Reduction",
+      "target": "0 members >110%",
+      "measurement": "Team members exceeding capacity after optimization"
+    },
+    {
+      "name": "Skill Match Rate",
+      "target": ">90%",
+      "measurement": "Tasks assigned to appropriately skilled members"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "team-agent",
+      "message": "Fetch team member profiles, skills, and availability",
+      "data": ["team_members", "skills", "working_hours", "leave_calendar"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch task assignments and effort estimates across projects",
+      "data": ["tasks", "assignments", "effort_estimates", "deadlines"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Resource Allocation Report",
+      "type": "Analysis with recommendations",
+      "content": ["capacity_matrix", "workload_heatmap", "reassignment_proposals", "capacity_forecast"]
+    }
+  ]
+}

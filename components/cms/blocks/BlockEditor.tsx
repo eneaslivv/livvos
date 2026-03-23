@@ -6,7 +6,7 @@ import { ChallengeBlockEditor } from './ChallengeBlockEditor';
 import { ImageShowcaseBlockEditor } from './ImageShowcaseBlockEditor';
 import { DesignSystemBlockEditor } from './DesignSystemBlockEditor';
 import { BannerBlockEditor } from './BannerBlockEditor';
-import { RichTextarea } from './RichTextarea';
+import { MiniEditor } from './MiniEditor';
 
 interface Props {
   block: ContentBlock;
@@ -64,7 +64,7 @@ export const BlockEditor: React.FC<Props> = ({ block, onChange, onDelete, onMove
           />
         )}
         {block.type === 'text' && (
-          <RichTextarea
+          <MiniEditor
             value={block.content}
             onChange={(content) => onChange({ ...block, content })}
             placeholder="Paragraph text..."
@@ -72,12 +72,13 @@ export const BlockEditor: React.FC<Props> = ({ block, onChange, onDelete, onMove
           />
         )}
         {block.type === 'quote' && (
-          <RichTextarea
+          <MiniEditor
             value={block.content}
             onChange={(content) => onChange({ ...block, content })}
             placeholder="Quote text..."
             rows={4}
             className="italic"
+            minimal
           />
         )}
         {block.type === 'hero_image' && (

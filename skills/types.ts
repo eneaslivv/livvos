@@ -224,13 +224,19 @@ export type DevelopmentSkill = SkillTemplate & {
   testingRequirements?: string[];
 };
 
-export type AnySkill = DatabaseSkill | SecuritySkill | DomainSkill | SystemSkill | DevelopmentSkill;
+export type PMSkill = SkillTemplate & {
+  category: 'pm';
+  pmDomain: 'planning' | 'tracking' | 'communication' | 'analysis' | 'knowledge';
+  automationLevel?: 'full' | 'assisted' | 'manual';
+};
+
+export type AnySkill = DatabaseSkill | SecuritySkill | DomainSkill | SystemSkill | DevelopmentSkill | PMSkill;
 
 /**
  * Utility Types
  */
 
-export type SkillCategory = 'database' | 'security' | 'domain' | 'system' | 'development';
+export type SkillCategory = 'database' | 'security' | 'domain' | 'system' | 'development' | 'pm';
 export type SkillPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type SkillStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -238,6 +244,6 @@ export type SkillStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canc
  * Constants
  */
 
-export const SKILL_CATEGORIES: SkillCategory[] = ['database', 'security', 'domain', 'system', 'development'];
+export const SKILL_CATEGORIES: SkillCategory[] = ['database', 'security', 'domain', 'system', 'development', 'pm'];
 export const SKILL_PRIORITIES: SkillPriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 export const SKILL_STATUSES: SkillStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];

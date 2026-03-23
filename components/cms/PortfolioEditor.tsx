@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, AlertTriangle, CheckCircle2, Info, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, LayoutGrid, List, Star, X, Image as ImageIcon, Film, AlertTriangle, CheckCircle2, Info, Save, Eye } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { CmsPortfolioItem, CmsViewMode, PortfolioMedia, ContentBlock, ContentBlockType } from '../../types/cms';
 import { ImageUploader } from './ImageUploader';
 import { TagInput } from './TagInput';
 import { BlockEditor, createDefaultBlock } from './blocks/BlockEditor';
 import { GridSkeleton, ListSkeleton, EmptyState } from './CmsSkeleton';
+import { MiniEditor } from './blocks/MiniEditor';
 import { captureVideoThumbnail } from '../../lib/videoThumbnail';
 
 interface PortfolioEditorProps {
@@ -16,6 +17,7 @@ interface PortfolioEditorProps {
   onDelete: (id: string) => Promise<void>;
   onUpload: (file: File) => Promise<string | null>;
   detectMediaType?: (url: string) => PortfolioMedia['type'];
+  onPreview?: (item: CmsPortfolioItem) => void;
 }
 
 const CATEGORIES = [
@@ -109,6 +111,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   onDelete,
   onUpload,
   detectMediaType = defaultDetect,
+  onPreview,
 }) => {
   const [viewMode, setViewMode] = useState<CmsViewMode>('grid');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -239,10 +242,12 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     draftTimerRef.current = setTimeout(() => {
       try {
         const json = JSON.stringify(form);
-        if (json.length < 50_000) {
+        if (json.length < 500_000) {
           localStorage.setItem(draftKey, json);
         }
-      } catch { /* quota exceeded — silent */ }
+      } catch {
+        if (import.meta.env.DEV) console.warn('[CMS] Draft save failed — localStorage quota exceeded');
+      }
     }, 1500);
     return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
   }, [form, showModal, draftKey]);
@@ -764,12 +769,11 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   </div>
                   <div className="col-span-2 space-y-1.5">
                     <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">Description</label>
-                    <textarea
+                    <MiniEditor
                       value={form.description}
-                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                      rows={6}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-[#E6E2D8] bg-white text-[#09090B] placeholder:text-[#09090B]/25 focus:outline-none focus:border-[#E8BC59] resize-y transition-colors"
+                      onChange={(val) => setForm((f) => ({ ...f, description: val }))}
                       placeholder="Describe the project..."
+                      rows={6}
                     />
                   </div>
                 </div>
@@ -978,10 +982,14 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                       <button
                         onClick={() => {
                           const coverImage = form.media.find((m) => m.is_cover)?.url || form.image;
+                          const tools = form.tech_tags.length > 0 ? form.tech_tags : (form.services ? form.services.split(',').map((s) => s.trim()).filter(Boolean) : []);
                           const blocks: ContentBlock[] = [
                             { type: 'hero_image', image_url: coverImage || '', alt: form.title, sort_order: 0 },
-                            { type: 'challenge', label: 'Overview', heading: form.subtitle || form.title, paragraphs: form.description ? [form.description] : [''], tools: form.tech_tags.length > 0 ? form.tech_tags : (form.services ? form.services.split(',').map((s) => s.trim()) : []), kpis: [], sort_order: 1 },
-                            { type: 'image_showcase', label: 'Gallery', layout: 'side_by_side', images: [], sort_order: 2 },
+                            { type: 'challenge', label: 'The Challenge', heading: form.subtitle || `Defining the core problem and finding an elegant solution for ${form.title}.`, paragraphs: form.description ? [form.description, 'By unifying the data, documentation, and user interface, we created a consistent experience across all touchpoints.'] : ['We started with a robust discovery phase, unpacking user needs and technical bottlenecks.', 'By unifying the data, documentation, and user interface, we created a consistent experience across all touchpoints.'], tools, kpis: [{ text: 'Increased conversion by 12%' }, { text: 'Reduced latency by 40%' }, { text: 'Zero downtime during launch' }], sort_order: 1 },
+                            { type: 'image_showcase', label: 'Campaign structure layer', layout: 'wireframe', images: [], sort_order: 2 },
+                            { type: 'image_showcase', label: 'High fidelity interface', layout: 'side_by_side', images: [{ url: '', alt: 'Optimized for touch inputs and speed.', theme: 'light', caption: 'Mobile Checkout' }, { url: '', alt: 'System-wide preference adaptability.', theme: 'dark', caption: 'Dark Mode Ready' }], sort_order: 3 },
+                            { type: 'design_system', label: 'Design Language', heading: 'System & Assets', description: 'A comprehensive set of foundational elements defining the visual hierarchy and interaction patterns.', typeface: { name: 'Inter Display', weights: [{ value: '400', label: 'Regular' }, { value: '500', label: 'Medium' }, { value: '600', label: 'Semibold' }] }, colors: [{ name: 'Foreground', hex: '#18181B' }, { name: 'Primary', hex: '#2563EB' }, { name: 'Surface', hex: '#F4F4F5' }], spacing: { sizes: [{ px: 4, rem: '0.25rem' }, { px: 8, rem: '0.5rem' }, { px: 16, rem: '1rem' }] }, components: { buttons: [{ label: 'Action', variant: 'primary' }], inputs: [{ placeholder: 'Type...' }] }, sort_order: 4 },
+                            { type: 'banner', heading: `Redefine ${form.category?.toLowerCase() || 'innovation'} | with exclusive specials`, subtext: '', background_color: form.color || '#2a090b', sort_order: 5 },
                           ];
                           setForm((f) => ({ ...f, content_blocks: blocks }));
                         }}
@@ -1118,6 +1126,15 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
+                  {onPreview && (
+                    <button
+                      onClick={() => onPreview({ ...buildData(), id: editingId || 'preview', tenant_id: '' } as CmsPortfolioItem)}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-[#78736A] border border-[#E6E2D8] rounded-full hover:bg-[#F5F3EE] transition-colors"
+                      title="Preview case study"
+                    >
+                      <Eye size={13} /> Preview
+                    </button>
+                  )}
                   <button
                     onClick={safeClose}
                     className="px-4 py-2 text-xs font-medium text-[#78736A] border border-[#E6E2D8] rounded-full hover:bg-[#F5F3EE] transition-colors"

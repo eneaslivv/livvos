@@ -77,6 +77,61 @@ skill info <skill-name>
   - Required Agents: security-agent, tenant-agent, all-domain-agents
   - Duration: 60-90 minutes
 
+### Project Management (PM Agent)
+
+#### 🔶 High Priority Skills
+- **intake-scoping** - Gather requirements, define scope, produce scoping document with acceptance criteria
+  - Path: `skills/pm/intake-scoping.json`
+  - Required Agents: pm-agent, project-agent
+  - Duration: 30-60 minutes
+
+- **task-decomposition** - Break requirements into actionable tasks with estimates, dependencies, and assignments
+  - Path: `skills/pm/task-decomposition.json`
+  - Required Agents: pm-agent, project-agent, team-agent
+  - Duration: 20-45 minutes
+
+- **scope-creep-detection** - Monitor scope changes, detect unauthorized expansion, quantify impact
+  - Path: `skills/pm/scope-creep-detection.json`
+  - Required Agents: pm-agent, project-agent
+  - Duration: 15-30 minutes
+
+- **timeline-dependency-tracking** - Track dependencies, calculate critical path, detect schedule risks
+  - Path: `skills/pm/timeline-dependency-tracking.json`
+  - Required Agents: pm-agent, project-agent
+  - Duration: 15-30 minutes
+
+- **risk-flagging** - Proactively identify risks, assess severity/probability, recommend mitigations
+  - Path: `skills/pm/risk-flagging.json`
+  - Required Agents: pm-agent, project-agent
+  - Duration: 15-30 minutes
+
+#### 🟡 Medium Priority Skills
+- **daily-standup-synthesis** - Aggregate team progress, blockers, and velocity into standup summaries
+  - Path: `skills/pm/daily-standup-synthesis.json`
+  - Required Agents: pm-agent, project-agent, team-agent
+  - Duration: 10-20 minutes
+
+- **client-communication-drafting** - Draft professional status updates, delay notifications, milestone reports
+  - Path: `skills/pm/client-communication-drafting.json`
+  - Required Agents: pm-agent, project-agent
+  - Duration: 10-25 minutes
+
+- **meeting-prep-followup** - Prepare agendas, generate summaries, track action items across meetings
+  - Path: `skills/pm/meeting-prep-followup.json`
+  - Required Agents: pm-agent, project-agent, calendar-agent
+  - Duration: 15-30 minutes
+
+- **resource-allocation** - Analyze team capacity, optimize assignments, detect over/under-allocation
+  - Path: `skills/pm/resource-allocation.json`
+  - Required Agents: pm-agent, team-agent, project-agent
+  - Duration: 20-40 minutes
+
+#### 🟢 Low Priority Skills
+- **knowledge-base-maintenance** - Capture decisions, lessons learned, and build institutional knowledge
+  - Path: `skills/pm/knowledge-base-maintenance.json`
+  - Required Agents: pm-agent, document-agent
+  - Duration: 20-40 minutes
+
 ### Development Workflow
 
 #### 🟡 Medium Priority Skills
@@ -102,6 +157,11 @@ skill info <skill-name>
 1. data-migration-between-tables
 2. lead-status-transition-management
 3. project-financial-calculation
+4. intake-scoping
+5. task-decomposition
+6. scope-creep-detection
+7. timeline-dependency-tracking
+8. risk-flagging
 
 ### 🟡 Medium Priority (Normal)
 1. document-storage-management
@@ -109,9 +169,13 @@ skill info <skill-name>
 3. agent-health-check-validation
 4. new-agent-creation
 5. cross-agent-communication-protocol
+6. daily-standup-synthesis
+7. client-communication-drafting
+8. meeting-prep-followup
+9. resource-allocation
 
 ### 🟢 Low Priority (Background)
-*Coming soon: Performance monitoring, analytics aggregation, maintenance procedures*
+1. knowledge-base-maintenance
 
 ## Agent Skill Matrix
 
@@ -127,6 +191,7 @@ skill info <skill-name>
 | document-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
 | team-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
 | analytics-agent | ✗ | ✗ | ✗ | ✗ | ✗ |
+| pm-agent | ✗ | ✗ | ✓ | ✗ | ✗ |
 
 ## Usage Examples
 

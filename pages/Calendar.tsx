@@ -138,6 +138,14 @@ export const Calendar: React.FC = () => {
     return clientMap[task.client_id] || null;
   };
 
+  // Client info map for showing logos on phase pills
+  const clientInfoMap = clients.reduce<Record<string, { name: string; avatar: string | null; color: string | null }>>((acc, c) => {
+    acc[c.id] = { name: c.name, avatar: c.avatar_url ?? null, color: c.color ?? null };
+    return acc;
+  }, {});
+
+  const getClientInfo = (clientId: string) => clientInfoMap[clientId] || null;
+
   // Google Calendar sync
   const {
     isConnected: googleConnected,
@@ -1442,6 +1450,7 @@ export const Calendar: React.FC = () => {
           clientTimezoneMap={clientTimezoneMap}
           groupTasksByPhase={groupTasksByPhase}
           getDayTaskGroups={getDayTaskGroups}
+          getClientInfo={getClientInfo}
         />
       )}
 

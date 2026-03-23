@@ -1,0 +1,195 @@
+{
+  "name": "intake-scoping",
+  "description": "Gather project requirements, define scope boundaries, identify stakeholders, and produce a scoping document with acceptance criteria",
+  "priority": "HIGH",
+  "expectedDuration": "30-60 minutes",
+  "requiredAgents": ["pm-agent", "project-agent"],
+  "requiredPermissions": ["projects.manage", "tasks.create", "documents.create"],
+  "dependencies": ["project-schema-validation"],
+
+  "objectives": [
+    "Extract clear requirements from stakeholder input (tickets, messages, briefs)",
+    "Define in-scope vs out-of-scope boundaries",
+    "Identify key stakeholders and their roles (RACI)",
+    "Produce a structured scoping document with acceptance criteria",
+    "Flag ambiguities or missing information for follow-up",
+    "Estimate rough effort and complexity tier (S/M/L/XL)"
+  ],
+
+  "prerequisites": [
+    "Project or feature request exists with initial description",
+    "Stakeholder contacts identified",
+    "Access to project context (existing tasks, docs, history)"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Requirement Extraction",
+      "description": "Parse stakeholder input to extract functional and non-functional requirements",
+      "commands": [
+        "READ project brief, ticket, or conversation transcript",
+        "EXTRACT functional requirements as user stories",
+        "IDENTIFY non-functional requirements (performance, security, UX)",
+        "LIST assumptions made during extraction",
+        "FLAG ambiguous or contradictory requirements"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Structured list of requirements with assumptions and ambiguities"
+    },
+    {
+      "step": 2,
+      "action": "Scope Boundary Definition",
+      "description": "Define what is in scope and explicitly what is not",
+      "commands": [
+        "CATEGORIZE requirements into must-have, should-have, nice-to-have (MoSCoW)",
+        "DEFINE explicit out-of-scope items",
+        "IDENTIFY dependencies on external systems or teams",
+        "MAP requirements to existing codebase modules",
+        "ESTIMATE complexity tier per requirement"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Scope document with MoSCoW prioritization and boundaries"
+    },
+    {
+      "step": 3,
+      "action": "Stakeholder Mapping",
+      "description": "Identify all stakeholders and their involvement level",
+      "commands": [
+        "LIST all stakeholders (requestor, approver, implementers, testers)",
+        "ASSIGN RACI roles (Responsible, Accountable, Consulted, Informed)",
+        "IDENTIFY communication preferences and cadence",
+        "NOTE decision-making authority for scope changes"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "RACI matrix with communication plan"
+    },
+    {
+      "step": 4,
+      "action": "Acceptance Criteria Definition",
+      "description": "Define measurable acceptance criteria for each requirement",
+      "commands": [
+        "WRITE acceptance criteria in Given/When/Then format",
+        "DEFINE definition of done for the overall project",
+        "IDENTIFY testing requirements per criterion",
+        "SET quality gates and review checkpoints"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Acceptance criteria document with definition of done"
+    },
+    {
+      "step": 5,
+      "action": "Scoping Document Assembly",
+      "description": "Compile all artifacts into a final scoping document",
+      "commands": [
+        "COMPILE requirements, scope, RACI, and acceptance criteria",
+        "ADD rough timeline estimate and effort sizing",
+        "INCLUDE risk register with initial risks",
+        "CREATE follow-up questions list for stakeholders",
+        "GENERATE project kickoff checklist"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Complete scoping document ready for stakeholder review"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All requirements have clear acceptance criteria",
+      "Scope boundaries are explicitly defined",
+      "RACI matrix covers all stakeholders",
+      "No ambiguous requirements remain without follow-up flags",
+      "Effort estimate is within reasonable range for complexity"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Ambiguous requirement handling",
+        "test": "Submit a vague feature request with missing details",
+        "expected": "Agent flags ambiguities and generates clarifying questions"
+      },
+      {
+        "scenario": "Scope creep prevention",
+        "test": "Include requirements that clearly exceed original brief",
+        "expected": "Out-of-scope items identified and separated"
+      }
+    ],
+    "successIndicators": [
+      "Scoping document produced within expected duration",
+      "Stakeholder sign-off obtained without major revisions",
+      "No requirements missed during implementation phase"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "Insufficient context to define requirements",
+        "solution": "Generate targeted clarifying questions for stakeholder"
+      },
+      {
+        "error": "Conflicting requirements from different stakeholders",
+        "solution": "Document conflicts, propose resolution options, escalate to decision-maker"
+      },
+      {
+        "error": "Scope too large for single iteration",
+        "solution": "Propose phased delivery with milestones per phase"
+      }
+    ],
+    "rollbackProcedure": [
+      "ARCHIVE incomplete scoping document as draft",
+      "NOTIFY stakeholders of scoping pause",
+      "DOCUMENT blockers preventing completion"
+    ],
+    "escalationCriteria": [
+      "Requirements conflict cannot be resolved without executive decision",
+      "Project scope exceeds team capacity by >200%",
+      "Critical dependencies on unavailable external systems"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Requirement Completeness",
+      "target": ">95%",
+      "measurement": "Requirements identified at scoping vs discovered during implementation"
+    },
+    {
+      "name": "Scope Accuracy",
+      "target": "<15% variance",
+      "measurement": "Actual effort vs initial estimate"
+    },
+    {
+      "name": "Stakeholder Alignment",
+      "target": "First-round approval",
+      "measurement": "Number of revision cycles before sign-off"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "New project scoped — create project structure and initial tasks",
+      "data": ["scoping_document", "requirements_list", "stakeholder_map"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Notify stakeholders of scoping completion and review request",
+      "data": ["stakeholder_list", "document_url", "review_deadline"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Scoping Document",
+      "type": "Structured document",
+      "content": ["requirements", "scope_boundaries", "raci_matrix", "acceptance_criteria", "timeline_estimate"]
+    },
+    {
+      "name": "Follow-up Questions",
+      "type": "Checklist",
+      "content": ["ambiguities", "missing_info", "clarification_needs"]
+    }
+  ]
+}

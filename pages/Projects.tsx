@@ -858,19 +858,22 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         for (const task of phase.tasks) {
           const taskAssignee = resolveAssignee((task as any).assignee);
           const taskDueDate = (task as any).dueDate || phase.endDate || new Date().toISOString().slice(0, 10);
-          const { data: inserted } = await supabase.from('tasks').insert({
+          const { data: inserted, error: insertErr } = await supabase.from('tasks').insert({
             title: task.title,
             completed: false,
             project_id: selectedProject.id,
             client_id: (selectedProject as any).client_id || null,
-            assigned_to: taskAssignee,
-            assignee_ids: taskAssignee ? [taskAssignee] : [],
+            assignee_id: taskAssignee,
             priority: task.priority || 'medium',
             group_name: phase.name,
             due_date: taskDueDate,
             tenant_id: currentTenant?.id || null,
             owner_id: currentUser?.id || null,
           }).select('id').single();
+          if (insertErr) {
+            errorLogger.error('Error inserting AI task', insertErr);
+            continue;
+          }
           totalTasks++;
 
           // Insert subtasks linked to parent
@@ -882,15 +885,18 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
               parent_task_id: inserted.id,
               priority: 'medium',
               status: 'todo',
-              assigned_to: taskAssignee,
-              assignee_ids: taskAssignee ? [taskAssignee] : [],
+              assignee_id: taskAssignee,
               group_name: null,
               due_date: taskDueDate,
               tenant_id: currentTenant?.id || null,
               owner_id: currentUser?.id || null,
             }));
-            await supabase.from('tasks').insert(subtaskRows);
-            totalSubtasks += task.subtasks.length;
+            const { error: subErr } = await supabase.from('tasks').insert(subtaskRows);
+            if (subErr) {
+              errorLogger.error('Error inserting AI subtasks', subErr);
+            } else {
+              totalSubtasks += task.subtasks.length;
+            }
           }
         }
       }

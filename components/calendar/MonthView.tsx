@@ -63,9 +63,9 @@ export const MonthView: React.FC<MonthViewProps> = ({
       </div>
       <div className="grid grid-cols-7">
         {getMonthDays().map((day, idx) => {
-          const dateStr = day.toISOString().split('T')[0];
+          const dateStr = day.toLocaleDateString('en-CA');
           const isCurrentMonth = day.getMonth() === currentDate.getMonth();
-          const isToday = dateStr === new Date().toISOString().split('T')[0];
+          const isToday = dateStr === new Date().toLocaleDateString('en-CA');
           const isSelected = dateStr === selectedDate;
           const dayEvents = getDayEvents(dateStr);
           const dayTasks = getDayTasks(dateStr);

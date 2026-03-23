@@ -18,6 +18,7 @@ const CACHE_TTL: Record<string, number> = {
   tasks_bulk: 10 * 60 * 1000,     // 10 min
   plan_period: 5 * 60 * 1000,     // 5 min — plans are context-heavy
   task: 0,                         // no cache — single tasks are quick & varied
+  standup: 0,                      // no cache — each standup is unique per day
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -108,7 +109,7 @@ async function throttle(): Promise<void> {
 // ─── Fetch with retry on 429 ────────────────────────────────────
 
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
-  const delays = [5_000, 15_000]
+  const delays = [10_000, 30_000]
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options)
     if (res.status !== 429 || attempt === maxRetries) return res
@@ -144,33 +145,59 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
   const promise = (async (): Promise<T> => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    // Force token refresh to avoid 401 from stale/expired JWTs
-    let authToken: string
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.access_token) {
-      authToken = session.access_token
-    } else {
+
+    // Get a valid auth token, refreshing if expired or about to expire
+    const getValidToken = async (forceRefresh = false): Promise<string> => {
+      if (!forceRefresh) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          // Check if token expires within 60 seconds
+          const expiresAt = session.expires_at ? session.expires_at * 1000 : 0
+          if (expiresAt > Date.now() + 60_000) {
+            return session.access_token
+          }
+        }
+      }
+      // Token missing or expiring soon — force refresh
       const { data: refreshed } = await supabase.auth.refreshSession()
-      authToken = refreshed.session?.access_token || supabaseKey
+      return refreshed.session?.access_token || supabaseKey
     }
+
+    let authToken = await getValidToken()
 
     // Throttle to avoid bursting when multiple components load simultaneously
     await throttle()
 
-    const res = await fetchWithRetry(`${supabaseUrl}/functions/v1/gemini`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({ type, input }),
-    })
+    const makeRequest = async (token: string) => {
+      return fetchWithRetry(`${supabaseUrl}/functions/v1/gemini`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type, input }),
+      })
+    }
+
+    let res = await makeRequest(authToken)
+
+    // If 401, force-refresh the token and retry once
+    if (res.status === 401) {
+      if (import.meta.env.DEV) console.log(`[AI] 401 for ${type}, refreshing token and retrying`)
+      authToken = await getValidToken(true)
+      res = await makeRequest(authToken)
+    }
 
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
       if (import.meta.env.DEV) console.error(`[AI] ${type} error:`, errBody)
-      const err = new Error(errBody.error || `Edge function error (${res.status})`) as any
+      const message = res.status === 429
+        ? 'AI temporarily unavailable. Try again in 30 seconds.'
+        : res.status === 401
+        ? 'Session expired. Please refresh the page.'
+        : errBody.error || `Edge function error (${res.status})`
+      const err = new Error(message) as any
       err.isRateLimit = res.status === 429
       err.status = res.status
       throw err
@@ -269,6 +296,33 @@ export type PlanAIResult = {
 
 export const generatePlanFromAI = (input: string): Promise<PlanAIResult> =>
   callGemini('plan_period', input, (r) => Array.isArray(r?.changes))
+
+// ─── AI Standup ──────────────────────────────────────────────────
+
+export type StandupAction = {
+  type: 'complete' | 'create' | 'update_status' | 'flag_blocked'
+  taskId?: string
+  taskTitle: string
+  newTask?: { title: string; priority: 'low' | 'medium' | 'high'; dueDate?: string; projectName?: string }
+  updates?: { status?: string; priority?: string }
+  reason: string
+}
+
+export type StandupRisk = {
+  type: 'deadline_risk' | 'blocker' | 'scope_creep' | 'overload'
+  title: string
+  description: string
+  severity: 'low' | 'medium' | 'high'
+}
+
+export type StandupAIResult = {
+  summary: string
+  actions: StandupAction[]
+  risks: StandupRisk[]
+}
+
+export const processStandupFromAI = (input: string): Promise<StandupAIResult> =>
+  callGemini('standup', input, (r) => !!r?.summary && Array.isArray(r?.actions))
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {

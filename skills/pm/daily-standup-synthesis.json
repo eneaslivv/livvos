@@ -1,0 +1,172 @@
+{
+  "name": "daily-standup-synthesis",
+  "description": "Aggregate team progress, blockers, and status updates into a concise daily standup summary with action items",
+  "priority": "MEDIUM",
+  "expectedDuration": "10-20 minutes",
+  "requiredAgents": ["pm-agent", "project-agent", "team-agent"],
+  "requiredPermissions": ["tasks.read", "projects.read", "team.read"],
+  "dependencies": [],
+
+  "objectives": [
+    "Collect task progress from all team members (completed, in-progress, blocked)",
+    "Identify blockers and their root causes",
+    "Calculate sprint/milestone velocity and burn-down",
+    "Generate concise summary suitable for stakeholder sharing",
+    "Surface items needing PM attention or escalation",
+    "Track trends across consecutive standups"
+  ],
+
+  "prerequisites": [
+    "Active project with tasks assigned to team members",
+    "Task status updates available (completed_at, status changes)",
+    "Team member list with roles"
+  ],
+
+  "procedure": [
+    {
+      "step": 1,
+      "action": "Progress Collection",
+      "description": "Gather task status changes since last standup",
+      "commands": [
+        "QUERY tasks completed in last 24 hours",
+        "QUERY tasks moved to in-progress",
+        "QUERY tasks with status changes (priority, assignee, dates)",
+        "IDENTIFY tasks with no progress for >2 days",
+        "CALCULATE completion rate vs planned rate"
+      ],
+      "agent": ["pm-agent", "project-agent"],
+      "expectedOutput": "Per-member progress snapshot with velocity metrics"
+    },
+    {
+      "step": 2,
+      "action": "Blocker Detection",
+      "description": "Identify and categorize blockers",
+      "commands": [
+        "IDENTIFY tasks marked as blocked or stalled",
+        "CHECK dependency chains for upstream delays",
+        "DETECT tasks past due date without completion",
+        "CATEGORIZE blockers (technical, external, resource, decision)",
+        "SUGGEST resolution paths for each blocker"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Blocker list with categories and suggested resolutions"
+    },
+    {
+      "step": 3,
+      "action": "Velocity & Burndown",
+      "description": "Calculate sprint health metrics",
+      "commands": [
+        "CALCULATE tasks completed vs planned for current period",
+        "COMPUTE velocity trend (improving, stable, declining)",
+        "PROJECT completion date based on current velocity",
+        "COMPARE against milestone deadlines",
+        "FLAG if projected completion exceeds deadline"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Velocity metrics with completion projection"
+    },
+    {
+      "step": 4,
+      "action": "Summary Generation",
+      "description": "Compile standup summary with action items",
+      "commands": [
+        "GENERATE per-person summary (done, doing, blocked)",
+        "LIST top 3 achievements since last standup",
+        "LIST top blockers needing attention",
+        "DEFINE action items with owners and deadlines",
+        "ADD health indicator (on-track, at-risk, off-track)"
+      ],
+      "agent": "pm-agent",
+      "expectedOutput": "Formatted standup summary ready for sharing"
+    }
+  ],
+
+  "validation": {
+    "criteria": [
+      "All active team members represented in summary",
+      "Blockers have suggested resolutions",
+      "Velocity calculation is accurate",
+      "Summary is concise and actionable"
+    ],
+    "testScenarios": [
+      {
+        "scenario": "Normal progress day",
+        "test": "Generate standup with typical task progress",
+        "expected": "Clean summary with achievements and next steps"
+      },
+      {
+        "scenario": "Multiple blockers",
+        "test": "Generate standup when 3+ tasks are blocked",
+        "expected": "Blockers highlighted with escalation suggestions"
+      }
+    ],
+    "successIndicators": [
+      "Standup summary generated in <5 minutes",
+      "No missed blockers discovered after standup",
+      "Stakeholders understand project health from summary alone"
+    ]
+  },
+
+  "errorHandling": {
+    "commonErrors": [
+      {
+        "error": "No task updates in 24 hours",
+        "solution": "Flag as potential data gap, check if team is updating tasks"
+      },
+      {
+        "error": "Velocity data insufficient for projection",
+        "solution": "Use historical average or flag as too early to project"
+      }
+    ],
+    "rollbackProcedure": [
+      "SKIP standup generation for this cycle",
+      "ALERT PM to manually check project status"
+    ],
+    "escalationCriteria": [
+      "Project health is off-track for 3+ consecutive standups",
+      "Critical path task blocked with no resolution path",
+      "Team velocity dropped >40% from baseline"
+    ]
+  },
+
+  "successMetrics": [
+    {
+      "name": "Summary Accuracy",
+      "target": "100%",
+      "measurement": "All status changes captured correctly"
+    },
+    {
+      "name": "Generation Speed",
+      "target": "<5 minutes",
+      "measurement": "Time from trigger to completed summary"
+    },
+    {
+      "name": "Blocker Detection Rate",
+      "target": ">90%",
+      "measurement": "Blockers identified proactively vs reported manually"
+    }
+  ],
+
+  "agentInterfaces": [
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "project-agent",
+      "message": "Fetch task status changes for standup synthesis",
+      "data": ["date_range", "team_members", "project_ids"]
+    },
+    {
+      "fromAgent": "pm-agent",
+      "toAgent": "notifications-agent",
+      "message": "Send standup summary to stakeholders",
+      "data": ["summary_content", "recipient_list", "delivery_channel"]
+    }
+  ],
+
+  "expectedOutputs": [
+    {
+      "name": "Standup Summary",
+      "type": "Formatted report",
+      "content": ["per_person_status", "achievements", "blockers", "action_items", "health_indicator"]
+    }
+  ]
+}

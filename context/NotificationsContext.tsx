@@ -404,10 +404,68 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     }
   }, [user, currentTenant]);
 
-  // Load initial data + check daily tasks
+  // Welcome email for first-time users
+  const checkWelcomeEmail = useCallback(async () => {
+    if (!user || !currentTenant) return;
+    try {
+      const { data: existing } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('type', 'system')
+        .eq('title', 'Welcome!')
+        .limit(1);
+
+      if (existing && existing.length > 0) return; // already welcomed
+
+      // Create welcome notification
+      await supabase.from('notifications').insert({
+        user_id: user.id,
+        tenant_id: currentTenant.id,
+        type: 'system',
+        title: 'Welcome!',
+        message: `Welcome to ${currentTenant.name || 'the platform'}! Explore your dashboard to get started.`,
+        link: '/',
+        metadata: { welcome: true },
+        priority: 'low',
+        read: false,
+      });
+
+      // Send welcome email (fire-and-forget)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email, name')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.email) {
+        const brandName = currentTenant.name || 'LIVV OS';
+        await sendEmail({
+          template: 'welcome',
+          to: profile.email,
+          subject: `Welcome to ${brandName}!`,
+          brandName,
+          data: {
+            recipientName: profile.name || undefined,
+            title: `Welcome to ${brandName}`,
+            message: 'Your workspace is ready. Manage projects, track tasks, schedule events, and collaborate with your team — all in one place.',
+            ctaUrl: window.location.origin,
+            ctaText: 'Explore Your Dashboard',
+          },
+        });
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn('Welcome email check failed (non-blocking):', err);
+    }
+  }, [user, currentTenant]);
+
+  // Load initial data + check daily tasks + welcome email
   useEffect(() => {
-    fetchNotifications().then(() => checkDailyTasks());
-  }, [fetchNotifications, checkDailyTasks]);
+    fetchNotifications().then(() => {
+      checkDailyTasks();
+      checkWelcomeEmail();
+    });
+  }, [fetchNotifications, checkDailyTasks, checkWelcomeEmail]);
 
   // Real-time subscription
   useEffect(() => {

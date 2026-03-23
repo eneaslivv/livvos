@@ -2,7 +2,7 @@ import React from 'react';
 import { Plus, X } from 'lucide-react';
 import { TagInput } from '../TagInput';
 import { ChallengeBlock } from '../../../types/cms';
-import { RichTextarea } from './RichTextarea';
+import { MiniEditor } from './MiniEditor';
 
 interface Props {
   block: ChallengeBlock;
@@ -63,7 +63,7 @@ export const ChallengeBlockEditor: React.FC<Props> = ({ block, onChange }) => {
           {(block.paragraphs || []).map((p, i) => (
             <div key={i} className="flex gap-2">
               <div className="flex-1">
-                <RichTextarea
+                <MiniEditor
                   value={p}
                   onChange={(val) => updateParagraph(i, val)}
                   placeholder={`Paragraph ${i + 1}`}

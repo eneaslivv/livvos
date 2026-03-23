@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { Project } from '../../context/ProjectsContext';
 import type { AiPreview } from '../../pages/Projects';
+import { parseLocalDate, todayLocal } from '../../lib/dateUtils';
 
 export interface TasksTabProps {
   project: Project;
@@ -633,7 +634,7 @@ const DatePickerButton: React.FC<{
   done: boolean;
 }> = ({ value, onChange, done }) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOverdue = value && new Date(value) < new Date(new Date().toISOString().slice(0, 10)) && !done;
+  const isOverdue = value && parseLocalDate(value) < parseLocalDate(todayLocal()) && !done;
 
   return (
     <div className="relative">
@@ -648,7 +649,7 @@ const DatePickerButton: React.FC<{
         }`}
       >
         {value
-          ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          ? parseLocalDate(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
           : 'Set date'}
       </button>
       <input
