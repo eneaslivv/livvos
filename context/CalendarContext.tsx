@@ -230,39 +230,42 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     loadCalendarData()
 
     // ─── Realtime: targeted state updates instead of full reload ───
+    const tid = cachedTenantIdRef.current
+    const tenantFilter = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+
     const eventsChannel = supabase
-      .channel('calendar-events-rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, (payload) => {
+      .channel(`calendar-events-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events', ...tenantFilter }, (payload) => {
         const newEvent = payload.new as CalendarEvent
         setEvents(prev => {
           if (prev.some(e => e.id === newEvent.id)) return prev
           return [...prev, newEvent]
         })
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events', ...tenantFilter }, (payload) => {
         const updated = payload.new as CalendarEvent
         setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'calendar_events' }, (payload) => {
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'calendar_events', ...tenantFilter }, (payload) => {
         const deletedId = payload.old?.id
         if (deletedId) setEvents(prev => prev.filter(e => e.id !== deletedId))
       })
       .subscribe()
 
     const tasksChannel = supabase
-      .channel('tasks-rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload) => {
+      .channel(`tasks-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks', ...tenantFilter }, (payload) => {
         const newTask = normalizeTask(payload.new)
         setTasks(prev => {
           if (prev.some(t => t.id === newTask.id)) return prev
           return [...prev, newTask]
         })
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks', ...tenantFilter }, (payload) => {
         const updated = normalizeTask(payload.new)
         setTasks(prev => prev.map(t => t.id === updated.id ? updated : t))
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks', ...tenantFilter }, (payload) => {
         const deletedId = payload.old?.id
         if (deletedId) setTasks(prev => prev.filter(t => t.id !== deletedId))
       })

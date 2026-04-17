@@ -38,6 +38,7 @@ interface ClientDetailHeaderProps {
   onUpdateStatus: (status: string) => void;
   onDelete: () => void;
   onInvitePortal: () => void;
+  onSaveEmailAndInvite?: (email: string) => void;
   onUploadLogo?: (file: File) => void;
   onRemoveLogo?: () => void;
 }
@@ -59,11 +60,13 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
   onUpdateStatus,
   onDelete,
   onInvitePortal,
+  onSaveEmailAndInvite,
   onUploadLogo,
   onRemoveLogo,
   isUploadingLogo,
 }) => {
   const [savedField, setSavedField] = useState<string | null>(null);
+  const [portalEmail, setPortalEmail] = useState('');
 
   const handleSave = async (field: string) => {
     const ok = await onInlineEdit(field);
@@ -254,30 +257,63 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
         {/* Status: No invitation yet */}
         {clientInviteStatus === 'none' && (
           <div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-              {client.email
-                ? 'Invite the client so they can see their project progress, files and communicate.'
-                : 'Add an email to the client to invite them to the portal.'}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => window.open(`/?portal=client&clientId=${client.id}`, '_blank')}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all"
-              >
-                <Icons.External size={13} /> Preview portal
-              </button>
-              <button
-                onClick={onInvitePortal}
-                disabled={!client.email || isInvitingPortal}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {isInvitingPortal ? (
-                  <><Icons.Loader size={13} className="animate-spin" /> Generating invitation...</>
-                ) : (
-                  <><Icons.Send size={13} /> Invite to portal</>
-                )}
-              </button>
-            </div>
+            {!client.email ? (
+              <>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2.5">
+                  Enter the client's email to send them a portal invitation.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    placeholder="client@email.com"
+                    value={portalEmail}
+                    onChange={e => setPortalEmail(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && portalEmail.trim() && onSaveEmailAndInvite) {
+                        onSaveEmailAndInvite(portalEmail.trim());
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 dark:focus:ring-indigo-900/40 transition-all"
+                  />
+                  <button
+                    onClick={() => onSaveEmailAndInvite?.(portalEmail.trim())}
+                    disabled={!portalEmail.trim() || isInvitingPortal}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
+                  >
+                    {isInvitingPortal ? (
+                      <><Icons.Loader size={13} className="animate-spin" /> Sending...</>
+                    ) : (
+                      <><Icons.Send size={13} /> Save &amp; Invite</>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                  Invite the client so they can see their project progress, files and communicate.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.open(`/?portal=client&clientId=${client.id}`, '_blank')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all"
+                  >
+                    <Icons.External size={13} /> Preview portal
+                  </button>
+                  <button
+                    onClick={onInvitePortal}
+                    disabled={isInvitingPortal}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isInvitingPortal ? (
+                      <><Icons.Loader size={13} className="animate-spin" /> Generating invitation...</>
+                    ) : (
+                      <><Icons.Send size={13} /> Invite to portal</>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 

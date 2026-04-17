@@ -326,9 +326,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadFinances()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('finances-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => { loadFinances() })
+      .channel(`finances-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finances', ...tf }, () => { loadFinances() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadFinances])
@@ -409,10 +411,12 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadIncomes()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('incomes-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'incomes' }, () => { loadIncomes() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'installments' }, () => { loadIncomes() })
+      .channel(`incomes-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incomes', ...tf }, () => { loadIncomes() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'installments', ...tf }, () => { loadIncomes() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadIncomes])
@@ -460,9 +464,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadExpenses()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('expenses-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => { loadExpenses() })
+      .channel(`expenses-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', ...tf }, () => { loadExpenses() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadExpenses])
@@ -509,9 +515,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadTimeEntries()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('time-entries-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => { loadTimeEntries() })
+      .channel(`time-entries-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', ...tf }, () => { loadTimeEntries() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadTimeEntries])
@@ -889,9 +897,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   useEffect(() => {
     loadBudgets()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('budgets-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => { loadBudgets() })
+      .channel(`budgets-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets', ...tf }, () => { loadBudgets() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadBudgets])

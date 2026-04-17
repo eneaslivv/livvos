@@ -243,18 +243,34 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     fetchProjects()
 
-    // Realtime subscription
+    // Realtime subscription — incremental updates (no full refetch)
+    const tenantId = currentTenant?.id
+    const filter = tenantId ? `tenant_id=eq.${tenantId}` : undefined
+    const channelName = `projects-rt${tenantId ? `-${tenantId}` : ''}`
+
     const channel = supabase
-      .channel('projects-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
-        fetchProjects(true)
+      .channel(channelName)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'projects', ...(filter && { filter }) }, (payload) => {
+        const newProject = normalizeProject(payload.new)
+        setProjects(prev => {
+          if (prev.some(p => p.id === newProject.id)) return prev
+          return [newProject, ...prev]
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', ...(filter && { filter }) }, (payload) => {
+        const updated = normalizeProject(payload.new)
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'projects', ...(filter && { filter }) }, (payload) => {
+        const deletedId = payload.old?.id
+        if (deletedId) setProjects(prev => prev.filter(p => p.id !== deletedId))
       })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchProjects])
+  }, [fetchProjects, currentTenant?.id])
 
   const createProject = async (projectData: Partial<Project>) => {
     if (!user) {

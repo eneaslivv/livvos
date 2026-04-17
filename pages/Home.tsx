@@ -80,7 +80,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const userRole = roles[0]?.name || 'Guest';
 
     const tasks = calendarTasks as any[];  // CalendarContext is the single source of truth for tasks
-    const { data: projectsRaw } = useSupabase<DbProject>('projects', { subscribe: false });
+    const { data: projectsRaw } = useSupabase<DbProject>('projects', { subscribe: true });
 
     const projects = projectsRaw.slice(0, 4).map(p => ({
         id: p.id,

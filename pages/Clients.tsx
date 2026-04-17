@@ -89,6 +89,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const [portalInviteLink, setPortalInviteLink] = useState<string | null>(null);
   const [portalInviteError, setPortalInviteError] = useState<string | null>(null);
   const [isInvitingPortal, setIsInvitingPortal] = useState(false);
+  const [pendingInviteAfterEmail, setPendingInviteAfterEmail] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [clientInviteStatus, setClientInviteStatus] = useState<'none' | 'pending' | 'accepted'>('none');
@@ -201,6 +202,14 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       setEditingField(null);
     }
   }, [selectedClient?.id]);
+
+  // Auto-trigger invite after email is saved via "Save & Invite"
+  useEffect(() => {
+    if (pendingInviteAfterEmail && selectedClient?.email) {
+      setPendingInviteAfterEmail(false);
+      handleInvitePortal();
+    }
+  }, [pendingInviteAfterEmail, selectedClient?.email]);
 
   useEffect(() => {
     if (!selectedClient) return;
@@ -501,6 +510,17 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       setSelectedClient({ ...selectedClient, avatar_url: undefined });
     } catch (err: any) {
       errorLogger.error('Error removing client logo', err);
+    }
+  };
+
+  const handleSaveEmailAndInvite = async (email: string) => {
+    if (!selectedClient || !email) return;
+    try {
+      await updateClient(selectedClient.id, { email });
+      setSelectedClient({ ...selectedClient, email });
+      setPendingInviteAfterEmail(true);
+    } catch (err: any) {
+      setPortalInviteError(`Error saving email: ${err?.message || 'Unknown error'}`);
     }
   };
 
@@ -1030,6 +1050,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   }
                 }}
                 onInvitePortal={handleInvitePortal}
+                onSaveEmailAndInvite={handleSaveEmailAndInvite}
                 onUploadLogo={handleUploadLogo}
                 onRemoveLogo={handleRemoveLogo}
                 isUploadingLogo={isUploadingLogo}

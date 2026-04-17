@@ -1,14 +1,9 @@
--- Enable Supabase Realtime for all tables with frontend subscriptions.
--- Safe to re-run: catches duplicate_object for each table.
+-- Enable Supabase Realtime for all tables that have frontend subscriptions.
+-- Uses idempotent pattern: catches duplicate_object if table already in publication.
 
 DO $$
 DECLARE
   tables text[] := ARRAY[
-    'activity_logs',
-    'notifications',
-    'client_messages',
-    'task_comments',
-    'document_comments',
     'projects',
     'tasks',
     'calendar_events',

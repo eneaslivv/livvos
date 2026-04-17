@@ -161,20 +161,27 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     fetchClients()
 
     // Suscribirse a cambios en tiempo real
+    const tid = cachedTenantId
+    const tenantFilter = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+
     const channel = supabase
-      .channel('clients-changes-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, (payload) => {
-        errorLogger.log('Cambio en clients (Realtime):', payload.eventType)
-        
-        if (payload.eventType === 'INSERT') {
-          setClients(prev => [payload.new as Client, ...prev])
-        } else if (payload.eventType === 'UPDATE') {
-          setClients(prev => prev.map(client => 
-            client.id === payload.new.id ? payload.new as Client : client
-          ))
-        } else if (payload.eventType === 'DELETE') {
-          setClients(prev => prev.filter(client => client.id !== payload.old.id))
-        }
+      .channel(`clients-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clients', ...tenantFilter }, (payload) => {
+        errorLogger.log('Cambio en clients (Realtime): INSERT')
+        setClients(prev => {
+          if (prev.some(c => c.id === (payload.new as Client).id)) return prev
+          return [payload.new as Client, ...prev]
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clients', ...tenantFilter }, (payload) => {
+        errorLogger.log('Cambio en clients (Realtime): UPDATE')
+        setClients(prev => prev.map(client =>
+          client.id === payload.new.id ? payload.new as Client : client
+        ))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients', ...tenantFilter }, (payload) => {
+        errorLogger.log('Cambio en clients (Realtime): DELETE')
+        setClients(prev => prev.filter(client => client.id !== payload.old.id))
       })
       .subscribe()
 

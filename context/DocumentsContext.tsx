@@ -168,11 +168,13 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     loadDocuments()
+    const tid = tenantId
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
     const channel = supabase
-      .channel('documents-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, () => { loadDocuments() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, () => { loadDocuments() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => { loadDocuments() })
+      .channel(`documents-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'folders', ...tf }, () => { loadDocuments() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files', ...tf }, () => { loadDocuments() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents', ...tf }, () => { loadDocuments() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [loadDocuments])
