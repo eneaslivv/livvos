@@ -751,7 +751,6 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const handleUpdateTaskDate = async (taskId: string, date: string | null) => {
     try {
       await updateSyncedTask(taskId, { due_date: date || null } as any);
-      setTimeout(() => refreshTasks(), 500);
     } catch (err: any) {
       errorLogger.error('Error updating task date', err);
     }

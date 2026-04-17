@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { Project } from '../../context/ProjectsContext';
@@ -634,29 +634,39 @@ const DatePickerButton: React.FC<{
   done: boolean;
 }> = ({ value, onChange, done }) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOverdue = value && parseLocalDate(value) < parseLocalDate(todayLocal()) && !done;
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => { setLocalValue(value); }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value || null;
+    setLocalValue(newDate);
+    onChange(newDate);
+  };
+
+  const isOverdue = localValue && parseLocalDate(localValue) < parseLocalDate(todayLocal()) && !done;
 
   return (
     <div className="relative">
       <button
         onClick={() => inputRef.current?.showPicker()}
         className={`text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
-          !value
+          !localValue
             ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             : isOverdue
             ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
             : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
         }`}
       >
-        {value
-          ? parseLocalDate(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        {localValue
+          ? parseLocalDate(localValue).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
           : 'Set date'}
       </button>
       <input
         ref={inputRef}
         type="date"
-        value={value || ''}
-        onChange={e => onChange(e.target.value || null)}
+        value={localValue || ''}
+        onChange={handleChange}
         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
         tabIndex={-1}
       />
