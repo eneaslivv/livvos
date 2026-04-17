@@ -338,8 +338,25 @@ const ImageShowcaseRenderer: React.FC<{ block: ImageShowcaseBlock }> = ({ block 
    Design System — 5/7 grid
    ──────────────────────────────────────────── */
 
-const DesignSystemRenderer: React.FC<{ block: DesignSystemBlock }> = ({ block }) => (
+const DesignSystemRenderer: React.FC<{ block: DesignSystemBlock }> = ({ block }) => {
+  const typefaceName = block.typeface?.name || 'Inter Display';
+  const sources = block.typeface?.sources || [];
+  const fontStack = sources.length > 0
+    ? `"${typefaceName}", system-ui, sans-serif`
+    : undefined;
+  const fontFaceCss = sources
+    .map((s) => {
+      const format = s.format || 'woff2';
+      const style = s.style || 'normal';
+      const weight = s.weight || '400';
+      return `@font-face{font-family:"${typefaceName}";src:url("${s.url}") format("${format}");font-weight:${weight};font-style:${style};font-display:swap;}`;
+    })
+    .join('\n');
+  const assets = block.assets || [];
+
+  return (
   <div className="mb-24 md:mb-32">
+    {fontFaceCss && <style dangerouslySetInnerHTML={{ __html: fontFaceCss }} />}
     {/* Header */}
     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
       <div className="max-w-xl">
@@ -359,9 +376,9 @@ const DesignSystemRenderer: React.FC<{ block: DesignSystemBlock }> = ({ block })
           <div className="flex justify-between items-start mb-2">
             <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Typeface</span>
           </div>
-          <h3 className="text-sm font-medium text-neutral-900 mb-16">{block.typeface?.name || 'Inter Display'}</h3>
-          <div className="text-8xl md:text-9xl font-medium tracking-tighter text-neutral-900 mb-8 leading-none">Aa</div>
-          <p className="text-2xl md:text-3xl tracking-tight text-neutral-400 leading-tight font-light">
+          <h3 className="text-sm font-medium text-neutral-900 mb-16" style={fontStack ? { fontFamily: fontStack } : undefined}>{typefaceName}</h3>
+          <div className="text-8xl md:text-9xl font-medium tracking-tighter text-neutral-900 mb-8 leading-none" style={fontStack ? { fontFamily: fontStack } : undefined}>Aa</div>
+          <p className="text-2xl md:text-3xl tracking-tight text-neutral-400 leading-tight font-light" style={fontStack ? { fontFamily: fontStack } : undefined}>
             The quick brown fox jumps over the lazy dog.
           </p>
         </div>
@@ -371,14 +388,19 @@ const DesignSystemRenderer: React.FC<{ block: DesignSystemBlock }> = ({ block })
             {block.typeface!.weights.map((w, i) => (
               <div key={i}>
                 <div className="font-mono text-[10px] text-neutral-400 mb-1">{w.value}</div>
-                <div className="text-xs font-medium text-neutral-900">{w.label}</div>
+                <div
+                  className="text-xs font-medium text-neutral-900"
+                  style={fontStack ? { fontFamily: fontStack, fontWeight: Number(w.value) || undefined } : undefined}
+                >
+                  {w.label}
+                </div>
               </div>
             ))}
           </div>
         )}
 
         {/* Decorative watermark */}
-        <div className="absolute -bottom-10 -right-8 text-[240px] font-bold text-neutral-50 select-none pointer-events-none z-0 opacity-60">g</div>
+        <div className="absolute -bottom-10 -right-8 text-[240px] font-bold text-neutral-50 select-none pointer-events-none z-0 opacity-60" style={fontStack ? { fontFamily: fontStack } : undefined}>g</div>
       </div>
 
       {/* Right */}
@@ -499,8 +521,31 @@ const DesignSystemRenderer: React.FC<{ block: DesignSystemBlock }> = ({ block })
         </div>
       </div>
     </div>
+
+    {/* Assets grid */}
+    {assets.length > 0 && (
+      <div className="mt-6 bg-white rounded-3xl border border-neutral-100 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.02)]">
+        <div className="flex justify-between items-start mb-8">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Assets</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+          {assets.map((a, i) => (
+            <div key={i} className="group cursor-default">
+              <div className="aspect-square w-full rounded-xl mb-3 bg-neutral-50 border border-neutral-100 flex items-center justify-center overflow-hidden group-hover:scale-[1.02] transition-transform duration-300">
+                <img src={a.url} alt={a.name} className="max-w-[70%] max-h-[70%] object-contain" />
+              </div>
+              <p className="text-xs font-medium text-neutral-900 truncate">{a.name}</p>
+              {a.kind && (
+                <p className="font-mono text-[10px] text-neutral-400 uppercase tracking-wider">{a.kind}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
-);
+  );
+};
 
 /* ────────────────────────────────────────────
    Banner — dark rounded section

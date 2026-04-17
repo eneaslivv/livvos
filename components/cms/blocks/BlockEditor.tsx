@@ -91,7 +91,7 @@ export const BlockEditor: React.FC<Props> = ({ block, onChange, onDelete, onMove
           <ImageShowcaseBlockEditor block={block} onChange={onChange as any} onUpload={onUpload} />
         )}
         {block.type === 'design_system' && (
-          <DesignSystemBlockEditor block={block} onChange={onChange as any} />
+          <DesignSystemBlockEditor block={block} onChange={onChange as any} onUpload={onUpload} />
         )}
         {block.type === 'banner' && (
           <BannerBlockEditor block={block} onChange={onChange as any} />

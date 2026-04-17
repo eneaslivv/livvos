@@ -145,6 +145,27 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     try { localStorage.removeItem(key || draftKey); } catch {}
   }, [draftKey]);
 
+  /** Append uploaded media; first item becomes cover. Runs per-file so batch uploads accumulate correctly. */
+  const handleMediaUpload = useCallback((url: string | null) => {
+    if (!url) return;
+    const mediaType = detectMediaType(url);
+    const isVideo = mediaType === 'video';
+    setForm((f) => {
+      const isFirst = f.media.length === 0;
+      const existingIsVideo = !!f.image && /\.(mp4|webm|mov)(\?|$)/i.test(f.image);
+      // Only schedule thumb generation if this upload becomes the cover video
+      if (isFirst && isVideo) {
+        queueMicrotask(() => autoGenerateVideoThumbnail(url));
+      }
+      return {
+        ...f,
+        media: [...f.media, { url, type: mediaType, is_cover: isFirst, caption: '' }],
+        ...(isFirst && !isVideo ? { image: url } : {}),
+        ...(!isFirst && !isVideo && existingIsVideo ? { image: url } : {}),
+      };
+    });
+  }, [detectMediaType]);
+
   /** Auto-capture a video frame, upload it, and set as card thumbnail */
   const autoGenerateVideoThumbnail = async (videoUrl: string) => {
     setGeneratingThumb(true);
@@ -827,123 +848,138 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
                   <label className="text-xs font-semibold text-[#09090B] tracking-tight">Project Content</label>
 
                   {/* ── Media Gallery sub-section ── */}
-                  <div className="bg-[#FDFBF7] rounded-xl border border-[#E6E2D8] p-4 space-y-2">
-                    <div>
-                      <h4 className="text-xs font-semibold text-[#09090B]">Media Gallery</h4>
-                      <p className="text-[11px] text-[#78736A] mt-0.5">Upload images, videos & GIFs for the project gallery. Click ★ to set the cover image.</p>
+                  <div className="bg-[#FDFBF7] rounded-xl border border-[#E6E2D8] p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-semibold text-[#09090B]">Media Gallery</h4>
+                        <p className="text-[11px] text-[#78736A] mt-0.5">
+                          Drop multiple images, videos or GIFs. Click ★ to pick the cover.
+                        </p>
+                      </div>
+                      {form.media.length > 0 && (
+                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-white border border-[#E6E2D8] text-[10px] font-mono text-[#78736A]">
+                          {form.media.length} item{form.media.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
-                  {form.media.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {form.media.map((m, i) => (
-                        <div
-                          key={i}
-                          className={`relative group rounded-lg overflow-hidden border-2 transition-colors ${
-                            m.is_cover ? 'border-[#E8BC59]' : 'border-[#E6E2D8]'
-                          }`}
-                        >
-                          {m.type === 'video' ? (
-                            <video src={m.url} className="w-full h-20 object-cover" muted />
-                          ) : (
-                            <img src={m.url} alt="" className="w-full h-20 object-cover" />
-                          )}
-                          {/* Type badge */}
-                          <span className="absolute top-1 left-1 px-1 py-0.5 bg-black/60 rounded text-[8px] text-white font-mono uppercase flex items-center gap-0.5">
-                            {m.type === 'video' ? <Film size={8} /> : <ImageIcon size={8} />}
-                            {m.type}
-                          </span>
-                          {/* Cover star */}
-                          <button
-                            onClick={() => {
-                              const isVideoMedia = m.type === 'video';
-                              setForm((f) => ({
-                                ...f,
-                                media: f.media.map((item, idx) => ({
-                                  ...item,
-                                  is_cover: idx === i,
-                                })),
-                                // If static image, set as card thumbnail directly
-                                ...(!isVideoMedia ? { image: m.url } : {}),
-                              }));
-                              // If video, auto-generate thumbnail for card
-                              if (isVideoMedia) {
-                                autoGenerateVideoThumbnail(m.url);
+
+                    {/* Auto-generating thumbnail indicator */}
+                    {generatingThumb && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
+                        <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                        <span>Generating card thumbnail from video...</span>
+                      </div>
+                    )}
+                    {/* Persistent warning if image field is still a video (auto-gen failed) */}
+                    {!generatingThumb && form.image && /\.(mp4|webm|mov)(\?|$)/i.test(form.image) && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-700">
+                        <AlertTriangle size={12} className="shrink-0" />
+                        <span>
+                          <strong>Auto-thumbnail failed.</strong> Upload a static screenshot (JPG/PNG) to use as the card image on the public site.
+                        </span>
+                      </div>
+                    )}
+
+                    {form.media.length === 0 ? (
+                      <ImageUploader
+                        value={null}
+                        multiple
+                        onChange={handleMediaUpload}
+                        onUpload={(file) => onUpload(file)}
+                        label="Upload images, videos or GIFs"
+                      />
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        {form.media.map((m, i) => (
+                          <div
+                            key={i}
+                            className={`relative group rounded-lg overflow-hidden border-2 bg-white transition-colors ${
+                              m.is_cover ? 'border-[#E8BC59] shadow-[0_0_0_3px_rgba(232,188,89,0.12)]' : 'border-[#E6E2D8]'
+                            }`}
+                          >
+                            {m.type === 'video' ? (
+                              <video src={m.url} className="w-full h-20 object-cover" muted />
+                            ) : (
+                              <img src={m.url} alt="" className="w-full h-20 object-cover" />
+                            )}
+                            {/* Type badge */}
+                            <span className="absolute top-1 left-1 px-1 py-0.5 bg-black/60 rounded text-[8px] text-white font-mono uppercase flex items-center gap-0.5">
+                              {m.type === 'video' ? <Film size={8} /> : <ImageIcon size={8} />}
+                              {m.type}
+                            </span>
+                            {/* Cover star */}
+                            <button
+                              onClick={() => {
+                                const isVideoMedia = m.type === 'video';
+                                setForm((f) => ({
+                                  ...f,
+                                  media: f.media.map((item, idx) => ({
+                                    ...item,
+                                    is_cover: idx === i,
+                                  })),
+                                  ...(!isVideoMedia ? { image: m.url } : {}),
+                                }));
+                                if (isVideoMedia) {
+                                  autoGenerateVideoThumbnail(m.url);
+                                }
+                              }}
+                              className="absolute top-1 right-1 p-0.5"
+                              title={m.is_cover ? 'Cover image' : 'Set as cover'}
+                            >
+                              <Star
+                                size={14}
+                                className={`drop-shadow ${
+                                  m.is_cover
+                                    ? 'text-[#E8BC59] fill-[#E8BC59]'
+                                    : 'text-white/70 opacity-0 group-hover:opacity-100 transition-opacity'
+                                }`}
+                              />
+                            </button>
+                            {/* Delete */}
+                            <button
+                              onClick={() =>
+                                setForm((f) => {
+                                  const removed = f.media[i];
+                                  const nextMedia = f.media.filter((_, idx) => idx !== i);
+                                  const coverRemoved = removed?.is_cover && nextMedia.length > 0;
+                                  if (coverRemoved) {
+                                    nextMedia[0] = { ...nextMedia[0], is_cover: true };
+                                  }
+                                  return { ...f, media: nextMedia };
+                                })
                               }
-                            }}
-                            className="absolute top-1 right-1 p-0.5"
-                          >
-                            <Star
-                              size={14}
-                              className={`drop-shadow ${
-                                m.is_cover
-                                  ? 'text-[#E8BC59] fill-[#E8BC59]'
-                                  : 'text-white/70 opacity-0 group-hover:opacity-100 transition-opacity'
-                              }`}
+                              className="absolute top-1 right-6 w-5 h-5 bg-red-500/80 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove"
+                            >
+                              <X size={10} />
+                            </button>
+                            {/* Caption */}
+                            <input
+                              value={m.caption || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const next = [...f.media];
+                                  next[i] = { ...next[i], caption: val };
+                                  return { ...f, media: next };
+                                });
+                              }}
+                              placeholder="Caption..."
+                              className="w-full px-1.5 py-1 text-[10px] bg-white border-t border-[#E6E2D8] focus:outline-none focus:bg-[#FDFBF7] placeholder:text-[#09090B]/20"
                             />
-                          </button>
-                          {/* Caption */}
-                          <input
-                            value={m.caption || ''}
-                            onChange={(e) => {
-                              const next = [...form.media];
-                              next[i] = { ...next[i], caption: e.target.value };
-                              setForm((f) => ({ ...f, media: next }));
-                            }}
-                            placeholder="Caption..."
-                            className="w-full px-1.5 py-1 text-[10px] bg-[#FDFBF7] border-t border-[#E6E2D8] focus:outline-none placeholder:text-[#09090B]/20"
-                          />
-                          {/* Delete */}
-                          <button
-                            onClick={() => setForm((f) => ({ ...f, media: f.media.filter((_, idx) => idx !== i) }))}
-                            className="absolute bottom-6 right-1 w-5 h-5 bg-red-500/80 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Auto-generating thumbnail indicator */}
-                  {generatingThumb && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
-                      <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                      <span>Generating card thumbnail from video...</span>
-                    </div>
-                  )}
-                  {/* Persistent warning if image field is still a video (auto-gen failed) */}
-                  {!generatingThumb && form.image && /\.(mp4|webm|mov)(\?|$)/i.test(form.image) && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-700">
-                      <AlertTriangle size={12} className="shrink-0" />
-                      <span>
-                        <strong>Auto-thumbnail failed.</strong> Upload a static screenshot (JPG/PNG) to use as the card image on the public site.
-                      </span>
-                    </div>
-                  )}
-                  <ImageUploader
-                    value={null}
-                    onChange={(url) => {
-                      if (!url) return;
-                      const mediaType = detectMediaType(url);
-                      const isFirst = form.media.length === 0;
-                      const isVideo = mediaType === 'video';
-                      const shouldSetImage = isFirst && !isVideo;
-                      setForm((f) => ({
-                        ...f,
-                        media: [
-                          ...f.media,
-                          { url, type: mediaType, is_cover: isFirst, caption: '' },
-                        ],
-                        ...(shouldSetImage ? { image: url } : {}),
-                        // If existing image is a video and this is a static image, replace it
-                        ...(!isFirst && !isVideo && f.image && /\.(mp4|webm|mov)(\?|$)/i.test(f.image) ? { image: url } : {}),
-                      }));
-                      // Auto-generate thumbnail from video for card cover
-                      if (isVideo) {
-                        autoGenerateVideoThumbnail(url);
-                      }
-                    }}
-                    onUpload={(file) => onUpload(file)}
-                    label={form.media.length > 0 ? 'Add more media' : 'Upload images, videos or GIFs'}
-                  />
+                          </div>
+                        ))}
+                        {/* Trailing add-tile — matches media cell */}
+                        <ImageUploader
+                          value={null}
+                          multiple
+                          variant="tile"
+                          onChange={handleMediaUpload}
+                          onUpload={(file) => onUpload(file)}
+                          label="Add more"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* ── Page Builder sub-section ── */}

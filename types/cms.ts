@@ -53,13 +53,20 @@ export interface DesignSystemBlock extends ContentBlockBase {
   label: string;
   heading: string;
   description?: string;
-  typeface?: { name: string; weights: { value: string; label: string }[] };
+  typeface?: {
+    name: string;
+    weights: { value: string; label: string }[];
+    /** Optional uploaded font files injected via @font-face */
+    sources?: { url: string; weight: string; style?: 'normal' | 'italic'; format?: string }[];
+  };
   colors: { name: string; hex: string }[];
   spacing?: { sizes: { px: number; rem: string }[] };
   components?: {
     buttons?: { label: string; variant?: 'primary' | 'secondary' | 'outline' }[];
     inputs?: { placeholder: string }[];
   };
+  /** Optional extra assets (logos, icons, marks) shown in a gallery card */
+  assets?: { url: string; name: string; kind?: 'logo' | 'icon' | 'image' }[];
 }
 
 export interface BannerBlock extends ContentBlockBase {

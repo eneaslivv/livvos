@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Upload, X, Image as ImageIcon, Check } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Check, Plus } from 'lucide-react';
 
 const ACCEPTED_TYPES = 'image/*,video/mp4,video/webm,video/quicktime,image/gif';
 const isMediaFile = (file: File) =>
@@ -13,6 +13,8 @@ interface ImageUploaderProps {
   onUpload: (file: File) => Promise<string | null>;
   label?: string;
   compact?: boolean;
+  multiple?: boolean;
+  variant?: 'default' | 'tile';
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -21,36 +23,47 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   onUpload,
   label = 'Image',
   compact = false,
+  multiple = false,
+  variant = 'default',
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [justUploaded, setJustUploaded] = useState(false);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (!isMediaFile(file)) return;
+  const handleFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const valid = Array.from(files).filter(isMediaFile);
+      if (valid.length === 0) return;
+      const toProcess = multiple ? valid : valid.slice(0, 1);
       setIsUploading(true);
       setJustUploaded(false);
-      const url = await onUpload(file);
-      if (url) {
-        onChange(url);
-        setJustUploaded(true);
-        setTimeout(() => setJustUploaded(false), 2500);
+      for (const file of toProcess) {
+        const url = await onUpload(file);
+        if (url) onChange(url);
       }
+      setJustUploaded(true);
+      setTimeout(() => setJustUploaded(false), 2500);
       setIsUploading(false);
     },
-    [onUpload, onChange]
+    [onUpload, onChange, multiple]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
     },
-    [handleFile]
+    [handleFiles]
+  );
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files?.length) handleFiles(e.target.files);
+      e.target.value = '';
+    },
+    [handleFiles]
   );
 
   if (compact) {
@@ -88,13 +101,53 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           ref={inputRef}
           type="file"
           accept={ACCEPTED_TYPES}
+          multiple={multiple}
           className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
-          }}
+          onChange={handleInputChange}
         />
       </div>
+    );
+  }
+
+  if (variant === 'tile') {
+    return (
+      <>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`group relative flex flex-col items-center justify-center gap-1 h-full min-h-[104px] rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+            isDragging
+              ? 'border-[#E8BC59] bg-[#E8BC59]/10'
+              : 'border-[#E6E2D8] bg-[#FDFBF7] hover:border-[#E8BC59]/50 hover:bg-[#E8BC59]/5'
+          }`}
+        >
+          {isUploading ? (
+            <div className="w-4 h-4 border-2 border-[#E8BC59] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <div className="w-7 h-7 rounded-full bg-white border border-[#E6E2D8] flex items-center justify-center group-hover:border-[#E8BC59]/60 transition-colors">
+                <Plus size={14} className="text-[#09090B]/50 group-hover:text-[#E8BC59]" />
+              </div>
+              <span className="text-[10px] text-[#09090B]/50 group-hover:text-[#09090B]/70">
+                {label === 'Image' ? 'Add media' : label}
+              </span>
+            </>
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_TYPES}
+          multiple={multiple}
+          className="hidden"
+          onChange={handleInputChange}
+        />
+      </>
     );
   }
 
@@ -151,8 +204,13 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             <>
               <ImageIcon size={20} className="text-[#09090B]/30 mb-2" />
               <span className="text-xs text-[#09090B]/50">
-                Drop image or click to upload
+                {multiple ? 'Drop files or click to upload' : 'Drop image or click to upload'}
               </span>
+              {multiple && (
+                <span className="text-[10px] text-[#09090B]/30 mt-0.5">
+                  Images, videos, or GIFs — multiple allowed
+                </span>
+              )}
             </>
           )}
         </div>
@@ -161,11 +219,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         ref={inputRef}
         type="file"
         accept={ACCEPTED_TYPES}
+        multiple={multiple}
         className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-        }}
+        onChange={handleInputChange}
       />
     </div>
   );

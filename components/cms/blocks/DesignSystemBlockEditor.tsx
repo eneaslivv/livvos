@@ -1,15 +1,34 @@
-import React from 'react';
-import { Plus, X } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Plus, X, Upload, Type as TypeIcon } from 'lucide-react';
 import { DesignSystemBlock } from '../../../types/cms';
 
 interface Props {
   block: DesignSystemBlock;
   onChange: (block: DesignSystemBlock) => void;
+  onUpload?: (file: File) => Promise<string | null>;
 }
 
-export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange }) => {
+const WEIGHT_OPTIONS = ['100', '200', '300', '400', '500', '600', '700', '800', '900'];
+const FONT_ACCEPT = '.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf,application/font-woff2,application/font-woff,application/x-font-ttf,application/x-font-otf';
+
+const detectFontFormat = (url: string, filename?: string): string => {
+  const src = (filename || url).toLowerCase();
+  if (src.endsWith('.woff2')) return 'woff2';
+  if (src.endsWith('.woff')) return 'woff';
+  if (src.endsWith('.ttf')) return 'truetype';
+  if (src.endsWith('.otf')) return 'opentype';
+  return 'woff2';
+};
+
+export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange, onUpload }) => {
   const colors = block.colors || [];
   const weights = block.typeface?.weights || [];
+  const sources = block.typeface?.sources || [];
+  const assets = block.assets || [];
+  const fontInputRef = useRef<HTMLInputElement>(null);
+  const assetInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFont, setUploadingFont] = useState(false);
+  const [uploadingAsset, setUploadingAsset] = useState(false);
 
   const addColor = () => onChange({ ...block, colors: [...colors, { name: '', hex: '#000000' }] });
   const updateColor = (i: number, patch: Partial<{ name: string; hex: string }>) => {
@@ -32,6 +51,61 @@ export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange }) =>
   const removeWeight = (i: number) => {
     const tf = block.typeface || { name: '', weights: [] };
     onChange({ ...block, typeface: { ...tf, weights: tf.weights.filter((_, idx) => idx !== i) } });
+  };
+
+  const updateSource = (i: number, patch: Partial<{ url: string; weight: string; style: 'normal' | 'italic'; format: string }>) => {
+    const tf = block.typeface || { name: '', weights: [] };
+    const next = [...sources];
+    next[i] = { ...next[i], ...patch };
+    onChange({ ...block, typeface: { ...tf, sources: next } });
+  };
+  const removeSource = (i: number) => {
+    const tf = block.typeface || { name: '', weights: [] };
+    onChange({ ...block, typeface: { ...tf, sources: sources.filter((_, idx) => idx !== i) } });
+  };
+
+  const handleFontUpload = async (files: FileList | null) => {
+    if (!files || !onUpload) return;
+    setUploadingFont(true);
+    try {
+      for (const file of Array.from(files)) {
+        const url = await onUpload(file);
+        if (!url) continue;
+        const format = detectFontFormat(url, file.name);
+        const tf = block.typeface || { name: '', weights: [] };
+        const nextSources = [...(tf.sources || []), { url, weight: '400', style: 'normal' as const, format }];
+        onChange({ ...block, typeface: { ...tf, sources: nextSources } });
+      }
+    } finally {
+      setUploadingFont(false);
+      if (fontInputRef.current) fontInputRef.current.value = '';
+    }
+  };
+
+  const updateAsset = (i: number, patch: Partial<{ url: string; name: string; kind: 'logo' | 'icon' | 'image' }>) => {
+    const next = [...assets];
+    next[i] = { ...next[i], ...patch };
+    onChange({ ...block, assets: next });
+  };
+  const removeAsset = (i: number) => onChange({ ...block, assets: assets.filter((_, idx) => idx !== i) });
+
+  const handleAssetUpload = async (files: FileList | null) => {
+    if (!files || !onUpload) return;
+    setUploadingAsset(true);
+    try {
+      const next = [...assets];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue;
+        const url = await onUpload(file);
+        if (!url) continue;
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        next.push({ url, name: baseName, kind: 'logo' });
+      }
+      onChange({ ...block, assets: next });
+    } finally {
+      setUploadingAsset(false);
+      if (assetInputRef.current) assetInputRef.current.value = '';
+    }
   };
 
   return (
@@ -109,6 +183,75 @@ export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange }) =>
             </div>
           ))}
         </div>
+
+        {/* Font files */}
+        {onUpload && (
+          <div className="pt-3 mt-1 border-t border-[#E6E2D8]/70 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-[#78736A]">Font files <span className="text-[#09090B]/30 normal-case">(woff2, woff, ttf, otf)</span></span>
+              <button
+                onClick={() => fontInputRef.current?.click()}
+                disabled={uploadingFont}
+                className="flex items-center gap-1 text-[10px] font-medium text-[#E8BC59] hover:text-[#d4a94d] disabled:opacity-50"
+              >
+                {uploadingFont ? (
+                  <span className="w-3 h-3 border border-[#E8BC59] border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Upload size={12} />
+                )}
+                Upload
+              </button>
+              <input
+                ref={fontInputRef}
+                type="file"
+                accept={FONT_ACCEPT}
+                multiple
+                className="hidden"
+                onChange={(e) => handleFontUpload(e.target.files)}
+              />
+            </div>
+            {sources.length === 0 ? (
+              <p className="text-[10px] text-[#09090B]/40">
+                No font files uploaded. Without a file, the preview falls back to system fonts.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {sources.map((s, i) => {
+                  const fileLabel = s.url.split('/').pop()?.split('?')[0] || s.url;
+                  return (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-[#E6E2D8] bg-white">
+                      <TypeIcon size={12} className="text-[#09090B]/40 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-[#09090B] truncate">{fileLabel}</div>
+                        <div className="font-mono text-[9px] text-[#78736A]">{s.format || 'woff2'}</div>
+                      </div>
+                      <select
+                        value={s.weight}
+                        onChange={(e) => updateSource(i, { weight: e.target.value })}
+                        className="px-1.5 py-0.5 rounded border border-[#E6E2D8] bg-white text-[10px] font-mono text-[#09090B] focus:border-[#E8BC59] outline-none"
+                        title="Font weight"
+                      >
+                        {WEIGHT_OPTIONS.map((w) => <option key={w} value={w}>{w}</option>)}
+                      </select>
+                      <select
+                        value={s.style || 'normal'}
+                        onChange={(e) => updateSource(i, { style: e.target.value as 'normal' | 'italic' })}
+                        className="px-1.5 py-0.5 rounded border border-[#E6E2D8] bg-white text-[10px] text-[#09090B] focus:border-[#E8BC59] outline-none"
+                        title="Font style"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="italic">Italic</option>
+                      </select>
+                      <button onClick={() => removeSource(i)} className="text-[#09090B]/30 hover:text-red-500 shrink-0">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Colors */}
@@ -297,6 +440,71 @@ export const DesignSystemBlockEditor: React.FC<Props> = ({ block, onChange }) =>
           ))}
         </div>
       </div>
+
+      {/* Assets (logos, icons, marks) */}
+      {onUpload && (
+        <div className="p-3 rounded-lg border border-[#E6E2D8] bg-[#FAF8F3]/50 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-mono uppercase tracking-widest text-[#78736A]">Assets</label>
+            <button
+              onClick={() => assetInputRef.current?.click()}
+              disabled={uploadingAsset}
+              className="flex items-center gap-1 text-[10px] font-medium text-[#E8BC59] hover:text-[#d4a94d] disabled:opacity-50"
+            >
+              {uploadingAsset ? (
+                <span className="w-3 h-3 border border-[#E8BC59] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Upload size={12} />
+              )}
+              Upload
+            </button>
+            <input
+              ref={assetInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handleAssetUpload(e.target.files)}
+            />
+          </div>
+          {assets.length === 0 ? (
+            <p className="text-[10px] text-[#09090B]/40">
+              Upload logos, icons, or marks to include in the design system card.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {assets.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-[#E6E2D8] bg-white">
+                  <div className="w-10 h-10 rounded border border-[#E6E2D8] bg-[#FAF8F3] flex items-center justify-center overflow-hidden shrink-0">
+                    <img src={a.url} alt={a.name} className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <input
+                      type="text"
+                      value={a.name}
+                      onChange={(e) => updateAsset(i, { name: e.target.value })}
+                      placeholder="Asset name"
+                      className="w-full text-xs text-[#09090B] outline-none bg-transparent"
+                    />
+                    <select
+                      value={a.kind || 'logo'}
+                      onChange={(e) => updateAsset(i, { kind: e.target.value as 'logo' | 'icon' | 'image' })}
+                      className="px-1.5 py-0.5 rounded border border-[#E6E2D8] bg-white text-[10px] text-[#09090B] focus:border-[#E8BC59] outline-none"
+                    >
+                      <option value="logo">Logo</option>
+                      <option value="icon">Icon</option>
+                      <option value="image">Image</option>
+                    </select>
+                  </div>
+                  <button onClick={() => removeAsset(i)} className="text-[#09090B]/30 hover:text-red-500 shrink-0">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
