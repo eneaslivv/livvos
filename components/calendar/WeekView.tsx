@@ -298,47 +298,93 @@ export const WeekView: React.FC<WeekViewProps> = ({
                 );
               })}
               </>
-              ) : (
-              /* Flat individual tasks */
-              unscheduledTasks.map(task => {
-                const tc = getTaskColor(task);
-                const overdue = getOverdueDays(task);
-                return (
-                  <div
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => onTaskDragStart(e, task.id)}
-                    onDragEnd={() => setDraggingTaskId(null)}
-                    className={`text-[10px] px-2 py-1 rounded-full mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
-                    title={`${task.title}${isTaskBlocked(task) ? ' \u26A0 BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
-                    onClick={() => onOpenTaskDetail(task)}
-                  >
-                    <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
-                      {task.completed ? (
-                        <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
-                      ) : isTaskBlocked(task) ? (
-                        <Icons.Lock size={8} className="text-amber-500 shrink-0" />
-                      ) : (
-                        <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
-                      )}
-                      <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
-                      {overdue > 0 && (
-                        <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
-                          +{overdue}d
-                        </span>
-                      )}
-                      {task.completed && getElapsedDays(task) !== null && (
-                        <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
-                      )}
-                      {!task.completed && !overdue && getClientLabel(task) && (
-                        <span className="ml-auto text-[8px] font-medium text-violet-500 dark:text-violet-400 shrink-0 truncate max-w-[60px]" title={getClientLabel(task)!}>
-                          {getClientLabel(task)}
-                        </span>
-                      )}
+              ) : (() => {
+                /* Flat individual tasks — collapse when pile too high */
+                const FLAT_COLLAPSE_THRESHOLD = 4;
+                const isDayExpanded = expandedDays.has(dateStr);
+                const overdueCount = unscheduledTasks.filter(t => getOverdueDays(t) > 0).length;
+                const tooMany = unscheduledTasks.length > FLAT_COLLAPSE_THRESHOLD;
+                if (tooMany && !isDayExpanded) {
+                  return (
+                    <div
+                      className="text-[10px] px-2 py-1 rounded-lg cursor-pointer border bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      onClick={() => {
+                        const next = new Set(expandedDays);
+                        next.add(dateStr);
+                        setExpandedDays(next);
+                      }}
+                      title="Click to expand tasks"
+                    >
+                      <div className="flex items-center gap-1 text-zinc-600 dark:text-zinc-300 truncate">
+                        <Icons.CheckCircle size={9} className="shrink-0" />
+                        <span className="font-semibold">{unscheduledTasks.length} tasks</span>
+                        {overdueCount > 0 && (
+                          <span className="text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                            {overdueCount} overdue
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  );
+                }
+                return (
+                  <>
+                    {tooMany && (
+                      <button
+                        onClick={() => {
+                          const next = new Set(expandedDays);
+                          next.delete(dateStr);
+                          setExpandedDays(next);
+                        }}
+                        className="w-full text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 mb-0.5 flex items-center justify-center gap-1"
+                        title="Collapse tasks"
+                      >
+                        <Icons.ChevronRight size={8} className="rotate-[-90deg]" />
+                        Hide tasks
+                      </button>
+                    )}
+                    {unscheduledTasks.map(task => {
+                      const tc = getTaskColor(task);
+                      const overdue = getOverdueDays(task);
+                      return (
+                        <div
+                          key={task.id}
+                          draggable
+                          onDragStart={(e) => onTaskDragStart(e, task.id)}
+                          onDragEnd={() => setDraggingTaskId(null)}
+                          className={`text-[10px] px-2 py-1 rounded-full mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                          title={`${task.title}${isTaskBlocked(task) ? ' \u26A0 BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
+                          onClick={() => onOpenTaskDetail(task)}
+                        >
+                          <div className={`font-medium flex items-center gap-1 ${tc.text} truncate`}>
+                            {task.completed ? (
+                              <Icons.CheckCircle size={8} className="text-emerald-500 shrink-0" />
+                            ) : isTaskBlocked(task) ? (
+                              <Icons.Lock size={8} className="text-amber-500 shrink-0" />
+                            ) : (
+                              <span className={`w-1 h-1 rounded-full ${tc.dot} shrink-0`} />
+                            )}
+                            <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
+                            {overdue > 0 && (
+                              <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                                +{overdue}d
+                              </span>
+                            )}
+                            {task.completed && getElapsedDays(task) !== null && (
+                              <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
+                            )}
+                            {!task.completed && !overdue && getClientLabel(task) && (
+                              <span className="ml-auto text-[8px] font-medium text-violet-500 dark:text-violet-400 shrink-0 truncate max-w-[60px]" title={getClientLabel(task)!}>
+                                {getClientLabel(task)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
                 );
-              }))}
+              })()}
             </div>
           );
         })}
