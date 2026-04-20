@@ -85,10 +85,13 @@ export const WeekView: React.FC<WeekViewProps> = ({
   const nowRowRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(new Date());
   const [expandedPhase, setExpandedPhase] = useState<string | null>(null); // "date|groupName"
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set()); // dates where phase row is expanded
+  const PHASES_COLLAPSE_THRESHOLD = 3;
 
-  // Reset expanded phase when week changes
+  // Reset expanded state when week changes
   useEffect(() => {
     setExpandedPhase(null);
+    setExpandedDays(new Set());
   }, [weekDays[0]?.toISOString()]);
 
   // Auto-scroll to current hour on mount
@@ -180,7 +183,48 @@ export const WeekView: React.FC<WeekViewProps> = ({
               onDrop={(e) => onTaskDrop(e, dateStr)}
             >
               {/* Grouped by phase */}
-              {phaseGroups ? phaseGroups.map(group => {
+              {phaseGroups && phaseGroups.length > PHASES_COLLAPSE_THRESHOLD && !expandedDays.has(dateStr) ? (() => {
+                const totalTasks = phaseGroups.reduce((n, g) => n + g.totalCount, 0);
+                const doneTasks = phaseGroups.reduce((n, g) => n + g.completedCount, 0);
+                const pct = totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0;
+                return (
+                  <div
+                    className="text-[10px] px-2 py-1 rounded-lg cursor-pointer border bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    onClick={() => {
+                      const next = new Set(expandedDays);
+                      next.add(dateStr);
+                      setExpandedDays(next);
+                    }}
+                    title="Click to expand phases"
+                  >
+                    <div className="flex items-center gap-1 text-zinc-600 dark:text-zinc-300 truncate">
+                      <Icons.Layers size={9} className="shrink-0" />
+                      <span className="font-semibold">{phaseGroups.length} phases</span>
+                      <span className="text-zinc-400">·</span>
+                      <span className="tabular-nums text-[9px]">{doneTasks}/{totalTasks}</span>
+                      <div className="ml-auto w-8 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden shrink-0">
+                        <div className={`h-full rounded-full ${pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : phaseGroups ? (
+                <>
+                {phaseGroups.length > PHASES_COLLAPSE_THRESHOLD && (
+                  <button
+                    onClick={() => {
+                      const next = new Set(expandedDays);
+                      next.delete(dateStr);
+                      setExpandedDays(next);
+                    }}
+                    className="w-full text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 mb-0.5 flex items-center justify-center gap-1"
+                    title="Collapse phases"
+                  >
+                    <Icons.ChevronRight size={8} className="rotate-[-90deg]" />
+                    Hide phases
+                  </button>
+                )}
+                {phaseGroups.map(group => {
                 const phaseKey = `${dateStr}|${group.groupName}`;
                 const isExpanded = expandedPhase === phaseKey;
                 const pct = group.totalCount > 0 ? (group.completedCount / group.totalCount) * 100 : 0;
@@ -252,7 +296,9 @@ export const WeekView: React.FC<WeekViewProps> = ({
                     )}
                   </div>
                 );
-              }) : (
+              })}
+              </>
+              ) : (
               /* Flat individual tasks */
               unscheduledTasks.map(task => {
                 const tc = getTaskColor(task);

@@ -853,10 +853,27 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
       // Insert tasks + subtasks — use supabase directly to get parent IDs back
       let totalTasks = 0;
       let totalSubtasks = 0;
+      // Distribute tasks evenly across phase date range when AI didn't give per-task dates
+      const distributeDate = (phaseStart: string | undefined, phaseEnd: string | undefined, index: number, total: number): string => {
+        const fallback = new Date().toISOString().slice(0, 10);
+        const start = phaseStart || phaseEnd || fallback;
+        const end = phaseEnd || phaseStart || fallback;
+        const startMs = new Date(start + 'T00:00:00').getTime();
+        const endMs = new Date(end + 'T00:00:00').getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || total <= 1) return start;
+        const spanDays = Math.floor((endMs - startMs) / (1000 * 60 * 60 * 24));
+        const step = spanDays / Math.max(total - 1, 1);
+        const dayOffset = Math.round(step * index);
+        const d = new Date(startMs + dayOffset * 24 * 60 * 60 * 1000);
+        return d.toISOString().slice(0, 10);
+      };
       for (const phase of aiPreview.phases) {
-        for (const task of phase.tasks) {
+        const taskCount = phase.tasks.length;
+        for (let i = 0; i < phase.tasks.length; i++) {
+          const task = phase.tasks[i];
           const taskAssignee = resolveAssignee((task as any).assignee);
-          const taskDueDate = (task as any).dueDate || phase.endDate || new Date().toISOString().slice(0, 10);
+          const aiDate = (task as any).dueDate;
+          const taskDueDate = aiDate || distributeDate(phase.startDate, phase.endDate, i, taskCount);
           const { data: inserted, error: insertErr } = await supabase.from('tasks').insert({
             title: task.title,
             completed: false,
@@ -865,6 +882,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             assignee_id: taskAssignee,
             priority: task.priority || 'medium',
             group_name: phase.name,
+            start_date: taskDueDate,
             due_date: taskDueDate,
             tenant_id: currentTenant?.id || null,
             owner_id: currentUser?.id || null,
@@ -875,21 +893,32 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           }
           totalTasks++;
 
-          // Insert subtasks linked to parent
+          // Insert subtasks linked to parent — stagger 1 day each starting at parent, bounded by phase end
           if (task.subtasks?.length && inserted?.id) {
-            const subtaskRows = task.subtasks.map(sub => ({
-              title: sub.title,
-              completed: false,
-              project_id: selectedProject.id,
-              parent_task_id: inserted.id,
-              priority: 'medium',
-              status: 'todo',
-              assignee_id: taskAssignee,
-              group_name: null,
-              due_date: taskDueDate,
-              tenant_id: currentTenant?.id || null,
-              owner_id: currentUser?.id || null,
-            }));
+            const parentMs = new Date(taskDueDate + 'T00:00:00').getTime();
+            const endMs = phase.endDate ? new Date(phase.endDate + 'T00:00:00').getTime() : null;
+            const subtaskRows = task.subtasks.map((sub, subIdx) => {
+              let subDate: string = (sub as any).dueDate;
+              if (!subDate) {
+                const stepped = parentMs + subIdx * 24 * 60 * 60 * 1000;
+                const bounded = endMs && stepped > endMs ? endMs : stepped;
+                subDate = new Date(bounded).toISOString().slice(0, 10);
+              }
+              return {
+                title: sub.title,
+                completed: false,
+                project_id: selectedProject.id,
+                parent_task_id: inserted.id,
+                priority: 'medium',
+                status: 'todo',
+                assignee_id: taskAssignee,
+                group_name: null,
+                start_date: subDate,
+                due_date: subDate,
+                tenant_id: currentTenant?.id || null,
+                owner_id: currentUser?.id || null,
+              };
+            });
             const { error: subErr } = await supabase.from('tasks').insert(subtaskRows);
             if (subErr) {
               errorLogger.error('Error inserting AI subtasks', subErr);
