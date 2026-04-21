@@ -544,22 +544,27 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
   const handleCreateProject = async () => {
     if (!newProjectTitle.trim()) return;
+    if (!newProjectClient) {
+      setCreateError('Select a client (or Internal · Livv for internal projects).');
+      return;
+    }
     setIsSubmittingProject(true);
     setCreateError(null);
     try {
       errorLogger.log('Creating new project', { title: newProjectTitle });
 
-      // Resolve client_id if a client was selected
-      const selectedClientObj = clients.find(c => c.id === newProjectClient);
+      // Resolve client_id — "__internal_livv__" means internal (no client row)
+      const isInternal = newProjectClient === '__internal_livv__';
+      const selectedClientObj = isInternal ? null : clients.find(c => c.id === newProjectClient);
 
       const newProject = await createProject({
         title: newProjectTitle.trim(),
         description: newProjectDesc.trim(),
         progress: 0,
         status: ProjectStatus.Active,
-        client: selectedClientObj?.name || selectedClientObj?.company || 'TBD',
-        clientName: selectedClientObj?.name || selectedClientObj?.company || 'TBD',
-        clientAvatar: selectedClientObj?.name?.substring(0, 2).toUpperCase() || 'XX',
+        client: selectedClientObj?.name || selectedClientObj?.company || (isInternal ? 'Internal · Livv' : 'TBD'),
+        clientName: selectedClientObj?.name || selectedClientObj?.company || (isInternal ? 'Internal · Livv' : 'TBD'),
+        clientAvatar: selectedClientObj?.name?.substring(0, 2).toUpperCase() || (isInternal ? 'IL' : 'XX'),
         ...(selectedClientObj ? { client_id: selectedClientObj.id } as any : {}),
         deadline: newProjectDeadline || '',
         nextSteps: 'Kick-off',
@@ -633,6 +638,19 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
       setSelectedId(projects[0].id);
     }
   }, [projects, selectedId]);
+
+  // Listen for global "+ New" popover and Clients page requesting a new project.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { name?: string; clientId?: string | null } | undefined;
+      setIsCreating(true);
+      setNewProjectTitle(detail?.name || '');
+      setNewProjectClient(detail?.clientId || '');
+      setCreateError(null);
+    };
+    window.addEventListener('open-new-project', handler);
+    return () => window.removeEventListener('open-new-project', handler);
+  }, []);
 
   const handleAddGroup = async () => {
     if (!selectedProject || !newGroupName.trim()) return;
@@ -1146,9 +1164,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const tabDefs = [
     { id: 'overview', label: 'Overview', icon: Icons.Layers },
     { id: 'tasks', label: 'Tasks', icon: Icons.Check },
-    { id: 'timeline', label: 'Timeline', icon: Icons.Clock },
-    { id: 'files', label: 'Files', icon: Icons.File },
-    { id: 'settings', label: 'Settings', icon: Icons.Settings },
+    { id: 'docs', label: 'Docs', icon: Icons.File },
   ];
 
   /* ─── Error state ─── */
@@ -1245,9 +1261,11 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     <select
                       value={newProjectClient}
                       onChange={e => setNewProjectClient(e.target.value)}
+                      required
                       className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
                     >
-                      <option value="">No client</option>
+                      <option value="" disabled>Select a client…</option>
+                      <option value="__internal_livv__">Internal · Livv</option>
                       {clients.map(c => (
                         <option key={c.id} value={c.id}>{c.name || c.company || c.email}</option>
                       ))}
@@ -1405,36 +1423,42 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           {/* Header */}
           <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
             <div className="min-w-0">
+              {/* Breadcrumb: Clients / <Client> / <Project> */}
+              {selectedProject && (
+                <nav className="flex items-center gap-1 text-[11px] text-zinc-400 mb-1.5" aria-label="Breadcrumb">
+                  <span className="font-medium">Clients</span>
+                  <Icons.ChevronRight size={11} />
+                  <span className="font-medium text-zinc-500 dark:text-zinc-300 truncate max-w-[140px]">
+                    {selectedClient?.name || 'Internal · Livv'}
+                  </span>
+                  <Icons.ChevronRight size={11} />
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-200 truncate max-w-[180px]">
+                    {selectedProject.title}
+                  </span>
+                </nav>
+              )}
               <div className="flex items-center gap-2.5 mb-1.5">
-                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">{selectedProject ? `PRJ-${selectedProject.id.slice(0, 6)}` : '—'}</span>
                 {selectedProject && <StatusBadge status={selectedProject.status} />}
               </div>
               <h1 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-zinc-100 break-words">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
               <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1.5 text-xs text-zinc-400">
                 {selectedProject && (
                   <>
-                    {selectedClient ? (
-                      <span className="flex items-center gap-1.5">
-                        {selectedClient.avatar_url ? (
-                          <img src={selectedClient.avatar_url} alt={selectedClient.name} className="w-4 h-4 rounded-full object-cover" />
-                        ) : (
-                          <Icons.Users size={12} />
-                        )}
-                        <span className="text-zinc-600 dark:text-zinc-300 font-medium">{selectedClient.name}</span>
-                        {selectedClient.company && <span className="text-zinc-400">· {selectedClient.company}</span>}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-zinc-400">
-                        <Icons.Star size={12} />
-                        Own project
+                    <span className="flex items-center gap-1">
+                      <Icons.Calendar size={12} />
+                      {new Date(selectedProject.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                    {selectedProject.deadline && (
+                      <span className="flex items-center gap-1">
+                        <Icons.Clock size={12} />
+                        Due {new Date(selectedProject.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                     )}
-                    <span className="flex items-center gap-1"><Icons.Calendar size={12} /> {new Date(selectedProject.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </>
                 )}
               </div>
             </div>
-            <div className="flex gap-1.5 sm:gap-2 shrink-0">
+            <div className="flex gap-1.5 sm:gap-2 shrink-0 items-center">
               <button onClick={() => setIsShareModalOpen(true)}
                 className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                 Share
@@ -1442,6 +1466,18 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
               <button onClick={() => setIsClientPreviewMode(true)}
                 className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors">
                 Project View
+              </button>
+              {/* Settings kebab — opens SettingsTab (no longer a top-level tab) */}
+              <button
+                onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
+                title="Project settings"
+                className={`p-1.5 text-[11px] font-medium border rounded-lg transition-colors ${
+                  activeTab === 'settings'
+                    ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                }`}
+              >
+                <Icons.MoreVert size={14} />
               </button>
             </div>
           </div>
@@ -1685,37 +1721,15 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                   />
                 )}
 
-                {/* ── Timeline Tab ── */}
-                {activeTab === 'timeline' && selectedProject && (
-                  <TimelineTab
-                    project={selectedProject}
-                    derivedTasksGroups={derivedTasksGroups}
-                    members={members}
-                    newGroupName={newGroupName}
-                    onNewGroupNameChange={setNewGroupName}
-                    timelineNewStart={timelineNewStart}
-                    onTimelineNewStartChange={setTimelineNewStart}
-                    timelineNewEnd={timelineNewEnd}
-                    onTimelineNewEndChange={setTimelineNewEnd}
-                    onAddPhaseWithDates={handleAddPhaseWithDates}
-                    onUpdatePhaseDate={handleUpdatePhaseDate}
-                    onDeletePhase={handleDeletePhase}
-                    onToggleTask={handleToggleTask}
-                    onAddTask={handleAddTask}
-                    newTaskTitle={newTaskTitle}
-                    onNewTaskTitleChange={setNewTaskTitle}
-                  />
-                )}
-
-                {/* ── Files Tab ── */}
-                {activeTab === 'files' && selectedProject && (
+                {/* ── Docs Tab ── (rebranded from Files) */}
+                {activeTab === 'docs' && selectedProject && (
                   <FilesTab
                     project={selectedProject}
                     onUpdateProject={updateProject}
                   />
                 )}
 
-                {/* ── Settings Tab ── */}
+                {/* ── Settings panel (opened via header kebab) ── */}
                 {activeTab === 'settings' && selectedProject && (
                   <SettingsTab
                     project={selectedProject}

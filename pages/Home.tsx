@@ -146,6 +146,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [isAddingTask, setIsAddingTask] = useState(false);
     const [showCompleted, setShowCompleted] = useState(false);
+    const [showOverdue, setShowOverdue] = useState(false);
     const [selectedFocusTask, setSelectedFocusTask] = useState<CalendarTask | null>(null);
     const [editingTask, setEditingTask] = useState<Partial<CalendarTask>>({});
     const [savingTask, setSavingTask] = useState(false);
@@ -347,15 +348,23 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         return t.owner_id === authUser.id;
     });
 
-    // Filter: today's tasks = incomplete (carry over) + completed today (user timezone)
+    // Filter: today's tasks = active-today + overdue (carry over) + undated pending + completed today.
+    // A task is "active today" when today falls within [start_date, end_date], respecting whichever
+    // boundary exists. Future tasks appear on their own date, not today.
     const todayDateStr = todayLocal();
     const todayTasks = myTasks.filter(t => {
-        if (!t.completed) return true; // all pending tasks always show
-        // completed tasks: only show if completed_at is today (user's local date)
-        const completedAt = (t as any).completed_at;
-        if (!completedAt) return false; // no completion timestamp → hide (old completed task)
-        const completedDate = new Date(completedAt).toLocaleDateString('en-CA');
-        return completedDate === todayDateStr;
+        if (t.completed) {
+            const completedAt = (t as any).completed_at;
+            if (!completedAt) return false;
+            const completedDate = new Date(completedAt).toLocaleDateString('en-CA');
+            return completedDate === todayDateStr;
+        }
+        const startDate = (t as any).start_date;
+        const endDate = (t as any).end_date;
+        if (!startDate && !endDate) return true; // undated inbox
+        if (startDate && startDate <= todayDateStr) return true; // started today or earlier (in-progress or overdue)
+        if (!startDate && endDate && endDate <= todayDateStr) return true; // due today or overdue, no start
+        return false; // future-dated — show on its own day instead
     });
 
     // ─── Calendar: today's events + overdue tasks ───
@@ -677,9 +686,22 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
                     {/* Today's Focus */}
                     {(() => {
-                        const todayPending = todayTasks.filter(t => !t.completed);
+                        const isOverdue = (t: any) => {
+                            const end = t.end_date;
+                            const start = t.start_date;
+                            if (end) return end < todayDateStr;
+                            if (start) return start < todayDateStr;
+                            return false;
+                        };
+                        const allPending = todayTasks.filter(t => !t.completed);
+                        const overduePending = allPending.filter(isOverdue);
+                        const todayPending = allPending.filter(t => !isOverdue(t));
                         const todayCompleted = todayTasks.filter(t => t.completed);
-                        const allDone = todayTasks.length > 0 && todayPending.length === 0;
+                        const allDone = todayTasks.length > 0 && allPending.length === 0;
+
+                        const reactivateTask = (taskId: string) => {
+                            calUpdateTask(taskId, { start_date: todayDateStr } as any);
+                        };
 
                         return (
                             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5">
@@ -726,6 +748,83 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                     <div className="flex items-center gap-2.5 px-3 py-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-500/5 mb-1">
                                         <Icons.Check size={14} className="text-emerald-500 shrink-0" />
                                         <span className="text-[13px] font-medium text-emerald-700 dark:text-emerald-400">All set for today</span>
+                                    </div>
+                                )}
+
+                                {/* Overdue tasks — collapsible rose card */}
+                                {overduePending.length > 0 && (
+                                    <div className="mb-2 rounded-lg border border-rose-200/70 dark:border-rose-500/20 bg-rose-50/40 dark:bg-rose-500/5 overflow-hidden">
+                                        <button
+                                            onClick={() => setShowOverdue(!showOverdue)}
+                                            className="flex items-center justify-between w-full px-3 py-2.5 hover:bg-rose-100/40 dark:hover:bg-rose-500/10 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Icons.AlertCircle size={13} className="text-rose-500" />
+                                                <span className="text-[12px] font-semibold text-rose-700 dark:text-rose-400">
+                                                    {overduePending.length} overdue
+                                                </span>
+                                                <span className="text-[10px] text-rose-500/70 dark:text-rose-400/60 font-medium">carry over from past days</span>
+                                            </div>
+                                            <motion.div
+                                                animate={{ rotate: showOverdue ? 180 : 0 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <Icons.ChevronDown size={13} className="text-rose-400" />
+                                            </motion.div>
+                                        </button>
+                                        <AnimatePresence>
+                                            {showOverdue && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="px-2 pb-2 space-y-0.5 border-t border-rose-200/50 dark:border-rose-500/15 pt-2">
+                                                        {overduePending.map((task) => {
+                                                            const projectId = (task as any).projectId || (task as any).project_id;
+                                                            const origDate = (task as any).end_date || (task as any).start_date;
+                                                            const daysOverdue = origDate
+                                                                ? Math.floor((new Date(todayDateStr).getTime() - new Date(origDate).getTime()) / (1000 * 60 * 60 * 24))
+                                                                : 0;
+                                                            return (
+                                                                <div
+                                                                    key={task.id}
+                                                                    onClick={() => handleOpenTaskDetail(task as CalendarTask)}
+                                                                    className={`flex items-center justify-between rounded-md transition-all cursor-pointer hover:bg-white/60 dark:hover:bg-zinc-900/40 group ${isMobile ? 'px-2 py-3' : 'px-2 py-2'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
+                                                                            className={`rounded-full border-[1.5px] border-rose-300 dark:border-rose-500/40 hover:border-emerald-400 dark:hover:border-emerald-500 text-transparent hover:text-emerald-400 flex items-center justify-center shrink-0 transition-colors ${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`}
+                                                                        >
+                                                                            <Icons.Check size={isMobile ? 11 : 9} strokeWidth={3} />
+                                                                        </button>
+                                                                        <div className="min-w-0">
+                                                                            <span className={`font-medium text-zinc-900 dark:text-zinc-100 ${isMobile ? 'text-sm' : 'text-[13px]'}`}>{task.title}</span>
+                                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                                <span className="text-[10px] text-rose-500 font-medium">
+                                                                                    {daysOverdue === 1 ? '1 day late' : `${daysOverdue} days late`}
+                                                                                </span>
+                                                                                {projectId && <span className="text-[10px] text-zinc-400">· {projectLookup[projectId] || ''}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); reactivateTask(task.id); }}
+                                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 px-2 py-1 rounded-md hover:bg-rose-100/60 dark:hover:bg-rose-500/15 shrink-0"
+                                                                        title="Move to today"
+                                                                    >
+                                                                        Move to today
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 )}
 

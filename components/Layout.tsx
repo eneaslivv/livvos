@@ -15,11 +15,13 @@ import { supabase } from '../lib/supabase';
 import { AiAdvisor } from './AiAdvisor';
 import { BottomTabBar } from './ui/BottomTabBar';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { ClientsSidebarTree } from './layout/ClientsSidebarTree';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentPage: PageView;
   currentMode: AppMode;
+  navParams?: NavParams | null;
   onNavigate: (page: PageView, params?: NavParams) => void;
   onSwitchMode: (mode: AppMode) => void;
 }
@@ -453,7 +455,7 @@ const CreateTaskModal = ({
   );
 };
 
-export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, onNavigate, onSwitchMode }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, navParams, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
   const { currentTenant, hasFeature } = useTenant();
   const isMobile = useIsMobile();
@@ -551,12 +553,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
   const osNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
-    { id: 'projects', label: 'Projects', icon: <Icons.Briefcase />, permission: { module: 'projects', action: 'view' }, feature: 'projects_module' },
-    { id: 'team_clients', label: 'Team/Clients', icon: <Icons.Users />, permission: { module: 'team', action: 'view' }, feature: 'team_management' },
+    // 'projects' and 'team_clients' entries removed — projects live inside the Clients tree; team mgmt moved to tenant settings.
     { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
     { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
     { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
   ];
+  const clientsActive = currentPage === 'clients' || currentPage === 'projects';
+  const showProjectsModule = hasFeature('projects_module') && (!isInitialized || hasPermission('projects', 'view'));
 
   const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
@@ -595,7 +598,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         shadow-2xl shadow-zinc-200/50 dark:shadow-black/80
         rounded-[2rem] flex-col items-center py-6 gap-2
         transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
-        overflow-hidden
         ${isSidebarExpanded ? 'md:w-[240px]' : 'md:w-[72px]'}
       `}>
 
@@ -639,7 +641,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         </div>}
 
         {/* Navigation Items */}
-        <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto no-scrollbar mask-image-linear-gradient mt-4 items-center">
+        <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto no-scrollbar mask-image-linear-gradient mt-2 items-center">
           {!isInitialized && (
             <div className="w-full flex flex-col gap-2 px-3 animate-pulse">
               {Array.from({ length: navSkeletonCount }).map((_, index) => (
@@ -657,14 +659,25 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               id={item.id}
               icon={item.icon}
               label={item.label}
-              active={currentPage === item.id || (item.id === 'team_clients' && (currentPage === 'team' || currentPage === 'clients'))}
+              active={currentPage === item.id}
               expanded={isSidebarExpanded}
-              onClick={() => {
-                onNavigate(item.id);
-
-              }}
+              onClick={() => onNavigate(item.id)}
             />
           ))}
+
+          {/* Clients tree pinned at the bottom of the nav (Notion-style) */}
+          {isInitialized && currentMode === 'os' && showProjectsModule && (
+            <div className="w-full mt-auto pt-3">
+              <ClientsSidebarTree
+                active={clientsActive}
+                expanded={isSidebarExpanded}
+                currentPage={currentPage}
+                currentClientId={navParams?.clientId}
+                currentProjectId={navParams?.projectId}
+                onNavigate={onNavigate}
+              />
+            </div>
+          )}
         </nav>
 
         {/* Bottom Actions */}
@@ -718,9 +731,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         <div className="sticky top-0 z-40 px-4 md:px-8 pt-4 pb-2 w-full max-w-[1600px] mx-auto">
           <TopNavbar
             pageTitle={currentPage}
+            currentPage={currentPage}
+            navParams={navParams}
             onOpenSearch={() => setShowCommandPalette(true)}
-            onOpenTask={() => setIsTaskModalOpen(true)}
             onNavigate={onNavigate}
+            onOpenNewTask={() => setIsTaskModalOpen(true)}
           />
         </div>
 

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { Project } from '../../context/ProjectsContext';
+import { useDocuments } from '../../context/DocumentsContext';
 import { logActivity } from '../../lib/activity';
+import { DocumentCard } from '../docs/DocumentCard';
+import { DocumentEditor } from '../docs/DocumentEditor';
 
 export interface FilesTabProps {
   project: Project;
@@ -16,6 +19,41 @@ export const FilesTab: React.FC<FilesTabProps> = ({
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkName, setLinkName] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const { documents, createDocument, deleteDocument } = useDocuments();
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [isCreatingDoc, setIsCreatingDoc] = useState(false);
+
+  const projectDocs = useMemo(
+    () => documents.filter(d => d.project_id === project.id),
+    [documents, project.id]
+  );
+
+  const handleNewDoc = async () => {
+    if (isCreatingDoc) return;
+    setIsCreatingDoc(true);
+    try {
+      const doc = await createDocument('Untitled Document', {
+        projectId: project.id,
+        clientId: project.client_id ?? null,
+      });
+      setEditingDocumentId(doc.id);
+      await logActivity({ action: 'created doc', target: doc.title, project_title: project.title, type: 'project_update' });
+    } catch (err: any) {
+      alert(err.message || 'Error creating document');
+    } finally {
+      setIsCreatingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (id: string, title: string) => {
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    try {
+      await deleteDocument(id);
+      await logActivity({ action: 'deleted doc', target: title, project_title: project.title, type: 'project_update' });
+    } catch (err: any) {
+      alert(err.message || 'Error deleting document');
+    }
+  };
 
   const handleAddLink = async () => {
     if (!linkUrl.trim()) return;
@@ -37,10 +75,18 @@ export const FilesTab: React.FC<FilesTabProps> = ({
   const isLink = (file: { url?: string }) => !!file.url;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Project Files</h3>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleNewDoc}
+            disabled={isCreatingDoc}
+            className="px-4 py-2 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Icons.Docs size={14} />
+            {isCreatingDoc ? 'Creating...' : 'New Doc'}
+          </button>
           <button
             onClick={() => setShowLinkModal(true)}
             className="px-4 py-2 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center gap-2"
@@ -75,13 +121,39 @@ export const FilesTab: React.FC<FilesTabProps> = ({
         </div>
       </div>
 
-      {project.files.length === 0 ? (
+      {projectDocs.length > 0 && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {projectDocs.map(doc => (
+              <div key={doc.id} className="group relative">
+                <DocumentCard
+                  document={doc}
+                  view="grid"
+                  onClick={() => setEditingDocumentId(doc.id)}
+                />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteDoc(doc.id, doc.title);
+                  }}
+                  className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+                  title="Delete document"
+                >
+                  <Icons.Trash size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {project.files.length === 0 && projectDocs.length === 0 ? (
         <div className="text-center py-16 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700">
           <Icons.File size={36} className="mx-auto text-zinc-300 dark:text-zinc-600 mb-3" />
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">No files or links yet</p>
-          <p className="text-xs text-zinc-400">Upload files or add links to keep project assets organized.</p>
+          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">No docs, files or links yet</p>
+          <p className="text-xs text-zinc-400">Create a doc, upload files, or add links to keep project assets organized.</p>
         </div>
-      ) : (
+      ) : project.files.length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {project.files.map((file, i) => (
             <motion.div
@@ -124,7 +196,7 @@ export const FilesTab: React.FC<FilesTabProps> = ({
             </motion.div>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Add Link Modal */}
       <AnimatePresence>
@@ -188,6 +260,13 @@ export const FilesTab: React.FC<FilesTabProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {editingDocumentId && (
+        <DocumentEditor
+          documentId={editingDocumentId}
+          onClose={() => setEditingDocumentId(null)}
+        />
+      )}
     </div>
   );
 };

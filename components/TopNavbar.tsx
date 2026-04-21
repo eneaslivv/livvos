@@ -5,16 +5,19 @@ import { useRBAC } from '../context/RBACContext';
 import { useTenant } from '../context/TenantContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { NotificationBell } from './NotificationBell';
-import type { PageView } from '../types';
+import { UnifiedNewPopover } from './layout/UnifiedNewPopover';
+import type { PageView, NavParams } from '../types';
 
 interface TopNavbarProps {
     pageTitle: string;
+    currentPage: PageView;
+    navParams?: NavParams;
     onOpenSearch: () => void;
-    onOpenTask: () => void;
-    onNavigate?: (page: PageView) => void;
+    onNavigate: (page: PageView, params?: NavParams) => void;
+    onOpenNewTask: () => void;
 }
 
-export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, onOpenTask, onNavigate }) => {
+export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, navParams, onOpenSearch, onNavigate, onOpenNewTask }) => {
     const { user } = useRBAC();
     const { currentTenant } = useTenant();
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -50,14 +53,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                 {/* Right: Actions */}
                 <div className="flex items-center gap-2">
 
-                    {/* Create Task Button */}
-                    <button
-                        onClick={onOpenTask}
-                        className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold tracking-wide hover:opacity-90 transition-opacity"
-                    >
-                        <Icons.Plus size={12} strokeWidth={2.5} />
-                        New Task
-                    </button>
+                    {/* Unified "+ New" (⌘N) */}
+                    <UnifiedNewPopover
+                        variant="topbar"
+                        currentPage={currentPage}
+                        currentClientId={navParams?.clientId}
+                        currentProjectId={navParams?.projectId}
+                        onNavigate={onNavigate}
+                        onOpenNewTask={onOpenNewTask}
+                    />
 
                     {/* Notifications */}
                     <NotificationBell onNavigate={onNavigate} />
@@ -71,14 +75,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, onOpenSearch, o
                             {user?.name?.[0] || 'U'}
                         </div>
                         <span className="hidden md:block text-xs font-medium text-zinc-700 dark:text-zinc-200">{user?.name || 'User'}</span>
-                    </button>
-
-                    {/* Mobile Create Task */}
-                    <button
-                        onClick={onOpenTask}
-                        className="md:hidden p-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg transition-opacity hover:opacity-90"
-                    >
-                        <Icons.Plus size={18} />
                     </button>
 
                 </div>

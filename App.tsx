@@ -637,6 +637,7 @@ const AppContent: React.FC<{
     <Layout
       currentPage={currentPage}
       currentMode={appMode}
+      navParams={navParams}
       onNavigate={handleNavigate}
       onSwitchMode={handleSwitchMode}
     >

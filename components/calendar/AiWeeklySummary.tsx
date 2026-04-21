@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icons } from '../ui/Icons';
+import { supabase } from '../../lib/supabase';
 
 export interface AiSummaryData {
   objectives: string[];
@@ -70,9 +71,18 @@ export const AiWeeklySummary: React.FC<AiWeeklySummaryProps> = ({
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 mb-2">
           <Icons.AlertCircle size={14} className="text-red-500 shrink-0" />
           <span className="text-xs text-red-600 dark:text-red-400">{aiSummaryError}</span>
-          <button onClick={() => { onClearError(); onGenerate(); }} className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors">
-            Retry
-          </button>
+          {/log in|session has ended|sesión/i.test(aiSummaryError) ? (
+            <button
+              onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
+              className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors"
+            >
+              Log in again
+            </button>
+          ) : (
+            <button onClick={() => { onClearError(); onGenerate(); }} className="ml-auto text-[10px] font-semibold text-red-500 hover:text-red-700 transition-colors">
+              Retry
+            </button>
+          )}
         </div>
       )}
 

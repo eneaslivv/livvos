@@ -15,13 +15,6 @@ import { sendInviteEmail } from '../lib/sendInviteEmail';
 import { PageView, NavParams } from '../types';
 
 import { ClientListSidebar } from '../components/clients/ClientListSidebar';
-import { ClientDetailHeader } from '../components/clients/ClientDetailHeader';
-import { ClientInfoTab } from '../components/clients/ClientInfoTab';
-import { ClientFinanceTab } from '../components/clients/ClientFinanceTab';
-import { ClientMessagesTab } from '../components/clients/ClientMessagesTab';
-import { ClientTasksTab } from '../components/clients/ClientTasksTab';
-import { ClientHistoryTab } from '../components/clients/ClientHistoryTab';
-import { ClientProjectsTab } from '../components/clients/ClientProjectsTab';
 import { NewClientPanel } from '../components/clients/NewClientPanel';
 
 /* ─── Helpers ─── */
@@ -31,10 +24,178 @@ const statusConfig = {
   inactive: { label: 'Inactive',  bg: 'bg-zinc-100 dark:bg-zinc-800',         text: 'text-zinc-500 dark:text-zinc-400',       dot: 'bg-zinc-400' },
 } as const;
 
-const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
+/* ─── Simplified client header (name + color + status) ─── */
+const getClientInitials = (name: string) =>
+  name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
 
-/* ─── Detail Tabs ─── */
-type DetailTab = 'info' | 'projects' | 'finance' | 'messages' | 'tasks' | 'history';
+const ClientSimpleHeader: React.FC<{
+  client: Client;
+  editingField: string | null;
+  editDraft: Record<string, string>;
+  ownerName: string | null;
+  onEditField: (field: string) => void;
+  onEditDraftChange: (draft: Record<string, string>) => void;
+  onCancelEdit: () => void;
+  onInlineEdit: (field: string) => Promise<boolean>;
+  onUpdateStatus: (status: string) => void;
+  onUpdateColor: (color: string | null) => void;
+  onUploadLogo: (file: File) => Promise<void> | void;
+  onRemoveLogo: () => Promise<void> | void;
+  isUploadingLogo: boolean;
+}> = ({ client, editingField, editDraft, onEditField, onEditDraftChange, onCancelEdit, onInlineEdit, onUpdateStatus, onUpdateColor, onUploadLogo, onRemoveLogo, isUploadingLogo }) => {
+  const status = statusConfig[client.status as keyof typeof statusConfig] ?? statusConfig.inactive;
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
+  const palette = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#71717a'];
+  const editingName = editingField === 'name';
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60">
+      <div className="flex items-center gap-3">
+        {/* Logo / avatar (editable) */}
+        <div className="relative group shrink-0">
+          <button
+            onClick={() => logoInputRef.current?.click()}
+            disabled={isUploadingLogo}
+            className="w-11 h-11 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-xs font-bold transition-all hover:border-zinc-400 dark:hover:border-zinc-500 disabled:opacity-50"
+            style={!client.avatar_url && client.color ? { backgroundColor: `${client.color}22`, color: client.color } : undefined}
+            title={client.avatar_url ? 'Change logo' : 'Upload logo'}
+          >
+            {isUploadingLogo ? (
+              <div className="w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+            ) : client.avatar_url ? (
+              <img src={client.avatar_url} alt={client.name} className="w-full h-full object-contain p-0.5" />
+            ) : (
+              <span className={!client.color ? 'text-zinc-500 dark:text-zinc-400' : ''}>
+                {getClientInitials(client.name)}
+              </span>
+            )}
+          </button>
+          <div className="absolute inset-0 rounded-xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 pointer-events-none">
+            <Icons.Upload size={14} className="text-white pointer-events-auto cursor-pointer" onClick={() => logoInputRef.current?.click()} />
+            {client.avatar_url && (
+              <Icons.Trash
+                size={14}
+                className="text-white pointer-events-auto cursor-pointer hover:text-red-300"
+                onClick={(e) => { e.stopPropagation(); onRemoveLogo(); }}
+              />
+            )}
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onUploadLogo(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        <button
+          onClick={() => setColorOpen(v => !v)}
+          className="relative w-3 h-3 rounded-full shrink-0 ring-2 ring-offset-2 ring-transparent hover:ring-zinc-200 dark:hover:ring-zinc-700 dark:ring-offset-zinc-900 transition-all"
+          style={{ backgroundColor: client.color || '#71717a' }}
+          title="Change color"
+        >
+          {colorOpen && (
+            <div className="absolute left-0 top-5 z-20 p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl flex gap-1">
+              {palette.map(c => (
+                <span
+                  key={c}
+                  onClick={(e) => { e.stopPropagation(); onUpdateColor(c); setColorOpen(false); }}
+                  className="w-5 h-5 rounded-full cursor-pointer hover:scale-110 transition-transform"
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
+        </button>
+        {editingName ? (
+          <input
+            autoFocus
+            value={editDraft.name ?? client.name}
+            onChange={e => onEditDraftChange({ ...editDraft, name: e.target.value })}
+            onBlur={() => onInlineEdit('name')}
+            onKeyDown={e => {
+              if (e.key === 'Enter') onInlineEdit('name');
+              if (e.key === 'Escape') onCancelEdit();
+            }}
+            className="text-lg font-bold text-zinc-900 dark:text-zinc-100 bg-transparent border-b border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-zinc-900 dark:focus:border-zinc-100 px-1 flex-1"
+          />
+        ) : (
+          <button
+            onClick={() => { onEditField('name'); onEditDraftChange({ name: client.name }); }}
+            className="text-lg font-bold text-zinc-900 dark:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 px-1 -mx-1 rounded transition-colors text-left truncate"
+          >
+            {client.name || 'Untitled client'}
+          </button>
+        )}
+        <div className="relative">
+          <button
+            onClick={() => setStatusOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${status.bg} ${status.text}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+            {status.label}
+            <Icons.ChevronDown size={10} />
+          </button>
+          {statusOpen && (
+            <div className="absolute right-0 top-full mt-1 z-20 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl min-w-[120px]">
+              {(['active','prospect','inactive'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => { onUpdateStatus(s); setStatusOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700/60 text-left"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusConfig[s].dot}`} />
+                  {statusConfig[s].label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── Inline editable property ─── */
+const InlineProp: React.FC<{
+  label: string;
+  value: string;
+  editing: boolean;
+  draft: string | undefined;
+  onEdit: () => void;
+  onDraftChange: (v: string) => void;
+  onCancel: () => void;
+  onSave: () => Promise<boolean> | void;
+}> = ({ label, value, editing, draft, onEdit, onDraftChange, onCancel, onSave }) => (
+  <div>
+    <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">{label}</p>
+    {editing ? (
+      <input
+        autoFocus
+        value={draft ?? ''}
+        onChange={e => onDraftChange(e.target.value)}
+        onBlur={() => onSave()}
+        onKeyDown={e => {
+          if (e.key === 'Enter') onSave();
+          if (e.key === 'Escape') onCancel();
+        }}
+        className="w-full text-[12px] bg-transparent border-b border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-zinc-900 dark:focus:border-zinc-100 text-zinc-900 dark:text-zinc-100"
+      />
+    ) : (
+      <button
+        onClick={onEdit}
+        className="text-[12px] font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 truncate text-left w-full"
+      >
+        {value || <span className="text-zinc-400 italic font-normal">Add…</span>}
+      </button>
+    )}
+  </div>
+);
 
 export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParams) => void }> = ({ onNavigate }) => {
   const { user } = useAuth();
@@ -75,7 +236,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const [showNewClientPanel, setShowNewClientPanel] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [detailTab, setDetailTab] = useState<DetailTab>('info');
+  // detailTab state removed — the simplified detail view no longer uses tabs.
   const [showNewTaskInline, setShowNewTaskInline] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
   const [newTaskData, setNewTaskData] = useState<{ title: string; description: string; priority: string; due_date: string; assignee_id: string; status: string }>({ title: '', description: '', priority: 'medium', due_date: new Date().toISOString().split('T')[0], assignee_id: '', status: 'todo' });
@@ -197,11 +358,21 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
     if (selectedClient) {
       loadClientData(selectedClient.id);
       loadInvitationStatus(selectedClient.id);
-      setDetailTab('info');
       setPortalInviteError(null);
       setEditingField(null);
     }
   }, [selectedClient?.id]);
+
+  // Listen for global "+ New" popover requesting a new client.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { name?: string } | undefined;
+      setNewClientData(prev => ({ ...prev, name: detail?.name || '' }));
+      setShowNewClientPanel(true);
+    };
+    window.addEventListener('open-new-client', handler);
+    return () => window.removeEventListener('open-new-client', handler);
+  }, []);
 
   // Auto-trigger invite after email is saved via "Save & Invite"
   useEffect(() => {
@@ -857,7 +1028,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         user_id: user?.id || '',
         user_name: user?.email?.split('@')[0] || 'User',
         action_type: 'payment' as any,
-        action_description: `Income created: ${newIncomeData.concept} — ${fmtMoney(amount)}`,
+        action_description: `Income created: ${newIncomeData.concept} — $${amount.toLocaleString()}`,
         action_date: new Date().toISOString(),
       });
       setNewIncomeData({ concept: '', total_amount: '', num_installments: '1', due_date: '', project_id: '', currency: 'USD', installment_dates: [] });
@@ -967,15 +1138,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
     );
   }
 
-  /* ─── Detail tabs ─── */
-  const detailTabs: { id: DetailTab; label: string; icon: React.ElementType; badge?: number }[] = [
-    { id: 'info', label: 'Info', icon: Icons.Users },
-    { id: 'projects', label: 'Projects', icon: Icons.Briefcase, badge: assignedProjects.length || undefined },
-    { id: 'finance', label: 'Finance', icon: Icons.DollarSign || Icons.Activity, badge: clientFinancials.overdue },
-    { id: 'messages', label: 'Chat', icon: Icons.Message, badge: messages.filter(m => m.sender_type === 'client' && !m.read_at).length },
-    { id: 'tasks', label: 'Tasks', icon: Icons.CheckCircle, badge: tasks.filter(t => !t.completed).length + projectTasks.filter(t => !t.completed).length },
-    { id: 'history', label: 'History', icon: Icons.Clock },
-  ];
+  // detailTabs removed — simplified view renders without tabs.
 
   return (
     <div className="pt-2 pb-6">
@@ -1024,204 +1187,108 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   Back to clients
                 </button>
               )}
-              {/* Client header */}
-              <ClientDetailHeader
+              {/* ── Simplified header ── */}
+              <ClientSimpleHeader
                 client={selectedClient}
                 editingField={editingField}
                 editDraft={editDraft}
-                clientFinanceSummary={{ totalInvoiced: clientFinancials.totalIncome, totalPaid: clientFinancials.totalCollected, totalPending: clientFinancials.pendingAmount }}
-                clientInviteStatus={clientInviteStatus}
-                portalInviteLink={portalInviteLink}
-                portalInviteError={portalInviteError}
-                isInvitingPortal={isInvitingPortal}
-                emailSent={emailSent}
                 onEditField={setEditingField}
                 onEditDraftChange={setEditDraft}
                 onCancelEdit={() => setEditingField(null)}
                 onInlineEdit={handleInlineEdit}
                 onUpdateStatus={handleUpdateClientStatus}
-                onDelete={async () => {
-                  if (!confirm('Are you sure you want to delete this client? This action cannot be undone.')) return;
+                onUpdateColor={async (color: string | null) => {
                   try {
-                    await deleteClient(selectedClient.id);
-                    setSelectedClient(null);
-                  } catch (err: any) {
-                    alert('Error deleting client: ' + (err?.message || 'Unknown error'));
-                  }
+                    await updateClient(selectedClient.id, { color });
+                    setSelectedClient({ ...selectedClient, color });
+                  } catch (err) { errorLogger.error('Error updating client color', err); }
                 }}
-                onInvitePortal={handleInvitePortal}
-                onSaveEmailAndInvite={handleSaveEmailAndInvite}
                 onUploadLogo={handleUploadLogo}
                 onRemoveLogo={handleRemoveLogo}
                 isUploadingLogo={isUploadingLogo}
+                ownerName={teamMembers.find(m => m.id === selectedClient.owner_id)?.name || null}
               />
 
-              {/* Tabs */}
-              <div className="flex items-center gap-0.5 px-5 pt-3 border-b border-zinc-100 dark:border-zinc-800/60 overflow-x-auto">
-                {detailTabs.map(tab => {
-                  const Icon = tab.icon;
-                  const isActive = detailTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setDetailTab(tab.id)}
-                      className={`relative px-3.5 py-2.5 text-[11px] font-medium flex items-center gap-1.5 transition-colors rounded-t-lg whitespace-nowrap ${
-                        isActive
-                          ? 'text-zinc-900 dark:text-zinc-100'
-                          : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-                      }`}
-                    >
-                      <Icon size={13} />
-                      {tab.label}
-                      {tab.badge && tab.badge > 0 ? (
-                        <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${
-                          tab.id === 'finance' ? 'bg-red-100 dark:bg-red-500/20 text-red-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                        }`}>
-                          {tab.badge}
-                        </span>
-                      ) : null}
-                      {isActive && (
-                        <motion.div layoutId="clientTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-full" />
-                      )}
-                    </button>
-                  );
-                })}
+              {/* ── 3 inline props ── */}
+              <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60 grid grid-cols-3 gap-4">
+                <InlineProp
+                  label="Industry"
+                  value={selectedClient.industry || ''}
+                  editing={editingField === 'industry'}
+                  draft={editDraft.industry}
+                  onEdit={() => { setEditingField('industry'); setEditDraft({ industry: selectedClient.industry || '' }); }}
+                  onDraftChange={(v) => setEditDraft({ ...editDraft, industry: v })}
+                  onCancel={() => setEditingField(null)}
+                  onSave={() => handleInlineEdit('industry')}
+                />
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Owner</p>
+                  <p className="text-[12px] font-medium text-zinc-700 dark:text-zinc-300 truncate">
+                    {teamMembers.find(m => m.id === selectedClient.owner_id)?.name || '—'}
+                  </p>
+                </div>
+                <InlineProp
+                  label="Timezone"
+                  value={selectedClient.timezone || ''}
+                  editing={editingField === 'timezone'}
+                  draft={editDraft.timezone}
+                  onEdit={() => { setEditingField('timezone'); setEditDraft({ timezone: selectedClient.timezone || '' }); }}
+                  onDraftChange={(v) => setEditDraft({ ...editDraft, timezone: v })}
+                  onCancel={() => setEditingField(null)}
+                  onSave={() => handleInlineEdit('timezone')}
+                />
               </div>
 
-              {/* Tab Content */}
-              <div className="p-5 min-h-[300px] max-h-[calc(100vh-380px)] overflow-y-auto">
-                <AnimatePresence mode="wait">
-                  {/* ─── INFO TAB ─── */}
-                  {detailTab === 'info' && (
-                    <ClientInfoTab
-                      client={selectedClient}
-                      editingField={editingField}
-                      editDraft={editDraft}
-                      assignedProjects={assignedProjects}
-                      availableProjects={availableProjects}
-                      showProjectDropdown={showProjectDropdown}
-                      assigningProject={assigningProject}
-                      projectDropdownRef={projectDropdownRef}
-                      onEditField={setEditingField}
-                      onEditDraftChange={setEditDraft}
-                      onCancelEdit={() => setEditingField(null)}
-                      onInlineEdit={handleInlineEdit}
-                      onAssignProject={(pid) => handleAssignProject(pid)}
-                      onUnassignProject={handleUnassignProject}
-                      onToggleProjectDropdown={() => setShowProjectDropdown(prev => !prev)}
-                      onUpdateColor={async (color: string | null) => {
-                        try {
-                          await updateClient(selectedClient.id, { color });
-                          setSelectedClient({ ...selectedClient, color });
-                        } catch (err) {
-                          errorLogger.error('Error updating client color', err);
-                        }
-                      }}
-                      onUpdateTimezone={async (timezone: string | null) => {
-                        try {
-                          await updateClient(selectedClient.id, { timezone });
-                          setSelectedClient({ ...selectedClient, timezone });
-                        } catch (err) {
-                          errorLogger.error('Error updating client timezone', err);
-                        }
-                      }}
-                      onNavigateToProject={(projectId) => onNavigate?.('projects', { projectId })}
-                    />
-                  )}
-
-                  {/* ─── PROJECTS TAB ─── */}
-                  {detailTab === 'projects' && (
-                    <ClientProjectsTab
-                      clientId={selectedClient.id}
-                      assignedProjects={assignedProjects}
-                      projectTasks={projectTasks}
-                      availableProjects={availableProjects}
-                      assigningProject={assigningProject}
-                      showProjectDropdown={showProjectDropdown}
-                      projectDropdownRef={projectDropdownRef}
-                      onAssignProject={(pid) => handleAssignProject(pid)}
-                      onUnassignProject={handleUnassignProject}
-                      onToggleProjectDropdown={() => setShowProjectDropdown(!showProjectDropdown)}
-                      onNavigateToProject={(projectId) => onNavigate?.('projects', { projectId })}
-                    />
-                  )}
-
-                  {/* ─── FINANCE TAB ─── */}
-                  {detailTab === 'finance' && (
-                    <ClientFinanceTab
-                      client={selectedClient}
-                      clientIncomes={clientIncomes}
-                      clientFinancials={clientFinancials}
-                      showNewIncomeForm={showNewIncomeForm}
-                      newIncomeData={newIncomeData}
-                      creatingIncome={creatingIncome}
-                      deletingIncomeId={deletingIncomeId}
-                      availableProjects={availableProjects}
-                      onShowNewIncomeForm={(v) => { setShowNewIncomeForm(v); if (v) { setShowExpenseForm(false); setShowTimeForm(false); } }}
-                      onNewIncomeDataChange={setNewIncomeData}
-                      onCreateIncome={handleCreateIncome}
-                      onDeleteIncome={handleDeleteIncome}
-                      onMarkInstallmentPaid={handleMarkInstallmentPaid}
-                      showExpenseForm={showExpenseForm}
-                      onShowExpenseForm={(v) => { setShowExpenseForm(v); if (v) { setShowNewIncomeForm(false); setShowTimeForm(false); } }}
-                      expenseFormData={expenseFormData}
-                      onExpenseFormChange={setExpenseFormData}
-                      onCreateExpense={handleCreateExpense}
-                      onDeleteExpense={handleDeleteExpense}
-                      showTimeForm={showTimeForm}
-                      onShowTimeForm={(v) => { setShowTimeForm(v); if (v) { setShowNewIncomeForm(false); setShowExpenseForm(false); } }}
-                      timeFormData={timeFormData}
-                      onTimeFormChange={setTimeFormData}
-                      onCreateTimeEntry={handleCreateTimeEntry}
-                      onDeleteTimeEntry={handleDeleteTimeEntry}
-                      isSubmittingFinance={isSubmittingFinance}
-                    />
-                  )}
-
-                  {/* ─── MESSAGES TAB ─── */}
-                  {detailTab === 'messages' && (
-                    <ClientMessagesTab
-                      messages={messages}
-                      newMessage={newMessage}
-                      messagesEndRef={messagesEndRef}
-                      onNewMessageChange={setNewMessage}
-                      onSendMessage={handleSendMessage}
-                    />
-                  )}
-
-                  {/* ─── TASKS TAB ─── */}
-                  {detailTab === 'tasks' && (
-                    <ClientTasksTab
-                      tasks={tasks}
-                      projectTasks={projectTasks}
-                      assignedProjects={assignedProjects}
-                      teamMembers={teamMembers}
-                      userId={user?.id}
-                      taskProjectFilter={taskProjectFilter}
-                      showNewTaskInline={showNewTaskInline}
-                      newTaskData={newTaskData}
-                      creatingTask={creatingTask}
-                      expandedTaskId={expandedTaskId}
-                      newSubtaskTitle={newSubtaskTitle}
-                      addingSubtask={addingSubtask}
-                      onTaskProjectFilterChange={setTaskProjectFilter}
-                      onShowNewTaskInline={setShowNewTaskInline}
-                      onNewTaskDataChange={setNewTaskData}
-                      onCreateTask={handleCreateTask}
-                      onToggleTask={handleToggleTask}
-                      onToggleUnifiedTask={handleToggleUnifiedTask}
-                      onExpandTask={setExpandedTaskId}
-                      onNewSubtaskTitleChange={setNewSubtaskTitle}
-                      onAddSubtask={handleAddSubtask}
-                      onToggleSubtask={handleToggleSubtask}
-                    />
-                  )}
-
-                  {/* ─── HISTORY TAB ─── */}
-                  {detailTab === 'history' && (
-                    <ClientHistoryTab history={history} />
-                  )}
-                </AnimatePresence>
+              {/* ── Projects list ── */}
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                    Projects · {assignedProjects.length}
+                  </h3>
+                </div>
+                {assignedProjects.length === 0 ? (
+                  <p className="text-[12px] text-zinc-400 italic py-4 text-center">
+                    No projects yet.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                    {assignedProjects.map(p => (
+                      <li key={p.id}>
+                        <button
+                          onClick={() => onNavigate?.('projects', { projectId: p.id })}
+                          className="w-full flex items-center gap-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 -mx-2 px-2 rounded-lg transition-colors text-left"
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            p.status === 'Completed' ? 'bg-zinc-400'
+                            : p.status === 'Pending' ? 'bg-amber-500'
+                            : p.status === 'Review' ? 'bg-violet-500'
+                            : 'bg-emerald-500'
+                          }`} />
+                          <span className="text-[13px] font-medium text-zinc-800 dark:text-zinc-200 truncate flex-1">
+                            {p.title}
+                          </span>
+                          {p.deadline && (
+                            <span className="text-[11px] text-zinc-400 shrink-0">
+                              {new Date(p.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open-new-project', {
+                      detail: { clientId: selectedClient.id, name: '' },
+                    }));
+                    onNavigate?.('projects', { clientId: selectedClient.id });
+                  }}
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl text-[12px] font-medium text-zinc-500 hover:border-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                >
+                  <Icons.Plus size={14} />
+                  New project
+                </button>
               </div>
             </div>
           ) : (
