@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from './ui/Icons';
-import { generateAdvisorInsights, clearAICache, AdvisorInsight } from '../lib/ai';
+import { generateAdvisorInsights, getCachedAdvisorInsights, sendAdvisorChat, clearAICache, AdvisorInsight, AdvisorChatMessage } from '../lib/ai';
 import { useProjects } from '../context/ProjectsContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTeam } from '../context/TeamContext';
@@ -94,9 +94,14 @@ export const AiAdvisor: React.FC = () => {
   const [greeting, setGreeting] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [chatMessages, setChatMessages] = useState<AdvisorChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const lastContextHashRef = useRef<number>(0);
 
   // Cycle loading steps
@@ -182,6 +187,20 @@ export const AiAdvisor: React.FC = () => {
       return;
     }
 
+    // Serve cached result synchronously to avoid loading flash on reopen
+    if (!forceRefresh) {
+      const cached = getCachedAdvisorInsights(context);
+      if (cached) {
+        setInsights(cached.insights || []);
+        setGreeting(cached.greeting || '');
+        setHasLoaded(true);
+        setError(null);
+        setSessionExpired(false);
+        lastContextHashRef.current = contextHash;
+        return;
+      }
+    }
+
     if (forceRefresh) clearAICache('advisor');
     setLoading(true);
     setError(null);
@@ -190,19 +209,69 @@ export const AiAdvisor: React.FC = () => {
       setInsights(result.insights || []);
       setGreeting(result.greeting || '');
       setHasLoaded(true);
+      setSessionExpired(false);
       lastContextHashRef.current = contextHash;
     } catch (err: any) {
       console.error('AI Advisor error:', err);
-      setError(err?.message || 'Could not generate the analysis');
+      if (err?.needsReLogin) {
+        setSessionExpired(true);
+        // Keep any previously loaded insights visible; just show a banner
+        if (!hasLoaded) setError(err?.message || 'Your session has ended.');
+      } else {
+        setError(err?.message || 'Could not generate the analysis');
+      }
     } finally {
       setLoading(false);
     }
   }, [user, buildContextSummary, hasLoaded]);
 
+  // Restore cached insights on mount so reopens are instant (no loading flash)
+  useEffect(() => {
+    if (!user) return;
+    const context = buildContextSummary();
+    const cached = getCachedAdvisorInsights(context);
+    if (cached && !hasLoaded) {
+      setInsights(cached.insights || []);
+      setGreeting(cached.greeting || '');
+      setHasLoaded(true);
+      lastContextHashRef.current = quickHash(context);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const handleOpen = () => {
     setIsOpen(true);
     if (!hasLoaded && !loading) {
       loadInsights();
+    }
+  };
+
+  const handleSendChat = async () => {
+    const question = chatInput.trim();
+    if (!question || chatSending || !user) return;
+    const userMsg: AdvisorChatMessage = { role: 'user', content: question };
+    const nextHistory = [...chatMessages, userMsg];
+    setChatMessages(nextHistory);
+    setChatInput('');
+    setChatSending(true);
+    try {
+      const context = buildContextSummary();
+      const { reply } = await sendAdvisorChat(context, chatMessages, question);
+      setChatMessages([...nextHistory, { role: 'assistant', content: reply }]);
+      setSessionExpired(false);
+    } catch (err: any) {
+      console.error('AI chat error:', err);
+      if (err?.needsReLogin) setSessionExpired(true);
+      setChatMessages([...nextHistory, {
+        role: 'assistant',
+        content: err?.needsReLogin ? 'Your session has ended. Please refresh the page to sign in again.' : (err?.message || 'Could not send the message. Try again.'),
+      }]);
+    } finally {
+      setChatSending(false);
+      // Scroll chat to bottom after render
+      setTimeout(() => {
+        if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      }, 50);
     }
   };
 
@@ -440,9 +509,73 @@ export const AiAdvisor: React.FC = () => {
                 )}
               </div>
 
-              {/* ── Footer ── */}
-              {hasLoaded && !loading && insights.length > 0 && (
-                <div className="px-5 py-3.5 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0">
+              {/* ── Session expired banner ── */}
+              {sessionExpired && (
+                <div className="px-5 py-2 border-t border-amber-200/60 dark:border-amber-700/30 bg-amber-50/60 dark:bg-amber-500/5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Icons.Alert size={12} className="text-amber-500 shrink-0" />
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 flex-1">Session expired. Refresh the page to sign in again.</span>
+                    <button
+                      onClick={() => { setSessionExpired(false); loadInsights(true); }}
+                      className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Chat messages ── */}
+              {chatMessages.length > 0 && (
+                <div ref={chatScrollRef} className="max-h-[240px] overflow-y-auto px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 space-y-2 shrink-0">
+                  {chatMessages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-[11px] leading-[1.55] ${
+                        msg.role === 'user'
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-br-sm'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-bl-sm'
+                      }`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {chatSending && (
+                    <div className="flex justify-start">
+                      <div className="px-3 py-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-[11px] text-zinc-400 rounded-bl-sm">
+                        <motion.span
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{ duration: 1.2, repeat: Infinity }}
+                        >
+                          Thinking...
+                        </motion.span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Footer + Chat input ── */}
+              {hasLoaded && insights.length > 0 && (
+                <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
+                      placeholder="Ask a follow-up..."
+                      disabled={chatSending}
+                      className="flex-1 px-3 py-2 text-[11px] bg-zinc-100 dark:bg-zinc-800 rounded-lg border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 focus:outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors"
+                    />
+                    <button
+                      onClick={handleSendChat}
+                      disabled={chatSending || !chatInput.trim()}
+                      className="p-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                      title="Send"
+                    >
+                      <Icons.Send size={12} />
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -453,9 +586,9 @@ export const AiAdvisor: React.FC = () => {
                     <button
                       onClick={() => loadInsights(true)}
                       disabled={loading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                     >
-                      <Icons.RefreshCw size={10} />
+                      <Icons.RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
                       Refresh
                     </button>
                   </div>

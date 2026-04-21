@@ -12,6 +12,7 @@ type AICacheEntry = {
 /** TTL per request type (in milliseconds) */
 const CACHE_TTL: Record<string, number> = {
   advisor: 2 * 60 * 60 * 1000,    // 2h — business context changes slowly
+  advisor_chat: 0,                 // no cache — each chat turn is unique
   weekly_summary: 60 * 60 * 1000, // 1h — weekly data is stable
   proposal: 30 * 60 * 1000,       // 30 min — same brief = same proposal
   blog: 30 * 60 * 1000,           // 30 min
@@ -159,8 +160,15 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
         }
       }
       // Token missing or expiring soon — force refresh
-      const { data: refreshed } = await supabase.auth.refreshSession()
-      return refreshed.session?.access_token || supabaseKey
+      const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
+      if (refreshErr || !refreshed.session?.access_token) {
+        // Refresh token itself is dead — user must log in again
+        const err = new Error('Your session has ended. Please log in again.') as any
+        err.status = 401
+        err.needsReLogin = true
+        throw err
+      }
+      return refreshed.session.access_token
     }
 
     let authToken = await getValidToken()
@@ -195,11 +203,12 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
       const message = res.status === 429
         ? 'AI temporarily unavailable. Try again in 30 seconds.'
         : res.status === 401
-        ? 'Session expired. Please refresh the page.'
+        ? 'Your session has ended. Please log in again.'
         : errBody.error || `Edge function error (${res.status})`
       const err = new Error(message) as any
       err.isRateLimit = res.status === 429
       err.status = res.status
+      err.needsReLogin = res.status === 401
       throw err
     }
 
@@ -269,6 +278,24 @@ export const generateWeeklySummaryFromAI = (input: string): Promise<WeeklySummar
 
 export const generateAdvisorInsights = (input: string): Promise<AdvisorAIResult> =>
   callGemini('advisor', input, (r) => Array.isArray(r?.insights))
+
+/** Synchronously return cached advisor insights for the given context (or null). */
+export const getCachedAdvisorInsights = (input: string): AdvisorAIResult | null =>
+  getCached<AdvisorAIResult>('advisor', input)
+
+export type AdvisorChatMessage = { role: 'user' | 'assistant'; content: string }
+
+export type AdvisorChatResult = { reply: string }
+
+/** Conversational follow-up chat that piggybacks on the advisor context. */
+export const sendAdvisorChat = (
+  context: string,
+  history: AdvisorChatMessage[],
+  question: string,
+): Promise<AdvisorChatResult> => {
+  const payload = JSON.stringify({ context, history, question })
+  return callGemini<AdvisorChatResult>('advisor_chat', payload, (r) => typeof r?.reply === 'string')
+}
 
 export const generateBlogFromAI = (input: string): Promise<BlogAIResult> =>
   callGemini('blog', input, (r) => !!r?.title && !!r?.content)

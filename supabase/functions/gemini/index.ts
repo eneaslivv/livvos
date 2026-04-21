@@ -238,9 +238,10 @@ serve(async (req) => {
       }
     }
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('GEMINI_API_KEY')
+    const useOpenAI = !!Deno.env.get('OPENAI_API_KEY')
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY' }), {
+      return new Response(JSON.stringify({ error: 'Missing OPENAI_API_KEY (or GEMINI_API_KEY as fallback)' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -335,142 +336,164 @@ Rules:
 - Respond in the SAME language as the input (Spanish if input is in Spanish)
 - If there are overdue items, low income, or stalled projects, flag them as high priority
 - Always include at least one forward-looking recommendation`
+        : type === 'advisor_chat'
+        ? `You are a senior business advisor continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (current business snapshot), "history" (prior turns as [{role, content}]), and "question" (the new user message).
+Return ONLY valid JSON: {"reply":"your response text"}
+Rules:
+- Use the context (projects, finances, team) to give concrete, data-grounded answers.
+- Keep replies concise: 2-5 sentences unless the user asks for detail.
+- Respond in the SAME language as the user's question (Spanish if Spanish).
+- No markdown code fences; plain text only in the reply field.
+- If the context is missing data the user asked about, say so briefly and suggest what to check.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'standup' ? 4096 : 512
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : 0.3
 
-    const generationConfig: Record<string, any> = {
-      temperature: type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : 0.3,
-      maxOutputTokens: maxTokens,
-    }
-    generationConfig.responseMimeType = 'application/json'
-
-    const requestPayload: Record<string, any> = {
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: processedInput }],
-        },
-      ],
-      generationConfig,
-    }
-
-    // Fetch with retry on 429 (rate limit) + model fallback
-    const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
-    const geminiBody = JSON.stringify(requestPayload)
+    // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
     let response: Response | null = null
+    let rawText = ''
 
-    for (let modelIdx = 0; modelIdx < MODELS.length; modelIdx++) {
-      const model = MODELS[modelIdx]
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    if (useOpenAI) {
+      // Model chain: mini first, 4o as fallback on 5xx
+      const MODELS = ['gpt-4o-mini', 'gpt-4o']
+      const openaiBody = (model: string) => JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: processedInput },
+        ],
+        response_format: { type: 'json_object' },
+        temperature,
+        max_tokens: Math.min(maxTokens, 16384),
+      })
 
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        response = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: geminiBody,
+      for (let modelIdx = 0; modelIdx < MODELS.length; modelIdx++) {
+        const model = MODELS[modelIdx]
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: openaiBody(model),
+          })
+          if (response.status !== 429 || attempt === MAX_RETRIES) break
+          const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
+          const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 2) * 1000
+          const jitter = Math.floor(Math.random() * 2000)
+          const delay = baseDelay + jitter
+          console.log(`[ai] openai 429 on ${model}, retry in ${delay}ms (${attempt + 1}/${MAX_RETRIES})`)
+          await new Promise(r => setTimeout(r, delay))
+        }
+        if (response!.ok || response!.status === 400) break // 400 = bad request, don't fallback
+        if (modelIdx < MODELS.length - 1) {
+          console.log(`[ai] ${model} failed (${response!.status}), falling back to ${MODELS[modelIdx + 1]}`)
+        }
+      }
+
+      if (!response!.ok) {
+        const text = await response!.text()
+        console.error(`[ai] openai error ${response!.status} for type=${type}:`, text.slice(0, 500))
+        const userMessage = response!.status === 429
+          ? 'API rate limit exceeded. Please wait a minute and try again.'
+          : response!.status === 401
+          ? 'AI provider authentication failed. Check OPENAI_API_KEY.'
+          : text || 'OpenAI request failed'
+        return new Response(JSON.stringify({ error: userMessage }), {
+          status: response!.status === 429 ? 429 : 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
-
-        if (response.status !== 429 || attempt === MAX_RETRIES) break
-
-        // Use Retry-After header if present, otherwise exponential backoff starting higher
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
-        const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 2) * 1000 // 4s, 8s, 16s
-        const jitter = Math.floor(Math.random() * 2000)
-        const delay = baseDelay + jitter
-        console.log(`[gemini] 429 on ${model}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
-        await new Promise(r => setTimeout(r, delay))
       }
 
-      // If this model succeeded or returned a non-429 error, use it
-      if (response!.status !== 429) break
+      const data = await response!.json()
+      rawText = data?.choices?.[0]?.message?.content || ''
+      const finishReason = data?.choices?.[0]?.finish_reason || 'unknown'
+      console.log(`[ai] openai type=${type} finish=${finishReason} len=${rawText.length}`)
 
-      // If rate-limited on this model and there's a fallback, try next model
-      if (modelIdx < MODELS.length - 1) {
-        console.log(`[gemini] ${model} exhausted retries with 429, falling back to ${MODELS[modelIdx + 1]}`)
+      // Save usage for logging (remapped to Gemini-style fields further down)
+      ;(response as any)._usage = {
+        promptTokenCount: data?.usage?.prompt_tokens || 0,
+        candidatesTokenCount: data?.usage?.completion_tokens || 0,
+      }
+    } else {
+      // ─── Legacy Gemini path ──────────────────────────────────────
+      const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
+      const generationConfig: Record<string, any> = {
+        temperature,
+        maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json',
+      }
+      const geminiBody = JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: processedInput }] }],
+        generationConfig,
+      })
+
+      for (let modelIdx = 0; modelIdx < MODELS.length; modelIdx++) {
+        const model = MODELS[modelIdx]
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          response = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: geminiBody,
+          })
+          if (response.status !== 429 || attempt === MAX_RETRIES) break
+          const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10)
+          const baseDelay = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 2) * 1000
+          const jitter = Math.floor(Math.random() * 2000)
+          await new Promise(r => setTimeout(r, baseDelay + jitter))
+        }
+        if (response!.status !== 429) break
+      }
+
+      if (!response!.ok) {
+        const text = await response!.text()
+        console.error(`[ai] gemini error ${response!.status}:`, text.slice(0, 500))
+        return new Response(JSON.stringify({
+          error: response!.status === 429 ? 'API rate limit exceeded. Please wait a minute and try again.' : (text || 'Gemini request failed'),
+        }), {
+          status: response!.status === 429 ? 429 : 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const data = await response!.json()
+      if (!data?.candidates?.length) {
+        const feedback = data?.promptFeedback || data?.blockReason || 'no candidates returned'
+        return new Response(JSON.stringify({ error: 'AI returned empty response', details: feedback }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const parts = data?.candidates?.[0]?.content?.parts || []
+      rawText = parts.filter((p: any) => !p.thought && !p.thoughtSignature).map((p: any) => p.text || '').join('')
+      ;(response as any)._usage = {
+        promptTokenCount: data?.usageMetadata?.promptTokenCount || 0,
+        candidatesTokenCount: data?.usageMetadata?.candidatesTokenCount || 0,
       }
     }
 
-    if (!response!.ok) {
-      const text = await response!.text()
-      console.error(`[gemini] API error ${response!.status} for type=${type}:`, text.slice(0, 500))
-      const userMessage = response!.status === 429
-        ? 'API rate limit exceeded. Please wait a minute and try again.'
-        : text || 'Gemini request failed'
-      return new Response(JSON.stringify({ error: userMessage }), {
-        status: response!.status === 429 ? 429 : 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const data = await response!.json()
-
-    // Check for blocked/empty responses
-    if (!data?.candidates?.length) {
-      const feedback = data?.promptFeedback || data?.blockReason || 'no candidates returned'
-      console.error(`[gemini] No candidates for type=${type}:`, JSON.stringify(feedback).slice(0, 500))
-      return new Response(JSON.stringify({ error: 'AI returned empty response', details: feedback }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Extract text from parts — gemini-2.5 may include thinking parts
-    const parts = data?.candidates?.[0]?.content?.parts || []
-    console.log(`[gemini] type=${type} parts=${parts.length} finishReason=${data.candidates[0]?.finishReason}`)
-
-    // Strategy: try parsing each part as JSON individually (last valid wins),
-    // then fallback to concatenated text with regex extraction
+    // ─── Parse JSON from rawText (works for both providers) ────────
     let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | StandupResponse | null = null
-
-    // 1. Try each part individually (response JSON is usually in the last part)
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const partText = (parts[i]?.text || '').trim()
-      if (!partText || partText.length < 2) continue
-      try {
-        json = JSON.parse(partText)
-        break
-      } catch {}
-    }
-
-    // 2. Fallback: concatenate non-thinking parts and try extraction
-    if (!json) {
-      const text = parts
-        .filter((p: any) => !p.thought && !p.thoughtSignature)
-        .map((p: any) => p.text || '').join('') || ''
-
-      try {
-        json = JSON.parse(text)
-      } catch (_err) {
-        // Try extracting JSON from markdown code blocks
-        const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-        if (codeBlock) {
-          try { json = JSON.parse(codeBlock[1].trim()) } catch {}
-        }
-        // Fallback: extract first { ... } or [ ... ] block
-        if (!json) {
-          const match = text.match(/\{[\s\S]*\}/)
-          if (match) {
-            try { json = JSON.parse(match[0]) } catch {}
-          }
-        }
+    const trimmed = rawText.trim()
+    if (trimmed) {
+      try { json = JSON.parse(trimmed) } catch {}
+      if (!json) {
+        const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (codeBlock) { try { json = JSON.parse(codeBlock[1].trim()) } catch {} }
+      }
+      if (!json) {
+        const match = trimmed.match(/\{[\s\S]*\}/)
+        if (match) { try { json = JSON.parse(match[0]) } catch {} }
       }
     }
 
-    // 3. Last resort: concatenate ALL parts text and regex extract
-    if (!json) {
-      const allText = parts.map((p: any) => p.text || '').join('')
-      const match = allText.match(/\{[\s\S]*\}/)
-      if (match) {
-        try { json = JSON.parse(match[0]) } catch {}
-      }
-    }
-
-    // Debug string for error responses (text var is not in scope here)
-    const finishReason = data.candidates[0]?.finishReason || 'unknown'
-    const rawDebug = parts.map((p: any) => (p.text || '').slice(0, 500)).join(' | ').slice(0, 1500)
+    const finishReason = 'unknown'
+    const rawDebug = rawText.slice(0, 1500)
 
     if (type === 'tasks_bulk') {
       const bulk = json as TasksBulkResponse
@@ -529,6 +552,14 @@ Rules:
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+    } else if (type === 'advisor_chat') {
+      const chat = json as { reply?: string }
+      if (!chat || typeof chat.reply !== 'string') {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
     } else if (!json || !(json as TaskResponse).title) {
       return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
         status: 500,
@@ -537,7 +568,7 @@ Rules:
     }
 
     // Log usage (non-blocking)
-    const usage = data?.usageMetadata
+    const usage = (response as any)?._usage
     if (tenantId) {
       supabaseAdmin.from('ai_usage_log').insert({
         tenant_id: tenantId,
