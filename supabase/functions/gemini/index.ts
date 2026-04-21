@@ -255,9 +255,10 @@ Return ONLY valid JSON with this structure:
 {"phases":[{"name":"Phase Name","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","budget":0,"tasks":[{"title":"Task title","priority":"low|medium|high","dueDate":"YYYY-MM-DD","assignee":"team member name or null","subtasks":[{"title":"Subtask title"}]}]}]}
 Rules:
 - Create 2-5 phases with clear, professional names
-- Each phase should have 3-6 concrete, actionable tasks (NOT more — quality over quantity)
-- Each task should have 1-3 subtasks ONLY if the task is complex enough to warrant them. Simple tasks need 0 subtasks.
-- IMPORTANT: Each task MUST have its own "dueDate" (YYYY-MM-DD) staggered within the phase date range. Space tasks evenly — do NOT give all tasks the same date.
+- Each phase should have 2-4 HIGH-LEVEL parent tasks (NOT more — quality over quantity, never a long flat list)
+- HEAVILY prefer nesting detail as subtasks. Each parent task should have 3-6 subtasks when the work has multiple concrete steps. Only leave 0 subtasks for truly atomic work (e.g., "Send approval email").
+- NEVER emit a parent task that is actually a step of another parent — merge it in as a subtask instead. Group related small items under one parent (e.g., "Website Build" with subtasks "Hero section", "About page", "Contact form", "Footer" — NOT 4 separate parent tasks).
+- IMPORTANT: Each PARENT task MUST have its own "dueDate" (YYYY-MM-DD) staggered within the phase date range. Space parent tasks evenly — do NOT give all tasks the same date. Subtasks inherit roughly from parent.
 - If a list of team members is provided in the input, assign tasks to specific people by name using the "assignee" field. Distribute work evenly across the team based on task type. If no team is provided, set assignee to null.
 - Priorities: high for critical-path/blocking tasks, medium for standard, low for nice-to-have
 - Task titles should be concise and actionable (start with a verb)
