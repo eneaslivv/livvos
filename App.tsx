@@ -19,6 +19,8 @@ import { FinanceProvider } from './context/FinanceContext';
 import { ProjectsProvider } from './context/ProjectsContext';
 import { AnalyticsProvider } from './context/AnalyticsContext';
 import { SystemProvider } from './context/SystemContext';
+import { PresenceProvider } from './context/PresenceContext';
+import { LiveCursors } from './components/presence/LiveCursors';
 
 const loadHome = () => import('./pages/Home').then(module => ({ default: module.Home }));
 const loadProjects = () => import('./pages/Projects').then(module => ({ default: module.Projects }));
@@ -979,31 +981,34 @@ const App: React.FC = () => {
           <SecurityProvider>
             <NotificationsProvider>
               <TeamProvider>
-                <ClientsProvider>
-                  <CalendarProvider>
-                    <DocumentsProvider>
-                      <FinanceProvider>
-                        <ProjectsProvider>
-                          <AnalyticsProvider>
-                            <SystemProvider>
-                              <AppContent
-                                currentPage={currentPage}
-                                appMode={appMode}
-                                handleNavigate={handleNavigate}
-                                handleSwitchMode={handleSwitchMode}
-                                showDebug={showDebug}
-                                navParams={navParams}
-                              />
-                              {showDebug && (
-                                <DebugPanel visible={showDebug} />
-                              )}
-                            </SystemProvider>
-                          </AnalyticsProvider>
-                        </ProjectsProvider>
-                      </FinanceProvider>
-                    </DocumentsProvider>
-                  </CalendarProvider>
-                </ClientsProvider>
+                <PresenceProvider currentPage={currentPage}>
+                  <ClientsProvider>
+                    <CalendarProvider>
+                      <DocumentsProvider>
+                        <FinanceProvider>
+                          <ProjectsProvider>
+                            <AnalyticsProvider>
+                              <SystemProvider>
+                                <AppContent
+                                  currentPage={currentPage}
+                                  appMode={appMode}
+                                  handleNavigate={handleNavigate}
+                                  handleSwitchMode={handleSwitchMode}
+                                  showDebug={showDebug}
+                                  navParams={navParams}
+                                />
+                                <LiveCursors currentPage={currentPage} />
+                                {showDebug && (
+                                  <DebugPanel visible={showDebug} />
+                                )}
+                              </SystemProvider>
+                            </AnalyticsProvider>
+                          </ProjectsProvider>
+                        </FinanceProvider>
+                      </DocumentsProvider>
+                    </CalendarProvider>
+                  </ClientsProvider>
+                </PresenceProvider>
               </TeamProvider>
             </NotificationsProvider>
           </SecurityProvider>

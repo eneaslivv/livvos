@@ -6,6 +6,7 @@ import { useTenant } from '../context/TenantContext';
 import { ConfigurationModal } from './config/ConfigurationModal';
 import { NotificationBell } from './NotificationBell';
 import { UnifiedNewPopover } from './layout/UnifiedNewPopover';
+import { PresenceAvatars } from './presence/PresenceAvatars';
 import type { PageView, NavParams } from '../types';
 
 interface TopNavbarProps {
@@ -52,6 +53,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, na
 
                 {/* Right: Actions */}
                 <div className="flex items-center gap-2">
+
+                    {/* Live presence (who's online in this tenant) */}
+                    <div className="hidden sm:flex items-center pr-1 mr-1 border-r border-zinc-200 dark:border-zinc-800">
+                        <div className="pr-2">
+                            <PresenceAvatars currentPage={currentPage} />
+                        </div>
+                    </div>
 
                     {/* Unified "+ New" (⌘N) */}
                     <UnifiedNewPopover
