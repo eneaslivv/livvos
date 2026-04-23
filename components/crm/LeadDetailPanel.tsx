@@ -226,8 +226,16 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
                 <Field label="Budget">
                   <input value={draft.budget} onChange={(e) => setDraft({ ...draft, budget: e.target.value })} className={inputClass} placeholder="$0" inputMode="numeric" />
                 </Field>
-                <Field label="Source">
-                  <input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} className={inputClass} placeholder="Instagram, web" />
+                <Field label="Landing (source)">
+                  <input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} className={inputClass} placeholder="agencies-lp, home" />
+                </Field>
+                <Field label="Form (origin)">
+                  <input
+                    value={draft.origin}
+                    onChange={(e) => setDraft({ ...draft, origin: e.target.value })}
+                    className={inputClass}
+                    placeholder="Contact Form, Hero, Footer"
+                  />
                 </Field>
               </div>
 
@@ -268,12 +276,44 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
                 </div>
               )}
 
-              {/* UTM — compact */}
-              {showExtended && (lead.utm?.source || lead.utm?.campaign || lead.utm?.medium) && (
-                <div className="flex gap-3 text-[11px]">
-                  {lead.utm?.source && <div><span className="text-zinc-400">utm_source:</span> <span className="text-zinc-600 dark:text-zinc-300">{lead.utm.source}</span></div>}
-                  {lead.utm?.medium && <div><span className="text-zinc-400">utm_medium:</span> <span className="text-zinc-600 dark:text-zinc-300">{lead.utm.medium}</span></div>}
-                  {lead.utm?.campaign && <div><span className="text-zinc-400">utm_campaign:</span> <span className="text-zinc-600 dark:text-zinc-300">{lead.utm.campaign}</span></div>}
+              {/* Attribution — UTM + landing page + click IDs (from leads.utm JSONB) */}
+              {showExtended && (lead.utm?.source || lead.utm?.campaign || lead.utm?.medium || (lead.utm as any)?.page_url || (lead.utm as any)?.landing || (lead.utm as any)?.first_landing_page || (lead.utm as any)?.gclid || (lead.utm as any)?.fbclid) && (
+                <div className="space-y-1 text-[11px] rounded-lg px-3 py-2 bg-zinc-50/60 dark:bg-zinc-900/20 border border-zinc-100 dark:border-zinc-800/30">
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Attribution</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {lead.utm?.source && <div><span className="text-zinc-400">utm_source:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.source}</span></div>}
+                    {lead.utm?.medium && <div><span className="text-zinc-400">utm_medium:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.medium}</span></div>}
+                    {lead.utm?.campaign && <div><span className="text-zinc-400">utm_campaign:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.campaign}</span></div>}
+                    {(lead.utm as any)?.gclid && <div><span className="text-zinc-400">gclid:</span> <span className="text-zinc-700 dark:text-zinc-200 font-mono">{String((lead.utm as any).gclid).slice(0, 16)}…</span></div>}
+                    {(lead.utm as any)?.fbclid && <div><span className="text-zinc-400">fbclid:</span> <span className="text-zinc-700 dark:text-zinc-200 font-mono">{String((lead.utm as any).fbclid).slice(0, 16)}…</span></div>}
+                  </div>
+                  {((lead.utm as any)?.page_url || (lead.utm as any)?.landing || (lead.utm as any)?.first_landing_page || (lead.utm as any)?.last_landing_page) && (() => {
+                    const pageUrl = (lead.utm as any).page_url || (lead.utm as any).landing || (lead.utm as any).first_landing_page || (lead.utm as any).last_landing_page;
+                    const isAbsolute = /^https?:\/\//i.test(pageUrl);
+                    return (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800/30 mt-1">
+                        <div className="text-zinc-400 text-[10px] mb-0.5">Page submitted from (what the user saw)</div>
+                        {isAbsolute ? (
+                          <a
+                            href={pageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-zinc-700 dark:text-zinc-200 font-mono text-[11px] break-all hover:text-zinc-900 dark:hover:text-zinc-50 underline decoration-zinc-300 dark:decoration-zinc-600 underline-offset-2"
+                          >
+                            <Icons.External size={10} className="shrink-0" />
+                            {pageUrl}
+                          </a>
+                        ) : (
+                          <div className="text-zinc-700 dark:text-zinc-200 font-mono text-[11px] break-all">{pageUrl}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {(lead.utm as any)?.referrer && (
+                    <div className="pt-1">
+                      <span className="text-zinc-400 text-[10px]">Referrer:</span> <span className="text-zinc-600 dark:text-zinc-300 text-[11px] break-all">{(lead.utm as any).referrer}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
