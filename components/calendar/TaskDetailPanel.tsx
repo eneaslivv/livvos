@@ -5,6 +5,8 @@ import { SlidePanel } from '../ui/SlidePanel';
 import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
 import { CalendarTask } from '../../hooks/useCalendar';
 import { TaskCommentsSection } from './TaskCommentsSection';
+import { useDocuments } from '../../context/DocumentsContext';
+import { DocumentEditor } from '../docs/DocumentEditor';
 
 interface TeamMember {
   id: string;
@@ -100,9 +102,40 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     subtasks: false,
     dependencies: true,
+    documents: false,
     comments: true,
   });
   const toggle = (key: string) => setCollapsed(p => ({ ...p, [key]: !p[key] }));
+
+  const { createDocument, getDocumentsByTask, deleteDocument } = useDocuments();
+  const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [creatingDoc, setCreatingDoc] = useState(false);
+  const linkedDocs = selectedTask ? getDocumentsByTask(selectedTask.id) : [];
+
+  const handleCreateDoc = async () => {
+    if (!selectedTask || creatingDoc) return;
+    setCreatingDoc(true);
+    try {
+      const doc = await createDocument(selectedTask.title || 'Untitled Document', {
+        taskId: selectedTask.id,
+        projectId: selectedTask.project_id ?? null,
+        clientId: selectedTask.client_id ?? null,
+      });
+      setOpenDocId(doc.id);
+    } catch (err) {
+      console.error('Error creating document from task:', err);
+    } finally {
+      setCreatingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    try {
+      await deleteDocument(docId);
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  };
 
   return (
     <SlidePanel
@@ -675,6 +708,73 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
 
           <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
 
+          {/* ─── Documents ─── */}
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => toggle('documents')}
+              className="flex items-center gap-1.5 mb-2 group w-full"
+            >
+              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.documents ? 'rotate-90' : ''}`} />
+              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer flex items-center gap-1.5">
+                <Icons.Docs size={11} />
+                Documents
+              </label>
+              {linkedDocs.length > 0 && (
+                <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 ml-0.5">
+                  {linkedDocs.length}
+                </span>
+              )}
+            </button>
+            <AnimatePresence initial={false}>
+            {!collapsed.documents && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                <div className="space-y-1.5 pt-1">
+                  {linkedDocs.map(doc => (
+                    <div
+                      key={doc.id}
+                      className="group/doc flex items-center gap-2.5 px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800/70 rounded-lg cursor-pointer transition-colors"
+                      onClick={() => setOpenDocId(doc.id)}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+                        <Icons.Docs size={13} className="text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-zinc-800 dark:text-zinc-100 truncate">
+                          {doc.title || 'Untitled Document'}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                          Updated {new Date(doc.updated_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                          {doc.share_enabled && <span className="ml-1.5 text-emerald-500">· shared</span>}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id); }}
+                        className="opacity-0 group-hover/doc:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/15 transition-all"
+                        title="Delete document"
+                      >
+                        <Icons.Trash size={11} className="text-red-500" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleCreateDoc}
+                    disabled={creatingDoc}
+                    className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 transition-all disabled:opacity-50"
+                  >
+                    <Icons.Plus size={12} />
+                    {creatingDoc ? 'Creating...' : 'New document'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+            </AnimatePresence>
+          </div>
+
+          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
+
           {/* ─── Comments ─── */}
           <div className="mb-3">
             <button
@@ -703,6 +803,9 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </span>
           </div>
         </div>
+      )}
+      {openDocId && (
+        <DocumentEditor documentId={openDocId} onClose={() => setOpenDocId(null)} />
       )}
     </SlidePanel>
   );

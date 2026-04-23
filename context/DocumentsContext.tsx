@@ -65,9 +65,10 @@ interface DocumentsContextType {
   updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
-  createDocument: (title?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Document>
-  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'is_favorite' | 'share_enabled'>>) => Promise<void>
+  createDocument: (title?: string, options?: { clientId?: string | null; projectId?: string | null; taskId?: string | null }) => Promise<Document>
+  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'task_id' | 'is_favorite' | 'share_enabled'>>) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
+  getDocumentsByTask: (taskId: string) => Document[]
   refresh: () => Promise<void>
 }
 
@@ -327,7 +328,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const createDocument = async (
     title: string = 'Untitled Document',
-    options?: { clientId?: string | null; projectId?: string | null }
+    options?: { clientId?: string | null; projectId?: string | null; taskId?: string | null }
   ): Promise<Document> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not authenticated')
@@ -339,7 +340,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     if (!effectiveTenantId) throw new Error('Tenant not available. Reload the page.')
 
-    const { clientId = null, projectId = null } = options || {}
+    const { clientId = null, projectId = null, taskId = null } = options || {}
 
     const { data, error: err } = await supabase.from('documents').insert({
       title,
@@ -347,6 +348,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       tenant_id: effectiveTenantId,
       client_id: clientId,
       project_id: projectId,
+      task_id: taskId,
     }).select().single()
 
     if (err) throw new Error(`Error creating document: ${err.message}`)
@@ -370,6 +372,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDocuments(prev => prev.filter(d => d.id !== id))
   }
 
+  const getDocumentsByTask = useCallback(
+    (taskId: string): Document[] => documents.filter(d => d.task_id === taskId),
+    [documents]
+  )
+
   const deleteFile = async (id: string, url: string) => {
     const { error: dbError } = await supabase.from('files').delete().eq('id', id)
     if (dbError) throw dbError
@@ -384,7 +391,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <DocumentsContext.Provider value={{
       folders, files, documents, allFolders, breadcrumbs, currentFolderId, loading, error, isInitialized,
       setCurrentFolderId, createFolder, uploadFile, updateFile, updateFolder, deleteFolder, deleteFile,
-      createDocument, updateDocument, deleteDocument,
+      createDocument, updateDocument, deleteDocument, getDocumentsByTask,
       refresh: async () => loadDocuments()
     }}>
       {children}
