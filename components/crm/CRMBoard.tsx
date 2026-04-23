@@ -120,19 +120,31 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
                                         </p>
 
                                         {/* Meta Tags */}
-                                        {lead.aiAnalysis && (
+                                        {(lead.aiAnalysis || lead.origin || lead.source) && (
                                             <div className="flex flex-wrap gap-1.5 mb-3">
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border
+                                                {lead.aiAnalysis && (
+                                                    <>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border
                           ${lead.aiAnalysis.temperature === 'hot' ? 'bg-rose-50 border-rose-100 text-rose-600' :
-                                                        lead.aiAnalysis.temperature === 'warm' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                                                            'bg-blue-50 border-blue-100 text-blue-600'
-                                                    }
+                                                                lead.aiAnalysis.temperature === 'warm' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                                                                    'bg-blue-50 border-blue-100 text-blue-600'
+                                                            }
                         `}>
-                                                    {lead.aiAnalysis.temperature}
-                                                </span>
-                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-500">
-                                                    {lead.aiAnalysis.category}
-                                                </span>
+                                                            {lead.aiAnalysis.temperature}
+                                                        </span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-500">
+                                                            {lead.aiAnalysis.category}
+                                                        </span>
+                                                    </>
+                                                )}
+                                                {(lead.origin || lead.source) && (
+                                                    <span
+                                                        title={lead.source ? `source: ${lead.source}` : undefined}
+                                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 text-indigo-600 dark:text-indigo-400 max-w-[160px] truncate"
+                                                    >
+                                                        {lead.origin || lead.source}
+                                                    </span>
+                                                )}
                                             </div>
                                         )}
 
