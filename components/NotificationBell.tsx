@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Icons } from './ui/Icons';
 import { useNotifications, Notification } from '../context/NotificationsContext';
 import { supabase } from '../lib/supabase';
+import { formatNotificationTime, formatNotificationFullDate } from '../lib/notificationTime';
 
 interface NotificationBellProps {
     onNavigate?: (path: string) => void;
@@ -32,16 +33,11 @@ const getNotificationIcon = (type: Notification['type']) => {
     }
 };
 
-const getTimeAgo = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 60) return 'just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-    return date.toLocaleDateString();
+const priorityAccent: Record<Notification['priority'], string> = {
+    urgent: 'bg-rose-500',
+    high: 'bg-amber-500',
+    medium: 'bg-indigo-500',
+    low: 'bg-zinc-400',
 };
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
@@ -146,9 +142,17 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
                                     <button
                                         key={notification.id}
                                         onClick={() => handleNotificationClick(notification)}
-                                        className={`w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors flex gap-3 ${!notification.read ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
+                                        className={`relative w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors flex gap-3 ${!notification.read ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
                                             }`}
                                     >
+                                        {/* Priority accent bar */}
+                                        {!notification.read && (
+                                            <span
+                                                aria-hidden
+                                                className={`absolute left-0 top-2 bottom-2 w-1 rounded-r ${priorityAccent[notification.priority] || priorityAccent.medium}`}
+                                            />
+                                        )}
+
                                         {/* Icon */}
                                         <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
                                             {getNotificationIcon(notification.type)}
@@ -169,8 +173,11 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
                                                     {notification.message}
                                                 </p>
                                             )}
-                                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
-                                                {getTimeAgo(notification.created_at)}
+                                            <p
+                                                className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 tabular-nums"
+                                                title={formatNotificationFullDate(notification.created_at)}
+                                            >
+                                                {formatNotificationTime(notification.created_at)}
                                             </p>
                                             {/* Action buttons for portal access requests */}
                                             {notification.action_required && notification.metadata?.request_id && !notification.read && (

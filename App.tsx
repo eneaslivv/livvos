@@ -21,40 +21,40 @@ import { AnalyticsProvider } from './context/AnalyticsContext';
 import { SystemProvider } from './context/SystemContext';
 import { PresenceProvider } from './context/PresenceContext';
 import { LiveCursors } from './components/presence/LiveCursors';
+import { NotificationToaster } from './components/NotificationToaster';
+import { retryDynamicImport, isChunkLoadError } from './lib/lazyWithRetry';
 
-const loadHome = () => import('./pages/Home').then(module => ({ default: module.Home }));
-const loadProjects = () => import('./pages/Projects').then(module => ({ default: module.Projects }));
-const loadDocs = () => import('./pages/Docs').then(module => ({ default: module.Docs }));
-const loadCalendar = () => import('./pages/Calendar').then(module => ({ default: module.Calendar }));
-const loadClients = () => import('./pages/Clients').then(module => ({ default: module.Clients }));
-const loadTeamClients = () => import('./pages/TeamClients').then(module => ({ default: module.TeamClients }));
-const loadActivity = () => import('./pages/Activity').then(module => ({ default: module.Activity }));
-const loadSales = () => import('./pages/Sales').then(module => ({ default: module.Sales }));
-const loadFinance = () => import('./pages/Finance').then(module => ({ default: module.Finance }));
-const loadTeam = () => import('./pages/Team').then(module => ({ default: module.Team }));
-const loadAuth = () => import('./pages/Auth').then(module => ({ default: module.Auth }));
-const loadAcceptInvite = () => import('./pages/AcceptInvite').then(module => ({ default: module.AcceptInvite }));
-const loadTenantSettings = () => import('./pages/TenantSettings').then(module => ({ default: module.TenantSettings }));
-const loadProposalPublic = () => import('./pages/ProposalPublic').then(module => ({ default: module.ProposalPublic }));
-const loadClientPortal = () => import('./pages/ClientPortal').then(module => ({ default: module.ClientPortal }));
-const loadGoogleCallback = () => import('./pages/GoogleCallback').then(module => ({ default: module.GoogleCallback }));
-const loadAcceptProjectShare = () => import('./pages/AcceptProjectShare').then(module => ({ default: module.AcceptProjectShare }));
-const loadSharedProjectView = () => import('./pages/SharedProjectView').then(module => ({ default: module.SharedProjectView }));
-const loadPublicPortalView = () => import('./pages/PublicPortalView').then(module => ({ default: module.PublicPortalView }));
-const loadSharedDocument = () => import('./pages/SharedDocument').then(module => ({ default: module.SharedDocument }));
-const loadContentCms = () => import('./pages/ContentCms').then(module => ({ default: module.ContentCms }));
-const loadPlatformAdmin = () => import('./pages/PlatformAdmin').then(module => ({ default: module.PlatformAdmin }));
+const loadHome = () => retryDynamicImport(() => import('./pages/Home').then(m => ({ default: m.Home })), 'Home');
+const loadProjects = () => retryDynamicImport(() => import('./pages/Projects').then(m => ({ default: m.Projects })), 'Projects');
+const loadDocs = () => retryDynamicImport(() => import('./pages/Docs').then(m => ({ default: m.Docs })), 'Docs');
+const loadCalendar = () => retryDynamicImport(() => import('./pages/Calendar').then(m => ({ default: m.Calendar })), 'Calendar');
+const loadClients = () => retryDynamicImport(() => import('./pages/Clients').then(m => ({ default: m.Clients })), 'Clients');
+const loadTeamClients = () => retryDynamicImport(() => import('./pages/TeamClients').then(m => ({ default: m.TeamClients })), 'TeamClients');
+const loadActivity = () => retryDynamicImport(() => import('./pages/Activity').then(m => ({ default: m.Activity })), 'Activity');
+const loadSales = () => retryDynamicImport(() => import('./pages/Sales').then(m => ({ default: m.Sales })), 'Sales');
+const loadFinance = () => retryDynamicImport(() => import('./pages/Finance').then(m => ({ default: m.Finance })), 'Finance');
+const loadTeam = () => retryDynamicImport(() => import('./pages/Team').then(m => ({ default: m.Team })), 'Team');
+const loadAuth = () => retryDynamicImport(() => import('./pages/Auth').then(m => ({ default: m.Auth })), 'Auth');
+const loadAcceptInvite = () => retryDynamicImport(() => import('./pages/AcceptInvite').then(m => ({ default: m.AcceptInvite })), 'AcceptInvite');
+const loadTenantSettings = () => retryDynamicImport(() => import('./pages/TenantSettings').then(m => ({ default: m.TenantSettings })), 'TenantSettings');
+const loadProposalPublic = () => retryDynamicImport(() => import('./pages/ProposalPublic').then(m => ({ default: m.ProposalPublic })), 'ProposalPublic');
+const loadClientPortal = () => retryDynamicImport(() => import('./pages/ClientPortal').then(m => ({ default: m.ClientPortal })), 'ClientPortal');
+const loadGoogleCallback = () => retryDynamicImport(() => import('./pages/GoogleCallback').then(m => ({ default: m.GoogleCallback })), 'GoogleCallback');
+const loadAcceptProjectShare = () => retryDynamicImport(() => import('./pages/AcceptProjectShare').then(m => ({ default: m.AcceptProjectShare })), 'AcceptProjectShare');
+const loadSharedProjectView = () => retryDynamicImport(() => import('./pages/SharedProjectView').then(m => ({ default: m.SharedProjectView })), 'SharedProjectView');
+const loadPublicPortalView = () => retryDynamicImport(() => import('./pages/PublicPortalView').then(m => ({ default: m.PublicPortalView })), 'PublicPortalView');
+const loadSharedDocument = () => retryDynamicImport(() => import('./pages/SharedDocument').then(m => ({ default: m.SharedDocument })), 'SharedDocument');
+const loadContentCms = () => retryDynamicImport(() => import('./pages/ContentCms').then(m => ({ default: m.ContentCms })), 'ContentCms');
+const loadPlatformAdmin = () => retryDynamicImport(() => import('./pages/PlatformAdmin').then(m => ({ default: m.PlatformAdmin })), 'PlatformAdmin');
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
 const Docs = React.lazy(loadDocs);
 const Calendar = React.lazy(loadCalendar);
-const Clients = React.lazy(loadClients);
 const TeamClients = React.lazy(loadTeamClients);
 const Activity = React.lazy(loadActivity);
 const Sales = React.lazy(loadSales);
 const Finance = React.lazy(loadFinance);
-const Team = React.lazy(loadTeam);
 const Auth = React.lazy(loadAuth);
 const AcceptInvite = React.lazy(loadAcceptInvite);
 const TenantSettings = React.lazy(loadTenantSettings);
@@ -492,6 +492,15 @@ class PageErrorBoundary extends React.Component<
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     if (import.meta.env.DEV) {
       console.error(`[${this.props.page}] ErrorBoundary:`, error, info.componentStack);
+    }
+    // Stale-chunk recovery: after a deploy, old dynamic chunks 404. Force one
+    // reload; sessionStorage flag (cleared on success) prevents loops.
+    if (isChunkLoadError(error) && typeof window !== 'undefined') {
+      const key = `__chunk_reload__:page:${this.props.page}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, String(Date.now()));
+        window.location.reload();
+      }
     }
   }
   render() {
@@ -997,6 +1006,7 @@ const App: React.FC = () => {
                                   showDebug={showDebug}
                                   navParams={navParams}
                                 />
+                                <NotificationToaster onNavigate={(p) => handleNavigate(p as PageView)} />
                                 <LiveCursors currentPage={currentPage} />
                                 {showDebug && (
                                   <DebugPanel visible={showDebug} />
