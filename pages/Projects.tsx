@@ -261,7 +261,7 @@ const ClientViewPreview: React.FC<{
     const startDate = project.createdAt
       ? new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : 'TBD';
-    const dueDates = tasks.map((t: any) => t.due_date).filter(Boolean) as string[];
+    const dueDates = tasks.map((t: any) => t.start_date || t.due_date).filter(Boolean) as string[];
     const etaRaw = dueDates.length ? dueDates.sort().slice(-1)[0] : project.deadline;
     const etaDate = etaRaw
       ? new Date(etaRaw).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -351,7 +351,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
-    select: 'id,title,completed,completed_at,project_id,due_date,assignee_id,priority,group_name,parent_task_id,status'
+    select: 'id,title,completed,completed_at,project_id,start_date,end_date,due_date,assignee_id,priority,group_name,parent_task_id,status'
   });
 
   // Loading timeout — prevents infinite spinner
@@ -439,9 +439,13 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     for (const task of projectTasks) {
       const gName = task.group_name || 'General';
       if (!groupMap.has(gName)) groupMap.set(gName, { name: gName, tasks: [] });
+      // Calendar treats start_date as primary, falling back to due_date.
+      // Project view mirrors that so a task always shows on the same day in
+      // both surfaces.
+      const taskDate = task.start_date || task.due_date || undefined;
       groupMap.get(gName)!.tasks.push({
         id: task.id, title: task.title, done: !!task.completed,
-        assignee: task.assignee_id || '', dueDate: task.due_date || undefined,
+        assignee: task.assignee_id || '', dueDate: taskDate,
         priority: task.priority || 'medium', status: task.status || 'todo',
         completedAt: task.completed_at || undefined,
       });
@@ -666,7 +670,8 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     if (!title) return;
     setTaskError(null);
     try {
-      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: 'General', due_date: new Date().toISOString().slice(0, 10) } as any);
+      const today = new Date().toISOString().slice(0, 10);
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: 'General', start_date: today, due_date: today } as any);
       setQuickTaskTitle('');
       setTimeout(() => refreshTasks(), 1000);
       await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
@@ -684,7 +689,8 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     const groupName = derivedTasksGroups[groupIdx]?.name || 'General';
     setTaskError(null);
     try {
-      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: groupName, due_date: new Date().toISOString().slice(0, 10) } as any);
+      const today = new Date().toISOString().slice(0, 10);
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: groupName, start_date: today, due_date: today } as any);
       setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }));
       // Safety net: refresh tasks after a short delay in case realtime doesn't fire
       setTimeout(() => refreshTasks(), 1000);
@@ -768,7 +774,10 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
   const handleUpdateTaskDate = async (taskId: string, date: string | null) => {
     try {
-      await updateSyncedTask(taskId, { due_date: date || null } as any);
+      // Write both columns so the calendar (start_date) and the project view
+      // (due_date) stay in sync. Otherwise the task would show on two
+      // different days depending on which surface you look at.
+      await updateSyncedTask(taskId, { due_date: date || null, start_date: date || null } as any);
     } catch (err: any) {
       errorLogger.error('Error updating task date', err);
     }
