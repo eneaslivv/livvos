@@ -635,9 +635,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                         <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Tasks</div>
-                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{tasks.length}</div>
-                            <div className="text-[10px] text-zinc-400 mt-0.5">total</div>
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Pending</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{pendingCount}</div>
+                            <div className="text-[10px] text-zinc-400 mt-0.5">today</div>
                         </div>
                         <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
                             <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Done</div>
@@ -1146,9 +1146,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     {/* Metrics Row */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Tasks</div>
-                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{tasks.length}</div>
-                            <div className="text-[10px] text-zinc-400 mt-0.5">total</div>
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Pending</div>
+                            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-none">{pendingCount}</div>
+                            <div className="text-[10px] text-zinc-400 mt-0.5">today</div>
                         </div>
                         <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
                             <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-2">Done</div>

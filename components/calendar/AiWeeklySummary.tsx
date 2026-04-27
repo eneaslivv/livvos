@@ -40,14 +40,10 @@ export const AiWeeklySummary: React.FC<AiWeeklySummaryProps> = ({
       {!aiSummary && !aiSummaryLoading && (
         <button
           onClick={() => onGenerate()}
-          className="group flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-indigo-300 dark:hover:border-indigo-600/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all duration-200"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/20 transition-colors"
         >
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-            <Icons.Sparkles size={12} className="text-white" />
-          </div>
-          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-            Generate weekly summary with AI
-          </span>
+          <Icons.Sparkles size={13} className="text-indigo-500 dark:text-indigo-400" />
+          <span className="text-xs font-medium">Weekly summary</span>
         </button>
       )}
 
