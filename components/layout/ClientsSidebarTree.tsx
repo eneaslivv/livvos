@@ -249,7 +249,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
           aria-hidden={!treeOpen}
         >
           <div className="overflow-hidden min-h-0">
-            <div className="w-[calc(100%-24px)] mx-3 max-h-[40vh] overflow-y-auto pr-0.5 space-y-0.5 no-scrollbar">
+            <div className="sidebar-thin-scroll w-[calc(100%-24px)] mx-3 max-h-[60vh] overflow-y-auto overscroll-contain pr-1 space-y-0.5">
               {sortedClients.length === 0 && projectsByClient.orphans.length === 0 && (
                 <p className="px-3 py-3 text-[11px] text-zinc-400 italic">
                   No clients or projects yet.
