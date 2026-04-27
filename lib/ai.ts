@@ -147,31 +147,36 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-    // Get a valid auth token, refreshing if expired or about to expire
-    const getValidToken = async (forceRefresh = false): Promise<string> => {
+    // Returns whatever access token we can produce, or null. NEVER throws — let the
+    // server decide whether the token is acceptable. Throwing pre-emptively from here
+    // produced false "session expired" banners even when the user was logged in.
+    const getAvailableToken = async (forceRefresh = false): Promise<string | null> => {
       if (!forceRefresh) {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.access_token) {
-          // Check if token expires within 60 seconds
-          const expiresAt = session.expires_at ? session.expires_at * 1000 : 0
-          if (expiresAt > Date.now() + 60_000) {
-            return session.access_token
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            // Use the existing token unless it's literally already expired.
+            const expiresAt = session.expires_at ? session.expires_at * 1000 : Infinity
+            if (expiresAt > Date.now() + 5_000) return session.access_token
           }
-        }
+        } catch { /* fall through to refresh */ }
       }
-      // Token missing or expiring soon — force refresh
-      const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
-      if (refreshErr || !refreshed.session?.access_token) {
-        // Refresh token itself is dead — user must log in again
-        const err = new Error('Your session has ended. Please log in again.') as any
-        err.status = 401
-        err.needsReLogin = true
-        throw err
+      try {
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        return refreshed.session?.access_token || null
+      } catch {
+        return null
       }
-      return refreshed.session.access_token
     }
 
-    let authToken = await getValidToken()
+    const sessionExpired = (): never => {
+      const err = new Error('Your session has ended. Please log in again.') as any
+      err.status = 401
+      err.needsReLogin = true
+      throw err
+    }
+
+    let authToken = await getAvailableToken()
 
     // Throttle to avoid bursting when multiple components load simultaneously
     await throttle()
@@ -188,13 +193,22 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
       })
     }
 
-    let res = await makeRequest(authToken)
+    if (!authToken) {
+      // No token at all — try one forced refresh before giving up.
+      authToken = await getAvailableToken(true)
+      if (!authToken) sessionExpired()
+    }
 
-    // If 401, force-refresh the token and retry once
+    let res = await makeRequest(authToken!)
+
+    // If the server rejects, force-refresh and retry once. Only declare the session
+    // dead if the server still rejects us after a fresh token.
     if (res.status === 401) {
       if (import.meta.env.DEV) console.log(`[AI] 401 for ${type}, refreshing token and retrying`)
-      authToken = await getValidToken(true)
-      res = await makeRequest(authToken)
+      const refreshed = await getAvailableToken(true)
+      if (!refreshed) sessionExpired()
+      res = await makeRequest(refreshed!)
+      if (res.status === 401) sessionExpired()
     }
 
     if (!res.ok) {

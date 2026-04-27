@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, CheckCircle2, Calendar, Clock, ArrowRight, X,
@@ -230,11 +231,11 @@ export const DailyBriefingModal: React.FC<Props> = ({
 
   // ─── Render ───
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {visible && (
         <motion.div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -251,7 +252,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-[520px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
@@ -267,7 +268,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
             </button>
 
             {/* Header */}
-            <div className="px-6 pt-6 pb-4">
+            <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 shrink-0">
               <div className="flex items-center gap-2 mb-1">
                 {phase === 'done' ? <Sparkles size={20} className="text-emerald-500" /> : getGreetingIcon()}
                 <span className="text-sm font-medium text-[#78736A]">
@@ -305,7 +306,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
             {/* ═══ PHASE: BRIEFING (original UI) ═══ */}
             {phase === 'briefing' && (
               <>
-                <div className="px-6 py-4 space-y-4 max-h-[50vh] overflow-y-auto">
+                <div className="px-5 sm:px-6 py-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
                   {overdueTasks.length > 0 && (
                     <div className="rounded-xl bg-red-50 border border-red-100 p-3.5">
                       <div className="flex items-center gap-2 mb-2.5">
@@ -377,7 +378,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
                               {event.start_time && (
                                 <p className="text-[10px] text-blue-500">
                                   {formatTime(event.start_time)}
-                                  {event.end_time ? ` — ${formatTime(event.end_time)}` : ''}
+                                  {(event as any).end_time ? ` — ${formatTime((event as any).end_time)}` : ''}
                                 </p>
                               )}
                             </div>
@@ -389,7 +390,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
                 </div>
 
                 {/* Footer — two buttons */}
-                <div className="px-6 pb-6 pt-2 space-y-2">
+                <div className="px-5 sm:px-6 pb-5 sm:pb-6 pt-2 space-y-2 shrink-0">
                   <button
                     onClick={() => { setPhase('standup'); setTimeout(() => textareaRef.current?.focus(), 100); }}
                     className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#09090B] text-white text-sm font-medium hover:bg-[#09090B]/90 transition-colors"
@@ -411,7 +412,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
             {/* ═══ PHASE: STANDUP (textarea input) ═══ */}
             {phase === 'standup' && (
               <>
-                <div className="px-6 py-4">
+                <div className="px-5 sm:px-6 py-4 flex-1 min-h-0 overflow-y-auto">
                   <p className="text-sm text-[#78736A] mb-3">
                     Tell me what you worked on, what you're doing next, or if anything is blocking you.
                   </p>
@@ -428,7 +429,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
                   )}
                 </div>
 
-                <div className="px-6 pb-6 pt-1 flex gap-2">
+                <div className="px-5 sm:px-6 pb-5 sm:pb-6 pt-1 flex gap-2 shrink-0">
                   <button
                     onClick={() => setPhase('briefing')}
                     className="flex items-center justify-center gap-1 py-2.5 px-4 rounded-xl text-[#78736A] text-sm hover:bg-[#F0EDE6] transition-colors"
@@ -459,7 +460,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
             {/* ═══ PHASE: REVIEW (AI proposed actions) ═══ */}
             {phase === 'review' && standupResult && (
               <>
-                <div className="px-6 py-4 space-y-4 max-h-[55vh] overflow-y-auto">
+                <div className="px-5 sm:px-6 py-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
                   {/* Summary */}
                   <div className="rounded-xl bg-[#F5F3EE] border border-[#E6E2D8] p-3.5">
                     <p className="text-sm text-[#09090B]">{standupResult.summary}</p>
@@ -522,7 +523,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
                   {error && <p className="text-xs text-red-500">{error}</p>}
                 </div>
 
-                <div className="px-6 pb-6 pt-2 flex gap-2">
+                <div className="px-5 sm:px-6 pb-5 sm:pb-6 pt-2 flex gap-2 shrink-0">
                   <button
                     onClick={() => { setPhase('standup'); setStandupResult(null); }}
                     className="flex items-center justify-center gap-1 py-2.5 px-4 rounded-xl text-[#78736A] text-sm hover:bg-[#F0EDE6] transition-colors"
@@ -552,7 +553,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
 
             {/* ═══ PHASE: DONE (confirmation) ═══ */}
             {phase === 'done' && standupResult && (
-              <div className="px-6 py-8 text-center">
+              <div className="px-5 sm:px-6 py-8 text-center shrink-0">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
@@ -574,6 +575,7 @@ export const DailyBriefingModal: React.FC<Props> = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

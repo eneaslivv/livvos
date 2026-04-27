@@ -1177,13 +1177,11 @@ export const Calendar: React.FC = () => {
         {!aiPlan && !aiPlanLoading && calendarMode === 'schedule' && (
           <button
             onClick={handleGenerateAiPlan}
-            className="group flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-violet-200 dark:border-violet-700/60 hover:border-violet-400 dark:hover:border-violet-500/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-all duration-200 shrink-0"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50/60 dark:hover:bg-violet-950/20 transition-colors shrink-0"
           >
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-              <Icons.Sparkles size={12} className="text-white" />
-            </div>
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-              AI Plan This {view === 'month' ? 'Month' : 'Week'}
+            <Icons.Sparkles size={13} className="text-violet-500 dark:text-violet-400" />
+            <span className="text-xs font-medium">
+              Plan this {view === 'month' ? 'month' : 'week'}
             </span>
           </button>
         )}
@@ -1251,52 +1249,79 @@ export const Calendar: React.FC = () => {
 
       {/* Team member filter */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
-        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
           <button
             onClick={() => {
               const next = !groupTasksByPhase;
               setGroupTasksByPhase(next);
               localStorage.setItem('cal-group-phases', next ? '1' : '0');
             }}
-            className={`flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-full transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md transition-colors shrink-0 ${
               groupTasksByPhase
-                ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60'
+                ? 'text-indigo-600 dark:text-indigo-400 font-medium'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
             title="Group tasks by phase"
           >
             <Icons.Layers size={11} />
             Phases
           </button>
-          <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
-          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider shrink-0">Filter:</span>
+          <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1.5" />
           {[
             { id: 'all', label: 'All' },
-            { id: 'me', label: 'My tasks' },
+            { id: 'me', label: 'Me' },
             ...teamMembers
               .filter(m => m.status === 'active' && m.id !== user?.id)
               .map(m => ({ id: m.id, label: m.name || m.email?.split('@')[0] || 'Member', avatar: m.avatar_url })),
-          ].map((item: any) => (
-            <button
-              key={item.id}
-              onClick={() => setTaskFilter(item.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-full transition-all duration-200 shrink-0 ${
-                taskFilter === item.id
-                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold shadow-sm'
-                  : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60'
-              }`}
-            >
-              {item.avatar && (
-                <img src={item.avatar} alt="" className="w-4 h-4 rounded-full" />
-              )}
-              {!item.avatar && item.id !== 'all' && item.id !== 'me' && (
-                <div className="w-4 h-4 rounded-full bg-zinc-300 dark:bg-zinc-600 flex items-center justify-center text-[7px] font-bold text-white">
-                  {item.label?.[0]?.toUpperCase()}
-                </div>
-              )}
-              {item.label}
-            </button>
-          ))}
+          ].map((item: any) => {
+            const active = taskFilter === item.id;
+            const isPerson = item.id !== 'all' && item.id !== 'me';
+            if (isPerson) {
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setTaskFilter(item.id)}
+                  title={item.label}
+                  className="shrink-0 p-0.5 rounded-full transition-all"
+                >
+                  {item.avatar ? (
+                    <img
+                      src={item.avatar}
+                      alt={item.label}
+                      className={`w-6 h-6 rounded-full transition-all ${
+                        active
+                          ? 'ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950'
+                          : 'opacity-60 hover:opacity-100'
+                      }`}
+                    />
+                  ) : (
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-all ${
+                        active
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {item.label?.[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              );
+            }
+            return (
+              <button
+                key={item.id}
+                onClick={() => setTaskFilter(item.id)}
+                className={`px-2 py-1 text-[11px] rounded-md transition-colors shrink-0 ${
+                  active
+                    ? 'text-zinc-900 dark:text-zinc-100 font-medium'
+                    : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
