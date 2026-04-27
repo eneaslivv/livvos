@@ -641,7 +641,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         </div>}
 
         {/* Navigation Items */}
-        <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto no-scrollbar mask-image-linear-gradient mt-2 items-center">
+        <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto overscroll-contain sidebar-thin-scroll mt-2 items-center">
           {!isInitialized && (
             <div className="w-full flex flex-col gap-2 px-3 animate-pulse">
               {Array.from({ length: navSkeletonCount }).map((_, index) => (
