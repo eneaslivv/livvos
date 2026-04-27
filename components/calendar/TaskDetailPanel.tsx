@@ -37,7 +37,7 @@ export interface TaskDetailPanelProps {
   onClose: () => void;
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
-  onQuickUpdate?: (taskId: string, updates: Partial<CalendarTask>) => void;
+  onQuickUpdate?: (taskId: string, updates: Partial<CalendarTask>) => Promise<unknown>;
   // Subtasks
   subtasksForSelected: CalendarTask[];
   newSubtaskTitle: string;
