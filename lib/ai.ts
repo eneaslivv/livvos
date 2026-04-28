@@ -248,6 +248,13 @@ async function callGemini<T>(
     if (!data?.result || !validate(data.result)) throw new Error('Invalid AI response')
 
     const result = data.result as T
+    // Tag the result with the server-issued output_id so feedback bars can
+    // reference it. Cached results inherit this id (they're the same output
+    // logically, even if pulled from localStorage). Existing callers that
+    // don't read _outputId are unaffected.
+    if (data?.output_id && typeof data.output_id === 'string' && result && typeof result === 'object') {
+      ;(result as any)._outputId = data.output_id
+    }
     setCache(type, input, result)
     return result
   })()
@@ -435,6 +442,78 @@ export async function upsertTenantAIProfile(
     return null
   }
   return data as TenantAIProfile
+}
+
+// ─── AI Feedback (Phase 2 + 3 substrate) ─────────────────────────
+// Every AI result carries an `_outputId` injected by callGemini when the
+// server logs it to ai_output_log. UI surfaces show a thumbs up/down bar
+// that calls submitAIFeedback with that id. Positive-rated outputs are
+// retrieved as few-shot examples in future similar requests.
+
+/** Helper: read the output_id off any AI result. Safe for cached results too. */
+export function getOutputId(result: unknown): string | null {
+  if (result && typeof result === 'object' && '_outputId' in result) {
+    const id = (result as { _outputId?: unknown })._outputId
+    return typeof id === 'string' ? id : null
+  }
+  return null
+}
+
+export type AIFeedbackRating = -1 | 0 | 1
+
+/**
+ * Submit feedback on a specific AI output. Upserts on (output_id, user_id)
+ * so a user revising their vote (e.g. thumbs-up after correcting their input)
+ * just updates the existing row.
+ */
+export async function submitAIFeedback(
+  outputId: string,
+  rating: AIFeedbackRating,
+  correction?: string,
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    if (import.meta.env.DEV) console.warn('[ai] submitAIFeedback: no user')
+    return false
+  }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('tenant_id')
+    .eq('id', user.id)
+    .maybeSingle()
+  const tenantId = profile?.tenant_id
+  if (!tenantId) {
+    if (import.meta.env.DEV) console.warn('[ai] submitAIFeedback: no tenant for user')
+    return false
+  }
+  const { error } = await supabase
+    .from('ai_feedback')
+    .upsert({
+      output_id: outputId,
+      tenant_id: tenantId,
+      user_id: user.id,
+      rating,
+      correction: correction?.trim() || null,
+    }, { onConflict: 'output_id,user_id' })
+  if (error) {
+    if (import.meta.env.DEV) console.error('[ai] submitAIFeedback error:', error)
+    return false
+  }
+  return true
+}
+
+/** Fetch the current user's feedback for a specific output (or null). */
+export async function getMyAIFeedback(outputId: string): Promise<{ rating: AIFeedbackRating; correction: string | null } | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data, error } = await supabase
+    .from('ai_feedback')
+    .select('rating, correction')
+    .eq('output_id', outputId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (error || !data) return null
+  return data as { rating: AIFeedbackRating; correction: string | null }
 }
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */

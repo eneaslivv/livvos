@@ -4,7 +4,8 @@ import { errorLogger } from '../../lib/errorLogger';
 import { Icons } from '../ui/Icons';
 import { Client } from '../../context/ClientsContext';
 import { useTenant } from '../../context/TenantContext';
-import { generateProposalFromAI } from '../../lib/ai';
+import { generateProposalFromAI, getOutputId } from '../../lib/ai';
+import { AIFeedbackBar } from '../ai/AIFeedbackBar';
 
 type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
 
@@ -149,6 +150,7 @@ export const ProposalsPanel: React.FC = () => {
   const [createLanguage, setCreateLanguage] = useState<'en' | 'es'>('en');
   const [createComplexity, setCreateComplexity] = useState('standard');
   const [aiWarning, setAiWarning] = useState<string | null>(null);
+  const [lastAIOutputId, setLastAIOutputId] = useState<string | null>(null);
 
   const selectedProposal = useMemo(
     () => proposals.find(p => p.id === selectedId) || null,
@@ -333,6 +335,7 @@ export const ProposalsPanel: React.FC = () => {
 
     setAiWarning(null);
     generateProposalFromAI(prompt).then((result) => {
+      setLastAIOutputId(getOutputId(result));
       handleUpdate({
         pricing_snapshot: {
           ...(selectedService || {}),
@@ -594,6 +597,9 @@ export const ProposalsPanel: React.FC = () => {
               </div>
               {aiWarning && (
                 <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">{aiWarning}</div>
+              )}
+              {lastAIOutputId && (
+                <AIFeedbackBar outputId={lastAIOutputId} className="mt-2" />
               )}
             </div>
 

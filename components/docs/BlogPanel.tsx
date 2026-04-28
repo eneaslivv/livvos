@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { generateBlogFromAI } from '../../lib/ai';
+import { generateBlogFromAI, getOutputId } from '../../lib/ai';
+import { AIFeedbackBar } from '../ai/AIFeedbackBar';
 import { useTenant } from '../../context/TenantContext';
 
 type BlogStatus = 'draft' | 'published';
@@ -34,6 +35,7 @@ export const BlogPanel: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [lastAIOutputId, setLastAIOutputId] = useState<string | null>(null);
   const [draftInput, setDraftInput] = useState('');
 
   const selected = useMemo(() => posts.find(p => p.id === selectedId) || null, [posts, selectedId]);
@@ -102,6 +104,7 @@ export const BlogPanel: React.FC = () => {
     try {
       const prompt = `Write a blog post based on this brief:\n${draftInput || selected.excerpt || ''}`;
       const result = await generateBlogFromAI(prompt);
+      setLastAIOutputId(getOutputId(result));
       await updatePost({
         title: result.title,
         excerpt: result.excerpt,
@@ -201,6 +204,9 @@ export const BlogPanel: React.FC = () => {
             </div>
             {aiError && (
               <div className="text-xs text-red-600 dark:text-red-400 mt-1">{aiError}</div>
+            )}
+            {lastAIOutputId && (
+              <AIFeedbackBar outputId={lastAIOutputId} className="mt-2" />
             )}
           </div>
         ) : (

@@ -98,6 +98,12 @@ const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 10     // max requests per window
 const RATE_WINDOW = 60000 // 1 minute window
 
+async function hashString(s: string): Promise<string> {
+  const data = new TextEncoder().encode(s)
+  const buf = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 function checkRateLimit(userId: string): boolean {
   const now = Date.now()
   const entry = rateLimiter.get(userId)
@@ -305,6 +311,60 @@ Use the profile above to personalize tone, language, and recommendations. The us
       })
     }
 
+    // ─── Few-shot retrieval: embed the input and pull top-3 high-rated past
+    // outputs of the same type from the same tenant. Inject them as examples.
+    // Only runs when OpenAI is the active provider (embeddings need OpenAI key).
+    // Skipped for advisor_chat (each turn is unique, retrieval adds noise).
+    let queryEmbedding: number[] | null = null
+    let examplesBlock = ''
+    const RETRIEVAL_TYPES = new Set(['task', 'proposal', 'blog', 'weekly_summary', 'advisor', 'tasks_bulk'])
+    if (useOpenAI && tenantId && RETRIEVAL_TYPES.has(type)) {
+      try {
+        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: 'text-embedding-3-small', input: processedInput.slice(0, 8000) }),
+        })
+        if (embedRes.ok) {
+          const embedData = await embedRes.json()
+          queryEmbedding = embedData?.data?.[0]?.embedding || null
+        } else {
+          console.log(`[ai] embedding skipped: status ${embedRes.status}`)
+        }
+      } catch (e) {
+        console.log('[ai] embedding error:', String(e))
+      }
+
+      if (queryEmbedding) {
+        try {
+          const { data: similar } = await supabaseAdmin.rpc('search_similar_ai_outputs', {
+            p_tenant_id: tenantId,
+            p_request_type: type,
+            p_query_embedding: queryEmbedding,
+            p_limit: 3,
+          })
+          if (similar && Array.isArray(similar) && similar.length > 0) {
+            const examples = similar.map((row: any, idx: number) => {
+              const out = typeof row.output_json === 'string' ? row.output_json : JSON.stringify(row.output_json)
+              return `Example ${idx + 1} (similarity ${Number(row.similarity).toFixed(2)}, avg rating ${Number(row.avg_rating).toFixed(1)}):
+Input: ${row.input_text.slice(0, 800)}
+Output: ${out.slice(0, 1500)}`
+            }).join('\n\n---\n\n')
+            examplesBlock = `<PAST_EXAMPLES>
+The following are past responses from this tenant that received positive user feedback. Use them to calibrate tone, structure, and depth — NOT to copy. The current input may differ; respect its specifics.
+
+${examples}
+</PAST_EXAMPLES>
+
+`
+            console.log(`[ai] injected ${similar.length} few-shot examples for type=${type}`)
+          }
+        } catch (e) {
+          console.log('[ai] retrieval error:', String(e))
+        }
+      }
+    }
+
     const baseSystemPrompt =
       type === 'task'
         ? `You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string).
@@ -425,7 +485,7 @@ Rules:
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
-    const systemPrompt = profileBlock + baseSystemPrompt
+    const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
     const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : 512
     const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : 0.3
@@ -674,7 +734,37 @@ Rules:
       }).then(() => {})
     }
 
-    return new Response(JSON.stringify({ result: json }), {
+    // ─── Log output for retrieval + feedback ────────────────────────
+    // We compute input_hash on the server so frontend can't fake collisions.
+    // We persist the embedding we already computed for retrieval (no extra
+    // API call). If embedding wasn't computed (Gemini fallback or error), the
+    // row is still inserted without it; can be backfilled later.
+    let outputId: string | null = null
+    if (tenantId && RETRIEVAL_TYPES.has(type)) {
+      const inputHash = await hashString(processedInput)
+      const { data: logRow, error: logErr } = await supabaseAdmin
+        .from('ai_output_log')
+        .insert({
+          tenant_id: tenantId,
+          user_id: userId,
+          request_type: type,
+          input_text: processedInput.slice(0, 16000),
+          input_hash: inputHash,
+          output_json: json,
+          embedding: queryEmbedding,
+          tokens_input: usage?.promptTokenCount || 0,
+          tokens_output: usage?.candidatesTokenCount || 0,
+        })
+        .select('id')
+        .single()
+      if (logErr) {
+        console.log('[ai] output log insert error:', logErr.message)
+      } else {
+        outputId = (logRow as { id: string })?.id || null
+      }
+    }
+
+    return new Response(JSON.stringify({ result: json, output_id: outputId }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
