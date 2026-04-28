@@ -58,20 +58,20 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                 <button
                     onClick={() => setIsOpen(prev => !prev)}
                     className={`
-                        w-full flex items-center gap-2 p-2 rounded-2xl
+                        w-full flex items-center gap-2 rounded-2xl
                         bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-800
                         border border-zinc-200 dark:border-zinc-800
                         transition-all
                         ${isInChildTenant ? 'ring-2 ring-amber-300 dark:ring-amber-700' : ''}
-                        ${expanded ? 'justify-start' : 'justify-center'}
+                        ${expanded ? 'p-2 justify-start' : 'p-1 justify-center'}
                     `}
                     title={expanded ? undefined : currentTenant.name}
                 >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shrink-0 overflow-hidden">
+                    <div className={`flex items-center justify-center rounded-xl shrink-0 overflow-hidden ${expanded ? 'w-11 h-11' : 'w-10 h-10'}`}>
                         {logoSrc ? (
-                            <img src={logoSrc} alt={currentTenant.name} className="max-w-full max-h-full object-contain" />
+                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain" />
                         ) : (
-                            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
                                 {currentTenant.name.slice(0, 2).toUpperCase()}
                             </span>
                         )}

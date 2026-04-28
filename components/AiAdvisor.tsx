@@ -7,8 +7,10 @@ import {
   getCachedAdvisorInsights,
   sendAdvisorChat,
   clearAICache,
+  getOutputId,
   AdvisorInsight,
 } from '../lib/ai';
+import { AIFeedbackBar } from './ai/AIFeedbackBar';
 import { useProjects } from '../context/ProjectsContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTeam } from '../context/TeamContext';
@@ -53,8 +55,8 @@ const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Ico
 
 type ChatMsg =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string }
-  | { role: 'assistant'; kind: 'insights'; greeting: string; insights: AdvisorInsight[] };
+  | { role: 'assistant'; content: string; outputId?: string | null }
+  | { role: 'assistant'; kind: 'insights'; greeting: string; insights: AdvisorInsight[]; outputId?: string | null };
 
 const InsightsBlock: React.FC<{ greeting: string; insights: AdvisorInsight[] }> = ({ greeting, insights }) => (
   <div className="space-y-2.5">
@@ -189,8 +191,9 @@ export const AiAdvisor: React.FC = () => {
     setSending(true);
     try {
       const context = buildContextSummary();
-      const { reply } = await sendAdvisorChat(context, chatHistoryForApi, question.trim());
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      const replyResult = await sendAdvisorChat(context, chatHistoryForApi, question.trim());
+      const { reply } = replyResult;
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, outputId: getOutputId(replyResult) }]);
       setSessionExpired(false);
     } catch (err: any) {
       console.error('AI chat error:', err);
@@ -232,6 +235,7 @@ export const AiAdvisor: React.FC = () => {
         kind: 'insights',
         greeting: result.greeting || '',
         insights: result.insights || [],
+        outputId: getOutputId(result),
       }]);
       setSessionExpired(false);
     } catch (err: any) {
@@ -404,6 +408,7 @@ export const AiAdvisor: React.FC = () => {
                   }
                   // Assistant
                   const isInsightsMsg = 'kind' in msg && msg.kind === 'insights';
+                  const outputId = (msg as any).outputId as string | null | undefined;
                   return (
                     <div key={idx} className="flex items-start gap-2.5">
                       <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}>
@@ -414,6 +419,9 @@ export const AiAdvisor: React.FC = () => {
                           <InsightsBlock greeting={(msg as any).greeting} insights={(msg as any).insights} />
                         ) : (
                           (msg as any).content
+                        )}
+                        {outputId && (
+                          <AIFeedbackBar outputId={outputId} className="mt-2" compact />
                         )}
                       </div>
                     </div>
