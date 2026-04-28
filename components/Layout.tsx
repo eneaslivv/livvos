@@ -16,6 +16,7 @@ import { AiAdvisor } from './AiAdvisor';
 import { BottomTabBar } from './ui/BottomTabBar';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { ClientsSidebarTree } from './layout/ClientsSidebarTree';
+import { TenantSwitcher } from './layout/TenantSwitcher';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -27,29 +28,11 @@ interface LayoutProps {
 }
 
 // Define color themes for each navigation item
-const NAV_THEMES: Record<string, string> = {
-  docs: 'hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400',
-  // Sales Themes
-  sales_dashboard: 'hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
-  finance: 'hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400',
-  sales_leads: 'hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-500/10 dark:hover:text-purple-400',
-  sales_analytics: 'hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-500/10 dark:hover:text-sky-400',
-};
-
-const ACTIVE_THEMES: Record<string, string> = {
-  home: 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm', // Inverted for high contrast
-  projects: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
-  clients: 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-300 shadow-sm',
-  calendar: 'bg-orange-100 text-orange-900 dark:bg-orange-500/20 dark:text-orange-300 shadow-sm',
-  activity: 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 shadow-sm',
-  docs: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-500/20 dark:text-indigo-300 shadow-sm',
-  // Sales Active
-  sales_dashboard: 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm',
-  finance: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm',
-  sales_leads: 'bg-purple-100 text-purple-900 dark:bg-purple-500/20 dark:text-purple-300 shadow-sm',
-  sales_analytics: 'bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-300 shadow-sm',
-  platform_admin: 'bg-red-100 text-red-900 dark:bg-red-500/20 dark:text-red-300 shadow-sm',
-};
+// Compact, single-palette nav style — every item shares the same neutral
+// hover/active treatment so the sidebar reads as a quiet list, not a
+// rainbow of pills.
+const NAV_BASE = 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-100';
+const NAV_ACTIVE = 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-50 font-medium';
 
 const NavItem: React.FC<{
   id: string;
@@ -58,30 +41,25 @@ const NavItem: React.FC<{
   active: boolean;
   expanded: boolean;
   onClick: () => void
-}> = ({ id, icon, label, active, expanded, onClick }) => {
-
-  const themeClass = active
-    ? ACTIVE_THEMES[id] || ACTIVE_THEMES.home
-    : `text-zinc-500 dark:text-zinc-400 ${NAV_THEMES[id] || NAV_THEMES.home}`;
-
+}> = ({ id: _id, icon, label, active, expanded, onClick }) => {
   return (
     <button
       onClick={onClick}
       className={`
-        relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl transition-all duration-200 group/item shrink-0
-        ${themeClass}
+        relative flex items-center w-[calc(100%-16px)] mx-2 px-2.5 py-1.5 rounded-md transition-colors duration-150 group/item shrink-0
+        ${active ? NAV_ACTIVE : NAV_BASE}
       `}
       title={!expanded ? label : undefined}
     >
-      <div className="flex items-center justify-center w-6 h-6 shrink-0 transition-transform duration-200 group-hover/item:scale-110">
+      <div className="flex items-center justify-center w-[18px] h-[18px] shrink-0">
         {React.cloneElement(icon as React.ReactElement<any>, {
-          size: 20,
-          strokeWidth: active ? 2.5 : 2
+          size: 17,
+          strokeWidth: 2,
         })}
       </div>
 
       <span className={`
-        ml-3 text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 
+        ml-2.5 text-[13px] whitespace-nowrap overflow-hidden transition-all duration-300
         ${expanded ? 'opacity-100 translate-x-0 w-auto' : 'opacity-0 -translate-x-2 w-0'}
       `}>
         {label}
@@ -89,7 +67,7 @@ const NavItem: React.FC<{
 
       {/* Tooltip for collapsed state */}
       {!expanded && (
-        <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-800 text-white dark:text-zinc-100 text-xs font-medium rounded-lg opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-xl border border-zinc-800 dark:border-zinc-700">
+        <div className="absolute left-full ml-3 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white dark:text-zinc-100 text-[11px] font-medium rounded-md opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-lg">
           {label}
           <div className="absolute top-1/2 -left-1 -mt-1 border-4 border-transparent border-r-zinc-900 dark:border-r-zinc-800"></div>
         </div>
@@ -457,7 +435,7 @@ const CreateTaskModal = ({
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, navParams, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
-  const { currentTenant, hasFeature } = useTenant();
+  const { hasFeature } = useTenant();
   const isMobile = useIsMobile();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -593,24 +571,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       */}
       <aside className={`
         hidden md:flex
-        fixed z-50 h-[calc(100vh-32px)] top-4 bottom-4 left-4
-        bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800
-        shadow-2xl shadow-zinc-200/50 dark:shadow-black/80
-        rounded-[2rem] flex-col items-center py-6 gap-2
-        transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
-        ${isSidebarExpanded ? 'md:w-[240px]' : 'md:w-[72px]'}
+        fixed z-50 h-[calc(100vh-24px)] top-3 bottom-3 left-3
+        bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800
+        shadow-lg shadow-zinc-200/40 dark:shadow-black/60
+        rounded-2xl flex-col items-center py-4 gap-1
+        transition-all duration-300 ease-[cubic-bezier(0.25,0.8,0.25,1)]
+        ${isSidebarExpanded ? 'md:w-[228px]' : 'md:w-[64px]'}
       `}>
 
-        {/* Tenant Logo */}
-        {(currentTenant?.logo_url || currentTenant?.logo_url_dark) && (
-          <div className={`flex items-center justify-center w-[calc(100%-24px)] mx-3 mb-3 shrink-0 ${isSidebarExpanded ? 'h-14' : 'h-10'}`}>
-            <img
-              src={isDarkMode && currentTenant.logo_url_dark ? currentTenant.logo_url_dark : (currentTenant.logo_url || currentTenant.logo_url_dark)}
-              alt={currentTenant.name}
-              className="max-h-full max-w-full object-contain"
-            />
-          </div>
-        )}
+        {/* Tenant Switcher (replaces tenant logo — opens dropdown of workspaces + connected agencies) */}
+        <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} />
 
         {/* Workspace Switcher */}
         {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0">
@@ -643,14 +613,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         {/* Navigation Items */}
         <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto overscroll-contain sidebar-thin-scroll mt-2 items-center">
           {!isInitialized && (
-            <div className="w-full flex flex-col gap-2 px-3 animate-pulse">
+            <div className="w-full flex flex-col gap-1 px-2 animate-pulse">
               {Array.from({ length: navSkeletonCount }).map((_, index) => (
                 <div
                   key={index}
-                  className={`h-11 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded ? 'w-full' : 'w-12 mx-auto'}`}
+                  className={`h-7 rounded-md bg-zinc-100 dark:bg-zinc-800/60 ${isSidebarExpanded ? 'w-full' : 'w-9 mx-auto'}`}
                 />
               ))}
-              <div className={`h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 mt-3 ${isSidebarExpanded ? 'w-full' : 'w-12 mx-auto'}`} />
+              <div className={`h-7 rounded-md bg-zinc-100 dark:bg-zinc-800/60 mt-2 ${isSidebarExpanded ? 'w-full' : 'w-9 mx-auto'}`} />
             </div>
           )}
           {isInitialized && currentNavItems.map(item => (
@@ -697,22 +667,22 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           )}
           <button
             onClick={toggleTheme}
-            className="relative flex items-center w-[calc(100%-24px)] mx-3 px-3 py-2.5 rounded-2xl text-zinc-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-300 dark:hover:bg-amber-500/10 transition-colors group/btn shrink-0"
+            className="relative flex items-center w-[calc(100%-16px)] mx-2 px-2.5 py-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors group/btn shrink-0"
             title={!isSidebarExpanded ? "Toggle Theme" : undefined}
           >
-            <div className="flex items-center justify-center w-6 h-6 shrink-0">
-              {isDarkMode ? <Icons.Sun size={20} /> : <Icons.Moon size={20} />}
+            <div className="flex items-center justify-center w-[18px] h-[18px] shrink-0">
+              {isDarkMode ? <Icons.Sun size={17} strokeWidth={2} /> : <Icons.Moon size={17} strokeWidth={2} />}
             </div>
-            <span className={`ml-3 text-sm font-medium whitespace-nowrap transition-all duration-300 ${isSidebarExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Theme</span>
+            <span className={`ml-2.5 text-[13px] whitespace-nowrap transition-all duration-300 ${isSidebarExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Theme</span>
           </button>
 
           {/* Sidebar Toggle Button */}
           <button
             onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-            className="hidden md:flex items-center justify-center w-full py-3 mt-1 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
+            className="hidden md:flex items-center justify-center w-full py-2 mt-1 text-zinc-300 hover:text-zinc-600 dark:text-zinc-700 dark:hover:text-zinc-400 transition-colors"
             title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
           >
-            {isSidebarExpanded ? <Icons.ChevronLeft size={16} /> : <Icons.ChevronRight size={16} />}
+            {isSidebarExpanded ? <Icons.ChevronLeft size={14} /> : <Icons.ChevronRight size={14} />}
           </button>
         </div>
 
@@ -724,7 +694,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             flex-1 h-screen overflow-y-auto relative scroll-smooth bg-zinc-50 dark:bg-black
             transition-all duration-500 ease-[cubic-bezier(0.25,0.8,0.25,1)]
             pb-20 md:pb-0
-            ${isSidebarExpanded ? 'md:ml-[256px]' : 'md:ml-[88px]'}
+            ${isSidebarExpanded ? 'md:ml-[244px]' : 'md:ml-[80px]'}
         `}
       >
         {/* Fixed Top Navbar */}
