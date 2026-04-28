@@ -188,6 +188,11 @@ async function callGemini<T>(
     }
 
     const sessionExpired = (): never => {
+      // Clear the dead session so the next page load lands on the login flow
+      // instead of reading the same expired tokens from localStorage and
+      // looping. Fire-and-forget — we still throw immediately so callers can
+      // surface the banner.
+      supabase.auth.signOut().catch(() => {})
       const err = new Error('Your session has ended. Please log in again.') as any
       err.status = 401
       err.needsReLogin = true

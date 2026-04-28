@@ -11,6 +11,7 @@ import {
   AdvisorInsight,
 } from '../lib/ai';
 import { AIFeedbackBar } from './ai/AIFeedbackBar';
+import { supabase } from '../lib/supabase';
 import { useProjects } from '../context/ProjectsContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTeam } from '../context/TeamContext';
@@ -454,12 +455,25 @@ export const AiAdvisor: React.FC = () => {
                 <div className="px-5 py-2 border-t border-amber-200/60 dark:border-amber-700/30 bg-amber-50/60 dark:bg-amber-500/5 shrink-0">
                   <div className="flex items-center gap-2">
                     <Icons.Alert size={12} className="text-amber-500 shrink-0" />
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400 flex-1">Sesión expirada. Refrescá la página para iniciar sesión.</span>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 flex-1">Sesión expirada. Iniciá sesión de nuevo.</span>
                     <button
-                      onClick={() => window.location.reload()}
+                      onClick={async () => {
+                        // Clear the dead session and any stray Supabase keys, then
+                        // force a hard reload to land on the login screen.
+                        try { await supabase.auth.signOut(); } catch { /* ignore */ }
+                        try {
+                          for (let i = localStorage.length - 1; i >= 0; i--) {
+                            const k = localStorage.key(i);
+                            if (k && (k.startsWith('sb-') || k.includes('supabase'))) {
+                              localStorage.removeItem(k);
+                            }
+                          }
+                        } catch { /* ignore */ }
+                        window.location.href = window.location.pathname;
+                      }}
                       className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
                     >
-                      Refrescar
+                      Iniciar sesión
                     </button>
                   </div>
                 </div>
