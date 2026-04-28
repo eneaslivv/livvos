@@ -22,8 +22,22 @@ export interface Tenant {
     preview_url?: string | null;
     deploy_hook_url?: string | null;
     status: 'active' | 'suspended' | 'trial' | 'setup';
+    is_super_agency?: boolean;
+    parent_tenant_id?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface TenantMembership {
+    tenant_id: string;
+    tenant_name: string;
+    tenant_slug: string;
+    logo_url: string | null;
+    role: string;
+    source: 'native' | 'connection';
+    is_super_agency: boolean;
+    parent_tenant_id: string | null;
+    is_active: boolean;
 }
 
 export interface TenantConfig {
@@ -108,6 +122,10 @@ interface TenantContextType {
     updateTenant: (updates: Partial<Tenant>) => Promise<void>;
     switchTenant: (tenantId: string) => Promise<boolean>;
 
+    // Multi-tenant membership (super-agency switcher)
+    memberships: TenantMembership[];
+    refreshMemberships: () => Promise<void>;
+
     // Integrations
     updateIntegration: (provider: keyof TenantConfig['integrations'], config: any) => Promise<void>;
     testIntegration: (provider: keyof TenantConfig['integrations']) => Promise<boolean>;
@@ -153,7 +171,25 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isViewingAsTenant, setIsViewingAsTenant] = useState(false);
+    const [memberships, setMemberships] = useState<TenantMembership[]>([]);
     const hasLoadedRef = useRef(false);
+
+    const refreshMemberships = useCallback(async () => {
+        if (!user) {
+            setMemberships([]);
+            return;
+        }
+        try {
+            const { data, error: rpcError } = await supabase.rpc('get_my_tenants');
+            if (rpcError) {
+                if (import.meta.env.DEV) console.warn('[TenantContext] get_my_tenants failed:', rpcError.message);
+                return;
+            }
+            setMemberships((data || []) as TenantMembership[]);
+        } catch (err) {
+            errorLogger.error('Error fetching tenant memberships:', err);
+        }
+    }, [user]);
 
     const buildTenantSlug = useCallback((value: string) => {
         const slug = value
@@ -615,27 +651,22 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         }
     }, [currentTenant]);
 
-    // Switch tenant (for multi-tenant users)
+    // Switch tenant — validates membership server-side via RPC
     const switchTenant = useCallback(async (tenantId: string): Promise<boolean> => {
         if (!user) return false;
 
         try {
-            // Update user's profile with new tenant
-            const { error } = await supabase
-                .from('profiles')
-                .update({ tenant_id: tenantId })
-                .eq('id', user.id);
+            const { error: rpcError } = await supabase.rpc('switch_active_tenant', { p_tenant_id: tenantId });
+            if (rpcError) throw rpcError;
 
-            if (error) throw error;
-
-            // Reload tenant data
             await fetchTenantData();
+            await refreshMemberships();
             return true;
         } catch (err) {
             errorLogger.error('Error switching tenant:', err);
             return false;
         }
-    }, [user, fetchTenantData]);
+    }, [user, fetchTenantData, refreshMemberships]);
 
     // Update integration
     const updateIntegration = useCallback(async (provider: keyof TenantConfig['integrations'], config: any) => {
@@ -746,7 +777,8 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     // Initialize on mount and when user changes
     useEffect(() => {
         fetchTenantData();
-    }, [fetchTenantData]);
+        refreshMemberships();
+    }, [fetchTenantData, refreshMemberships]);
 
     // Apply branding when it changes
     useEffect(() => {
@@ -799,6 +831,10 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         createTenant,
         updateTenant,
         switchTenant,
+
+        // Multi-tenant membership
+        memberships,
+        refreshMemberships,
 
         // Integrations
         updateIntegration,

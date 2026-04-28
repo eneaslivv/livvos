@@ -587,29 +587,29 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Getters — always compare date-only portion (TIMESTAMPTZ can include time)
   const getEventsByDate = (date: string) => events.filter(event => event.start_date?.slice(0, 10) === date)
   const getTasksByDate = (date: string) => tasks.filter(task => {
-    // Completed tasks pin to their completed_at date (or start_date as fallback)
+    // Completed tasks pin to completed_at, then start_date
     if (task.completed) {
       if (task.completed_at) return task.completed_at.slice(0, 10) === date
       if (task.start_date) return task.start_date.slice(0, 10) === date
-      // Completed with no dates → pin to created_at
-      return task.created_at?.slice(0, 10) === date
+      return false
     }
-    // Pending tasks: show on start_date, fall back to created_at
-    if (task.start_date) return task.start_date.slice(0, 10) === date
-    return task.created_at?.slice(0, 10) === date
+    // Pending tasks: only show on their actual scheduled date.
+    // No fallback to created_at — that would pile every undated task onto today.
+    if (!task.start_date) return false
+    return task.start_date.slice(0, 10) === date
   })
   const getEventsByDateRange = (startDate: string, endDate: string) => events.filter(event => {
     const d = event.start_date?.slice(0, 10)
     return d && d >= startDate && d <= endDate
   })
   const getTasksByDateRange = (startDate: string, endDate: string) => tasks.filter(task => {
-    // Completed tasks pin to their completed_at date (or start_date/created_at as fallback)
     if (task.completed) {
-      const d = (task.completed_at ?? task.start_date ?? task.created_at)?.slice(0, 10)
-      return d && d >= startDate && d <= endDate
+      const d = (task.completed_at ?? task.start_date)?.slice(0, 10)
+      return !!d && d >= startDate && d <= endDate
     }
-    const d = (task.start_date ?? task.created_at)?.slice(0, 10)
-    return d && d >= startDate && d <= endDate
+    // Pending tasks: only include if scheduled. No created_at fallback (avoids today-pile).
+    const d = task.start_date?.slice(0, 10)
+    return !!d && d >= startDate && d <= endDate
   })
 
   const getCalendarStats = () => {

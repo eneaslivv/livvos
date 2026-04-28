@@ -126,7 +126,25 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 2)
 
 const inflight = new Map<string, Promise<unknown>>()
 
-async function callGemini<T>(type: string, input: string, validate: (d: any) => boolean): Promise<T> {
+/**
+ * Optional live profile enrichment. When provided, these fields are merged
+ * with the server-loaded `tenant_ai_profile` row before being injected into
+ * the system prompt. Use it to push fresh on-screen data the DB row doesn't
+ * have (e.g. live counters, currently-selected project context).
+ */
+export type LiveAIProfile = {
+  last_active_projects_summary?: string
+  last_finance_summary?: string
+  // Free-form pass-through. Server only reads known keys, but extras don't break anything.
+  [k: string]: unknown
+}
+
+async function callGemini<T>(
+  type: string,
+  input: string,
+  validate: (d: any) => boolean,
+  profile?: LiveAIProfile,
+): Promise<T> {
   // 1. Check cache
   const cached = getCached<T>(type, input)
   if (cached) {
@@ -189,7 +207,7 @@ async function callGemini<T>(type: string, input: string, validate: (d: any) => 
           'apikey': supabaseKey,
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ type, input }),
+        body: JSON.stringify({ type, input, profile }),
       })
     }
 
@@ -281,17 +299,17 @@ export type AdvisorAIResult = {
   greeting: string
 }
 
-export const generateTaskFromAI = (input: string): Promise<TaskAIResult> =>
-  callGemini('task', input, (r) => !!r?.title)
+export const generateTaskFromAI = (input: string, profile?: LiveAIProfile): Promise<TaskAIResult> =>
+  callGemini('task', input, (r) => !!r?.title, profile)
 
-export const generateProposalFromAI = (input: string): Promise<ProposalAIResult> =>
-  callGemini('proposal', input, (r) => !!r?.content)
+export const generateProposalFromAI = (input: string, profile?: LiveAIProfile): Promise<ProposalAIResult> =>
+  callGemini('proposal', input, (r) => !!r?.content, profile)
 
-export const generateWeeklySummaryFromAI = (input: string): Promise<WeeklySummaryAIResult> =>
-  callGemini('weekly_summary', input, (r) => Array.isArray(r?.objectives) && Array.isArray(r?.focus_tasks) && Array.isArray(r?.recommendations))
+export const generateWeeklySummaryFromAI = (input: string, profile?: LiveAIProfile): Promise<WeeklySummaryAIResult> =>
+  callGemini('weekly_summary', input, (r) => Array.isArray(r?.objectives) && Array.isArray(r?.focus_tasks) && Array.isArray(r?.recommendations), profile)
 
-export const generateAdvisorInsights = (input: string): Promise<AdvisorAIResult> =>
-  callGemini('advisor', input, (r) => Array.isArray(r?.insights))
+export const generateAdvisorInsights = (input: string, profile?: LiveAIProfile): Promise<AdvisorAIResult> =>
+  callGemini('advisor', input, (r) => Array.isArray(r?.insights), profile)
 
 /** Synchronously return cached advisor insights for the given context (or null). */
 export const getCachedAdvisorInsights = (input: string): AdvisorAIResult | null =>
@@ -306,13 +324,14 @@ export const sendAdvisorChat = (
   context: string,
   history: AdvisorChatMessage[],
   question: string,
+  profile?: LiveAIProfile,
 ): Promise<AdvisorChatResult> => {
   const payload = JSON.stringify({ context, history, question })
-  return callGemini<AdvisorChatResult>('advisor_chat', payload, (r) => typeof r?.reply === 'string')
+  return callGemini<AdvisorChatResult>('advisor_chat', payload, (r) => typeof r?.reply === 'string', profile)
 }
 
-export const generateBlogFromAI = (input: string): Promise<BlogAIResult> =>
-  callGemini('blog', input, (r) => !!r?.title && !!r?.content)
+export const generateBlogFromAI = (input: string, profile?: LiveAIProfile): Promise<BlogAIResult> =>
+  callGemini('blog', input, (r) => !!r?.title && !!r?.content, profile)
 
 // ─── AI Plan Period ──────────────────────────────────────────────
 
@@ -335,8 +354,8 @@ export type PlanAIResult = {
   summary: string
 }
 
-export const generatePlanFromAI = (input: string): Promise<PlanAIResult> =>
-  callGemini('plan_period', input, (r) => Array.isArray(r?.changes))
+export const generatePlanFromAI = (input: string, profile?: LiveAIProfile): Promise<PlanAIResult> =>
+  callGemini('plan_period', input, (r) => Array.isArray(r?.changes), profile)
 
 // ─── AI Standup ──────────────────────────────────────────────────
 
@@ -362,8 +381,61 @@ export type StandupAIResult = {
   risks: StandupRisk[]
 }
 
-export const processStandupFromAI = (input: string): Promise<StandupAIResult> =>
-  callGemini('standup', input, (r) => !!r?.summary && Array.isArray(r?.actions))
+export const processStandupFromAI = (input: string, profile?: LiveAIProfile): Promise<StandupAIResult> =>
+  callGemini('standup', input, (r) => !!r?.summary && Array.isArray(r?.actions), profile)
+
+// ─── Tenant AI Profile (CRUD) ────────────────────────────────────
+// Static per-tenant context that the user fills in via Settings → AI Preferences.
+// Server auto-loads this on every gemini call; clients only need these helpers
+// for the settings UI itself.
+
+export type TenantAIProfile = {
+  tenant_id: string
+  business_description: string | null
+  industry: string | null
+  target_audience: string | null
+  brand_voice: string | null
+  tone: string | null
+  primary_language: string | null
+  goals: string[] | null
+  constraints: string | null
+  custom_instructions: string | null
+  last_active_projects_summary: string | null
+  last_finance_summary: string | null
+  updated_at?: string
+}
+
+export const TENANT_AI_PROFILE_TONES = ['professional', 'casual', 'formal', 'playful', 'technical'] as const
+export const TENANT_AI_PROFILE_LANGUAGES = ['es', 'en', 'pt'] as const
+
+export async function getTenantAIProfile(tenantId: string): Promise<TenantAIProfile | null> {
+  const { data, error } = await supabase
+    .from('tenant_ai_profile')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (error) {
+    if (import.meta.env.DEV) console.error('[ai] getTenantAIProfile error:', error)
+    return null
+  }
+  return (data as TenantAIProfile) || null
+}
+
+export async function upsertTenantAIProfile(
+  tenantId: string,
+  patch: Partial<Omit<TenantAIProfile, 'tenant_id' | 'updated_at'>>,
+): Promise<TenantAIProfile | null> {
+  const { data, error } = await supabase
+    .from('tenant_ai_profile')
+    .upsert({ tenant_id: tenantId, ...patch }, { onConflict: 'tenant_id' })
+    .select('*')
+    .single()
+  if (error) {
+    if (import.meta.env.DEV) console.error('[ai] upsertTenantAIProfile error:', error)
+    return null
+  }
+  return data as TenantAIProfile
+}
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {

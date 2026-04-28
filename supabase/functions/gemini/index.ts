@@ -142,14 +142,16 @@ serve(async (req) => {
       tenantId = profile?.tenant_id || null
     }
 
-    // Check if tenant has AI feature enabled
+    // Check if tenant has AI feature enabled. Features live in tenant_config (one row per tenant),
+    // not in tenants. Fail-open if no config row exists or features is null — only block when
+    // ai_assistant is explicitly set to false.
     if (tenantId) {
-      const { data: tenant } = await supabaseAdmin
-        .from('tenants')
+      const { data: config } = await supabaseAdmin
+        .from('tenant_config')
         .select('features')
-        .eq('id', tenantId)
-        .single()
-      if (tenant?.features && tenant.features.ai_assistant === false) {
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+      if (config?.features && config.features.ai_assistant === false) {
         return new Response(JSON.stringify({ error: 'AI no está habilitado para este equipo.' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -174,7 +176,7 @@ serve(async (req) => {
     }
 
     const body = await req.json()
-    const { type, input } = body || {}
+    const { type, input, profile: clientProfile } = body || {}
 
     if (!input || typeof input !== 'string') {
       return new Response(JSON.stringify({ error: 'Missing input' }), {
@@ -182,6 +184,62 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    // ─── Load tenant AI profile ─────────────────────────────────────
+    // Source-of-truth precedence: client-provided profile (fresh from frontend)
+    // overrides DB row only if explicitly passed; otherwise we fetch from DB.
+    // Server-fetched is canonical because clients can't fabricate tenant_id.
+    type AIProfile = {
+      business_description?: string | null
+      industry?: string | null
+      target_audience?: string | null
+      brand_voice?: string | null
+      tone?: string | null
+      primary_language?: string | null
+      goals?: string[] | null
+      constraints?: string | null
+      custom_instructions?: string | null
+      last_active_projects_summary?: string | null
+      last_finance_summary?: string | null
+    }
+    let aiProfile: AIProfile | null = null
+    if (tenantId) {
+      const { data } = await supabaseAdmin
+        .from('tenant_ai_profile')
+        .select('business_description, industry, target_audience, brand_voice, tone, primary_language, goals, constraints, custom_instructions, last_active_projects_summary, last_finance_summary')
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+      aiProfile = (data as AIProfile) || null
+    }
+    // Allow client to enrich with fields it knows that the DB doesn't (e.g. live counters)
+    if (clientProfile && typeof clientProfile === 'object') {
+      aiProfile = { ...(aiProfile || {}), ...clientProfile } as AIProfile
+    }
+
+    function buildProfileBlock(p: AIProfile | null): string {
+      if (!p) return ''
+      const lines: string[] = []
+      if (p.business_description) lines.push(`Business: ${p.business_description}`)
+      if (p.industry) lines.push(`Industry: ${p.industry}`)
+      if (p.target_audience) lines.push(`Target audience: ${p.target_audience}`)
+      if (p.brand_voice) lines.push(`Brand voice: ${p.brand_voice}`)
+      if (p.tone) lines.push(`Tone preference: ${p.tone}`)
+      if (p.primary_language) lines.push(`Preferred response language: ${p.primary_language}`)
+      if (p.goals && p.goals.length) lines.push(`Current goals: ${p.goals.map((g) => `"${g}"`).join('; ')}`)
+      if (p.constraints) lines.push(`Constraints: ${p.constraints}`)
+      if (p.last_active_projects_summary) lines.push(`Active work snapshot: ${p.last_active_projects_summary}`)
+      if (p.last_finance_summary) lines.push(`Finance snapshot: ${p.last_finance_summary}`)
+      if (p.custom_instructions) lines.push(`User custom instructions: ${p.custom_instructions}`)
+      if (!lines.length) return ''
+      return `<TENANT_PROFILE>
+${lines.join('\n')}
+</TENANT_PROFILE>
+
+Use the profile above to personalize tone, language, and recommendations. The user's custom_instructions are HIGHER priority than your defaults — respect them. Never contradict the brand_voice or constraints. If profile data conflicts with the user input, the user input wins for the immediate task but profile still drives style/tone.
+
+`
+    }
+    const profileBlock = buildProfileBlock(aiProfile)
 
     // For plan_period / standup: limit task lines to avoid MAX_TOKENS on output
     let processedInput = input
@@ -247,9 +305,14 @@ serve(async (req) => {
       })
     }
 
-    const systemPrompt =
+    const baseSystemPrompt =
       type === 'task'
-        ? 'You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string). Keep title concise.'
+        ? `You are a task creation assistant. Return ONLY valid JSON with keys: title (string), priority (low|medium|high|urgent), tag (string).
+Rules:
+- title: rephrase the user's input as a concise actionable task (start with a verb when natural). Do NOT add scope or context that wasn't in the input.
+- priority: infer from urgency cues in the input (e.g. "asap", "hoy", "bloqueante" → urgent/high). If no cue, default to "medium".
+- tag: a short single-word category derived from the input (e.g. "Design", "Marketing", "Compras"). Do NOT invent project names or assignees — those are not part of this schema.
+- Respond in the SAME language as the input.`
         : type === 'tasks_bulk'
         ? `You are a senior project planning assistant for a creative agency. Given a project description and context, break it into phases with tasks, realistic delivery dates, and budget estimates.
 Return ONLY valid JSON with this structure:
@@ -269,20 +332,35 @@ Rules:
 - Be specific and detailed — avoid generic tasks like "review" or "finalize"
 - Focus on QUALITY: fewer well-defined tasks > many vague tasks`
         : type === 'proposal'
-        ? 'You are a proposal writer. Return ONLY valid JSON with keys: summary (string), content (string, structured with headings), timeline (array of objects with week:number, title:string, detail:string), language (en|es). Keep tone professional and clear.'
+        ? `You are a commercial proposal writer for a creative/services agency. Return ONLY valid JSON with keys: summary (string, 2-3 sentences), content (string, markdown-style structured with headings ##), timeline (array of {week:number, title:string, detail:string}), language (en|es).
+Grounding rules — CRITICAL to avoid hallucination:
+- USE ONLY information explicitly provided in the user input (client name, project type, budget, deadlines, scope, deliverables, team size).
+- DO NOT invent: client names, specific monetary amounts, exact percentages/metrics, team member names, technologies/tools not mentioned, case studies, testimonials, or competitor comparisons.
+- If a critical detail is missing (e.g., client name, budget, scope), use a clearly marked placeholder like [CLIENT NAME], [BUDGET TBD], [SCOPE TO CONFIRM]. Never fabricate to fill the gap.
+- Timeline: derive week count from any deadline/duration mentioned in the input. If no duration is given, propose a reasonable default (4-8 weeks) and explicitly note it as an "estimated" timeline in the content.
+- Tone: professional, concrete, action-oriented. Avoid filler ("we are passionate about...", "in today's fast-paced world...").
+- Respond in the same language as the input.`
         : type === 'blog'
-        ? 'You are a blog writer. Return ONLY valid JSON with keys: title (string), excerpt (string), content (string with headings), language (en|es). Keep it readable and structured.'
+        ? `You are a blog writer. Return ONLY valid JSON with keys: title (string), excerpt (string, 1-2 sentences), content (string, HTML with <h1>/<h2>/<p> tags), language (en|es).
+Grounding rules:
+- Stay strictly within the topic and angle the user provided.
+- DO NOT invent statistics, percentages, study results, quotes, expert names, company names, or product names. If you want to reference data, phrase it generically ("studies suggest", "many freelancers report") instead of citing fake numbers.
+- DO NOT add unrelated tangents to pad length. A focused 4-section post beats a sprawling 8-section one.
+- Tone: useful and direct. Avoid clickbait headlines and AI-tell phrases ("in today's fast-paced world", "let's dive in", "remember,").
+- Respond in the same language as the input.`
         : type === 'weekly_summary'
         ? `You are a professional productivity coach and project manager. Analyze the user's weekly calendar data (events, tasks, deadlines) and any custom instructions they provide.
 Return ONLY valid JSON with this structure:
 {"objectives":["objective 1","objective 2",...],"focus_tasks":["task 1","task 2",...],"recommendations":["recommendation 1","recommendation 2",...]}
-Rules:
-- objectives: 2-4 clear, actionable weekly goals derived from the calendar data
-- focus_tasks: 3-5 specific tasks the user should prioritize this week
-- recommendations: 2-4 personalized tips (time management, scheduling gaps, workload balance, etc.)
-- Be concise: each item should be 1-2 sentences max
-- Respond in the SAME language as the input (Spanish if input is in Spanish, English if in English)
-- If the user provides custom instructions or extra context, incorporate them into the analysis`
+Grounding rules — CRITICAL:
+- Every objective, focus_task and recommendation MUST be derived from the actual data in the input. DO NOT pad with generic advice that ignores the data.
+- If the input is sparse (few events/tasks), return FEWER items rather than fabricating. Empty arrays are acceptable when the data truly doesn't support a section.
+- focus_tasks: reference task titles or event names that actually appear in the input. NEVER invent task names.
+- recommendations: must reference a specific observation from the data (e.g., "You have 3 back-to-back meetings Wednesday — block recovery time after"). Avoid generic productivity tips that could apply to anyone.
+- Soft size guidance (only if data supports it): up to 4 objectives, up to 5 focus_tasks, up to 4 recommendations.
+- Be concise: each item 1-2 sentences max.
+- Respond in the SAME language as the input.
+- If the user provided custom instructions, weight them above the defaults.`
         : type === 'plan_period'
         ? `You are a senior project manager and scheduling optimizer for a creative agency. Given a set of tasks, team members with workload data, calendar events, and user preferences, reorganize and replan tasks for optimal productivity.
 Return ONLY valid JSON with this structure:
@@ -327,15 +405,15 @@ Rules:
         ? `You are a senior business advisor and strategist for a creative agency / studio owner. You have access to a summary of the user's current projects, finances, team, and calendar.
 Return ONLY valid JSON with this structure:
 {"greeting":"A brief personalized greeting (1 sentence)","insights":[{"area":"projects|finance|marketing|team|planning","icon":"Briefcase|DollarSign|TrendingUp|Users|Target","title":"Short title","body":"Actionable insight in 1-2 sentences","priority":"high|medium|low"}]}
-Rules:
-- Generate 4-6 personalized, actionable insights based on the data provided
-- Cover different areas: projects, finance, marketing strategy, team management, weekly planning
-- Be specific - reference actual project names, amounts, deadlines from the data
-- Priority: high = needs immediate attention, medium = this week, low = good to know
-- Keep tone professional but friendly, like a trusted advisor
-- Respond in the SAME language as the input (Spanish if input is in Spanish)
-- If there are overdue items, low income, or stalled projects, flag them as high priority
-- Always include at least one forward-looking recommendation`
+Grounding rules — CRITICAL to avoid hallucination:
+- Every insight MUST cite at least one concrete data point from the input (a project name, an amount, a date, a count). If the input does not contain enough data for an insight, OMIT it.
+- DO NOT pad to hit a count. Better to return 2 sharp insights than 6 generic ones. Acceptable range: 2-6 insights based on what the data supports.
+- DO NOT invent project names, client names, monetary amounts, deadlines, or team members. Only reference what appears in the input.
+- If a section (e.g., finance) has no data in the input, do not generate insights for that area.
+- Priority logic: high = overdue, blocking, or financial risk visible in the data | medium = this week, requires attention | low = optimization opportunity.
+- The greeting must reference something specific from the data (e.g., a project name or count of active items). Avoid generic "Hope you're having a great week!" openers.
+- Tone: trusted advisor — direct, data-grounded, no filler.
+- Respond in the SAME language as the input.`
         : type === 'advisor_chat'
         ? `You are a senior business advisor continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (current business snapshot), "history" (prior turns as [{role, content}]), and "question" (the new user message).
 Return ONLY valid JSON: {"reply":"your response text"}
@@ -346,6 +424,8 @@ Rules:
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
+
+    const systemPrompt = profileBlock + baseSystemPrompt
 
     const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : 512
     const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : 0.3
@@ -553,8 +633,23 @@ Rules:
         })
       }
     } else if (type === 'advisor_chat') {
-      const chat = json as { reply?: string }
-      if (!chat || typeof chat.reply !== 'string') {
+      // Salvage: gpt-4o-mini sometimes returns a JSON object with a different key
+      // (e.g., {"priorities":[...]}). Coerce any string/array value into a reply.
+      let chat = json as { reply?: string }
+      if (json && (!chat?.reply || typeof chat.reply !== 'string')) {
+        const obj = json as Record<string, unknown>
+        const stringField = Object.values(obj).find((v) => typeof v === 'string') as string | undefined
+        if (stringField) {
+          chat = { reply: stringField }
+        } else {
+          const arrayField = Object.values(obj).find((v) => Array.isArray(v)) as unknown[] | undefined
+          if (arrayField && arrayField.every((x) => typeof x === 'string')) {
+            chat = { reply: (arrayField as string[]).map((s) => `• ${s}`).join('\n') }
+          }
+        }
+        if (chat.reply) json = chat
+      }
+      if (!chat?.reply || typeof chat.reply !== 'string') {
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

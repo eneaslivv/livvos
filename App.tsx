@@ -36,6 +36,7 @@ const loadFinance = () => retryDynamicImport(() => import('./pages/Finance').the
 const loadTeam = () => retryDynamicImport(() => import('./pages/Team').then(m => ({ default: m.Team })), 'Team');
 const loadAuth = () => retryDynamicImport(() => import('./pages/Auth').then(m => ({ default: m.Auth })), 'Auth');
 const loadAcceptInvite = () => retryDynamicImport(() => import('./pages/AcceptInvite').then(m => ({ default: m.AcceptInvite })), 'AcceptInvite');
+const loadAcceptConnection = () => retryDynamicImport(() => import('./pages/AcceptConnection').then(m => ({ default: m.AcceptConnection })), 'AcceptConnection');
 const loadTenantSettings = () => retryDynamicImport(() => import('./pages/TenantSettings').then(m => ({ default: m.TenantSettings })), 'TenantSettings');
 const loadProposalPublic = () => retryDynamicImport(() => import('./pages/ProposalPublic').then(m => ({ default: m.ProposalPublic })), 'ProposalPublic');
 const loadClientPortal = () => retryDynamicImport(() => import('./pages/ClientPortal').then(m => ({ default: m.ClientPortal })), 'ClientPortal');
@@ -57,6 +58,7 @@ const Sales = React.lazy(loadSales);
 const Finance = React.lazy(loadFinance);
 const Auth = React.lazy(loadAuth);
 const AcceptInvite = React.lazy(loadAcceptInvite);
+const AcceptConnection = React.lazy(loadAcceptConnection);
 const TenantSettings = React.lazy(loadTenantSettings);
 const ProposalPublic = React.lazy(loadProposalPublic);
 const ClientPortal = React.lazy(loadClientPortal);
@@ -785,6 +787,7 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   // Check for invite URL
   const isInvite = window.location.pathname === '/accept-invite';
+  const isAcceptConnection = window.location.pathname === '/accept-connection';
   const proposalToken = new URLSearchParams(window.location.search).get('proposal');
   const portalFlag = new URLSearchParams(window.location.search).get('portal');
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
@@ -903,6 +906,14 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <AcceptInvite />
+      </Suspense>
+    );
+  }
+
+  if (isAcceptConnection) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AcceptConnection />
       </Suspense>
     );
   }
