@@ -321,20 +321,20 @@ export const Calendar: React.FC = () => {
 
   // Helper: color = priority (base color) + status (visual modifier)
   // done → green, cancelled → red/faded, active → priority color
-  // in-progress adds left border accent
+  // Soft palette: lighter borders + transparency for a calmer surface
   const getTaskColor = (task: CalendarTask) => {
     if (task.completed || task.status === 'done') {
-      return { bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-700/40', text: 'text-emerald-600/70 dark:text-emerald-400/60', dot: 'bg-emerald-400' };
+      return { bg: 'bg-emerald-50/70 dark:bg-emerald-900/15', border: 'border-emerald-200/50 dark:border-emerald-700/30', text: 'text-emerald-600/70 dark:text-emerald-400/60', dot: 'bg-emerald-400' };
     }
     if (task.status === 'cancelled') {
-      return { bg: 'bg-red-50/50 dark:bg-red-900/10', border: 'border-red-200/50 dark:border-red-800/30', text: 'text-red-400 dark:text-red-500', dot: 'bg-red-300' };
+      return { bg: 'bg-red-50/40 dark:bg-red-900/10', border: 'border-red-200/40 dark:border-red-800/20', text: 'text-red-400 dark:text-red-500', dot: 'bg-red-300' };
     }
     // Active tasks (todo / in-progress): priority determines color
     switch (task.priority) {
-      case 'urgent': return { bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-300 dark:border-red-800', text: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' };
-      case 'high': return { bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-300 dark:border-amber-800', text: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' };
-      case 'low': return { bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-300 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' };
-      default: return { bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-300 dark:border-blue-800', text: 'text-blue-700 dark:text-blue-300', dot: 'bg-blue-500' };
+      case 'urgent': return { bg: 'bg-red-50/80 dark:bg-red-900/15', border: 'border-red-200/60 dark:border-red-800/40', text: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' };
+      case 'high': return { bg: 'bg-amber-50/80 dark:bg-amber-900/15', border: 'border-amber-200/60 dark:border-amber-800/40', text: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' };
+      case 'low': return { bg: 'bg-emerald-50/80 dark:bg-emerald-900/15', border: 'border-emerald-200/60 dark:border-emerald-800/40', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' };
+      default: return { bg: 'bg-blue-50/80 dark:bg-blue-900/15', border: 'border-blue-200/60 dark:border-blue-800/40', text: 'text-blue-700 dark:text-blue-300', dot: 'bg-blue-500' };
     }
   };
 

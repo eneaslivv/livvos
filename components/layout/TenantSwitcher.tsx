@@ -67,11 +67,11 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                     `}
                     title={expanded ? undefined : currentTenant.name}
                 >
-                    <div className={`flex items-center justify-center rounded-xl shrink-0 overflow-hidden ${expanded ? 'w-11 h-11' : 'w-10 h-10'}`}>
+                    <div className={`relative flex items-center justify-center rounded-full shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 shadow-sm ${expanded ? 'w-11 h-11' : 'w-10 h-10'}`}>
                         {logoSrc ? (
-                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain" />
+                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain p-1" />
                         ) : (
-                            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 select-none">
                                 {currentTenant.name.slice(0, 2).toUpperCase()}
                             </span>
                         )}
@@ -178,11 +178,11 @@ const TenantRow: React.FC<{
             disabled:opacity-50 disabled:cursor-wait
         `}
     >
-        <div className="flex items-center justify-center w-7 h-7 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shrink-0 overflow-hidden">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 shrink-0 overflow-hidden shadow-sm">
             {membership.logo_url ? (
-                <img src={membership.logo_url} alt="" className="max-w-full max-h-full object-contain" />
+                <img src={membership.logo_url} alt="" className="w-full h-full object-contain p-0.5" />
             ) : (
-                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
+                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 select-none">
                     {membership.tenant_name.slice(0, 2).toUpperCase()}
                 </span>
             )}

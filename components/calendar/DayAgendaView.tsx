@@ -208,10 +208,13 @@ export const DayAgendaView: React.FC<DayAgendaViewProps> = ({
                   {hourEvents.map(event => (
                     <div
                       key={event.id}
-                      className="mb-1 px-3 py-2.5 rounded-xl border-l-[3px] bg-indigo-50 dark:bg-indigo-500/10 border-indigo-500"
+                      className="mb-1 px-3 py-2.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200/50 dark:border-indigo-700/30 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
                     >
-                      <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">{event.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                        {event.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 pl-3">
                         {event.location && (
                           <span className="text-[10px] text-indigo-500/70">{event.location}</span>
                         )}
@@ -228,20 +231,21 @@ export const DayAgendaView: React.FC<DayAgendaViewProps> = ({
                       <motion.button
                         key={task.id}
                         onClick={() => onOpenTaskDetail(task)}
-                        className={`mb-1 w-full text-left px-3 py-2.5 rounded-xl border-l-[3px] active:scale-[0.98] transition-transform ${
+                        className={`mb-1 w-full text-left px-3 py-2.5 rounded-2xl border active:scale-[0.98] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] ${
                           task.completed
-                            ? 'bg-zinc-50 dark:bg-zinc-800/30 border-zinc-300 dark:border-zinc-600'
+                            ? 'bg-zinc-50/70 dark:bg-zinc-800/30 border-zinc-200/50 dark:border-zinc-700/40'
                             : `${colors.bg} ${colors.border}`
-                        }`}
+                        } ${task.status === 'in-progress' ? 'ring-1 ring-inset ring-zinc-900/5 dark:ring-white/10' : ''}`}
                         whileTap={{ scale: 0.98 }}
                       >
                         <div className="flex items-center gap-2">
+                          <span className={`w-1.5 h-1.5 rounded-full ${colors.dot} shrink-0`} />
                           <p className={`text-sm font-medium flex-1 truncate ${task.completed ? 'line-through text-zinc-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
                             {task.title}
                           </p>
                           {task.completed && <Icons.CheckCircle size={14} className="text-emerald-500 shrink-0" />}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-2 mt-0.5 pl-3.5">
                           {client && <span className="text-[10px] text-zinc-400">{client}</span>}
                           {task.duration && <span className="text-[10px] text-zinc-400">{task.duration}min</span>}
                           {task.assignee_id && (
