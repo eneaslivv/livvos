@@ -63,6 +63,23 @@ export interface TaskDetailPanelProps {
   onOpenTaskDetail: (task: CalendarTask) => void;
 }
 
+// ── Local UI primitives ───────────────────────────────────────────────
+const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; trailing?: React.ReactNode }> = ({ icon, title, trailing }) => (
+  <div className="flex items-center justify-between mb-2.5">
+    <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+      <span className="opacity-70">{icon}</span>
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em]">{title}</h3>
+    </div>
+    {trailing}
+  </div>
+);
+
+const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <label className="block text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">
+    {children}
+  </label>
+);
+
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   selectedTask,
   editingTask,
@@ -145,32 +162,33 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
       footer={
         <div className="space-y-2">
           {saveError && (
-            <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg text-xs text-red-600 dark:text-red-400">
-              <span className="font-semibold">Save failed:</span> {saveError}
+            <div className="flex items-start gap-2 px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200/70 dark:border-red-500/30 rounded-xl text-xs text-red-600 dark:text-red-400">
+              <Icons.AlertCircle size={13} className="mt-0.5 flex-shrink-0" />
+              <span><span className="font-semibold">Save failed.</span> {saveError}</span>
             </div>
           )}
           <div className="flex items-center justify-between">
             <button
               onClick={() => selectedTask && onDelete(selectedTask.id)}
-              className="px-3 py-1.5 text-xs text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center gap-1.5"
+              className="px-2.5 py-1.5 text-xs text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center gap-1.5"
             >
               <Icons.Trash size={12} />
               Delete
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="px-3.5 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={onSave}
                 disabled={savingTask}
-                className="px-5 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all flex items-center gap-2"
+                className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all flex items-center gap-2 shadow-sm"
               >
-                {savingTask ? <div className="w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" /> : <Icons.Check size={14} />}
-                {savingTask ? 'Saving...' : 'Save changes'}
+                {savingTask ? <div className="w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" /> : <Icons.Check size={13} />}
+                {savingTask ? 'Saving' : 'Save'}
               </button>
             </div>
           </div>
@@ -178,15 +196,48 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
       }
     >
       {selectedTask && (
-        <div className="px-5 py-4">
+        <div className="px-6 py-5">
 
-          {/* ─── Header: Title + Complete ─── */}
-          <div className="mb-3">
+          {/* ─── Header: Complete pill + Title + meta ─── */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => onToggleComplete(selectedTask.id, !selectedTask.completed)}
+                className={`group inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  selectedTask.completed
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25'
+                    : 'bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/60'
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                  selectedTask.completed ? 'bg-white/20' : 'bg-white dark:bg-zinc-900 ring-1 ring-zinc-300 dark:ring-zinc-600 group-hover:ring-emerald-500'
+                }`}>
+                  {selectedTask.completed ? (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
+                      <Icons.Check size={11} className="text-white" />
+                    </motion.div>
+                  ) : (
+                    <Icons.Check size={11} className="text-transparent group-hover:text-emerald-500" />
+                  )}
+                </span>
+                {selectedTask.completed ? 'Completed' : 'Mark complete'}
+                {selectedTask.completed && getElapsedDays(selectedTask) !== null && (
+                  <span className="text-[10px] font-semibold text-white/90 bg-white/20 px-1.5 py-0.5 rounded-full">
+                    {getElapsedDays(selectedTask)}d
+                  </span>
+                )}
+              </button>
+              <div className="flex-1" />
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-600 font-mono tabular-nums select-all">
+                {selectedTask.id.slice(0, 8)}
+              </span>
+            </div>
+
             <input
               type="text"
               value={editingTask.title || ''}
               onChange={e => setEditingTask({ ...editingTask, title: e.target.value })}
-              className={`w-full text-lg font-semibold bg-transparent outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors ${
+              className={`w-full text-[22px] leading-tight font-semibold bg-transparent outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors -mx-1 px-1 rounded-md focus:bg-zinc-50 dark:focus:bg-zinc-800/40 ${
                 selectedTask.completed
                   ? 'line-through text-zinc-400 dark:text-zinc-500'
                   : 'text-zinc-900 dark:text-zinc-50'
@@ -194,34 +245,9 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               placeholder="Task title..."
             />
 
-            <div className="flex items-center gap-3 mt-3">
-              <button
-                onClick={() => onToggleComplete(selectedTask.id, !selectedTask.completed)}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  selectedTask.completed
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30'
-                    : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 hover:text-emerald-600 dark:hover:border-emerald-500/40'
-                }`}
-              >
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                  selectedTask.completed ? 'bg-emerald-500 border-emerald-500' : 'border-current'
-                }`}>
-                  {selectedTask.completed && (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
-                      <Icons.Check size={10} className="text-white" />
-                    </motion.div>
-                  )}
-                </div>
-                {selectedTask.completed ? 'Completed' : 'Mark complete'}
-                {selectedTask.completed && getElapsedDays(selectedTask) !== null && (
-                  <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-100 dark:bg-emerald-500/20 px-1.5 py-0.5 rounded-full">
-                    {getElapsedDays(selectedTask)}d
-                  </span>
-                )}
-              </button>
-
-              <span className="text-[10px] text-zinc-300 dark:text-zinc-600 font-mono">{selectedTask.id.slice(0, 8)}</span>
-            </div>
+            <p className="mt-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+              Created {new Date(selectedTask.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+            </p>
           </div>
 
           {/* ─── Blocked banner ─── */}
@@ -260,151 +286,161 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             );
           })()}
 
-          {/* ─── Priority & Status ─── */}
-          <div className="space-y-3 mb-3">
+          {/* ─── Track: Priority + Status ─── */}
+          <SectionHeader icon={<Icons.Flag size={12} />} title="Track" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 mb-6">
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Priority</label>
-              <div className="flex gap-1.5">
+              <FieldLabel>Priority</FieldLabel>
+              <div className="flex gap-1">
                 {([
-                  { value: 'low', label: 'Low', dot: 'bg-emerald-500', active: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'medium', label: 'Medium', dot: 'bg-blue-500', active: 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30 text-blue-700 dark:text-blue-400' },
-                  { value: 'high', label: 'High', dot: 'bg-amber-500', active: 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/30 text-amber-700 dark:text-amber-400' },
-                  { value: 'urgent', label: 'Urgent', dot: 'bg-red-500', active: 'bg-red-50 dark:bg-red-500/10 border-red-300 dark:border-red-500/30 text-red-700 dark:text-red-400' },
-                ] as const).map(p => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => {
-                      const prevPriority = editingTask.priority;
-                      setEditingTask({ ...editingTask, priority: p.value });
-                      if (selectedTask && onQuickUpdate) {
-                        onQuickUpdate(selectedTask.id, { priority: p.value })
-                          ?.catch?.(() => setEditingTask(prev => ({ ...prev, priority: prevPriority })));
-                      }
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-                      editingTask.priority === p.value
-                        ? p.active
-                        : 'border-transparent text-zinc-400 dark:text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${p.dot}`} />
-                    {p.label}
-                  </button>
-                ))}
+                  { value: 'low', label: 'Low', dot: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/10', activeText: 'text-emerald-700 dark:text-emerald-400', activeRing: 'ring-emerald-200 dark:ring-emerald-500/30' },
+                  { value: 'medium', label: 'Medium', dot: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/10', activeText: 'text-blue-700 dark:text-blue-400', activeRing: 'ring-blue-200 dark:ring-blue-500/30' },
+                  { value: 'high', label: 'High', dot: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/10', activeText: 'text-amber-700 dark:text-amber-400', activeRing: 'ring-amber-200 dark:ring-amber-500/30' },
+                  { value: 'urgent', label: 'Urgent', dot: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/10', activeText: 'text-red-700 dark:text-red-400', activeRing: 'ring-red-200 dark:ring-red-500/30' },
+                ] as const).map(p => {
+                  const active = editingTask.priority === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => {
+                        const prevPriority = editingTask.priority;
+                        setEditingTask({ ...editingTask, priority: p.value });
+                        if (selectedTask && onQuickUpdate) {
+                          onQuickUpdate(selectedTask.id, { priority: p.value })
+                            ?.catch?.(() => setEditingTask(prev => ({ ...prev, priority: prevPriority })));
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ring-1 ${
+                        active
+                          ? `${p.activeBg} ${p.activeText} ${p.activeRing}`
+                          : 'ring-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+                      {p.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Status</label>
-              <div className="flex gap-1.5">
+              <FieldLabel>Status</FieldLabel>
+              <div className="flex gap-1">
                 {([
-                  { value: 'todo', label: 'To do', dot: 'bg-zinc-400', active: 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300' },
-                  { value: 'in-progress', label: 'In progress', dot: 'bg-blue-500', active: 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30 text-blue-700 dark:text-blue-400' },
-                  { value: 'done', label: 'Done', dot: 'bg-emerald-500', active: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400' },
-                  { value: 'cancelled', label: 'Cancelled', dot: 'bg-red-400', active: 'bg-red-50 dark:bg-red-500/10 border-red-300 dark:border-red-500/30 text-red-600 dark:text-red-400' },
-                ] as const).map(s => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => {
-                      const prevStatus = editingTask.status;
-                      setEditingTask({ ...editingTask, status: s.value });
-                      if (selectedTask && onQuickUpdate) {
-                        const completed = s.value === 'done';
-                        onQuickUpdate(selectedTask.id, { status: s.value, completed })
-                          ?.catch?.(() => setEditingTask(prev => ({ ...prev, status: prevStatus })));
-                      }
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-                      editingTask.status === s.value
-                        ? s.active
-                        : 'border-transparent text-zinc-400 dark:text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${s.dot}`} />
-                    {s.label}
-                  </button>
-                ))}
+                  { value: 'todo', label: 'To do', dot: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-800', activeText: 'text-zinc-700 dark:text-zinc-200', activeRing: 'ring-zinc-300 dark:ring-zinc-600' },
+                  { value: 'in-progress', label: 'In progress', dot: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/10', activeText: 'text-blue-700 dark:text-blue-400', activeRing: 'ring-blue-200 dark:ring-blue-500/30' },
+                  { value: 'done', label: 'Done', dot: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/10', activeText: 'text-emerald-700 dark:text-emerald-400', activeRing: 'ring-emerald-200 dark:ring-emerald-500/30' },
+                  { value: 'cancelled', label: 'Cancelled', dot: 'bg-red-400', activeBg: 'bg-red-50 dark:bg-red-500/10', activeText: 'text-red-600 dark:text-red-400', activeRing: 'ring-red-200 dark:ring-red-500/30' },
+                ] as const).map(s => {
+                  const active = editingTask.status === s.value;
+                  return (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => {
+                        const prevStatus = editingTask.status;
+                        setEditingTask({ ...editingTask, status: s.value });
+                        if (selectedTask && onQuickUpdate) {
+                          const completed = s.value === 'done';
+                          onQuickUpdate(selectedTask.id, { status: s.value, completed })
+                            ?.catch?.(() => setEditingTask(prev => ({ ...prev, status: prevStatus })));
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ring-1 ${
+                        active
+                          ? `${s.activeBg} ${s.activeText} ${s.activeRing}`
+                          : 'ring-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                      {s.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
-
-          {/* ─── Details grid ─── */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-3">
+          {/* ─── Schedule: Date + Time + Duration ─── */}
+          <SectionHeader icon={<Icons.Calendar size={12} />} title="Schedule" />
+          <div className="grid grid-cols-3 gap-2 mb-6">
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Date</label>
+              <FieldLabel>Date</FieldLabel>
               <input
                 type="date"
                 value={editingTask.start_date || ''}
                 onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
+                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors tabular-nums"
               />
             </div>
+            <div>
+              <FieldLabel>Time</FieldLabel>
+              <input
+                type="time"
+                value={editingTask.start_time || ''}
+                onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
+                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors tabular-nums"
+              />
+            </div>
+            <div>
+              <FieldLabel>Duration</FieldLabel>
+              <select
+                value={editingTask.duration || 60}
+                onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
+              >
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hours</option>
+                <option value="120">2 hours</option>
+                <option value="180">3 hours</option>
+                <option value="240">4 hours</option>
+              </select>
+            </div>
+          </div>
+
+          {/* ─── Context: Project + Client + Assignees ─── */}
+          <SectionHeader icon={<Icons.Briefcase size={12} />} title="Context" />
+          <div className="space-y-3 mb-6">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Time</label>
-                <input
-                  type="time"
-                  value={editingTask.start_time || ''}
-                  onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
-                />
+                <FieldLabel>Project</FieldLabel>
+                <select
+                  value={editingTask.project_id || ''}
+                  onChange={e => {
+                    const pid = e.target.value;
+                    const proj = projectOptions.find(p => p.id === pid);
+                    setEditingTask({
+                      ...editingTask,
+                      project_id: pid,
+                      client_id: proj?.client_id || editingTask.client_id || '',
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
+                >
+                  <option value="">— No project</option>
+                  {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Duration</label>
+                <FieldLabel>Client</FieldLabel>
                 <select
-                  value={editingTask.duration || 60}
-                  onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
+                  value={editingTask.client_id || ''}
+                  onChange={e => setEditingTask({ ...editingTask, client_id: e.target.value })}
+                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
                 >
-                  <option value="15">15m</option>
-                  <option value="30">30m</option>
-                  <option value="45">45m</option>
-                  <option value="60">1h</option>
-                  <option value="90">1.5h</option>
-                  <option value="120">2h</option>
-                  <option value="180">3h</option>
-                  <option value="240">4h</option>
+                  <option value="">— No client</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Project</label>
-              <select
-                value={editingTask.project_id || ''}
-                onChange={e => {
-                  const pid = e.target.value;
-                  const proj = projectOptions.find(p => p.id === pid);
-                  setEditingTask({
-                    ...editingTask,
-                    project_id: pid,
-                    client_id: proj?.client_id || editingTask.client_id || '',
-                  });
-                }}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
-              >
-                <option value="">None</option>
-                {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Client</label>
-              <select
-                value={editingTask.client_id || ''}
-                onChange={e => setEditingTask({ ...editingTask, client_id: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all"
-              >
-                <option value="">None</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Assignees</label>
+              <FieldLabel>Assigned to</FieldLabel>
               <MultiAssigneeSelect
                 value={editingTask.assignee_ids || (editingTask.assignee_id ? [editingTask.assignee_id] : [])}
                 onChange={ids => setEditingTask({ ...editingTask, assignee_ids: ids, assignee_id: ids[0] || undefined })}
@@ -414,36 +450,33 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
-
-          {/* ─── Description ─── */}
-          <div className="mb-3">
-            <label className="block text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Description</label>
+          {/* ─── Notes (description) ─── */}
+          <SectionHeader icon={<Icons.Docs size={12} />} title="Notes" />
+          <div className="mb-6">
             <textarea
               value={editingTask.description || ''}
               onChange={e => setEditingTask({ ...editingTask, description: e.target.value })}
-              placeholder="Add notes, context, or details..."
-              className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 resize-none transition-all"
+              placeholder="Add notes, context, or details…"
+              className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm leading-relaxed text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 resize-none transition-colors"
               rows={3}
             />
           </div>
 
           {/* ─── Subtasks ─── */}
-          <div className="mb-3">
+          <div className="mb-2">
             <button
               type="button"
               onClick={() => toggle('subtasks')}
-              className="flex items-center justify-between w-full mb-2 group"
+              className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
-              <div className="flex items-center gap-1.5">
-                <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.subtasks ? 'rotate-90' : ''}`} />
-                <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer">
-                  Subtasks
-                </label>
+              <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.subtasks ? 'rotate-90' : ''}`} />
+                <Icons.SquareCheck size={12} className="opacity-70" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Subtasks</span>
               </div>
               {totalSubtasks > 0 && (
-                <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {completedCount}/{totalSubtasks}
+                <span className="text-[11px] font-medium tabular-nums text-zinc-400 dark:text-zinc-500">
+                  {completedCount}<span className="opacity-50"> / </span>{totalSubtasks}
                 </span>
               )}
             </button>
@@ -544,19 +577,22 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
           </div>
 
           {/* ─── Dependency ─── */}
-          <div className="mb-3">
+          <div className="mb-2">
             <button
               type="button"
               onClick={() => toggle('dependencies')}
-              className="flex items-center gap-1.5 mb-2 group"
+              className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
-              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.dependencies ? 'rotate-90' : ''}`} />
-              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer flex items-center gap-1.5">
-                <Icons.Link size={11} />
-                Dependency
-              </label>
+              <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.dependencies ? 'rotate-90' : ''}`} />
+                <Icons.Link size={12} className="opacity-70" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Dependency</span>
+              </div>
               {editingTask.blocked_by && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Blocked
+                </span>
               )}
             </button>
             <AnimatePresence initial={false}>
@@ -706,22 +742,22 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </AnimatePresence>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
+          <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 dark:via-zinc-800 to-transparent my-3" />
 
           {/* ─── Documents ─── */}
-          <div className="mb-3">
+          <div className="mb-2">
             <button
               type="button"
               onClick={() => toggle('documents')}
-              className="flex items-center gap-1.5 mb-2 group w-full"
+              className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
-              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.documents ? 'rotate-90' : ''}`} />
-              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer flex items-center gap-1.5">
-                <Icons.Docs size={11} />
-                Documents
-              </label>
+              <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.documents ? 'rotate-90' : ''}`} />
+                <Icons.Docs size={12} className="opacity-70" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Documents</span>
+              </div>
               {linkedDocs.length > 0 && (
-                <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 ml-0.5">
+                <span className="text-[11px] font-medium tabular-nums text-zinc-400 dark:text-zinc-500">
                   {linkedDocs.length}
                 </span>
               )}
@@ -773,19 +809,20 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </AnimatePresence>
           </div>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800 mb-3" />
+          <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 dark:via-zinc-800 to-transparent my-3" />
 
           {/* ─── Comments ─── */}
-          <div className="mb-3">
+          <div className="mb-2">
             <button
               type="button"
               onClick={() => toggle('comments')}
-              className="flex items-center gap-1.5 mb-2 group"
+              className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
-              <Icons.ChevronRight size={12} className={`text-zinc-400 transition-transform ${!collapsed.comments ? 'rotate-90' : ''}`} />
-              <label className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer">
-                Comments
-              </label>
+              <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.comments ? 'rotate-90' : ''}`} />
+                <Icons.Message size={12} className="opacity-70" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Comments</span>
+              </div>
             </button>
             <AnimatePresence initial={false}>
             {!collapsed.comments && (
@@ -796,12 +833,6 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </AnimatePresence>
           </div>
 
-          {/* ─── Meta ─── */}
-          <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <span className="text-[10px] text-zinc-300 dark:text-zinc-600">
-              Created {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-          </div>
         </div>
       )}
       {openDocId && (

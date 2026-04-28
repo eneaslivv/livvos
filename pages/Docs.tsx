@@ -70,6 +70,124 @@ export const Docs: React.FC = () => {
   const [assignClientId, setAssignClientId] = useState('');
   const [assignProjectId, setAssignProjectId] = useState('');
 
+  // Multi-select / bulk actions
+  type SelKind = 'file' | 'folder' | 'doc';
+  type SelectedItem = { kind: SelKind; id: string; name: string; url?: string };
+  const [selected, setSelected] = useState<Map<string, SelectedItem>>(new Map());
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const isSelected = (id: string) => selected.has(id);
+  const toggleSelected = (item: SelectedItem) => {
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.set(item.id, item);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelected(new Map());
+  const selectAllCurrent = () => {
+    const next = new Map<string, SelectedItem>();
+    folders.forEach(f => next.set(f.id, { kind: 'folder', id: f.id, name: f.name }));
+    documents.forEach(d => next.set(d.id, { kind: 'doc', id: d.id, name: d.title }));
+    files.forEach(f => next.set(f.id, { kind: 'file', id: f.id, name: f.name, url: f.url }));
+    setSelected(next);
+  };
+
+  const totalCurrent = folders.length + documents.length + files.length;
+  const allSelected = totalCurrent > 0 && selected.size === totalCurrent;
+
+  const handleBulkDelete = async () => {
+    const items = Array.from(selected.values());
+    if (items.length === 0) return;
+    if (!confirm(`Delete ${items.length} item${items.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      for (const item of items) {
+        try {
+          if (item.kind === 'file') await deleteFile(item.id, item.url || '');
+          else if (item.kind === 'folder') await deleteFolder(item.id);
+          else if (item.kind === 'doc') await deleteDocument(item.id);
+        } catch (err: any) {
+          console.error('Bulk delete error on', item, err);
+        }
+      }
+      clearSelection();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkMove = async (targetFolderId: string | null) => {
+    const items = Array.from(selected.values());
+    if (items.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const item of items) {
+        try {
+          if (item.kind === 'file') {
+            await updateFile(item.id, { folder_id: targetFolderId });
+          } else if (item.kind === 'folder') {
+            if (item.id === targetFolderId) continue; // can't move into itself
+            await updateFolder(item.id, { parent_id: targetFolderId });
+          }
+          // Rich-text documents are flat (no folder_id) — skip silently
+        } catch (err: any) {
+          console.error('Bulk move error on', item, err);
+        }
+      }
+      clearSelection();
+      setShowBulkMove(false);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // Reset selection when navigating folders or switching tabs
+  useEffect(() => { clearSelection(); }, [currentFolderId, activeTab]);
+
+  // Drag-and-drop within the app: move single item onto folder
+  const moveItem = useCallback(async (kind: SelKind, id: string, targetFolderId: string | null) => {
+    try {
+      if (kind === 'file') await updateFile(id, { folder_id: targetFolderId });
+      else if (kind === 'folder') {
+        if (id === targetFolderId) return;
+        await updateFolder(id, { parent_id: targetFolderId });
+      }
+      // documents skip
+    } catch (err: any) {
+      alert(`Error moving: ${err.message}`);
+    }
+  }, [updateFile, updateFolder]);
+
+  const onCardDragStart = (e: React.DragEvent, kind: SelKind, id: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-eneas-doc', JSON.stringify({ kind, id }));
+    // Prevent the page-level OS-file overlay from triggering on internal drags
+    e.stopPropagation();
+  };
+
+  const onFolderDropTarget = {
+    onDragOver: (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-eneas-doc')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    },
+    onDrop: (e: React.DragEvent, folderId: string) => {
+      const raw = e.dataTransfer.getData('application/x-eneas-doc');
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const { kind, id } = JSON.parse(raw) as { kind: SelKind; id: string };
+        moveItem(kind, id, folderId);
+      } catch {}
+    },
+  };
+
   const openActionMenu = (type: 'file' | 'folder', item: any) => {
     setActionMenu({
       type,
@@ -184,17 +302,19 @@ export const Docs: React.FC = () => {
     }
   };
 
-  // Drag & drop
+  // Drag & drop — only react to OS file drags, not in-app card drags
+  const isOsFileDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('Files');
+
   const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!isOsFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     dragCounter.current++;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
+    setIsDragging(true);
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!isOsFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     dragCounter.current--;
@@ -204,11 +324,13 @@ export const Docs: React.FC = () => {
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!isOsFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
+    if (!isOsFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -654,15 +776,25 @@ export const Docs: React.FC = () => {
                 : 'space-y-1.5'
             }>
               {/* Folders */}
-              {folders.map((folder, i) => (
-                view === 'grid' ? (
+              {folders.map((folder, i) => {
+                const sel = isSelected(folder.id);
+                const selItem: SelectedItem = { kind: 'folder', id: folder.id, name: folder.name };
+                return view === 'grid' ? (
                   <motion.div
                     key={folder.id}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
-                    onClick={() => setCurrentFolderId(folder.id)}
-                    className="group cursor-pointer bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm transition-[border-color,background-color,box-shadow] duration-200"
+                    onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
+                    draggable
+                    onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
+                    onDragOver={onFolderDropTarget.onDragOver}
+                    onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
+                    className={`group cursor-pointer bg-white dark:bg-zinc-900 border rounded-xl p-4 hover:shadow-sm transition-[border-color,background-color,box-shadow] duration-200 ${
+                      sel
+                        ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900 bg-blue-50/40 dark:bg-blue-950/30'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
+                    }`}
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -670,12 +802,25 @@ export const Docs: React.FC = () => {
                       <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
                         <Icons.Folder size={24} className="text-blue-500" />
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
-                        className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
-                      >
-                        <Icons.MoreVert size={16} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSelected(selItem); }}
+                          aria-label={sel ? 'Deselect' : 'Select'}
+                          className={`flex items-center justify-center w-5 h-5 rounded-md border transition-all ${
+                            sel
+                              ? 'bg-blue-600 border-blue-600 text-white opacity-100'
+                              : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400'
+                          }`}
+                        >
+                          {sel && <Icons.Tick size={12} strokeWidth={3} />}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
+                          className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
+                        >
+                          <Icons.MoreVert size={16} />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{fmtDate(folder.created_at)}</p>
@@ -686,10 +831,29 @@ export const Docs: React.FC = () => {
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
-                    onClick={() => setCurrentFolderId(folder.id)}
-                    className="group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-[border-color,background-color] duration-200"
+                    onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
+                    draggable
+                    onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
+                    onDragOver={onFolderDropTarget.onDragOver}
+                    onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
+                    className={`group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color,background-color] duration-200 ${
+                      sel
+                        ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
+                    }`}
                     whileTap={{ scale: 0.99 }}
                   >
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleSelected(selItem); }}
+                      aria-label={sel ? 'Deselect' : 'Select'}
+                      className={`flex items-center justify-center w-5 h-5 rounded-md border transition-all flex-shrink-0 ${
+                        sel
+                          ? 'bg-blue-600 border-blue-600 text-white opacity-100'
+                          : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400'
+                      }`}
+                    >
+                      {sel && <Icons.Check size={12} />}
+                    </button>
                     <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
                       <Icons.Folder size={18} className="text-blue-500" />
                     </div>
@@ -703,31 +867,59 @@ export const Docs: React.FC = () => {
                     </button>
                     <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600 group-hover:text-blue-400 transition-colors" />
                   </motion.div>
-                )
-              ))}
+                );
+              })}
 
               {/* Documents (rich-text) */}
-              {documents.map((doc, i) => (
+              {documents.map((doc) => (
                 <DocumentCard
                   key={doc.id}
                   document={doc}
                   view={view}
                   onClick={() => setEditingDocumentId(doc.id)}
+                  selected={isSelected(doc.id)}
+                  onToggleSelect={() => toggleSelected({ kind: 'doc', id: doc.id, name: doc.title })}
+                  onMore={() => {
+                    if (confirm(`Delete document "${doc.title}"?`)) deleteDocument(doc.id);
+                  }}
+                  onDragStart={(e) => onCardDragStart(e, 'doc' as any, doc.id)}
                 />
               ))}
 
               {/* Files */}
-              {files.map((file, i) => (
-                view === 'grid' ? (
+              {files.map((file, i) => {
+                const fSel = isSelected(file.id);
+                const fSelItem: SelectedItem = { kind: 'file', id: file.id, name: file.name, url: file.url };
+                return view === 'grid' ? (
                   <motion.div
                     key={file.id}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
-                    className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-600 hover:shadow-sm transition-[border-color,box-shadow] duration-200"
+                    draggable
+                    onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
+                    onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
+                    className={`group relative bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden hover:shadow-sm transition-[border-color,box-shadow] duration-200 ${
+                      fSel
+                        ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
+                    }`}
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
+                    {/* Floating select checkbox (top-left, always reachable) */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleSelected(fSelItem); }}
+                      aria-label={fSel ? 'Deselect' : 'Select'}
+                      className={`absolute top-2 left-2 z-10 flex items-center justify-center w-5 h-5 rounded-md border transition-all ${
+                        fSel
+                          ? 'bg-blue-600 border-blue-600 text-white opacity-100'
+                          : 'bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm border-zinc-300 dark:border-zinc-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400'
+                      }`}
+                    >
+                      {fSel && <Icons.Tick size={12} strokeWidth={3} />}
+                    </button>
+
                     {/* Image thumbnail or icon */}
                     {isImageType(file.type) && file.url ? (
                       <div className="relative w-full h-28 bg-zinc-100 dark:bg-zinc-800">
@@ -747,7 +939,7 @@ export const Docs: React.FC = () => {
                             <Icons.External size={12} />
                           </a>
                           <button
-                            onClick={() => openActionMenu('file', file)}
+                            onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
                             className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 p-1.5 rounded-lg shadow-sm"
                           >
                             <Icons.MoreVert size={12} />
@@ -770,7 +962,7 @@ export const Docs: React.FC = () => {
                               <Icons.External size={13} />
                             </a>
                             <button
-                              onClick={() => openActionMenu('file', file)}
+                              onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
                               className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 p-1"
                             >
                               <Icons.MoreVert size={13} />
@@ -798,9 +990,27 @@ export const Docs: React.FC = () => {
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
-                    className="group flex items-center gap-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-[border-color] duration-200"
+                    draggable
+                    onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
+                    onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
+                    className={`group flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color] duration-200 ${
+                      fSel
+                        ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
+                    }`}
                     whileTap={{ scale: 0.99 }}
                   >
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleSelected(fSelItem); }}
+                      aria-label={fSel ? 'Deselect' : 'Select'}
+                      className={`flex items-center justify-center w-5 h-5 rounded-md border transition-all flex-shrink-0 ${
+                        fSel
+                          ? 'bg-blue-600 border-blue-600 text-white opacity-100'
+                          : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400'
+                      }`}
+                    >
+                      {fSel && <Icons.Tick size={12} strokeWidth={3} />}
+                    </button>
                     {isImageType(file.type) && file.url ? (
                       <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
                         <img src={file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
@@ -827,15 +1037,15 @@ export const Docs: React.FC = () => {
                         <Icons.External size={13} />
                       </a>
                       <button
-                        onClick={() => openActionMenu('file', file)}
+                        onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
                         className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 p-1"
                       >
                         <Icons.MoreVert size={13} />
                       </button>
                     </div>
                   </motion.div>
-                )
-              ))}
+                );
+              })}
             </div>
           )}
         </motion.div>
@@ -1012,6 +1222,129 @@ export const Docs: React.FC = () => {
           onClose={() => setEditingDocumentId(null)}
         />
       )}
+
+      {/* Floating bulk action bar */}
+      <AnimatePresence>
+      {selected.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 24 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"
+        >
+          <div className="flex items-center gap-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl shadow-2xl border border-zinc-800 dark:border-zinc-200 px-2 py-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium">
+              <span className="flex items-center justify-center min-w-6 h-6 px-1.5 rounded-md bg-blue-500 text-white text-xs font-semibold">
+                {selected.size}
+              </span>
+              <span className="hidden sm:inline">selected</span>
+            </div>
+            <div className="w-px h-6 bg-white/10 dark:bg-zinc-900/10 mx-1" />
+            {totalCurrent > 0 && (
+              <button
+                onClick={allSelected ? clearSelection : selectAllCurrent}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-white/10 dark:hover:bg-zinc-900/10 transition-colors"
+              >
+                <Icons.SquareCheck size={14} />
+                {allSelected ? 'Unselect all' : 'Select all'}
+              </button>
+            )}
+            <button
+              onClick={() => setShowBulkMove(true)}
+              disabled={bulkBusy}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-white/10 dark:hover:bg-zinc-900/10 transition-colors disabled:opacity-50"
+            >
+              <Icons.Folder size={14} />
+              Move
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkBusy}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-red-400 dark:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            >
+              <Icons.Trash size={14} />
+              Delete
+            </button>
+            <div className="w-px h-6 bg-white/10 dark:bg-zinc-900/10 mx-1" />
+            <button
+              onClick={clearSelection}
+              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white/10 dark:hover:bg-zinc-900/10 transition-colors"
+              aria-label="Clear selection"
+            >
+              <Icons.X size={14} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      {/* Bulk Move Modal */}
+      <AnimatePresence>
+      {showBulkMove && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => !bulkBusy && setShowBulkMove(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="w-full max-w-sm max-h-[90vh] bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                <Icons.Folder size={18} className="text-blue-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Move {selected.size} item{selected.size === 1 ? '' : 's'}</p>
+                <p className="text-[11px] text-zinc-400">Pick a destination folder</p>
+              </div>
+              <button onClick={() => setShowBulkMove(false)} disabled={bulkBusy} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 disabled:opacity-50">
+                <Icons.X size={16} />
+              </button>
+            </div>
+            <div className="px-3 pb-3">
+              <div className="max-h-72 overflow-y-auto space-y-0.5">
+                <button
+                  onClick={() => handleBulkMove(null)}
+                  disabled={bulkBusy}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-300 disabled:opacity-50"
+                >
+                  <Icons.Home size={15} className="text-zinc-400" />
+                  Root (Home)
+                </button>
+                {allFolders
+                  .filter(f => !selected.has(f.id))
+                  .map(folder => (
+                    <button
+                      key={folder.id}
+                      onClick={() => handleBulkMove(folder.id)}
+                      disabled={bulkBusy}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-300 disabled:opacity-50"
+                    >
+                      <Icons.Folder size={15} className="text-blue-500" />
+                      <span className="truncate">{folder.name}</span>
+                    </button>
+                  ))}
+                {allFolders.length === 0 && (
+                  <p className="text-xs text-zinc-400 text-center py-4">No folders yet — create one first.</p>
+                )}
+              </div>
+              {bulkBusy && (
+                <p className="text-[11px] text-zinc-400 text-center mt-2">Moving items...</p>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
     </div>
   );
 };

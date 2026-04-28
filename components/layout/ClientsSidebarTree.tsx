@@ -139,27 +139,27 @@ export const ClientsSidebarTree: React.FC<Props> = ({
   return (
     <div className="w-full shrink-0">
       {/* ── Main "Clients" button + tree toggle ── */}
-      <div className="relative w-[calc(100%-24px)] mx-3">
+      <div className="relative w-[calc(100%-16px)] mx-2">
         <div
-          className={`relative flex items-center rounded-2xl transition-all duration-200 group/item ${
+          className={`relative flex items-center rounded-md transition-colors duration-150 group/item ${
             active
-              ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-300 shadow-sm'
-              : 'text-zinc-500 dark:text-zinc-400 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-400'
+              ? 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-50 font-medium'
+              : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-100'
           } ${!expanded ? 'justify-center' : ''}`}
         >
           <button
             onClick={() => onNavigate('clients')}
             title={!expanded ? 'Clients' : undefined}
-            className={`flex items-center flex-1 min-w-0 px-3 py-2.5 ${!expanded ? 'justify-center' : ''}`}
+            className={`flex items-center flex-1 min-w-0 px-2.5 py-1.5 ${!expanded ? 'justify-center' : ''}`}
           >
-            <div className="flex items-center justify-center w-6 h-6 shrink-0">
-              <Icons.Briefcase size={20} strokeWidth={active ? 2.5 : 2} />
+            <div className="flex items-center justify-center w-[18px] h-[18px] shrink-0">
+              <Icons.Briefcase size={17} strokeWidth={2} />
             </div>
             {expanded && (
-              <span className="ml-3 text-sm font-medium text-left">Clients</span>
+              <span className="ml-2.5 text-[13px] text-left">Clients</span>
             )}
             {!expanded && (
-              <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-medium rounded-lg opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-xl border border-zinc-800 dark:border-zinc-700">
+              <div className="absolute left-full ml-3 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[11px] font-medium rounded-md opacity-0 -translate-x-2 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-lg">
                 Clients
               </div>
             )}
@@ -167,12 +167,12 @@ export const ClientsSidebarTree: React.FC<Props> = ({
           {expanded && (
             <button
               onClick={(e) => { e.stopPropagation(); setTreeOpen(v => !v); }}
-              className="p-1.5 mr-1.5 rounded-lg hover:bg-white/40 dark:hover:bg-zinc-900/40 transition-colors duration-200"
+              className="p-1 mr-1 rounded hover:bg-zinc-200/60 dark:hover:bg-zinc-700/40 transition-colors duration-150"
               title={treeOpen ? 'Hide all' : 'Show all clients & projects'}
             >
               <Icons.ChevronDown
-                size={14}
-                className={`transition-transform duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${treeOpen ? 'rotate-0' : '-rotate-90'}`}
+                size={13}
+                className={`transition-transform duration-[300ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${treeOpen ? 'rotate-0' : '-rotate-90'}`}
               />
             </button>
           )}
@@ -181,7 +181,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
 
       {/* ── Pinned shortcuts (always visible when sidebar expanded) ── */}
       {expanded && starredEntries.length > 0 && (
-        <div className="mt-1 w-[calc(100%-24px)] mx-3 pl-3 border-l border-zinc-100 dark:border-zinc-800/60 space-y-0.5">
+        <div className="mt-0.5 w-[calc(100%-16px)] mx-2 pl-3 border-l border-zinc-100 dark:border-zinc-800/60 space-y-0">
+
           {starredEntries.map(item => {
             const isActive = item.kind === 'client'
               ? (currentPage === 'clients' && currentClientId === item.id)
@@ -229,15 +230,12 @@ export const ClientsSidebarTree: React.FC<Props> = ({
 
       {/* ── Empty-state hint when nothing is pinned and tree is closed ── */}
       {expanded && !treeOpen && starredEntries.length === 0 && (
-        <div className="mt-1 w-[calc(100%-24px)] mx-3 px-3 py-2 text-[10px] italic text-zinc-400 dark:text-zinc-500 leading-relaxed">
-          No pinned items yet — star a client or project to pin it.
-          <button
-            onClick={() => setTreeOpen(true)}
-            className="block mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
-          >
-            ▸ View all
-          </button>
-        </div>
+        <button
+          onClick={() => setTreeOpen(true)}
+          className="mt-0.5 w-[calc(100%-16px)] mx-2 px-2.5 py-1 text-[11px] text-left text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
+        >
+          View all clients & projects
+        </button>
       )}
 
       {/* ── Inline full tree (animated open/close via grid-rows trick) ── */}
@@ -249,7 +247,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
           aria-hidden={!treeOpen}
         >
           <div className="overflow-hidden min-h-0">
-            <div className="sidebar-thin-scroll w-[calc(100%-24px)] mx-3 max-h-[60vh] overflow-y-auto overscroll-contain pr-1 space-y-0.5">
+            <div className="sidebar-thin-scroll w-[calc(100%-16px)] mx-2 max-h-[60vh] overflow-y-auto overscroll-contain pr-1 space-y-0">
               {sortedClients.length === 0 && projectsByClient.orphans.length === 0 && (
                 <p className="px-3 py-3 text-[11px] text-zinc-400 italic">
                   No clients or projects yet.
@@ -302,9 +300,9 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                 );
               })}
               {projectsByClient.orphans.length > 0 && (
-                <div className="pt-2 space-y-0.5">
-                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400">
-                    Internal · No client
+                <div className="pt-1.5 space-y-0">
+                  <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-600">
+                    Internal
                   </div>
                   {projectsByClient.orphans.map(p => (
                     <TreeRow
@@ -341,13 +339,13 @@ const TreeRow: React.FC<{
 }> = ({ label, color, active, starred, childrenCount, childrenOpen, onToggleChildren, onClick, onToggleStar }) => {
   const hasToggle = !!onToggleChildren;
   return (
-    <div className={`group/row relative flex items-center rounded-xl transition-colors duration-200 ease-out ${
-      active ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+    <div className={`group/row relative flex items-center rounded-md transition-colors duration-150 ${
+      active ? 'bg-zinc-100 dark:bg-zinc-800/80' : 'hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60'
     }`}>
       {hasToggle && (
         <button
           onClick={(e) => { e.stopPropagation(); onToggleChildren?.(); }}
-          className={`shrink-0 p-0.5 ml-1 rounded transition-colors duration-200 ${
+          className={`shrink-0 p-0.5 ml-0.5 rounded transition-colors duration-150 ${
             childrenCount
               ? 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
               : 'opacity-0 pointer-events-none'
@@ -356,20 +354,20 @@ const TreeRow: React.FC<{
         >
           <Icons.ChevronRight
             size={10}
-            className={`transition-transform duration-[320ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${childrenOpen ? 'rotate-90' : ''}`}
+            className={`transition-transform duration-[300ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${childrenOpen ? 'rotate-90' : ''}`}
           />
         </button>
       )}
       <button
         onClick={onClick}
-        className={`flex items-center flex-1 min-w-0 py-1.5 ${hasToggle ? 'pl-1 pr-2' : 'px-2.5'}`}
+        className={`flex items-center flex-1 min-w-0 py-1 ${hasToggle ? 'pl-0.5 pr-2' : 'px-2'}`}
       >
         <span
-          className="w-[10px] h-[10px] rounded-full shrink-0 transition-transform duration-200 ease-out group-hover/row:scale-110"
+          className="w-[8px] h-[8px] rounded-full shrink-0"
           style={{ backgroundColor: color }}
         />
-        <span className={`ml-2 text-[12px] truncate text-left transition-colors duration-200 ${
-          active ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-300'
+        <span className={`ml-2 text-[12px] truncate text-left ${
+          active ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-300'
         }`}>
           {label}
         </span>
@@ -377,13 +375,13 @@ const TreeRow: React.FC<{
       <button
         onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
         title={starred ? 'Unpin' : 'Pin'}
-        className={`shrink-0 p-1 mr-1 rounded transition-all duration-200 ease-out ${
+        className={`shrink-0 p-0.5 mr-1 rounded transition-all duration-150 ${
           starred
-            ? 'opacity-100 scale-100 text-amber-500 hover:text-amber-600'
-            : 'opacity-0 scale-90 group-hover/row:opacity-100 group-hover/row:scale-100 text-zinc-400 hover:text-amber-500'
+            ? 'opacity-100 text-amber-500 hover:text-amber-600'
+            : 'opacity-0 group-hover/row:opacity-100 text-zinc-400 hover:text-amber-500'
         }`}
       >
-        <Icons.Star size={11} strokeWidth={starred ? 2.5 : 2} fill={starred ? 'currentColor' : 'none'} />
+        <Icons.Star size={10} strokeWidth={starred ? 2.5 : 2} fill={starred ? 'currentColor' : 'none'} />
       </button>
     </div>
   );

@@ -7,6 +7,7 @@ import { RoleManagement } from './RoleManagement';
 import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
 import { EmailPreferences } from './EmailPreferences';
+import { AIPreferencesPanel } from './AIPreferencesPanel';
 import { useRBAC } from '../../context/RBACContext';
 import { supabase } from '../../lib/supabase';
 import type { PageView } from '../../types';
@@ -17,7 +18,7 @@ interface ConfigurationModalProps {
     onNavigate?: (page: PageView) => void;
 }
 
-type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email';
+type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email' | 'ai';
 
 export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose, onNavigate }) => {
     const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -31,6 +32,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
         { id: 'users', label: 'Members', icon: Icons.Users, requireAdmin: true },
         { id: 'roles', label: 'Roles', icon: Icons.Shield, requireAdmin: true },
         { id: 'email', label: 'Email', icon: Icons.Mail },
+        { id: 'ai', label: 'AI', icon: Icons.Sparkles },
     ];
 
     const TABS = ALL_TABS.filter(tab => {
@@ -127,6 +129,7 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
 
                         {activeTab === 'roles' && <RoleManagement />}
                         {activeTab === 'email' && <EmailPreferences />}
+                        {activeTab === 'ai' && <AIPreferencesPanel />}
                     </div>
                 </div>
             </div>
