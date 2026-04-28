@@ -352,7 +352,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                           draggable
                           onDragStart={(e) => onTaskDragStart(e, task.id)}
                           onDragEnd={() => setDraggingTaskId(null)}
-                          className={`text-[10px] px-2 py-1 rounded-full mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                          className={`text-[10px] px-2 py-1 rounded-2xl mb-0.5 cursor-grab active:cursor-grabbing border transition-all duration-300 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.05)] ${tc.bg} ${tc.border} ${task.status === 'in-progress' ? 'ring-1 ring-inset ring-zinc-900/5 dark:ring-white/10' : ''}`}
                           title={`${task.title}${isTaskBlocked(task) ? ' \u26A0 BLOCKED' : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
                           onClick={() => onOpenTaskDetail(task)}
                         >
@@ -366,15 +366,15 @@ export const WeekView: React.FC<WeekViewProps> = ({
                             )}
                             <span className={`truncate ${task.completed ? 'line-through' : ''}`}>{task.title}</span>
                             {overdue > 0 && (
-                              <span className="ml-auto text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                              <span className="ml-auto text-[8px] font-semibold text-red-500/90 bg-red-50/70 dark:bg-red-500/10 px-1.5 py-px rounded-full shrink-0">
                                 +{overdue}d
                               </span>
                             )}
                             {task.completed && getElapsedDays(task) !== null && (
-                              <span className="ml-auto text-[8px] font-semibold text-emerald-600 shrink-0">{getElapsedDays(task)}d</span>
+                              <span className="ml-auto text-[8px] font-medium text-emerald-600/80 shrink-0">{getElapsedDays(task)}d</span>
                             )}
                             {!task.completed && !overdue && getClientLabel(task) && (
-                              <span className="ml-auto text-[8px] font-medium text-violet-500 dark:text-violet-400 shrink-0 truncate max-w-[60px]" title={getClientLabel(task)!}>
+                              <span className="ml-auto text-[8px] font-medium text-violet-500/80 dark:text-violet-400/80 shrink-0 truncate max-w-[60px]" title={getClientLabel(task)!}>
                                 {getClientLabel(task)}
                               </span>
                             )}
@@ -464,9 +464,9 @@ export const WeekView: React.FC<WeekViewProps> = ({
                         draggable
                         onDragStart={(e) => onTaskDragStart(e, task.id)}
                         onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-xs px-3 py-1.5 rounded-full mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 ${tc.bg} ${tc.border} ${
+                        className={`text-xs px-3 py-1.5 rounded-2xl mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] ${tc.bg} ${tc.border} ${
                           task.status === 'cancelled' ? 'opacity-50' : ''
-                        } ${task.status === 'in-progress' ? 'border-l-[3px]' : ''}`}
+                        } ${task.status === 'in-progress' ? 'ring-1 ring-inset ring-zinc-900/5 dark:ring-white/10' : ''}`}
                         title={`${task.title}${task.assignee_id ? ` \u2014 ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` \u00B7 ${getClientLabel(task)}` : ''}${clientTimezoneMap && task.client_id && clientTimezoneMap[task.client_id] ? ` \u00B7 Client tz: ${tzCity(clientTimezoneMap[task.client_id])} (${tzNow(clientTimezoneMap[task.client_id])})` : ''}${isTaskBlocked(task) ? ` \u26A0 BLOCKED \u2014 waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
                         onClick={(e) => { e.stopPropagation(); onOpenTaskDetail(task); }}
                       >
@@ -480,15 +480,15 @@ export const WeekView: React.FC<WeekViewProps> = ({
                           )}
                           <span className={task.completed ? 'line-through' : ''}>{task.title}</span>
                           {overdue > 0 && (
-                            <span className="text-[8px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-1 rounded shrink-0">
+                            <span className="text-[8px] font-semibold text-red-500/90 bg-red-50/70 dark:bg-red-500/10 px-1.5 py-px rounded-full shrink-0">
                               +{overdue}d
                             </span>
                           )}
                           {task.assignee_id && (
                             getMemberAvatar(task.assignee_id) ? (
-                              <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-3.5 h-3.5 rounded-full shrink-0 ml-auto" />
+                              <img src={getMemberAvatar(task.assignee_id)!} alt="" className="w-3.5 h-3.5 rounded-full shrink-0 ml-auto ring-1 ring-white/60 dark:ring-zinc-800/60" />
                             ) : (
-                              <div className="w-3.5 h-3.5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[7px] font-bold text-blue-700 dark:text-blue-300 shrink-0 ml-auto">
+                              <div className="w-3.5 h-3.5 rounded-full bg-blue-100/70 dark:bg-blue-900/30 flex items-center justify-center text-[7px] font-bold text-blue-700 dark:text-blue-300 shrink-0 ml-auto">
                                 {(getMemberName(task.assignee_id) || '?')[0]?.toUpperCase()}
                             </div>
                           )
@@ -501,13 +501,13 @@ export const WeekView: React.FC<WeekViewProps> = ({
                             const bl = getBlockerTask(task);
                             const blOwner = bl?.assignee_id ? getMemberName(bl.assignee_id) : null;
                             return (
-                              <span className="text-[8px] text-amber-600 dark:text-amber-400 font-medium truncate">
+                              <span className="text-[8px] text-amber-600/80 dark:text-amber-400/80 font-medium truncate">
                                 {blOwner ? `Wait. ${blOwner}` : `Wait: ${bl?.title?.slice(0, 20) || '?'}`}
                               </span>
                             );
                           })()}
                           {getClientLabel(task) && (
-                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto truncate flex items-center gap-0.5">
+                            <span className="text-[8px] text-emerald-600/80 dark:text-emerald-400/80 font-medium ml-auto truncate flex items-center gap-0.5">
                               {getClientLabel(task)}
                               {clientTimezoneMap && task.client_id && clientTimezoneMap[task.client_id] && task.start_time && (
                                 <span className="text-[7px] text-blue-500 dark:text-blue-400 font-mono">
