@@ -574,18 +574,18 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
-                    <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-0.5">
-                        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.12em] mb-0.5">
+                        {new Date().toLocaleDateString('es-AR', { weekday: 'long', month: 'long', day: 'numeric' })}
                     </p>
-                    <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{greeting}, {userName}.</h2>
+                    <h2 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">{greeting}, {userName}.</h2>
                 </div>
 
-                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
                     <button
                         onClick={() => setIsThoughtsOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold hover:opacity-90 transition-opacity shrink-0"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium hover:opacity-90 transition-opacity shrink-0"
                     >
-                        <Icons.Brain size={12} /> Thoughts
+                        <Icons.Brain size={11} /> Thoughts
                     </button>
                     <button
                         onClick={() => setIsVisionOpen(true)}

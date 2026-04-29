@@ -87,17 +87,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
             {/* Bell Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group"
+                className="relative p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group"
                 title="Notifications"
             >
                 <Icons.Bell
-                    size={20}
+                    size={16}
+                    strokeWidth={2}
                     className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors"
                 />
 
                 {/* Unread Badge */}
                 {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold text-white bg-rose-500 rounded-full animate-in zoom-in duration-200">
+                    <span className="absolute top-0 right-0 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-semibold text-white bg-rose-500 rounded-full animate-in zoom-in duration-200">
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}

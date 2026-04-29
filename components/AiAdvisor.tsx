@@ -310,54 +310,54 @@ export const AiAdvisor: React.FC = () => {
               className="absolute inset-y-0 right-0 w-screen max-w-md max-h-screen bg-white dark:bg-zinc-900 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden"
             >
               {/* ── Header ── */}
-              <div className="px-5 pt-5 pb-4 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+              <div className="px-4 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center relative overflow-hidden shadow-sm"
+                      className="w-7 h-7 rounded-md flex items-center justify-center relative overflow-hidden"
                       style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}
                     >
-                      <Icons.Sparkles size={17} className="text-white relative z-10" />
+                      <Icons.Sparkles size={14} className="text-white relative z-10" />
                     </div>
                     <div>
-                      <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">AI Advisor</h2>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">
+                      <h2 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">AI Advisor</h2>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                         {busy ? 'Pensando...' : 'Conversá sobre tu negocio'}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5">
                     {messages.length > 0 && (
                       <button
                         onClick={() => setMessages([])}
-                        className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600"
+                        className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
                         title="Nueva conversación"
                       >
-                        <Icons.RefreshCw size={14} />
+                        <Icons.RefreshCw size={13} />
                       </button>
                     )}
                     <button
                       onClick={() => setIsOpen(false)}
-                      className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600"
+                      className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
                     >
-                      <Icons.X size={14} />
+                      <Icons.X size={13} />
                     </button>
                   </div>
                 </div>
 
                 {/* Quick stats bar */}
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100/80 dark:bg-zinc-800/50">
-                    <Icons.Briefcase size={11} className="text-zinc-400" />
-                    <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">{activeCount} activos</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                    <Icons.Briefcase size={10} className="text-zinc-400" />
+                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">{activeCount} activos</span>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100/80 dark:bg-zinc-800/50">
-                    <Icons.TrendingUp size={11} className="text-zinc-400" />
-                    <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">${totalIncome.toLocaleString()}</span>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                    <Icons.TrendingUp size={10} className="text-zinc-400" />
+                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">${totalIncome.toLocaleString()}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100/80 dark:bg-zinc-800/50">
-                    <Icons.Users size={11} className="text-zinc-400" />
-                    <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">{members.length}</span>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                    <Icons.Users size={10} className="text-zinc-400" />
+                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">{members.length}</span>
                   </div>
                 </div>
               </div>

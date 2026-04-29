@@ -253,7 +253,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     return (
       <div className="max-w-[1600px] mx-auto pt-4 pb-6">
         {renderNewLeadModal()}
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-6">Sales Analytics</h1>
+        <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 mb-5 leading-tight">Sales Analytics</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
             <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Total Visits</div>
@@ -370,49 +370,47 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
           )}
 
           {/* Header & Filters */}
-          <div className="flex items-center justify-between mb-6 shrink-0">
+          <div className="flex items-center justify-between mb-4 shrink-0">
             <div>
-              <h1 className="text-3xl font-light text-zinc-900 dark:text-zinc-100 font-serif">
+              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
                 Sales Pipeline
               </h1>
-              <p className="text-zinc-500 text-sm mt-1">Manage and track your leads.</p>
+              <p className="text-zinc-500 dark:text-zinc-500 text-[12px] mt-0.5">Manage and track your leads.</p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
               {/* Search - Visual only for now */}
               <div className="relative group">
-                <Icons.Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-zinc-600 transition-colors" />
+                <Icons.Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" strokeWidth={2} />
                 <input
                   type="text"
-                  placeholder="Search leads..."
-                  className="pl-9 pr-4 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg outline-none focus:border-zinc-400 w-48 transition-all"
+                  placeholder="Search leads"
+                  className="pl-7 pr-3 py-1.5 text-[12px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-zinc-400 dark:focus:border-zinc-600 w-44 transition-colors"
                 />
               </div>
-
-              <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
 
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value as LeadCategory | 'all')}
-                className="px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
+                className="px-2.5 py-1.5 text-[12px] border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
               >
-                <option value="all">All Categories</option>
+                <option value="all">All categories</option>
                 {(['branding', 'web-design', 'ecommerce', 'saas', 'creators', 'other'] as LeadCategory[]).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <select
                 value={temperature}
                 onChange={e => setTemperature(e.target.value as LeadTemperature | 'all')}
-                className="px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
+                className="px-2.5 py-1.5 text-[12px] border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
               >
-                <option value="all">All Temperatures</option>
+                <option value="all">All temperatures</option>
                 {(['cold', 'warm', 'hot'] as LeadTemperature[]).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
 
               <button
                 onClick={() => setShowNewLeadModal(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-medium rounded-lg hover:opacity-90 transition-opacity ml-2"
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium rounded-md hover:opacity-90 transition-opacity ml-1"
               >
-                <Icons.Plus size={16} />
+                <Icons.Plus size={12} strokeWidth={2.5} />
                 New Lead
               </button>
             </div>
@@ -459,7 +457,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
         <div className="max-w-[1600px] mx-auto pt-4 pb-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Inbox</h1>
+              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">Inbox</h1>
               <p className="text-zinc-500">You have {newLeads.length} new leads to review.</p>
             </div>
             <button
