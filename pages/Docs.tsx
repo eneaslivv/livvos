@@ -407,7 +407,7 @@ export const Docs: React.FC = () => {
                   <Icons.ChevronLeft size={16} />
                 </button>
               )}
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
                 {activeTab === 'documents' && currentFolderId ? currentFolderName : 'Documents'}
               </h1>
             </div>

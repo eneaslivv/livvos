@@ -1326,10 +1326,10 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 <button
                   key={f.id}
                   onClick={() => setSidebarFilter(f.id)}
-                  className={`px-2.5 py-1 text-[10px] font-semibold rounded-full transition-all duration-200 ${
+                  className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
                     sidebarFilter === f.id
-                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-                      : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                      ? 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60'
                   }`}
                 >
                   {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
@@ -1350,22 +1350,20 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             {filteredGroups.map(group => (
               <div key={group.id}>
                 {/* Group header */}
-                <div className="flex items-center gap-2 px-2 pt-3 pb-1.5">
+                <div className="flex items-center gap-1.5 px-2 pt-2.5 pb-1">
                   {group.category === 'client' && group.clientAvatar ? (
-                    <img src={group.clientAvatar} alt={group.label} className="w-4 h-4 rounded object-cover" />
+                    <img src={group.clientAvatar} alt={group.label} className="w-3.5 h-3.5 rounded object-cover" />
                   ) : group.category === 'client' ? (
-                    <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-[7px] font-bold text-white">
+                    <div className="w-3.5 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[7px] font-medium text-zinc-600 dark:text-zinc-300">
                       {group.label.substring(0, 2).toUpperCase()}
                     </div>
                   ) : (
-                    <div className="w-4 h-4 rounded bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-                      <Icons.Star size={8} className="text-white" />
-                    </div>
+                    <Icons.Star size={9} className="text-zinc-400 dark:text-zinc-600" />
                   )}
-                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider truncate">
+                  <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.08em] truncate">
                     {group.label}
                   </span>
-                  <span className="text-[10px] text-zinc-300 dark:text-zinc-600 ml-auto">{group.projects.length}</span>
+                  <span className="text-[10px] tabular-nums text-zinc-300 dark:text-zinc-600 ml-auto">{group.projects.length}</span>
                 </div>
 
                 {/* Project cards */}
@@ -1375,31 +1373,28 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     <motion.button
                       key={p.id}
                       onClick={() => setSelectedId(p.id)}
-                      whileTap={{ scale: 0.98 }}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all duration-200 group ${
+                      whileTap={{ scale: 0.99 }}
+                      className={`w-full text-left px-2 py-1.5 rounded-md transition-colors duration-150 group ${
                         isSelected
                           ? 'bg-zinc-100 dark:bg-zinc-800/80'
                           : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          className="w-5 h-5 rounded flex items-center justify-center shrink-0"
                           style={{ backgroundColor: colorToBg(p.color || '#3b82f6', 0.12) }}
                         >
-                          <ProgressRing progress={p.progress} size={22} stroke={2} color={p.color || '#3b82f6'} />
+                          <ProgressRing progress={p.progress} size={16} stroke={2} color={p.color || '#3b82f6'} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className={`text-[13px] font-medium truncate transition-colors ${
-                            isSelected ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-400'
+                          <div className={`text-[12px] truncate transition-colors ${
+                            isSelected ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-400'
                           }`}>
                             {p.title}
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <StatusBadge status={p.status} />
-                          </div>
                         </div>
-                        <span className={`text-[10px] font-mono tabular-nums transition-colors ${
+                        <span className={`text-[10px] tabular-nums shrink-0 ${
                           isSelected ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-300 dark:text-zinc-600'
                         }`}>
                           {p.progress}%
@@ -1430,63 +1425,60 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             </button>
           )}
           {/* Header */}
-          <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
+          <div className="px-4 sm:px-5 md:px-6 py-3 sm:py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
             <div className="min-w-0">
               {/* Breadcrumb: Clients / <Client> / <Project> */}
               {selectedProject && (
-                <nav className="flex items-center gap-1 text-[11px] text-zinc-400 mb-1.5" aria-label="Breadcrumb">
-                  <span className="font-medium">Clients</span>
-                  <Icons.ChevronRight size={11} />
-                  <span className="font-medium text-zinc-500 dark:text-zinc-300 truncate max-w-[140px]">
+                <nav className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 mb-1" aria-label="Breadcrumb">
+                  <span>Clients</span>
+                  <Icons.ChevronRight size={10} />
+                  <span className="text-zinc-500 dark:text-zinc-400 truncate max-w-[140px]">
                     {selectedClient?.name || 'Internal · Livv'}
                   </span>
-                  <Icons.ChevronRight size={11} />
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-200 truncate max-w-[180px]">
+                  <Icons.ChevronRight size={10} />
+                  <span className="font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[180px]">
                     {selectedProject.title}
                   </span>
                 </nav>
               )}
-              <div className="flex items-center gap-2.5 mb-1.5">
+              <h1 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
                 {selectedProject && <StatusBadge status={selectedProject.status} />}
-              </div>
-              <h1 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-zinc-100 break-words">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1.5 text-xs text-zinc-400">
                 {selectedProject && (
                   <>
-                    <span className="flex items-center gap-1">
-                      <Icons.Calendar size={12} />
-                      {new Date(selectedProject.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <span className="flex items-center gap-1 tabular-nums">
+                      <Icons.Calendar size={11} strokeWidth={2} />
+                      {new Date(selectedProject.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </span>
                     {selectedProject.deadline && (
-                      <span className="flex items-center gap-1">
-                        <Icons.Clock size={12} />
-                        Due {new Date(selectedProject.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      <span className="flex items-center gap-1 tabular-nums">
+                        <Icons.Clock size={11} strokeWidth={2} />
+                        Due {new Date(selectedProject.deadline).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </span>
                     )}
                   </>
                 )}
               </div>
             </div>
-            <div className="flex gap-1.5 sm:gap-2 shrink-0 items-center">
+            <div className="flex gap-1 shrink-0 items-center">
               <button onClick={() => setIsShareModalOpen(true)}
-                className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
                 Share
               </button>
               <button onClick={() => setIsClientPreviewMode(true)}
-                className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors">
+                className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
                 Project View
               </button>
-              {/* Settings kebab — opens SettingsTab (no longer a top-level tab) */}
               <button
                 onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
                 title="Project settings"
-                className={`p-1.5 text-[11px] font-medium border rounded-lg transition-colors ${
+                className={`p-1 rounded-md transition-colors ${
                   activeTab === 'settings'
-                    ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                    ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+                    : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                 }`}
               >
-                <Icons.MoreVert size={14} />
+                <Icons.MoreVert size={13} />
               </button>
             </div>
           </div>
