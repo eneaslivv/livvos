@@ -1249,24 +1249,24 @@ export const Calendar: React.FC = () => {
 
       {/* Team member filter */}
       {calendarMode === 'schedule' && teamMembers.length > 0 && (
-        <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
+        <div className="flex items-center gap-0.5 mb-3 overflow-x-auto pb-0.5">
           <button
             onClick={() => {
               const next = !groupTasksByPhase;
               setGroupTasksByPhase(next);
               localStorage.setItem('cal-group-phases', next ? '1' : '0');
             }}
-            className={`flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md transition-colors shrink-0 ${
+            className={`flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded-md transition-colors shrink-0 ${
               groupTasksByPhase
                 ? 'text-indigo-600 dark:text-indigo-400 font-medium'
                 : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
             title="Group tasks by phase"
           >
-            <Icons.Layers size={11} />
+            <Icons.Layers size={10} />
             Phases
           </button>
-          <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1.5" />
+          <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1" />
           {[
             { id: 'all', label: 'All' },
             { id: 'me', label: 'Me' },
@@ -1288,17 +1288,17 @@ export const Calendar: React.FC = () => {
                     <img
                       src={item.avatar}
                       alt={item.label}
-                      className={`w-6 h-6 rounded-full transition-all ${
+                      className={`w-[18px] h-[18px] rounded-full transition-all ${
                         active
-                          ? 'ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950'
+                          ? 'ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950'
                           : 'opacity-60 hover:opacity-100'
                       }`}
                     />
                   ) : (
                     <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-all ${
+                      className={`w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-medium transition-all ${
                         active
-                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950'
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950'
                           : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                       }`}
                     >
@@ -1312,7 +1312,7 @@ export const Calendar: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => setTaskFilter(item.id)}
-                className={`px-2 py-1 text-[11px] rounded-md transition-colors shrink-0 ${
+                className={`px-1.5 py-0.5 text-[11px] rounded-md transition-colors shrink-0 ${
                   active
                     ? 'text-zinc-900 dark:text-zinc-100 font-medium'
                     : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'

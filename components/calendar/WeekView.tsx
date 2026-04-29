@@ -123,41 +123,41 @@ export const WeekView: React.FC<WeekViewProps> = ({
       <div className="min-w-[700px]">
       {/* Day headers */}
       <div className="grid grid-cols-8 border-b border-zinc-200 dark:border-zinc-800">
-        <div className="p-4 border-r border-zinc-200 dark:border-zinc-800"></div>
+        <div className="px-2 py-1.5 border-r border-zinc-200 dark:border-zinc-800"></div>
         {weekDays.map((day, index) => {
           const dateStr = day.toISOString().split('T')[0];
           const isToday = dateStr === new Date().toISOString().split('T')[0];
           const isSelected = dateStr === selectedDate;
+          const dayTasksCount = getDayTasks(dateStr).length;
 
           return (
             <div
               key={index}
               onClick={() => setSelectedDate(dateStr)}
-              className={`p-4 text-center cursor-pointer transition-colors ${
+              className={`px-2 py-1.5 text-center cursor-pointer transition-colors flex items-baseline justify-center gap-1.5 ${
                 isSelected
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-500'
+                  ? 'bg-blue-50/70 dark:bg-blue-900/20 border-b-2 border-blue-500'
                   : isToday
-                  ? 'bg-zinc-50 dark:bg-zinc-800'
-                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  ? 'bg-zinc-50 dark:bg-zinc-800/60'
+                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
               }`}
             >
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                {day.toLocaleDateString('en-US', { weekday: 'short' })}
-              </div>
-              <div className={`text-lg font-semibold ${
-                isToday ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'
+              <span className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                {day.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.', '')}
+              </span>
+              <span className={`text-[14px] tabular-nums ${
+                isToday
+                  ? 'font-semibold text-blue-600 dark:text-blue-400'
+                  : isSelected
+                    ? 'font-medium text-zinc-900 dark:text-zinc-100'
+                    : 'text-zinc-700 dark:text-zinc-300'
               }`}>
                 {day.getDate()}
-              </div>
-              {getDayTasks(dateStr).length > 0 && (
-                <div className="flex items-center justify-center gap-0.5 mt-1">
-                  {getDayTasks(dateStr).slice(0, 5).map(t => (
-                    <span key={t.id} className={`w-1.5 h-1.5 rounded-full ${getTaskColor(t).dot}`} />
-                  ))}
-                  {getDayTasks(dateStr).length > 5 && (
-                    <span className="text-[8px] text-zinc-400 ml-0.5">+{getDayTasks(dateStr).length - 5}</span>
-                  )}
-                </div>
+              </span>
+              {dayTasksCount > 0 && (
+                <span className="text-[9px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                  · {dayTasksCount}
+                </span>
               )}
             </div>
           );
@@ -391,16 +391,16 @@ export const WeekView: React.FC<WeekViewProps> = ({
       </div>
 
       {/* Calendar body (hours) */}
-      <div ref={scrollRef} className="max-h-[420px] overflow-y-auto">
+      <div ref={scrollRef} className="max-h-[520px] overflow-y-auto">
         {hours.map((hour) => (
-          <div key={hour} ref={hour === currentHour ? nowRowRef : undefined} className="grid grid-cols-8 border-b border-zinc-100 dark:border-zinc-800 relative">
-            <div className="p-2 text-xs text-zinc-500 dark:text-zinc-400 text-right border-r border-zinc-200 dark:border-zinc-800 relative">
+          <div key={hour} ref={hour === currentHour ? nowRowRef : undefined} className="grid grid-cols-8 border-b border-zinc-100/70 dark:border-zinc-800/70 relative">
+            <div className="px-2 py-1 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 text-right border-r border-zinc-200/70 dark:border-zinc-800 relative">
               <div>{hour.toString().padStart(2, '0')}:00</div>
               {activeTimezone && (() => {
                 const { time, dayOffset } = convertHourToTz(hour, activeTimezone);
                 return (
-                  <div className="text-[9px] text-blue-500 dark:text-blue-400 font-mono mt-0.5">
-                    {time}{dayOffset !== 0 && <span className="text-[8px] text-blue-400/70"> {dayOffset > 0 ? '+' : ''}{dayOffset}d</span>}
+                  <div className="text-[8px] text-blue-500 dark:text-blue-400 font-mono mt-0.5">
+                    {time}{dayOffset !== 0 && <span className="text-[7px] text-blue-400/70"> {dayOffset > 0 ? '+' : ''}{dayOffset}d</span>}
                   </div>
                 );
               })()}
@@ -424,8 +424,8 @@ export const WeekView: React.FC<WeekViewProps> = ({
               return (
                 <div
                   key={dayIndex}
-                  className={`p-2 min-h-12 border-r border-zinc-100 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors relative cursor-pointer ${
-                    isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-500/10' : ''
+                  className={`p-1 min-h-[34px] border-r border-zinc-100/70 dark:border-zinc-800/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors relative cursor-pointer ${
+                    isSelected ? 'ring-1 ring-inset ring-blue-500 bg-blue-500/10' : ''
                   } ${isDragTarget ? 'hover:bg-blue-50/50 dark:hover:bg-blue-900/10' : ''}`}
                   onDragOver={onDragOver}
                   onDrop={(e) => onTaskDrop(e, dateStr, hour)}
@@ -437,19 +437,19 @@ export const WeekView: React.FC<WeekViewProps> = ({
                   {dayEvents.map((event) => (
                     <div
                       key={event.id}
-                      className="text-xs px-3 py-1.5 rounded-full mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity"
+                      className="text-[11px] px-2 py-0.5 rounded-md mb-0.5 truncate cursor-pointer hover:opacity-80 transition-opacity"
                       style={{ backgroundColor: event.color || '#3b82f6', color: 'white' }}
                       title={event.title}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="font-medium flex items-center gap-1">
                         {event.source === 'google' && (
-                          <span className="opacity-75 text-[10px] flex-shrink-0">G</span>
+                          <span className="opacity-75 text-[9px] flex-shrink-0">G</span>
                         )}
                         {event.title}
                       </div>
                       {event.location && (
-                        <div className="opacity-75">
+                        <div className="opacity-75 text-[9px]">
                           {contentPlatforms[event.location]?.label || event.location}
                         </div>
                       )}
@@ -464,7 +464,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                         draggable
                         onDragStart={(e) => onTaskDragStart(e, task.id)}
                         onDragEnd={() => setDraggingTaskId(null)}
-                        className={`text-xs px-3 py-1.5 rounded-2xl mb-1 cursor-grab active:cursor-grabbing border transition-all duration-300 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] ${tc.bg} ${tc.border} ${
+                        className={`text-[11px] px-2 py-0.5 rounded-md mb-0.5 cursor-grab active:cursor-grabbing border transition-colors ${tc.bg} ${tc.border} ${
                           task.status === 'cancelled' ? 'opacity-50' : ''
                         } ${task.status === 'in-progress' ? 'ring-1 ring-inset ring-zinc-900/5 dark:ring-white/10' : ''}`}
                         title={`${task.title}${task.assignee_id ? ` \u2014 ${getMemberName(task.assignee_id)}` : ''}${getClientLabel(task) ? ` \u00B7 ${getClientLabel(task)}` : ''}${clientTimezoneMap && task.client_id && clientTimezoneMap[task.client_id] ? ` \u00B7 Client tz: ${tzCity(clientTimezoneMap[task.client_id])} (${tzNow(clientTimezoneMap[task.client_id])})` : ''}${isTaskBlocked(task) ? ` \u26A0 BLOCKED \u2014 waiting for: ${getBlockerTask(task)?.title || '?'}${getBlockerTask(task)?.assignee_id ? ` (${getMemberName(getBlockerTask(task)!.assignee_id)})` : ''}` : ''} [${task.priority}/${task.status}]${overdue > 0 ? ` \u2014 ${overdue}d overdue` : ''}`}
