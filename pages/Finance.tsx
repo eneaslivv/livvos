@@ -8,9 +8,7 @@ import {
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
   Send, ThumbsUp, ThumbsDown, ArrowRight, Layers
 } from 'lucide-react';
-import { LivvCyclesView } from '../components/finance/LivvCyclesView';
-import { LivvSalesPipeline } from '../components/finance/LivvSalesPipeline';
-import { LivvExpenseSummary } from '../components/finance/LivvExpenseSummary';
+import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import {
   useFinance,
@@ -43,7 +41,7 @@ interface LiquidityPoint {
   balance: number;
 }
 
-type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'retiros' | 'budgets' | 'propuestas' | 'proyectos' | 'cycles' | 'pipeline' | 'summary' | 'config';
+type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'retiros' | 'budgets' | 'propuestas' | 'proyectos' | 'livv' | 'config';
 
 // ─── Formatters ───────────────────────────────────────────────────
 
@@ -1031,13 +1029,11 @@ export const Finance: React.FC = () => {
       <div className="flex overflow-x-auto no-scrollbar gap-0.5 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg w-fit">
         {([
           { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+          { id: 'livv', label: 'LIVV', icon: Layers },
           { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
           { id: 'gastos', label: 'Expenses', icon: Receipt },
           { id: 'retiros', label: 'Withdrawals', icon: Banknote },
           { id: 'budgets', label: 'Budgets', icon: Wallet },
-          { id: 'cycles', label: 'Cycles', icon: Layers },
-          { id: 'pipeline', label: 'Pipeline', icon: Target },
-          { id: 'summary', label: 'Summary', icon: PieChart },
           { id: 'propuestas', label: 'Proposals', icon: FileText },
           { id: 'proyectos', label: 'Projects P&L', icon: Target },
           { id: 'config', label: 'Settings', icon: Settings },
@@ -2414,14 +2410,8 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════ LIVV CYCLES ═══════════════ */}
-      {activeTab === 'cycles' && (<LivvCyclesView />)}
-
-      {/* ═══════════════ LIVV PIPELINE (Ventas & Utilidades) ═══════════════ */}
-      {activeTab === 'pipeline' && (<LivvSalesPipeline />)}
-
-      {/* ═══════════════ LIVV EXPENSE SUMMARY (Gastos Totales) ═══════════════ */}
-      {activeTab === 'summary' && (<LivvExpenseSummary />)}
+      {/* ═══════════════ LIVV (Cycles + Pipeline + Summary) ═══════════════ */}
+      {activeTab === 'livv' && (<LivvFinanceView />)}
 
       {/* ═══════════════ CONFIGURACIÓN ═══════════════ */}
       {activeTab === 'config' && (
