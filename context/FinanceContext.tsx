@@ -177,6 +177,33 @@ export interface CreateBudgetData {
   end_date?: string | null
 }
 
+export interface Withdrawal {
+  id: string
+  tenant_id: string
+  date: string
+  amount: number
+  transfer_fee: number
+  net_amount: number
+  fee_percentage: number
+  currency: string
+  source: string
+  destination: string
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateWithdrawalData {
+  date: string
+  amount: number
+  transfer_fee?: number
+  currency?: string
+  source?: string
+  destination?: string
+  notes?: string
+}
+
 // ─── Context Type ─────────────────────────────────────────────────
 
 interface FinanceContextType {
@@ -225,6 +252,14 @@ interface FinanceContextType {
   updateBudget: (id: string, updates: Partial<Budget>) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
   refreshBudgets: () => Promise<void>
+
+  // Withdrawal operations
+  withdrawals: Withdrawal[]
+  withdrawalsLoading: boolean
+  createWithdrawal: (data: CreateWithdrawalData) => Promise<Withdrawal | null>
+  updateWithdrawal: (id: string, updates: Partial<Withdrawal>) => Promise<void>
+  deleteWithdrawal: (id: string) => Promise<void>
+  refreshWithdrawals: () => Promise<void>
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -274,6 +309,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [budgetsLoading, setBudgetsLoading] = useState(false)
   const hasLoadedBudgetsRef = useRef(false)
+
+  // Withdrawal state
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false)
+  const hasLoadedWithdrawalsRef = useRef(false)
 
   // ─── Permissions ────────────────────────────────────────────
 
@@ -967,6 +1007,111 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   }, [])
 
+  // ─── Withdrawal Load + Realtime ────────────────────────────
+
+  const loadWithdrawals = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setWithdrawals([])
+      setWithdrawalsLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedWithdrawalsRef.current) {
+        setWithdrawalsLoading(true)
+      }
+      const timeout = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timed out' } }), 8000)
+      )
+      const query = supabase
+        .from('withdrawals')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('date', { ascending: false })
+
+      const { data, error: err } = await Promise.race([query, timeout])
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Withdrawals load issue:', err.code, err.message)
+        setWithdrawals([])
+        return
+      }
+      setWithdrawals(data || [])
+      hasLoadedWithdrawalsRef.current = true
+    } catch (err) {
+      console.error('Error loading withdrawals:', err)
+      setWithdrawals([])
+    } finally {
+      setWithdrawalsLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadWithdrawals()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+    const channel = supabase
+      .channel(`withdrawals-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals', ...tf }, () => { loadWithdrawals() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadWithdrawals])
+
+  const createWithdrawal = useCallback(async (data: CreateWithdrawalData): Promise<Withdrawal | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    try {
+      const payload: Record<string, any> = {
+        tenant_id: currentTenant.id,
+        date: data.date,
+        amount: data.amount,
+        transfer_fee: data.transfer_fee || 0,
+        currency: data.currency || 'USD',
+        source: data.source || 'bank',
+        destination: data.destination || '',
+        notes: data.notes || '',
+        created_by: user.id,
+      }
+      const { data: withdrawal, error: err } = await supabase
+        .from('withdrawals')
+        .insert(payload)
+        .select()
+        .single()
+      if (err) {
+        console.error('[FinanceContext] Withdrawal insert error:', err)
+        throw new Error(err.message || 'Error creating withdrawal.')
+      }
+      setWithdrawals(prev => [withdrawal, ...prev])
+      return withdrawal
+    } catch (err) {
+      console.error('[FinanceContext] createWithdrawal failed:', err)
+      throw err
+    }
+  }, [user, currentTenant?.id])
+
+  const updateWithdrawal = useCallback(async (id: string, updates: Partial<Withdrawal>): Promise<void> => {
+    try {
+      // Strip generated columns — DB rejects writes to them
+      const { net_amount, fee_percentage, ...writable } = updates as any
+      void net_amount; void fee_percentage
+      const { data: result, error: err } = await supabase
+        .from('withdrawals').update(writable).eq('id', id).select().single()
+      if (err) throw err
+      setWithdrawals(prev => prev.map(w => w.id === id ? result : w))
+    } catch (err) {
+      console.error('Error updating withdrawal:', err)
+      throw err
+    }
+  }, [])
+
+  const deleteWithdrawal = useCallback(async (id: string): Promise<void> => {
+    try {
+      const { error: err } = await supabase.from('withdrawals').delete().eq('id', id)
+      if (err) throw err
+      setWithdrawals(prev => prev.filter(w => w.id !== id))
+    } catch (err) {
+      console.error('Error deleting withdrawal:', err)
+      throw err
+    }
+  }, [])
+
   // ─── Value ──────────────────────────────────────────────────
 
   const value: FinanceContextType = useMemo(() => ({
@@ -986,6 +1131,9 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     budgets, budgetsLoading,
     createBudget, updateBudget, deleteBudget,
     refreshBudgets: loadBudgets,
+    withdrawals, withdrawalsLoading,
+    createWithdrawal, updateWithdrawal, deleteWithdrawal,
+    refreshWithdrawals: loadWithdrawals,
   }), [finances, loading, error, canViewFinances, canEditFinances,
     createFinance, updateFinance, deleteFinance,
     getFinanceByProject, getFinancialSummary,
@@ -993,7 +1141,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome, loadIncomes,
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses,
     timeEntries, timeEntriesLoading, createTimeEntry, deleteTimeEntry, loadTimeEntries,
-    budgets, budgetsLoading, createBudget, updateBudget, deleteBudget, loadBudgets])
+    budgets, budgetsLoading, createBudget, updateBudget, deleteBudget, loadBudgets,
+    withdrawals, withdrawalsLoading, createWithdrawal, updateWithdrawal, deleteWithdrawal, loadWithdrawals])
 
   return (
     <FinanceContext.Provider value={value}>
