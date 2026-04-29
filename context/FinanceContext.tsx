@@ -204,6 +204,175 @@ export interface CreateWithdrawalData {
   notes?: string
 }
 
+// ─── LIVV Spreadsheet Domain ──────────────────────────────────────
+// Mirrors the LIVV Creative Studio finance spreadsheet:
+//   Partners → Payment Cycles → Revenues / Costs / Distributions
+//   Pipeline projects (Ventas & Utilidades)
+
+export interface FinancePartner {
+  id: string
+  tenant_id: string
+  name: string
+  default_split_percentage: number
+  color: string
+  notes: string
+  is_active: boolean
+  sort_order: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateFinancePartnerData {
+  name: string
+  default_split_percentage: number
+  color?: string
+  notes?: string
+  sort_order?: number
+}
+
+export interface PaymentCycle {
+  id: string
+  tenant_id: string
+  label: string
+  period_month: string         // YYYY-MM-DD (first of month)
+  cycle_number: 1 | 2
+  period_description: string
+  processing_fee_rate: number  // 0..1 — 0.047 default
+  marketing_budget: number
+  prior_balance_eneas: number
+  status: 'draft' | 'closed'
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  revenues?: CycleRevenue[]
+  costs?: CycleCost[]
+  distributions?: CycleDistribution[]
+}
+
+export interface CreatePaymentCycleData {
+  label: string
+  period_month: string
+  cycle_number?: 1 | 2
+  period_description?: string
+  processing_fee_rate?: number
+  marketing_budget?: number
+  prior_balance_eneas?: number
+  notes?: string
+}
+
+export interface CycleRevenue {
+  id: string
+  cycle_id: string
+  tenant_id: string
+  client_id: string | null
+  client_name: string
+  amount: number
+  notes: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCycleRevenueData {
+  cycle_id: string
+  client_id?: string | null
+  client_name: string
+  amount: number
+  notes?: string
+  sort_order?: number
+}
+
+export interface CycleCost {
+  id: string
+  cycle_id: string
+  tenant_id: string
+  tool_name: string
+  cost: number
+  notes: string
+  externally_covered: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCycleCostData {
+  cycle_id: string
+  tool_name: string
+  cost: number
+  notes?: string
+  externally_covered?: boolean
+  sort_order?: number
+}
+
+export interface CycleDistribution {
+  id: string
+  cycle_id: string
+  tenant_id: string
+  partner_id: string | null
+  partner_name: string
+  split_percentage: number
+  sent_amount: number
+  prior_balance: number
+  notes: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCycleDistributionData {
+  cycle_id: string
+  partner_id?: string | null
+  partner_name: string
+  split_percentage: number
+  sent_amount?: number
+  prior_balance?: number
+  notes?: string
+  sort_order?: number
+}
+
+export interface PipelineProject {
+  id: string
+  tenant_id: string
+  client_group: string
+  client_id: string | null
+  client_name: string
+  project_name: string
+  total_amount: number
+  collected_amount: number
+  pending_amount: number
+  status: 'open' | 'in_progress' | 'closed' | 'lost'
+  notes: string
+  sort_order: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatePipelineProjectData {
+  client_group?: string
+  client_id?: string | null
+  client_name: string
+  project_name: string
+  total_amount: number
+  collected_amount?: number
+  status?: 'open' | 'in_progress' | 'closed' | 'lost'
+  notes?: string
+  sort_order?: number
+}
+
+/** Computed P&L for a payment cycle. All fields are derived. */
+export interface CycleSummary {
+  totalRevenue: number
+  netRevenue: number          // totalRevenue × (1 − processing_fee_rate)
+  processingFee: number       // totalRevenue × processing_fee_rate
+  totalCosts: number          // sum of cost lines (negative ones reduce total)
+  netProfit: number           // netRevenue − totalCosts
+  profitMargin: number        // netProfit / totalRevenue (0 if no revenue)
+  distributable: number       // netProfit − marketing_budget
+}
+
 // ─── Context Type ─────────────────────────────────────────────────
 
 interface FinanceContextType {
@@ -260,6 +429,46 @@ interface FinanceContextType {
   updateWithdrawal: (id: string, updates: Partial<Withdrawal>) => Promise<void>
   deleteWithdrawal: (id: string) => Promise<void>
   refreshWithdrawals: () => Promise<void>
+
+  // LIVV: Partners (profit-share recipients)
+  partners: FinancePartner[]
+  partnersLoading: boolean
+  createPartner: (data: CreateFinancePartnerData) => Promise<FinancePartner | null>
+  updatePartner: (id: string, updates: Partial<FinancePartner>) => Promise<void>
+  deletePartner: (id: string) => Promise<void>
+  refreshPartners: () => Promise<void>
+
+  // LIVV: Payment cycles (one or two per month)
+  paymentCycles: PaymentCycle[]
+  paymentCyclesLoading: boolean
+  createPaymentCycle: (data: CreatePaymentCycleData) => Promise<PaymentCycle | null>
+  updatePaymentCycle: (id: string, updates: Partial<PaymentCycle>) => Promise<void>
+  deletePaymentCycle: (id: string) => Promise<void>
+  refreshPaymentCycles: () => Promise<void>
+  computeCycleSummary: (cycle: PaymentCycle) => CycleSummary
+
+  // LIVV: Cycle revenue lines
+  createCycleRevenue: (data: CreateCycleRevenueData) => Promise<CycleRevenue | null>
+  updateCycleRevenue: (id: string, updates: Partial<CycleRevenue>) => Promise<void>
+  deleteCycleRevenue: (id: string) => Promise<void>
+
+  // LIVV: Cycle cost lines (tools / SaaS)
+  createCycleCost: (data: CreateCycleCostData) => Promise<CycleCost | null>
+  updateCycleCost: (id: string, updates: Partial<CycleCost>) => Promise<void>
+  deleteCycleCost: (id: string) => Promise<void>
+
+  // LIVV: Cycle distributions (per-partner entitlement / sent)
+  createCycleDistribution: (data: CreateCycleDistributionData) => Promise<CycleDistribution | null>
+  updateCycleDistribution: (id: string, updates: Partial<CycleDistribution>) => Promise<void>
+  deleteCycleDistribution: (id: string) => Promise<void>
+
+  // LIVV: Pipeline projects (Ventas & Utilidades)
+  pipelineProjects: PipelineProject[]
+  pipelineProjectsLoading: boolean
+  createPipelineProject: (data: CreatePipelineProjectData) => Promise<PipelineProject | null>
+  updatePipelineProject: (id: string, updates: Partial<PipelineProject>) => Promise<void>
+  deletePipelineProject: (id: string) => Promise<void>
+  refreshPipelineProjects: () => Promise<void>
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -314,6 +523,17 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(false)
   const hasLoadedWithdrawalsRef = useRef(false)
+
+  // LIVV state
+  const [partners, setPartners] = useState<FinancePartner[]>([])
+  const [partnersLoading, setPartnersLoading] = useState(false)
+  const hasLoadedPartnersRef = useRef(false)
+  const [paymentCycles, setPaymentCycles] = useState<PaymentCycle[]>([])
+  const [paymentCyclesLoading, setPaymentCyclesLoading] = useState(false)
+  const hasLoadedCyclesRef = useRef(false)
+  const [pipelineProjects, setPipelineProjects] = useState<PipelineProject[]>([])
+  const [pipelineProjectsLoading, setPipelineProjectsLoading] = useState(false)
+  const hasLoadedPipelineRef = useRef(false)
 
   // ─── Permissions ────────────────────────────────────────────
 
@@ -1112,6 +1332,382 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   }, [])
 
+  // ════════════════════════════════════════════════════════════════
+  // LIVV: Partners
+  // ════════════════════════════════════════════════════════════════
+
+  const loadPartners = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setPartners([])
+      setPartnersLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedPartnersRef.current) setPartnersLoading(true)
+      const { data, error: err } = await supabase
+        .from('finance_partners')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('sort_order', { ascending: true })
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Partners load issue:', err.message)
+        setPartners([])
+        return
+      }
+      setPartners(data || [])
+      hasLoadedPartnersRef.current = true
+    } catch (err) {
+      console.error('Error loading partners:', err)
+      setPartners([])
+    } finally {
+      setPartnersLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadPartners()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+    const channel = supabase
+      .channel(`finance-partners-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_partners', ...tf }, () => { loadPartners() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadPartners])
+
+  const createPartner = useCallback(async (data: CreateFinancePartnerData): Promise<FinancePartner | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      tenant_id: currentTenant.id,
+      name: data.name,
+      default_split_percentage: data.default_split_percentage,
+      color: data.color || '#10b981',
+      notes: data.notes || '',
+      sort_order: data.sort_order ?? partners.length,
+      created_by: user.id,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_partners').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+    setPartners(prev => [...prev, row].sort((a, b) => a.sort_order - b.sort_order))
+    return row
+  }, [user, currentTenant?.id, partners.length])
+
+  const updatePartner = useCallback(async (id: string, updates: Partial<FinancePartner>): Promise<void> => {
+    const { data: row, error: err } = await supabase
+      .from('finance_partners').update(updates).eq('id', id).select().single()
+    if (err) throw err
+    setPartners(prev => prev.map(p => p.id === id ? row : p))
+  }, [])
+
+  const deletePartner = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_partners').delete().eq('id', id)
+    if (err) throw err
+    setPartners(prev => prev.filter(p => p.id !== id))
+  }, [])
+
+  // ════════════════════════════════════════════════════════════════
+  // LIVV: Payment Cycles (with revenues / costs / distributions)
+  // ════════════════════════════════════════════════════════════════
+
+  const loadPaymentCycles = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setPaymentCycles([])
+      setPaymentCyclesLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedCyclesRef.current) setPaymentCyclesLoading(true)
+      const { data, error: err } = await supabase
+        .from('finance_payment_cycles')
+        .select('*, revenues:finance_cycle_revenues(*), costs:finance_cycle_costs(*), distributions:finance_cycle_distributions(*)')
+        .eq('tenant_id', currentTenant.id)
+        .order('period_month', { ascending: false })
+        .order('cycle_number', { ascending: true })
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] PaymentCycles load issue:', err.message)
+        setPaymentCycles([])
+        return
+      }
+      const sorted = (data || []).map((c: PaymentCycle) => ({
+        ...c,
+        revenues: (c.revenues || []).slice().sort((a, b) => a.sort_order - b.sort_order),
+        costs: (c.costs || []).slice().sort((a, b) => a.sort_order - b.sort_order),
+        distributions: (c.distributions || []).slice().sort((a, b) => a.sort_order - b.sort_order),
+      }))
+      setPaymentCycles(sorted)
+      hasLoadedCyclesRef.current = true
+    } catch (err) {
+      console.error('Error loading payment cycles:', err)
+      setPaymentCycles([])
+    } finally {
+      setPaymentCyclesLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadPaymentCycles()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+    const channel = supabase
+      .channel(`finance-cycles-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_payment_cycles', ...tf }, () => { loadPaymentCycles() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_cycle_revenues', ...tf }, () => { loadPaymentCycles() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_cycle_costs', ...tf }, () => { loadPaymentCycles() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_cycle_distributions', ...tf }, () => { loadPaymentCycles() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadPaymentCycles])
+
+  const createPaymentCycle = useCallback(async (data: CreatePaymentCycleData): Promise<PaymentCycle | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      tenant_id: currentTenant.id,
+      label: data.label,
+      period_month: data.period_month,
+      cycle_number: data.cycle_number ?? 1,
+      period_description: data.period_description ?? '',
+      processing_fee_rate: data.processing_fee_rate ?? 0.047,
+      marketing_budget: data.marketing_budget ?? 0,
+      prior_balance_eneas: data.prior_balance_eneas ?? 0,
+      notes: data.notes ?? '',
+      created_by: user.id,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_payment_cycles').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+
+    // Auto-seed default partner distributions
+    if (partners.length > 0) {
+      const distRows = partners.map((p, idx) => ({
+        cycle_id: row.id,
+        tenant_id: currentTenant.id,
+        partner_id: p.id,
+        partner_name: p.name,
+        split_percentage: p.default_split_percentage,
+        sent_amount: 0,
+        prior_balance: 0,
+        sort_order: idx,
+      }))
+      await supabase.from('finance_cycle_distributions').insert(distRows)
+    }
+
+    await loadPaymentCycles()
+    return row
+  }, [user, currentTenant?.id, partners, loadPaymentCycles])
+
+  const updatePaymentCycle = useCallback(async (id: string, updates: Partial<PaymentCycle>): Promise<void> => {
+    // Strip nested arrays — those are loaded via join, not writable here
+    const { revenues, costs, distributions, ...writable } = updates as any
+    void revenues; void costs; void distributions
+    const { error: err } = await supabase
+      .from('finance_payment_cycles').update(writable).eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  const deletePaymentCycle = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_payment_cycles').delete().eq('id', id)
+    if (err) throw err
+    setPaymentCycles(prev => prev.filter(c => c.id !== id))
+  }, [])
+
+  /**
+   * Compute the spreadsheet-style P&L block for a single cycle.
+   * Net Revenue = Total Revenue × (1 − fee_rate). Net Profit = Net Revenue − Total Costs.
+   * Negative cost lines (e.g. Jitter = -$19) reduce Total Costs (partner-covered tools).
+   */
+  const computeCycleSummary = useCallback((cycle: PaymentCycle): CycleSummary => {
+    const totalRevenue = (cycle.revenues || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+    const processingFee = totalRevenue * Number(cycle.processing_fee_rate || 0)
+    const netRevenue = totalRevenue - processingFee
+    const totalCosts = (cycle.costs || []).reduce((s, c) => s + Number(c.cost || 0), 0)
+    const netProfit = netRevenue - totalCosts
+    const profitMargin = totalRevenue > 0 ? netProfit / totalRevenue : 0
+    const distributable = netProfit - Number(cycle.marketing_budget || 0)
+    return { totalRevenue, netRevenue, processingFee, totalCosts, netProfit, profitMargin, distributable }
+  }, [])
+
+  // ─── Cycle Revenue CRUD ─────────────────────────────────────
+
+  const createCycleRevenue = useCallback(async (data: CreateCycleRevenueData): Promise<CycleRevenue | null> => {
+    if (!currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      cycle_id: data.cycle_id,
+      tenant_id: currentTenant.id,
+      client_id: data.client_id ?? null,
+      client_name: data.client_name,
+      amount: data.amount,
+      notes: data.notes ?? '',
+      sort_order: data.sort_order ?? 0,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_cycle_revenues').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+    await loadPaymentCycles()
+    return row
+  }, [currentTenant?.id, loadPaymentCycles])
+
+  const updateCycleRevenue = useCallback(async (id: string, updates: Partial<CycleRevenue>): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_revenues').update(updates).eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  const deleteCycleRevenue = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_revenues').delete().eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  // ─── Cycle Cost CRUD ────────────────────────────────────────
+
+  const createCycleCost = useCallback(async (data: CreateCycleCostData): Promise<CycleCost | null> => {
+    if (!currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      cycle_id: data.cycle_id,
+      tenant_id: currentTenant.id,
+      tool_name: data.tool_name,
+      cost: data.cost,
+      notes: data.notes ?? '',
+      externally_covered: data.externally_covered ?? false,
+      sort_order: data.sort_order ?? 0,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_cycle_costs').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+    await loadPaymentCycles()
+    return row
+  }, [currentTenant?.id, loadPaymentCycles])
+
+  const updateCycleCost = useCallback(async (id: string, updates: Partial<CycleCost>): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_costs').update(updates).eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  const deleteCycleCost = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_costs').delete().eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  // ─── Cycle Distribution CRUD ────────────────────────────────
+
+  const createCycleDistribution = useCallback(async (data: CreateCycleDistributionData): Promise<CycleDistribution | null> => {
+    if (!currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      cycle_id: data.cycle_id,
+      tenant_id: currentTenant.id,
+      partner_id: data.partner_id ?? null,
+      partner_name: data.partner_name,
+      split_percentage: data.split_percentage,
+      sent_amount: data.sent_amount ?? 0,
+      prior_balance: data.prior_balance ?? 0,
+      notes: data.notes ?? '',
+      sort_order: data.sort_order ?? 0,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_cycle_distributions').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+    await loadPaymentCycles()
+    return row
+  }, [currentTenant?.id, loadPaymentCycles])
+
+  const updateCycleDistribution = useCallback(async (id: string, updates: Partial<CycleDistribution>): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_distributions').update(updates).eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  const deleteCycleDistribution = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_cycle_distributions').delete().eq('id', id)
+    if (err) throw err
+    await loadPaymentCycles()
+  }, [loadPaymentCycles])
+
+  // ════════════════════════════════════════════════════════════════
+  // LIVV: Pipeline Projects (Ventas & Utilidades)
+  // ════════════════════════════════════════════════════════════════
+
+  const loadPipelineProjects = useCallback(async () => {
+    if (!user || !currentTenant) {
+      setPipelineProjects([])
+      setPipelineProjectsLoading(false)
+      return
+    }
+    try {
+      if (!hasLoadedPipelineRef.current) setPipelineProjectsLoading(true)
+      const { data, error: err } = await supabase
+        .from('finance_pipeline_projects')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('client_group', { ascending: true })
+        .order('sort_order', { ascending: true })
+      if (err) {
+        if (import.meta.env.DEV) console.warn('[FinanceContext] Pipeline load issue:', err.message)
+        setPipelineProjects([])
+        return
+      }
+      setPipelineProjects(data || [])
+      hasLoadedPipelineRef.current = true
+    } catch (err) {
+      console.error('Error loading pipeline:', err)
+      setPipelineProjects([])
+    } finally {
+      setPipelineProjectsLoading(false)
+    }
+  }, [user, currentTenant?.id])
+
+  useEffect(() => {
+    loadPipelineProjects()
+    const tid = currentTenant?.id
+    const tf = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+    const channel = supabase
+      .channel(`finance-pipeline-rt${tid ? `-${tid}` : ''}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finance_pipeline_projects', ...tf }, () => { loadPipelineProjects() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadPipelineProjects])
+
+  const createPipelineProject = useCallback(async (data: CreatePipelineProjectData): Promise<PipelineProject | null> => {
+    if (!user || !currentTenant?.id) throw new Error('Not authenticated')
+    const payload: Record<string, any> = {
+      tenant_id: currentTenant.id,
+      client_group: data.client_group ?? 'Otros Clientes',
+      client_id: data.client_id ?? null,
+      client_name: data.client_name,
+      project_name: data.project_name,
+      total_amount: data.total_amount,
+      collected_amount: data.collected_amount ?? 0,
+      status: data.status ?? 'open',
+      notes: data.notes ?? '',
+      sort_order: data.sort_order ?? 0,
+      created_by: user.id,
+    }
+    const { data: row, error: err } = await supabase
+      .from('finance_pipeline_projects').insert(payload).select().single()
+    if (err) throw new Error(err.message)
+    setPipelineProjects(prev => [...prev, row])
+    return row
+  }, [user, currentTenant?.id])
+
+  const updatePipelineProject = useCallback(async (id: string, updates: Partial<PipelineProject>): Promise<void> => {
+    // Strip generated columns
+    const { pending_amount, ...writable } = updates as any
+    void pending_amount
+    const { data: row, error: err } = await supabase
+      .from('finance_pipeline_projects').update(writable).eq('id', id).select().single()
+    if (err) throw err
+    setPipelineProjects(prev => prev.map(p => p.id === id ? row : p))
+  }, [])
+
+  const deletePipelineProject = useCallback(async (id: string): Promise<void> => {
+    const { error: err } = await supabase.from('finance_pipeline_projects').delete().eq('id', id)
+    if (err) throw err
+    setPipelineProjects(prev => prev.filter(p => p.id !== id))
+  }, [])
+
   // ─── Value ──────────────────────────────────────────────────
 
   const value: FinanceContextType = useMemo(() => ({
@@ -1134,6 +1730,20 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     withdrawals, withdrawalsLoading,
     createWithdrawal, updateWithdrawal, deleteWithdrawal,
     refreshWithdrawals: loadWithdrawals,
+    // LIVV
+    partners, partnersLoading,
+    createPartner, updatePartner, deletePartner,
+    refreshPartners: loadPartners,
+    paymentCycles, paymentCyclesLoading,
+    createPaymentCycle, updatePaymentCycle, deletePaymentCycle,
+    refreshPaymentCycles: loadPaymentCycles,
+    computeCycleSummary,
+    createCycleRevenue, updateCycleRevenue, deleteCycleRevenue,
+    createCycleCost, updateCycleCost, deleteCycleCost,
+    createCycleDistribution, updateCycleDistribution, deleteCycleDistribution,
+    pipelineProjects, pipelineProjectsLoading,
+    createPipelineProject, updatePipelineProject, deletePipelineProject,
+    refreshPipelineProjects: loadPipelineProjects,
   }), [finances, loading, error, canViewFinances, canEditFinances,
     createFinance, updateFinance, deleteFinance,
     getFinanceByProject, getFinancialSummary,
@@ -1142,7 +1752,14 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense, loadExpenses,
     timeEntries, timeEntriesLoading, createTimeEntry, deleteTimeEntry, loadTimeEntries,
     budgets, budgetsLoading, createBudget, updateBudget, deleteBudget, loadBudgets,
-    withdrawals, withdrawalsLoading, createWithdrawal, updateWithdrawal, deleteWithdrawal, loadWithdrawals])
+    withdrawals, withdrawalsLoading, createWithdrawal, updateWithdrawal, deleteWithdrawal, loadWithdrawals,
+    partners, partnersLoading, createPartner, updatePartner, deletePartner, loadPartners,
+    paymentCycles, paymentCyclesLoading, createPaymentCycle, updatePaymentCycle, deletePaymentCycle, loadPaymentCycles,
+    computeCycleSummary,
+    createCycleRevenue, updateCycleRevenue, deleteCycleRevenue,
+    createCycleCost, updateCycleCost, deleteCycleCost,
+    createCycleDistribution, updateCycleDistribution, deleteCycleDistribution,
+    pipelineProjects, pipelineProjectsLoading, createPipelineProject, updatePipelineProject, deletePipelineProject, loadPipelineProjects])
 
   return (
     <FinanceContext.Provider value={value}>

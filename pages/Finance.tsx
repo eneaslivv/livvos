@@ -6,8 +6,12 @@ import {
   ChevronLeft, ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
-  Send, ThumbsUp, ThumbsDown, ArrowRight
+  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers
 } from 'lucide-react';
+import { LivvCyclesView } from '../components/finance/LivvCyclesView';
+import { LivvSalesPipeline } from '../components/finance/LivvSalesPipeline';
+import { LivvExpenseSummary } from '../components/finance/LivvExpenseSummary';
+import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import {
   useFinance,
   type IncomeEntry,
@@ -39,7 +43,7 @@ interface LiquidityPoint {
   balance: number;
 }
 
-type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'retiros' | 'budgets' | 'propuestas' | 'proyectos' | 'config';
+type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'retiros' | 'budgets' | 'propuestas' | 'proyectos' | 'cycles' | 'pipeline' | 'summary' | 'config';
 
 // ─── Formatters ───────────────────────────────────────────────────
 
@@ -1031,6 +1035,9 @@ export const Finance: React.FC = () => {
           { id: 'gastos', label: 'Expenses', icon: Receipt },
           { id: 'retiros', label: 'Withdrawals', icon: Banknote },
           { id: 'budgets', label: 'Budgets', icon: Wallet },
+          { id: 'cycles', label: 'Cycles', icon: Layers },
+          { id: 'pipeline', label: 'Pipeline', icon: Target },
+          { id: 'summary', label: 'Summary', icon: PieChart },
           { id: 'propuestas', label: 'Proposals', icon: FileText },
           { id: 'proyectos', label: 'Projects P&L', icon: Target },
           { id: 'config', label: 'Settings', icon: Settings },
@@ -2407,9 +2414,21 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
+      {/* ═══════════════ LIVV CYCLES ═══════════════ */}
+      {activeTab === 'cycles' && (<LivvCyclesView />)}
+
+      {/* ═══════════════ LIVV PIPELINE (Ventas & Utilidades) ═══════════════ */}
+      {activeTab === 'pipeline' && (<LivvSalesPipeline />)}
+
+      {/* ═══════════════ LIVV EXPENSE SUMMARY (Gastos Totales) ═══════════════ */}
+      {activeTab === 'summary' && (<LivvExpenseSummary />)}
+
       {/* ═══════════════ CONFIGURACIÓN ═══════════════ */}
       {activeTab === 'config' && (
-        <div className="animate-in fade-in duration-500">
+        <div className="animate-in fade-in duration-500 space-y-5">
+          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
+            <LivvPartnersConfig />
+          </div>
           <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Financial Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
