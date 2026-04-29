@@ -172,7 +172,7 @@ export const UnifiedNewPopover: React.FC<Props> = ({
         title={isTopbar || expanded ? undefined : 'New (⌘N)'}
         className={
           isTopbar
-            ? 'flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold tracking-wide hover:opacity-90 transition-opacity active:scale-[0.98]'
+            ? 'flex items-center gap-1 px-2.5 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[11px] font-medium hover:opacity-90 transition-opacity'
             : `w-full flex items-center ${
                 expanded ? 'justify-start px-3' : 'justify-center px-2'
               } py-2.5 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-sm active:scale-[0.98]`
@@ -180,11 +180,9 @@ export const UnifiedNewPopover: React.FC<Props> = ({
       >
         {isTopbar ? (
           <>
-            <Icons.Plus size={12} strokeWidth={2.5} />
+            <Icons.Plus size={11} strokeWidth={2.5} />
             <span>New</span>
-            <span className="ml-1 text-[9px] font-mono opacity-60 border border-white/20 dark:border-zinc-900/20 rounded px-1 py-0.5">
-              ⌘N
-            </span>
+            <span className="ml-0.5 text-[9px] font-mono text-white/60 dark:text-zinc-900/60">⌘N</span>
           </>
         ) : (
           <>

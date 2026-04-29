@@ -72,23 +72,96 @@ function evictExpiredCache(): void {
   } catch { /* ignore */ }
 }
 
+// Hard caps so the AI cache never starves Supabase auth (which also lives
+// in localStorage). Total budget is well under typical 5-10MB browser quotas
+// once you account for other app state.
+const MAX_AI_CACHE_TOTAL_BYTES = 500_000 // 500KB across all ai_v2:* keys
+const MAX_AI_CACHE_ENTRY_BYTES = 30_000  // 30KB per entry
+
+/** Returns all ai cache keys in localStorage with byte size and age. */
+function listAICacheEntries(): { key: string; size: number; timestamp: number }[] {
+  const entries: { key: string; size: number; timestamp: number }[] = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(`${CACHE_VERSION}:`)) continue
+      const raw = localStorage.getItem(k) || ''
+      let timestamp = 0
+      try {
+        const parsed: AICacheEntry = JSON.parse(raw)
+        timestamp = parsed.timestamp || 0
+      } catch { /* corrupted — treat as oldest */ }
+      entries.push({ key: k, size: raw.length, timestamp })
+    }
+  } catch { /* ignore */ }
+  return entries
+}
+
+/** Evict oldest ai cache entries until total size is under target. */
+function enforceAICacheBudget(targetBytes: number = MAX_AI_CACHE_TOTAL_BYTES): void {
+  try {
+    const entries = listAICacheEntries()
+    let total = entries.reduce((s, e) => s + e.size, 0)
+    if (total <= targetBytes) return
+    entries.sort((a, b) => a.timestamp - b.timestamp) // oldest first
+    for (const e of entries) {
+      if (total <= targetBytes) break
+      try {
+        localStorage.removeItem(e.key)
+        total -= e.size
+      } catch { /* ignore single-key failure */ }
+    }
+    if (import.meta.env.DEV) console.log(`[AI] Cache budget enforced — total now ${total} bytes`)
+  } catch { /* ignore */ }
+}
+
+/** Hard purge: remove every ai cache key. Last resort if storage is wedged. */
+function purgeAllAICache(): void {
+  try {
+    const entries = listAICacheEntries()
+    for (const e of entries) {
+      try { localStorage.removeItem(e.key) } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
+
 function setCache(type: string, input: string, result: unknown): void {
   const ttl = CACHE_TTL[type] ?? 0
   if (ttl === 0) return
+  let value = ''
   try {
     const entry: AICacheEntry = { result, timestamp: Date.now() }
-    const value = JSON.stringify(entry)
-    // Skip caching if response is too large (>50KB) to avoid filling localStorage
-    if (value.length > 50_000) return
+    value = JSON.stringify(entry)
+    if (value.length > MAX_AI_CACHE_ENTRY_BYTES) {
+      if (import.meta.env.DEV) console.log(`[AI] Skip cache: entry ${value.length}B > limit ${MAX_AI_CACHE_ENTRY_BYTES}B`)
+      return
+    }
+    // Proactively make room before writing — never wait for QuotaExceededError
+    // because by the time we get one, Supabase auth may have already failed to
+    // persist a refreshed token, leaving the user stuck at "session expired".
+    enforceAICacheBudget(MAX_AI_CACHE_TOTAL_BYTES - value.length)
     localStorage.setItem(cacheKey(type, input), value)
   } catch {
-    // localStorage full — evict expired entries and retry once
-    evictExpiredCache()
+    // QuotaExceededError despite the proactive eviction (other tabs / other
+    // app state filled it). Recovery ladder: expired → halve budget → purge all.
     try {
-      const entry: AICacheEntry = { result, timestamp: Date.now() }
-      localStorage.setItem(cacheKey(type, input), JSON.stringify(entry))
-    } catch { /* still full — skip */ }
+      evictExpiredCache()
+      enforceAICacheBudget(Math.floor(MAX_AI_CACHE_TOTAL_BYTES / 2))
+      localStorage.setItem(cacheKey(type, input), value)
+    } catch {
+      // Still full — drop the entire ai cache. Better to lose cache than to
+      // wedge Supabase auth's ability to persist tokens.
+      purgeAllAICache()
+      if (import.meta.env.DEV) console.warn('[AI] Storage exhausted — purged all AI cache')
+    }
   }
+}
+
+// Self-heal on module load: if the previous page session left an oversize
+// cache (pre-fix users), trim it before any auth/AI calls happen. Cheap —
+// just iterates ai_v2:* keys.
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  try { enforceAICacheBudget() } catch { /* ignore */ }
 }
 
 // ─── Request throttle ────────────────────────────────────────────

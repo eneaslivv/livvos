@@ -698,7 +698,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         `}
       >
         {/* Fixed Top Navbar */}
-        <div className="sticky top-0 z-40 px-4 md:px-8 pt-4 pb-2 w-full max-w-[1600px] mx-auto">
+        <div className="sticky top-0 z-40 px-3 md:px-6 pt-3 pb-1.5 w-full max-w-[1440px] mx-auto">
           <TopNavbar
             pageTitle={currentPage}
             currentPage={currentPage}
@@ -709,7 +709,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           />
         </div>
 
-        <div className="px-4 md:px-8 pb-8 w-full max-w-[1600px] mx-auto min-h-full fade-in">
+        <div className="px-3 md:px-6 pb-8 pt-1 w-full max-w-[1440px] mx-auto min-h-full fade-in">
           {children}
         </div>
       </main>

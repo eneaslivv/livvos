@@ -26,37 +26,37 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, na
     const tenantLogo = isDarkMode && currentTenant?.logo_url_dark ? currentTenant.logo_url_dark : (currentTenant?.logo_url || currentTenant?.logo_url_dark);
 
     return (
-        <header className="w-full px-4 md:px-5 bg-zinc-50/60 dark:bg-black/60 backdrop-blur-2xl rounded-full">
-            <div className="flex items-center justify-between h-11 w-full">
+        <header className="w-full px-3 md:px-4 bg-zinc-50/60 dark:bg-black/60 backdrop-blur-2xl rounded-full">
+            <div className="flex items-center justify-between h-9 w-full">
 
                 {/* Left: Logo + Search Bar */}
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                     {tenantLogo && (
                         <img
                             src={tenantLogo}
                             alt={currentTenant?.name || ''}
-                            className="h-6 max-w-[80px] object-contain shrink-0 md:hidden"
+                            className="h-5 max-w-[72px] object-contain shrink-0 md:hidden"
                         />
                     )}
                     <div
                         onClick={onOpenSearch}
-                        className="group relative flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full cursor-text transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-56"
+                        className="group relative flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800 rounded-md cursor-text transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 w-48"
                     >
-                        <Icons.Search size={13} className="text-zinc-400 shrink-0" />
-                        <span className="text-xs text-zinc-400 font-medium">Search...</span>
-                        <span className="ml-auto text-[9px] font-semibold text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded shrink-0">⌘K</span>
+                        <Icons.Search size={12} className="text-zinc-400 shrink-0" strokeWidth={2} />
+                        <span className="text-[12px] text-zinc-400">Search</span>
+                        <span className="ml-auto text-[9px] text-zinc-400 dark:text-zinc-500 px-1 py-px rounded bg-zinc-100 dark:bg-zinc-800 shrink-0 font-mono">⌘K</span>
                     </div>
-                    <span className="hidden lg:block text-[11px] font-semibold text-zinc-400/60 dark:text-zinc-500/60 uppercase tracking-widest select-none">
+                    <span className="hidden lg:block text-[10px] font-medium text-zinc-400/70 dark:text-zinc-500/70 uppercase tracking-[0.12em] select-none">
                         {pageTitle === 'home' ? 'Dashboard' : pageTitle.replace('_', ' ')}
                     </span>
                 </div>
 
                 {/* Right: Actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
 
                     {/* Live presence (who's online in this tenant) */}
-                    <div className="hidden sm:flex items-center pr-1 mr-1 border-r border-zinc-200 dark:border-zinc-800">
-                        <div className="pr-2">
+                    <div className="hidden sm:flex items-center pr-1 mr-1 border-r border-zinc-200/70 dark:border-zinc-800/70">
+                        <div className="pr-1.5">
                             <PresenceAvatars currentPage={currentPage} />
                         </div>
                     </div>
@@ -77,12 +77,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, na
                     {/* User Menu */}
                     <button
                         onClick={() => setIsConfigOpen(true)}
-                        className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ml-0.5"
+                        className="flex items-center gap-1.5 pl-0.5 pr-2 py-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-zinc-50 dark:ring-black">
-                            {user?.name?.[0] || 'U'}
+                        <div className="w-6 h-6 rounded-md bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
+                            {user?.name?.[0]?.toUpperCase() || 'U'}
                         </div>
-                        <span className="hidden md:block text-xs font-medium text-zinc-700 dark:text-zinc-200">{user?.name || 'User'}</span>
+                        <span className="hidden md:block text-[12px] text-zinc-600 dark:text-zinc-300">{user?.name || 'User'}</span>
                     </button>
 
                 </div>
