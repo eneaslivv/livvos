@@ -337,6 +337,7 @@ export interface PipelineProject {
   tenant_id: string
   client_group: string
   client_id: string | null
+  project_id: string | null
   client_name: string
   project_name: string
   total_amount: number
@@ -353,6 +354,7 @@ export interface PipelineProject {
 export interface CreatePipelineProjectData {
   client_group?: string
   client_id?: string | null
+  project_id?: string | null
   client_name: string
   project_name: string
   total_amount: number
@@ -1676,6 +1678,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       tenant_id: currentTenant.id,
       client_group: data.client_group ?? 'Otros Clientes',
       client_id: data.client_id ?? null,
+      project_id: data.project_id ?? null,
       client_name: data.client_name,
       project_name: data.project_name,
       total_amount: data.total_amount,

@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Trash2, Pencil, Target, Check, X } from 'lucide-react'
+import { Plus, Trash2, Pencil, Target, Check, X, Link2 } from 'lucide-react'
 import { useFinance, type PipelineProject } from '../../context/FinanceContext'
+import { useClients } from '../../context/ClientsContext'
+import { useProjects } from '../../context/ProjectsContext'
 
 const fmtMoney = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
@@ -23,6 +25,8 @@ const STATUS_STYLES: Record<PipelineProject['status'], string> = {
 
 interface DraftRow {
   client_group: string
+  client_id: string | null
+  project_id: string | null
   client_name: string
   project_name: string
   total_amount: number
@@ -33,6 +37,8 @@ interface DraftRow {
 
 const EMPTY_DRAFT: DraftRow = {
   client_group: 'Otros Clientes',
+  client_id: null,
+  project_id: null,
   client_name: '',
   project_name: '',
   total_amount: 0,
@@ -52,6 +58,8 @@ export const LivvSalesPipeline: React.FC = () => {
     createPipelineProject, updatePipelineProject, deletePipelineProject,
     paymentCycles,
   } = useFinance()
+  const { clients } = useClients()
+  const { projects } = useProjects()
 
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState<DraftRow>(EMPTY_DRAFT)
@@ -96,6 +104,8 @@ export const LivvSalesPipeline: React.FC = () => {
     if (!draft.client_name.trim() || !draft.project_name.trim()) return
     await createPipelineProject({
       client_group: draft.client_group.trim() || 'Otros Clientes',
+      client_id: draft.client_id,
+      project_id: draft.project_id,
       client_name: draft.client_name.trim(),
       project_name: draft.project_name.trim(),
       total_amount: Number(draft.total_amount) || 0,
@@ -203,8 +213,18 @@ export const LivvSalesPipeline: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-2 font-medium text-zinc-800 dark:text-zinc-100">{item.project_name}</td>
-                          <td className="px-4 py-2 text-zinc-500 dark:text-zinc-400">{item.client_name}</td>
+                          <td className="px-4 py-2 font-medium text-zinc-800 dark:text-zinc-100">
+                            <span className="inline-flex items-center gap-1.5">
+                              {item.project_name}
+                              {item.project_id && <Link2 size={10} className="text-emerald-500" />}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-zinc-500 dark:text-zinc-400">
+                            <span className="inline-flex items-center gap-1.5">
+                              {item.client_name}
+                              {item.client_id && <Link2 size={10} className="text-emerald-500" />}
+                            </span>
+                          </td>
                           <td className="px-4 py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-200">{fmtMoney(Number(item.total_amount))}</td>
                           <td className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{fmtMoney(Number(item.collected_amount))}</td>
                           <td className="px-4 py-2 text-right tabular-nums text-amber-600 dark:text-amber-400">{fmtMoney(Number(item.pending_amount))}</td>
@@ -238,8 +258,36 @@ export const LivvSalesPipeline: React.FC = () => {
           <div className="bg-white dark:bg-zinc-900/60 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-3">
             <div className="grid grid-cols-1 md:grid-cols-7 gap-2 items-center">
               <input placeholder="Group" value={draft.client_group} onChange={e => setDraft(d => ({ ...d, client_group: e.target.value }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded" />
-              <input placeholder="Client" value={draft.client_name} onChange={e => setDraft(d => ({ ...d, client_name: e.target.value }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded" />
-              <input placeholder="Project" value={draft.project_name} onChange={e => setDraft(d => ({ ...d, project_name: e.target.value }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded" />
+              {/* Client picker — autocomplete against existing clients, falls back to free text */}
+              <input
+                list="livv-pipeline-clients"
+                placeholder="Client"
+                value={draft.client_name}
+                onChange={e => {
+                  const name = e.target.value
+                  const match = clients.find(c => c.name.toLowerCase().trim() === name.toLowerCase().trim())
+                  setDraft(d => ({ ...d, client_name: name, client_id: match?.id ?? null }))
+                }}
+                className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+              />
+              <datalist id="livv-pipeline-clients">
+                {clients.map(c => <option key={c.id} value={c.name} />)}
+              </datalist>
+              {/* Project picker — autocomplete against existing projects */}
+              <input
+                list="livv-pipeline-projects"
+                placeholder="Project"
+                value={draft.project_name}
+                onChange={e => {
+                  const name = e.target.value
+                  const match = projects.find(p => (p.title || '').toLowerCase().trim() === name.toLowerCase().trim())
+                  setDraft(d => ({ ...d, project_name: name, project_id: match?.id ?? null }))
+                }}
+                className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+              />
+              <datalist id="livv-pipeline-projects">
+                {projects.map(p => <option key={p.id} value={p.title} />)}
+              </datalist>
               <input type="number" step="0.01" placeholder="Total" value={draft.total_amount || ''} onChange={e => setDraft(d => ({ ...d, total_amount: Number(e.target.value) }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-right" />
               <input type="number" step="0.01" placeholder="Cobrado" value={draft.collected_amount || ''} onChange={e => setDraft(d => ({ ...d, collected_amount: Number(e.target.value) }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-right" />
               <select value={draft.status} onChange={e => setDraft(d => ({ ...d, status: e.target.value as PipelineProject['status'] }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded">

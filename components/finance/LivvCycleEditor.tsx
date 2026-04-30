@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, Pencil, Check, X, Calendar, Settings2 } from 'lucide-react'
+import { Plus, Trash2, Pencil, Check, X, Calendar, Settings2, Link2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import {
   useFinance,
@@ -8,6 +8,7 @@ import {
   type CycleCost,
   type CycleDistribution,
 } from '../../context/FinanceContext'
+import { useClients } from '../../context/ClientsContext'
 
 const fmtMoney = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
@@ -37,6 +38,7 @@ export const LivvCycleEditor: React.FC<Props> = ({ cycle, isOpen, onClose }) => 
     createCycleDistribution, updateCycleDistribution, deleteCycleDistribution,
     partners,
   } = useFinance()
+  const { clients } = useClients()
 
   const summary = computeCycleSummary(cycle)
   const utilidad = summary.distributable
@@ -59,7 +61,9 @@ export const LivvCycleEditor: React.FC<Props> = ({ cycle, isOpen, onClose }) => 
 
   // ─── Revenues ────────────────────────────────────────────
   const [revAdding, setRevAdding] = useState(false)
-  const [revDraft, setRevDraft] = useState({ client_name: '', amount: 0, notes: '' })
+  const [revDraft, setRevDraft] = useState<{ client_name: string; client_id: string | null; amount: number; notes: string }>({
+    client_name: '', client_id: null, amount: 0, notes: '',
+  })
   const [revEditId, setRevEditId] = useState<string | null>(null)
   const [revEditDraft, setRevEditDraft] = useState<Partial<CycleRevenue>>({})
 
@@ -67,12 +71,13 @@ export const LivvCycleEditor: React.FC<Props> = ({ cycle, isOpen, onClose }) => 
     if (!revDraft.client_name.trim()) return
     await createCycleRevenue({
       cycle_id: cycle.id,
+      client_id: revDraft.client_id,
       client_name: revDraft.client_name.trim(),
       amount: Number(revDraft.amount) || 0,
       notes: revDraft.notes,
       sort_order: (cycle.revenues || []).length,
     })
-    setRevDraft({ client_name: '', amount: 0, notes: '' })
+    setRevDraft({ client_name: '', client_id: null, amount: 0, notes: '' })
     setRevAdding(false)
   }
 
@@ -215,7 +220,12 @@ export const LivvCycleEditor: React.FC<Props> = ({ cycle, isOpen, onClose }) => 
                         </>
                       ) : (
                         <>
-                          <td className="px-3 py-1.5 font-medium text-zinc-800 dark:text-zinc-100">{r.client_name}</td>
+                          <td className="px-3 py-1.5 font-medium text-zinc-800 dark:text-zinc-100">
+                            <span className="inline-flex items-center gap-1.5">
+                              {r.client_name}
+                              {r.client_id && <Link2 size={10} className="text-emerald-500" />}
+                            </span>
+                          </td>
                           <td className="px-3 py-1.5 text-right tabular-nums text-zinc-700 dark:text-zinc-200">{fmtMoneyDec(Number(r.amount))}</td>
                           <td className="px-3 py-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">{r.notes}</td>
                           <td className="px-3 py-1.5 flex items-center gap-1 justify-end">
@@ -229,12 +239,28 @@ export const LivvCycleEditor: React.FC<Props> = ({ cycle, isOpen, onClose }) => 
                 })}
                 {revAdding && (
                   <tr className="bg-zinc-50/40 dark:bg-zinc-800/20">
-                    <td className="px-3 py-1.5"><input autoFocus placeholder="Client name" value={revDraft.client_name} onChange={e => setRevDraft(d => ({ ...d, client_name: e.target.value }))} className="w-full px-2 py-1 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded" /></td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        autoFocus
+                        list="livv-cycle-rev-clients"
+                        placeholder="Client (autocompleta)"
+                        value={revDraft.client_name}
+                        onChange={e => {
+                          const name = e.target.value
+                          const match = clients.find(c => c.name.toLowerCase().trim() === name.toLowerCase().trim())
+                          setRevDraft(d => ({ ...d, client_name: name, client_id: match?.id ?? null }))
+                        }}
+                        className="w-full px-2 py-1 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded"
+                      />
+                      <datalist id="livv-cycle-rev-clients">
+                        {clients.map(c => <option key={c.id} value={c.name} />)}
+                      </datalist>
+                    </td>
                     <td className="px-3 py-1.5"><input type="number" step="0.01" placeholder="0" value={revDraft.amount || ''} onChange={e => setRevDraft(d => ({ ...d, amount: Number(e.target.value) }))} className="w-full px-2 py-1 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-right" /></td>
                     <td className="px-3 py-1.5"><input placeholder="Notes" value={revDraft.notes} onChange={e => setRevDraft(d => ({ ...d, notes: e.target.value }))} className="w-full px-2 py-1 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded" /></td>
                     <td className="px-3 py-1.5 flex items-center gap-1 justify-end">
                       <button onClick={onAddRev} className="p-0.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded"><Check size={12} /></button>
-                      <button onClick={() => { setRevAdding(false); setRevDraft({ client_name: '', amount: 0, notes: '' }) }} className="p-0.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"><X size={12} /></button>
+                      <button onClick={() => { setRevAdding(false); setRevDraft({ client_name: '', client_id: null, amount: 0, notes: '' }) }} className="p-0.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"><X size={12} /></button>
                     </td>
                   </tr>
                 )}
