@@ -420,7 +420,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const [showTimeForm, setShowTimeForm] = useState(false);
   const [timeFormData, setTimeFormData] = useState({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
 
-  const selectedProject = projects.find(p => p.id === selectedId) || projects[0];
+  const selectedProject = projects.find(p => p.id === selectedId) || null;
   const allProjectTasks = selectedProject
     ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
     : [];
@@ -636,12 +636,17 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     }
   };
 
+  // Persist last-opened project so returning to the page keeps your context.
   useEffect(() => {
-    if (!selectedId && projects.length) {
-      errorLogger.log('Selecting first project by default');
-      setSelectedId(projects[0].id);
-    }
+    if (selectedId || !projects.length) return;
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('projects:lastSelectedId') : null;
+    if (stored && projects.some(p => p.id === stored)) setSelectedId(stored);
   }, [projects, selectedId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (selectedId) window.localStorage.setItem('projects:lastSelectedId', selectedId);
+  }, [selectedId]);
 
   // Listen for global "+ New" popover and Clients page requesting a new project.
   useEffect(() => {
@@ -1460,27 +1465,29 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 )}
               </div>
             </div>
-            <div className="flex gap-1 shrink-0 items-center">
-              <button onClick={() => setIsShareModalOpen(true)}
-                className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
-                Share
-              </button>
-              <button onClick={() => setIsClientPreviewMode(true)}
-                className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
-                Project View
-              </button>
-              <button
-                onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
-                title="Project settings"
-                className={`p-1 rounded-md transition-colors ${
-                  activeTab === 'settings'
-                    ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                }`}
-              >
-                <Icons.MoreVert size={13} />
-              </button>
-            </div>
+            {selectedProject && (
+              <div className="flex gap-1 shrink-0 items-center">
+                <button onClick={() => setIsShareModalOpen(true)}
+                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
+                  Share
+                </button>
+                <button onClick={() => setIsClientPreviewMode(true)}
+                  className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
+                  Project View
+                </button>
+                <button
+                  onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
+                  title="Project settings"
+                  className={`p-1 rounded-md transition-colors ${
+                    activeTab === 'settings'
+                      ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+                      : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <Icons.MoreVert size={13} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── Share modal ── */}
@@ -1628,12 +1635,33 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           </AnimatePresence>
 
           {/* ── Tab Bar ── */}
-          <div className="px-4 sm:px-6 md:px-8 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-            <TabBar tabs={tabDefs} active={activeTab} onChange={setActiveTab} />
-          </div>
+          {selectedProject && (
+            <div className="px-4 sm:px-6 md:px-8 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+              <TabBar tabs={tabDefs} active={activeTab} onChange={setActiveTab} />
+            </div>
+          )}
+
+          {/* ── Empty state ── */}
+          {!selectedProject && (
+            <div className="flex-1 flex items-center justify-center px-6 py-12">
+              <div className="text-center max-w-sm">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 flex items-center justify-center">
+                  <Icons.Folder size={20} className="text-zinc-400 dark:text-zinc-500" />
+                </div>
+                <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-200 mb-1">
+                  {projects.length ? 'Select a project' : 'No projects yet'}
+                </h2>
+                <p className="text-[12px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                  {projects.length
+                    ? 'Pick a project from the sidebar to see its overview, tasks and docs.'
+                    : 'Create your first project to start tracking work, finances and time.'}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Tab Content ── */}
-          <div className="flex-1 overflow-y-auto">
+          <div className={`flex-1 overflow-y-auto ${!selectedProject ? 'hidden' : ''}`}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
