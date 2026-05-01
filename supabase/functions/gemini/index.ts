@@ -514,11 +514,14 @@ Rules:
         : type === 'finance_entries_batch'
         ? `You are a finance data-entry assistant. The user uploaded a spreadsheet (already parsed to JSON) and you must turn EACH ROW into a structured income or expense, RESOLVING references to existing clients and projects from the lists provided.
 
+Each request processes rows from a single sheet (tab) of the workbook. The SHEET name is given in the input header and each row also carries source_sheet — echo it back unchanged. The user typically uses sheet names like "Marzo", "Gastos", "Income 2026"; treat those as organizational labels (you can mention them in summary) but do NOT use them as categories.
+
 Return ONLY valid JSON with this shape:
 {
-  "summary": "1 sentence describing what was found",
+  "summary": "1 sentence describing what was found in this sheet",
   "entries": [
     {
+      "source_sheet": "exact sheet name from the input rows",
       "source_row": number,
       "kind": "income" | "expense",
       "concept": "short label",
@@ -542,7 +545,7 @@ Return ONLY valid JSON with this shape:
   ],
   "unknown_clients": ["names from data not matching any CLIENTS row"],
   "unknown_projects": ["titles from data not matching any PROJECTS row"],
-  "skipped_rows": [{"source_row": number, "reason": "header" | "total" | "blank" | "unparseable"}]
+  "skipped_rows": [{"source_sheet": "name", "source_row": number, "reason": "header" | "total" | "blank" | "unparseable"}]
 }
 
 Rules — CRITICAL anti-hallucination:
@@ -551,7 +554,7 @@ Rules — CRITICAL anti-hallucination:
 - DATE BINDING: parse the row's date cell. If empty, set date=TODAY and date_inferred=true. NEVER invent a date that was not in the row.
 - CATEGORY: pick from EXPENSE_CATEGORIES exactly (case-sensitive). If not obvious, default to "Operations" and set needs_review=true.
 - IDs: never invent client_id / project_id. Only use IDs from CLIENTS / PROJECTS lists. Fuzzy match by name (case + accent insensitive). If no match, set id=null and add the raw name to unknown_clients / unknown_projects so the frontend can offer to create it.
-- source_row MUST equal the source_row of the input ROW you derived this entry from. Do NOT reuse a source_row across two entries.
+- source_row MUST equal the source_row of the input ROW you derived this entry from. source_sheet MUST equal the input row's source_sheet. Do NOT reuse the (source_sheet, source_row) pair across two entries.
 - needs_review=true whenever ANY of: amount inferred, date inferred, kind ambiguous, category guessed.
 - Respond strictly with the JSON object — no prose, no markdown fences.
 - Match the user's language for concept/vendor/notes/summary text.`

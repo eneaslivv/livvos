@@ -40,14 +40,25 @@ const fmtCurrency = (v: number) =>
 type Step = 'input' | 'parsing' | 'preview' | 'preview_batch' | 'saving' | 'done';
 
 type SheetRow = {
-  source_row: number;            // 1-indexed position in the original file (header is row 0, data starts at 1)
-  cells: Record<string, string>; // header → cell value as string
+  source_sheet: string;          // name of the worksheet this row came from
+  source_row: number;            // 1-indexed position within that worksheet (header is row 0, data starts at 1)
+  cells: Record<string, string>; // header → cell value as string (per-sheet headers may differ)
 };
 
 type SheetData = {
+  name: string;
   headers: string[];
   rows: SheetRow[];
-  totalRows: number;             // total non-blank data rows in the file (may exceed rows.length when capped)
+  totalRows: number;             // total non-blank data rows in this sheet (may exceed rows.length when capped)
+};
+
+// A workbook may have multiple sheets — we process each one separately so
+// per-sheet header sets stay coherent in the prompt. The sheet name is also
+// surfaced in the preview's "Source row" panel so the user can audit which
+// tab a draft came from.
+type WorkbookData = {
+  sheets: SheetData[];
+  totalRows: number;             // sum across sheets
 };
 
 type MatchStatus = 'new' | 'duplicate' | 'update' | 'low_confidence';
@@ -68,6 +79,7 @@ type DraftEntry = {
   recurring: boolean;
   notes: string | null;
   // ─── Anti-hallucination + sync metadata ───
+  source_sheet: string | null;
   source_row: number | null;
   source_row_data: Record<string, string> | null;
   needs_review: boolean;
@@ -112,14 +124,18 @@ const buildSinglePrompt = (
 };
 
 // Builds a chunk-aware prompt where each row is a JSON object with a stable,
-// 1-indexed `source_row`. The IA echoes that index so the frontend can verify
-// every emitted entry's amount/date came from a real cell of that row — the
-// fix for "phantom $3,000 expenses" caused by silent CSV truncation.
+// 1-indexed `source_row` plus the originating sheet name. The IA echoes both
+// so the frontend can verify every emitted entry's amount/date came from a
+// real cell of that row — the fix for "phantom $3,000 expenses" caused by
+// silent CSV truncation. Per-sheet calls keep header sets coherent.
 const buildBatchPrompt = (
   fileName: string,
+  sheetName: string,
+  sheetIndex: number,
+  totalSheets: number,
   headers: string[],
   rows: SheetRow[],
-  totalInFile: number,
+  totalInSheet: number,
   chunkRange: { from: number; to: number },
   clients: Client[],
   projects: Project[],
@@ -130,7 +146,8 @@ const buildBatchPrompt = (
   return [
     `TODAY: ${today}`,
     `FILE: ${fileName}`,
-    `CHUNK: rows ${chunkRange.from}-${chunkRange.to} of ${totalInFile}`,
+    `SHEET: "${sheetName}" (${sheetIndex + 1} of ${totalSheets})`,
+    `CHUNK: rows ${chunkRange.from}-${chunkRange.to} of ${totalInSheet} in this sheet`,
     '',
     'EXPENSE_CATEGORIES (use one of these EXACTLY, or "Operations" if uncertain):',
     ...EXPENSE_CATEGORIES.map(c => `- ${c}`),
@@ -143,8 +160,8 @@ const buildBatchPrompt = (
     '',
     `SHEET_HEADERS: ${JSON.stringify(headers)}`,
     '',
-    'ROWS (JSON, source_row is the 1-indexed row number in the original file; never invent rows):',
-    JSON.stringify(rows.map(r => ({ source_row: r.source_row, ...r.cells }))),
+    'ROWS (JSON, source_row is the 1-indexed row number within this sheet; source_sheet is the sheet name; never invent rows or sheets):',
+    JSON.stringify(rows.map(r => ({ source_sheet: r.source_sheet, source_row: r.source_row, ...r.cells }))),
   ].join('\n');
 };
 
@@ -319,11 +336,21 @@ const findMatchingBudget = (category: string, date: string, budgets: Budget[]): 
   return null;
 };
 
+const sheetRowKey = (sheet: string, row: number) => `${sheet}::${row}`;
+
 const toDraft = (
   r: FinanceEntryAIResult,
-  rowsByIndex: Map<number, SheetRow>,
+  rowsByKey: Map<string, SheetRow>,
+  fallbackSheet: string,
 ): DraftEntry => {
-  const sourceRow = typeof r.source_row === 'number' ? rowsByIndex.get(r.source_row) : undefined;
+  // The IA may echo source_sheet for each entry; if missing (older prompt or
+  // single-sheet upload) fall back to the chunk's sheet name so audit still
+  // works.
+  const sheetName = (r as any).source_sheet || fallbackSheet || '';
+  const lookupRow =
+    typeof r.source_row === 'number'
+      ? rowsByKey.get(sheetRowKey(sheetName, r.source_row))
+      : undefined;
   return {
     kind: r.kind,
     concept: r.concept || '',
@@ -339,8 +366,9 @@ const toDraft = (
     status: r.status === 'paid' ? 'paid' : 'pending',
     recurring: !!r.recurring,
     notes: r.notes || null,
+    source_sheet: sheetName || null,
     source_row: typeof r.source_row === 'number' ? r.source_row : null,
-    source_row_data: sourceRow ? sourceRow.cells : null,
+    source_row_data: lookupRow ? lookupRow.cells : null,
     needs_review: !!r.needs_review,
     validation_errors: [],
     match_status: 'new',
@@ -361,15 +389,20 @@ const validateAgainstSource = (draft: DraftEntry): DraftEntry => {
   if (draft.source_row == null) {
     errors.push('La IA no devolvió source_row para esta fila.');
   } else if (!draft.source_row_data) {
-    errors.push(`La IA referenció source_row=${draft.source_row}, pero no existe en el archivo.`);
+    errors.push(
+      draft.source_sheet
+        ? `La IA referenció hoja "${draft.source_sheet}", fila ${draft.source_row}, pero no existe en el archivo.`
+        : `La IA referenció source_row=${draft.source_row}, pero no existe en el archivo.`
+    );
   } else {
-    const fakeRow: SheetRow = { source_row: draft.source_row, cells: draft.source_row_data };
+    const fakeRow: SheetRow = {
+      source_sheet: draft.source_sheet || '',
+      source_row: draft.source_row,
+      cells: draft.source_row_data,
+    };
     if (draft.amount > 0 && !rowContainsNumber(fakeRow, draft.amount)) {
       errors.push(`El monto ${fmtCurrency(draft.amount)} no aparece en la fila origen — posible alucinación.`);
     }
-    // Skip date validation when the IA explicitly inferred it from TODAY.
-    // The `date_inferred` flag isn't on DraftEntry, but if needs_review is
-    // true and date matches today, we trust the inference.
     const today = new Date().toISOString().slice(0, 10);
     if (draft.date && draft.date !== today && !rowContainsDate(fakeRow, draft.date)) {
       errors.push(`La fecha ${draft.date} no aparece en la fila origen.`);
@@ -413,12 +446,12 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [aiOutputRef, setAIOutputRef] = useState<AIOutputRef | null>(null);
 
-  // File upload state — sheetData replaces the old csvText/filePreview pair.
-  // Keeping headers + per-row cells lets the AI see structured JSON instead of
-  // a possibly-truncated CSV string, which is the root-cause fix for amount
-  // hallucination.
+  // File upload state. workbookData holds every sheet of the uploaded file
+  // (each with its own headers + rows). Multi-sheet support means processing
+  // each tab independently so per-sheet header sets stay coherent in the
+  // prompt — and so the audit trail can show which tab a draft came from.
   const [fileName, setFileName] = useState<string | null>(null);
-  const [sheetData, setSheetData] = useState<SheetData | null>(null);
+  const [workbookData, setWorkbookData] = useState<WorkbookData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isListening, setIsListening] = useState(false);
@@ -445,7 +478,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setBatchProgress(null);
       setAIOutputRef(null);
       setFileName(null);
-      setSheetData(null);
+      setWorkbookData(null);
       setTimeout(() => textareaRef.current?.focus(), 80);
     } else {
       try { recognitionRef.current?.abort?.(); } catch { /* noop */ }
@@ -513,25 +546,46 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array', cellDates: true, cellNF: false, cellText: true });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      if (!sheet) {
-        setError('No pude leer la primera hoja del archivo.');
+      if (wb.SheetNames.length === 0) {
+        setError('El archivo no tiene hojas.');
         return;
       }
-      const aoa: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
-      if (aoa.length === 0) {
-        setError('El archivo está vacío.');
+      // Iterate every sheet (tab) of the workbook. Each sheet is processed
+      // separately downstream so its header set stays coherent. Empty sheets
+      // are skipped silently. The MAX_TOTAL_ROWS cap is applied across the
+      // whole workbook to bound the total AI calls.
+      const sheets: SheetData[] = [];
+      let totalRowsAcrossWorkbook = 0;
+      let remainingBudget = MAX_TOTAL_ROWS;
+
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        if (!sheet) continue;
+        const aoa: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
+        if (aoa.length === 0) continue;
+        const headers = (aoa[0] || []).map((v, i) => String(v ?? '').trim() || `col${i + 1}`);
+        const dataRowsAll = aoa.slice(1);
+        if (dataRowsAll.length === 0) continue;
+
+        totalRowsAcrossWorkbook += dataRowsAll.length;
+        const dataRowsCapped = remainingBudget > 0 ? dataRowsAll.slice(0, remainingBudget) : [];
+        remainingBudget -= dataRowsCapped.length;
+
+        const rows: SheetRow[] = dataRowsCapped.map((row, idx) => {
+          const cells: Record<string, string> = {};
+          headers.forEach((h, ci) => { cells[h] = String(row[ci] ?? '').trim(); });
+          return { source_sheet: sheetName, source_row: idx + 1, cells };
+        });
+        sheets.push({ name: sheetName, headers, rows, totalRows: dataRowsAll.length });
+      }
+
+      if (sheets.length === 0) {
+        setError('El archivo está vacío o ninguna hoja tiene filas con datos.');
         return;
       }
-      const headers = (aoa[0] || []).map((v, i) => String(v ?? '').trim() || `col${i + 1}`);
-      const dataRows = aoa.slice(1, MAX_TOTAL_ROWS + 1);
-      const rows: SheetRow[] = dataRows.map((row, idx) => {
-        const cells: Record<string, string> = {};
-        headers.forEach((h, ci) => { cells[h] = String(row[ci] ?? '').trim(); });
-        return { source_row: idx + 1, cells };
-      });
+
       setFileName(file.name);
-      setSheetData({ headers, rows, totalRows: aoa.length - 1 });
+      setWorkbookData({ sheets, totalRows: totalRowsAcrossWorkbook });
     } catch (err: any) {
       console.error('[FinanceAssistant] file parse error', err);
       setError('No pude leer ese archivo. Asegurate de que sea CSV o Excel válido.');
@@ -552,43 +606,57 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
 
   const clearFile = useCallback(() => {
     setFileName(null);
-    setSheetData(null);
+    setWorkbookData(null);
   }, []);
 
   // ─── Submit → AI parse (single OR batch depending on file presence) ─
   const handleParse = useCallback(async () => {
     setError(null);
 
-    // Batch mode
-    if (sheetData && sheetData.rows.length > 0) {
+    // Batch mode — multi-sheet aware
+    if (workbookData && workbookData.sheets.some(s => s.rows.length > 0)) {
       setStep('parsing');
-      setBatchProgress({ current: 0, total: Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE) });
+      // One chunk = one AI call. We chunk per sheet so each call sees only
+      // the headers that belong to that sheet — mixing sheets in one call
+      // confuses the IA when columns differ.
+      type Chunk = { sheet: SheetData; sheetIndex: number; rows: SheetRow[] };
+      const chunks: Chunk[] = [];
+      workbookData.sheets.forEach((sheet, sheetIndex) => {
+        for (let i = 0; i < sheet.rows.length; i += BATCH_CHUNK_SIZE) {
+          chunks.push({ sheet, sheetIndex, rows: sheet.rows.slice(i, i + BATCH_CHUNK_SIZE) });
+        }
+      });
+      setBatchProgress({ current: 0, total: chunks.length });
+
       try {
         const allEntries: FinanceEntryAIResult[] = [];
         const allUnknownClients: string[] = [];
         const allUnknownProjects: string[] = [];
         let lastOutputId: string | null = null;
 
-        const chunks: SheetRow[][] = [];
-        for (let i = 0; i < sheetData.rows.length; i += BATCH_CHUNK_SIZE) {
-          chunks.push(sheetData.rows.slice(i, i + BATCH_CHUNK_SIZE));
-        }
-
         for (let i = 0; i < chunks.length; i++) {
-          const chunk = chunks[i];
-          const range = { from: chunk[0].source_row, to: chunk[chunk.length - 1].source_row };
+          const { sheet, sheetIndex, rows: chunkRows } = chunks[i];
+          const range = { from: chunkRows[0].source_row, to: chunkRows[chunkRows.length - 1].source_row };
           const prompt = buildBatchPrompt(
             fileName || 'data.csv',
-            sheetData.headers,
-            chunk,
-            sheetData.totalRows,
+            sheet.name,
+            sheetIndex,
+            workbookData.sheets.length,
+            sheet.headers,
+            chunkRows,
+            sheet.totalRows,
             range,
             clients,
             projects,
           );
           const result = await parseFinanceBatchFromAI(prompt);
           if ((result as any)._outputId) lastOutputId = (result as any)._outputId;
-          allEntries.push(...(result.entries || []));
+          // Tag each entry with the sheet name so toDraft can recover it even
+          // if the IA forgot to echo source_sheet in its output.
+          (result.entries || []).forEach(e => {
+            if (!(e as any).source_sheet) (e as any).source_sheet = sheet.name;
+            allEntries.push(e);
+          });
           (result.unknown_clients || []).forEach(s => { if (typeof s === 'string' && s.trim()) allUnknownClients.push(s.trim()); });
           (result.unknown_projects || []).forEach(s => { if (typeof s === 'string' && s.trim()) allUnknownProjects.push(s.trim()); });
           setBatchProgress({ current: i + 1, total: chunks.length });
@@ -601,15 +669,19 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
           return;
         }
 
-        // Index rows for O(1) source lookup during validation.
-        const rowsByIndex = new Map<number, SheetRow>();
-        sheetData.rows.forEach(r => rowsByIndex.set(r.source_row, r));
+        // Composite-key index: (sheet name, row index) → SheetRow. Two sheets
+        // can share row numbers, so the sheet name is part of the key.
+        const rowsByKey = new Map<string, SheetRow>();
+        workbookData.sheets.forEach(s =>
+          s.rows.forEach(r => rowsByKey.set(sheetRowKey(r.source_sheet, r.source_row), r))
+        );
 
         // 1. Convert + validate against source rows (anti-hallucination).
         // 2. Classify against existing data (dedup / update vs create).
         // 3. Auto-link budget when category + date matches an active budget.
         const drafts = allEntries.map(e => {
-          let d = toDraft(e, rowsByIndex);
+          const fallbackSheet = (e as any).source_sheet || workbookData.sheets[0]?.name || '';
+          let d = toDraft(e, rowsByKey, fallbackSheet);
           d = validateAgainstSource(d);
           const classification = classifyDraft(d, expenses, incomes);
           d.match_status = classification.status;
@@ -661,7 +733,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     try {
       const prompt = buildSinglePrompt(input, clients, projects);
       const result = await parseFinanceEntryFromAI(prompt);
-      const draft = toDraft(result, new Map());
+      const draft = toDraft(result, new Map(), '');
       // Single entries don't have a source row — clear the validation noise.
       draft.validation_errors = [];
       draft.needs_review = false;
@@ -685,7 +757,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setError(err?.message || 'No pude procesar la descripción. Probá reformular.');
       setStep('input');
     }
-  }, [sheetData, fileName, userInput, clients, projects, expenses, incomes, budgets]);
+  }, [workbookData, fileName, userInput, clients, projects, expenses, incomes, budgets]);
 
   // ─── Persist a single draft ──────────────────────────────────────
   // Honors match_status: a draft tagged `update` can be applied to the
@@ -1019,7 +1091,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             </div>
 
             {/* File upload zone */}
-            {!sheetData ? (
+            {!workbookData ? (
               <div
                 onDrop={onDrop}
                 onDragOver={e => e.preventDefault()}
@@ -1031,7 +1103,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Subí un Excel o CSV</div>
-                  <div className="text-[10px] text-zinc-400">Arrastrá un archivo o hacé click — cada fila se valida contra la IA en tandas de {BATCH_CHUNK_SIZE}</div>
+                  <div className="text-[10px] text-zinc-400">Arrastrá un archivo o hacé click — procesa todas las pestañas en tandas de {BATCH_CHUNK_SIZE} filas</div>
                 </div>
                 <Upload size={14} className="text-zinc-400 group-hover:text-fuchsia-600 transition-colors" />
                 <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.tsv,text/csv" onChange={onPickFile} className="hidden" />
@@ -1045,7 +1117,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{fileName}</div>
                     <div className="text-[10px] text-zinc-500">
-                      {sheetData.totalRows} filas · {sheetData.headers.length} columnas
+                      {workbookData.sheets.length} {workbookData.sheets.length === 1 ? 'hoja' : 'hojas'} · {workbookData.totalRows} filas totales
                     </div>
                   </div>
                   <button onClick={clearFile} type="button" className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
@@ -1053,51 +1125,74 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   </button>
                 </div>
 
-                {/* Pagination warning */}
-                {sheetData.rows.length > BATCH_CHUNK_SIZE && (
-                  <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1.5">
-                    <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                    <span>
-                      Se procesará en {Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE)} tandas de {BATCH_CHUNK_SIZE} filas (~{Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE) * 4}s).
+                {/* Per-sheet breakdown — surfaces multi-tab visibility so the
+                    user knows the IA is going to read everything, not just
+                    the first sheet (the previous behaviour). */}
+                <div className="flex flex-wrap gap-1">
+                  {workbookData.sheets.map(s => (
+                    <span key={s.name}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-zinc-900/60 border border-fuchsia-200 dark:border-fuchsia-500/30 text-[10px] text-zinc-700 dark:text-zinc-300">
+                      <span className="font-semibold">{s.name}</span>
+                      <span className="text-zinc-400">{s.totalRows}</span>
                     </span>
-                  </div>
-                )}
-                {sheetData.totalRows > MAX_TOTAL_ROWS && (
+                  ))}
+                </div>
+
+                {/* Pagination warning */}
+                {(() => {
+                  const totalChunks = workbookData.sheets.reduce(
+                    (acc, s) => acc + Math.ceil(s.rows.length / BATCH_CHUNK_SIZE), 0
+                  );
+                  return totalChunks > 1 ? (
+                    <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1.5">
+                      <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                      <span>Se procesará en {totalChunks} tandas (~{totalChunks * 4}s).</span>
+                    </div>
+                  ) : null;
+                })()}
+                {workbookData.totalRows > MAX_TOTAL_ROWS && (
                   <div className="flex items-start gap-1.5 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded px-2 py-1.5">
                     <AlertTriangle size={11} className="shrink-0 mt-0.5" />
                     <span>
-                      El archivo tiene {sheetData.totalRows} filas — solo se procesarán las primeras {MAX_TOTAL_ROWS}.
+                      El archivo tiene {workbookData.totalRows} filas — solo se procesarán las primeras {MAX_TOTAL_ROWS}.
                     </span>
                   </div>
                 )}
 
-                <div className="overflow-x-auto rounded-lg border border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/60">
-                  <table className="w-full text-[10px]">
-                    <thead className="bg-zinc-50/70 dark:bg-zinc-800/30">
-                      <tr>
-                        {sheetData.headers.slice(0, 6).map((h, i) => (
-                          <th key={i} className="px-2 py-1.5 text-left font-semibold text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h || `col${i + 1}`}</th>
-                        ))}
-                        {sheetData.headers.length > 6 && <th className="px-2 py-1.5 text-left text-zinc-400">+{sheetData.headers.length - 6}</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sheetData.rows.slice(0, 3).map((row, ri) => (
-                        <tr key={ri} className="border-t border-zinc-100 dark:border-zinc-800/40">
-                          {sheetData.headers.slice(0, 6).map((h, ci) => (
-                            <td key={ci} className="px-2 py-1.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap max-w-[140px] truncate">{String(row.cells[h] ?? '')}</td>
+                {/* Preview the first sheet's first 3 rows just so the user
+                    sees the headers were read correctly. */}
+                {workbookData.sheets[0] && (
+                  <div className="overflow-x-auto rounded-lg border border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/60">
+                    <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800/60">
+                      Vista previa: {workbookData.sheets[0].name}
+                    </div>
+                    <table className="w-full text-[10px]">
+                      <thead className="bg-zinc-50/70 dark:bg-zinc-800/30">
+                        <tr>
+                          {workbookData.sheets[0].headers.slice(0, 6).map((h, i) => (
+                            <th key={i} className="px-2 py-1.5 text-left font-semibold text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h || `col${i + 1}`}</th>
                           ))}
-                          {sheetData.headers.length > 6 && <td className="px-2 py-1.5 text-zinc-300">…</td>}
+                          {workbookData.sheets[0].headers.length > 6 && <th className="px-2 py-1.5 text-left text-zinc-400">+{workbookData.sheets[0].headers.length - 6}</th>}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {workbookData.sheets[0].rows.slice(0, 3).map((row, ri) => (
+                          <tr key={ri} className="border-t border-zinc-100 dark:border-zinc-800/40">
+                            {workbookData.sheets[0].headers.slice(0, 6).map((h, ci) => (
+                              <td key={ci} className="px-2 py-1.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap max-w-[140px] truncate">{String(row.cells[h] ?? '')}</td>
+                            ))}
+                            {workbookData.sheets[0].headers.length > 6 && <td className="px-2 py-1.5 text-zinc-300">…</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Examples — only when no file is loaded */}
-            {!sheetData && (
+            {!workbookData && (
               <div className="space-y-1.5">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Ejemplos rápidos</div>
                 <div className="flex flex-col gap-1.5">
@@ -1122,11 +1217,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             <div className="flex items-center justify-between pt-1">
               <p className="text-[10px] text-zinc-400">⌘/Ctrl + Enter para enviar</p>
               <button onClick={handleParse} type="button"
-                disabled={!userInput.trim() && !sheetData}
+                disabled={!userInput.trim() && !workbookData}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
                 style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}>
                 <Wand2 size={13} />
-                {sheetData ? 'Procesar archivo' : 'Parse with AI'}
+                {workbookData ? 'Procesar archivo' : 'Parse with AI'}
               </button>
             </div>
           </>
@@ -1140,7 +1235,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
               <Sparkles size={14} className="absolute -top-1 -right-1 text-indigo-500 animate-pulse" />
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {sheetData
+              {workbookData
                 ? batchProgress
                   ? `Tanda ${batchProgress.current} de ${batchProgress.total} — analizando filas y matcheando con tu CRM…`
                   : 'Preparando tandas…'
@@ -1628,7 +1723,9 @@ const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
                       : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200'
                   }`}>{d.kind === 'income' ? 'IN' : 'EX'}</div>
                   {d.source_row != null && (
-                    <span className="shrink-0 text-[9px] font-mono text-zinc-400">#{d.source_row}</span>
+                    <span className="shrink-0 text-[9px] font-mono text-zinc-400" title={d.source_sheet ? `Hoja: ${d.source_sheet}` : undefined}>
+                      {d.source_sheet ? `${d.source_sheet}#${d.source_row}` : `#${d.source_row}`}
+                    </span>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
@@ -1672,7 +1769,8 @@ const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
                     {d.source_row_data && (
                       <div className="rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 text-[10px]">
                         <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
-                          <FileSpreadsheet size={10} /> Fila origen #{d.source_row}
+                          <FileSpreadsheet size={10} />
+                          {d.source_sheet ? `Hoja "${d.source_sheet}" · Fila #${d.source_row}` : `Fila origen #${d.source_row}`}
                         </div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                           {Object.entries(d.source_row_data).map(([h, v]) => (

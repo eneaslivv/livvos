@@ -6,11 +6,12 @@ import {
   ChevronLeft, ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
-  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles
+  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles, MessageSquare
 } from 'lucide-react';
 import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import { FinanceAssistant } from '../components/finance/FinanceAssistant';
+import { FinanceChat } from '../components/finance/FinanceChat';
 import {
   useFinance,
   type IncomeEntry,
@@ -193,6 +194,7 @@ export const Finance: React.FC = () => {
 
   // AI assistant state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -913,6 +915,12 @@ export const Finance: React.FC = () => {
                 title="Add an entry by describing it in natural language">
                 <Sparkles size={14} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
                 <span>Add with AI</span>
+              </button>
+              <button onClick={() => setIsChatOpen(true)}
+                className="group flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200 border border-fuchsia-300 dark:border-fuchsia-500/40 text-fuchsia-700 dark:text-fuchsia-300 bg-white dark:bg-zinc-900 hover:bg-fuchsia-50/60 dark:hover:bg-fuchsia-500/10"
+                title="Preguntale sobre tus finanzas">
+                <MessageSquare size={14} strokeWidth={2.5} />
+                <span>Preguntale</span>
               </button>
               <button onClick={openIncomeForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
                 <ArrowDownLeft size={14} strokeWidth={2.5} />
@@ -2565,6 +2573,7 @@ export const Finance: React.FC = () => {
 
       {/* ═══════════════ AI ASSISTANT ═══════════════ */}
       <FinanceAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
+      <FinanceChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
     </div>
   );
 };
