@@ -65,6 +65,7 @@ export interface Project {
   files: ProjectFile[]
   activity: ProjectActivity[]
   color: string
+  icon?: string | null
   budget: number
   currency: string
 }
@@ -128,6 +129,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     files: Array.isArray(p.files) ? p.files : [],
     activity: Array.isArray(p.activity) ? p.activity : [],
     color: p.color ?? '#3b82f6',
+    icon: p.icon ?? null,
     budget: typeof p.budget === 'number' ? p.budget : 0,
     currency: p.currency ?? 'USD',
   });
@@ -153,6 +155,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.budget !== undefined) payload.budget = p.budget;
     if (p.currency !== undefined) payload.currency = p.currency;
     if (p.color !== undefined) payload.color = p.color;
+    if (p.icon !== undefined) payload.icon = p.icon;
     // updatedAt is handled automatically or by trigger, but we can send it
     payload.updated_at = new Date().toISOString();
     return payload;

@@ -93,7 +93,12 @@ export const ClientDetailHeader: React.FC<ClientDetailHeaderProps> = ({
               } : undefined}
             >
               {client.avatar_url ? (
-                <img src={client.avatar_url} alt="" className="w-12 h-12 object-contain p-1" />
+                <img
+                  src={client.avatar_url}
+                  alt={client.name}
+                  className="w-12 h-12 object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
               ) : getInitials(client.name)}
             </div>
             {onUploadLogo && (

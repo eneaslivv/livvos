@@ -110,21 +110,21 @@ export const Calendar: React.FC = () => {
     return memberMap[id]?.avatar_url || null;
   };
 
-  const { data: projectOptions } = useSupabase<{ id: string; title: string; client_id?: string }>('projects', {
+  const { data: projectOptions } = useSupabase<{ id: string; title: string; client_id?: string; icon?: string | null }>('projects', {
     enabled: true,
     subscribe: false,
-    select: 'id,title,client_id'
+    select: 'id,title,client_id,icon'
   });
 
-  const projectMap = projectOptions.reduce<Record<string, string>>((acc, project) => {
-    acc[project.id] = project.title;
+  const projectMap = projectOptions.reduce<Record<string, { title: string; icon?: string | null; client_id?: string }>>((acc, project) => {
+    acc[project.id] = { title: project.title, icon: project.icon, client_id: project.client_id };
     return acc;
   }, {});
 
   const getProjectLabel = (task: CalendarTask) => {
     const projectId = (task as any).project_id || (task as any).projectId;
     if (!projectId) return 'No project';
-    return projectMap[projectId] || 'Project';
+    return projectMap[projectId]?.title || 'Project';
   };
 
   // Client name map for showing client on tasks
@@ -137,6 +137,7 @@ export const Calendar: React.FC = () => {
     if (!task.client_id) return null;
     return clientMap[task.client_id] || null;
   };
+
 
   // Client info map for showing logos on phase pills
   const clientInfoMap = clients.reduce<Record<string, { name: string; avatar: string | null; color: string | null }>>((acc, c) => {

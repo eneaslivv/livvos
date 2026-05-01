@@ -18,6 +18,7 @@ export interface Client {
   industry?: string
   timezone?: string | null
   color?: string | null
+  icon?: string | null
   created_at: string
   updated_at: string
 }

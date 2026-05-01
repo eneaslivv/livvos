@@ -113,7 +113,14 @@ export const ClientListSidebar: React.FC<ClientListSidebarProps> = ({
                         } : undefined}
                       >
                         {client.avatar_url ? (
-                          <img src={client.avatar_url} alt="" className="w-9 h-9 rounded-full object-contain p-0.5" />
+                          <img
+                            src={client.avatar_url}
+                            alt={client.name}
+                            className="w-9 h-9 rounded-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : client.icon ? (
+                          <span className="text-base leading-none">{client.icon}</span>
                         ) : getInitials(client.name)}
                       </div>
                       <div className="flex-1 min-w-0">

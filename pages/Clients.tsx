@@ -16,6 +16,7 @@ import { PageView, NavParams } from '../types';
 
 import { ClientListSidebar } from '../components/clients/ClientListSidebar';
 import { NewClientPanel } from '../components/clients/NewClientPanel';
+import { IconPicker } from '../components/ui/IconPicker';
 
 /* ─── Helpers ─── */
 const statusConfig = {
@@ -39,10 +40,11 @@ const ClientSimpleHeader: React.FC<{
   onInlineEdit: (field: string) => Promise<boolean>;
   onUpdateStatus: (status: string) => void;
   onUpdateColor: (color: string | null) => void;
+  onUpdateIcon: (icon: string | null) => void;
   onUploadLogo: (file: File) => Promise<void> | void;
   onRemoveLogo: () => Promise<void> | void;
   isUploadingLogo: boolean;
-}> = ({ client, editingField, editDraft, onEditField, onEditDraftChange, onCancelEdit, onInlineEdit, onUpdateStatus, onUpdateColor, onUploadLogo, onRemoveLogo, isUploadingLogo }) => {
+}> = ({ client, editingField, editDraft, onEditField, onEditDraftChange, onCancelEdit, onInlineEdit, onUpdateStatus, onUpdateColor, onUpdateIcon, onUploadLogo, onRemoveLogo, isUploadingLogo }) => {
   const status = statusConfig[client.status as keyof typeof statusConfig] ?? statusConfig.inactive;
   const [statusOpen, setStatusOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
@@ -64,7 +66,14 @@ const ClientSimpleHeader: React.FC<{
             {isUploadingLogo ? (
               <div className="w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
             ) : client.avatar_url ? (
-              <img src={client.avatar_url} alt={client.name} className="w-full h-full object-contain p-0.5" />
+              <img
+                src={client.avatar_url}
+                alt={client.name}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : client.icon ? (
+              <span className="text-xl leading-none">{client.icon}</span>
             ) : (
               <span className={!client.color ? 'text-zinc-500 dark:text-zinc-400' : ''}>
                 {getClientInitials(client.name)}
@@ -93,6 +102,7 @@ const ClientSimpleHeader: React.FC<{
             }}
           />
         </div>
+        <IconPicker value={client.icon} onChange={onUpdateIcon} size={26} title="Pick an icon for this client" />
         <button
           onClick={() => setColorOpen(v => !v)}
           className="relative w-3 h-3 rounded-full shrink-0 ring-2 ring-offset-2 ring-transparent hover:ring-zinc-200 dark:hover:ring-zinc-700 dark:ring-offset-zinc-900 transition-all"
@@ -657,12 +667,16 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   const handleUploadLogo = async (file: File) => {
     if (!selectedClient) return;
     if (file.size > 2 * 1024 * 1024) { alert('Max file size is 2MB'); return; }
+    if (!currentTenant?.id) { alert('No active tenant'); return; }
     setIsUploadingLogo(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `client_logos/${selectedClient.id}.${ext}`;
-      await supabase.storage.from('documents').upload(path, file, { upsert: true });
-      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `client-logos/${currentTenant.id}/${selectedClient.id}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('tenant-assets')
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
       const avatarUrl = `${urlData.publicUrl}?v=${Date.now()}`;
       await updateClient(selectedClient.id, { avatar_url: avatarUrl });
       setSelectedClient({ ...selectedClient, avatar_url: avatarUrl });
@@ -1202,6 +1216,12 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                     await updateClient(selectedClient.id, { color });
                     setSelectedClient({ ...selectedClient, color });
                   } catch (err) { errorLogger.error('Error updating client color', err); }
+                }}
+                onUpdateIcon={async (icon: string | null) => {
+                  try {
+                    await updateClient(selectedClient.id, { icon });
+                    setSelectedClient({ ...selectedClient, icon });
+                  } catch (err) { errorLogger.error('Error updating client icon', err); }
                 }}
                 onUploadLogo={handleUploadLogo}
                 onRemoveLogo={handleRemoveLogo}
