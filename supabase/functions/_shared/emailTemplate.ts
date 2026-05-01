@@ -620,6 +620,14 @@ export function buildNewLeadTeamEmail(p: NewLeadTeamPayload): string {
 }
 
 // 6. Lead welcome reply (client / inbound prospect)
+export interface LeadWelcomeReplyProject {
+  title: string
+  subtitle?: string                      // role / what was built
+  category?: string                      // e.g. "Identity", "Web", "Motion"
+  year?: string | number
+  url?: string                           // public case-study URL
+}
+
 export interface LeadWelcomeReplyPayload extends CommonOpts {
   leadFirstName: string
   fromName: string                       // founder / sales rep name
@@ -628,6 +636,11 @@ export interface LeadWelcomeReplyPayload extends CommonOpts {
   steps?: { number: string; title: string; description: string }[]
   ctaUrl: string
   ctaLabel?: string
+  // Optional SLA banner + recent-work showcase. Both render only if provided
+  // so smaller / single-product tenants can keep the message focused.
+  responseTimeText?: string              // e.g. "We reply within 4 business hours."
+  projects?: LeadWelcomeReplyProject[]   // 2-4 recent works, rendered as a list
+  portfolioUrl?: string                  // "See all work" link below the projects
 }
 
 export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
@@ -638,6 +651,8 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
     { number: '03', title: 'A kickoff if it fits', description: "We'd start in two weeks. You'd get direct access to our boards from day one." },
   ]
   const steps = p.steps && p.steps.length ? p.steps : defaultSteps
+
+  const projects = (p.projects || []).slice(0, 4)
 
   const inner = `
     <div style="padding:40px 36px 36px;background:${T.cream50};border-bottom:1px solid ${T.cream200};">
@@ -650,6 +665,20 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
       ${eyebrow('Welcome to Livv Studio')}
       <h1 style="margin:14px 0 0;font-family:${FONT_SANS};font-weight:300;font-size:30px;line-height:1.05;letter-spacing:-0.045em;color:${T.cream900};max-width:460px;">${escapeHtml(p.leadFirstName)} — your message landed. Thank you for reaching out.</h1>
     </div>
+
+    ${p.responseTimeText ? `<div style="padding:18px 36px;background:${T.wine400};color:${T.parchment};border-bottom:1px solid ${T.wine700};">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="vertical-align:middle;width:30px;">
+            <span style="display:inline-block;width:22px;height:22px;border-radius:9999px;background:${T.gold};color:${T.wine400};line-height:22px;text-align:center;font-family:${FONT_SANS};font-weight:500;font-size:13px;">&#10004;</span>
+          </td>
+          <td style="vertical-align:middle;padding-left:8px;">
+            <div style="font-family:${FONT_MONO};font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(241,173,216,0.85);margin-bottom:2px;">© Response time</div>
+            <div style="font-family:${FONT_SANS};font-size:14px;color:${T.parchment};line-height:1.4;">${escapeHtml(p.responseTimeText)}</div>
+          </td>
+        </tr>
+      </table>
+    </div>` : ''}
 
     ${(p.bodyParagraphs && p.bodyParagraphs.length ? p.bodyParagraphs : [
       "I read your note this morning. The brief is exactly the kind of work we love: a brand with story, a product with care, and a team ready to commit.",
@@ -670,7 +699,36 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
       </table>`).join('')}
     </div>
 
-    <div style="padding:22px 36px 28px;background:#ffffff;">
+    ${projects.length ? `<div style="padding:24px 36px 8px;background:#ffffff;border-top:1px dashed ${T.cream200};">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:14px;">
+        <tr>
+          <td>${eyebrow('Recent work')}</td>
+          <td align="right">${meta(`${String(projects.length).padStart(2, '0')} ${projects.length === 1 ? 'project' : 'projects'}`)}</td>
+        </tr>
+      </table>
+      ${projects.map((proj, i) => {
+        const titleHtml = proj.url
+          ? `<a href="${escapeHtml(proj.url)}" style="color:${T.cream900};text-decoration:none;border-bottom:1px solid ${T.cream300};">${escapeHtml(proj.title)}</a>`
+          : escapeHtml(proj.title)
+        const subtitle = [proj.category, proj.subtitle, proj.year].filter(Boolean).map(escapeHtml as any).join(' · ')
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-bottom:${i < projects.length - 1 ? `1px dashed ${T.cream200}` : 'none'};">
+          <tr>
+            <td style="padding:14px 0;vertical-align:top;width:8px;">
+              <span style="display:inline-block;width:6px;height:6px;border-radius:9999px;background:${T.gold};margin-top:6px;"></span>
+            </td>
+            <td style="padding:14px 0 14px 12px;vertical-align:top;">
+              <div style="font-family:${FONT_SANS};font-size:14px;color:${T.cream900};line-height:1.35;margin-bottom:4px;">${titleHtml}</div>
+              ${subtitle ? `<div style="font-family:${FONT_MONO};font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:${T.cream500};">${subtitle}</div>` : ''}
+            </td>
+          </tr>
+        </table>`
+      }).join('')}
+      ${p.portfolioUrl ? `<div style="text-align:center;margin-top:14px;">
+        <a href="${escapeHtml(p.portfolioUrl)}" style="font-family:${FONT_SANS};font-size:11.5px;color:${T.cream500};text-decoration:none;border-bottom:1px solid ${T.cream300};">See all work &rarr;</a>
+      </div>` : ''}
+    </div>` : ''}
+
+    <div style="padding:22px 36px 28px;background:#ffffff;${projects.length ? `border-top:1px dashed ${T.cream200};` : ''}">
       ${button(p.ctaLabel || 'Pick a time on my calendar', p.ctaUrl, { fullWidth: true })}
       <div style="margin-top:18px;font-family:${FONT_SANS};font-size:12px;color:${T.fgBody};line-height:1.6;">Or just reply to this email — it goes straight to me, not to a queue.</div>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:22px;padding-top:18px;border-top:1px dashed ${T.cream200};">

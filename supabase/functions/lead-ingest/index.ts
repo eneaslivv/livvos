@@ -359,13 +359,57 @@ serve(async (req) => {
       if (!autoReplyDisabled && category !== 'newsletter') {
         notifyStatus.welcome.attempted = true
         const firstName = name.trim().split(/\s+/)[0] || name
+
+        // Pull a few featured/published portfolio items so the welcome includes
+        // a quick "what we've shipped" showcase. Best-effort — never block the
+        // send. Featured first, then by display_order, then by created_at.
+        const { data: portfolioRows } = await supabase
+          .from('portfolio_items')
+          .select('title, subtitle, category, year, slug, summary, is_featured, display_order, created_at')
+          .eq('tenant_id', tenant.id)
+          .eq('published', true)
+          .order('is_featured', { ascending: false })
+          .order('display_order', { ascending: true })
+          .order('created_at', { ascending: false })
+          .limit(3)
+
+        // Resolve the public site root once. tenants.website_url is the
+        // explicit field (e.g. https://livvvv.com); fall back to LIVV_PUBLIC_URL
+        // env, then a sensible default. Trailing slash stripped.
+        const { data: tenantUrls } = await supabase
+          .from('tenants')
+          .select('website_url, preview_url')
+          .eq('id', tenant.id)
+          .maybeSingle()
+        const publicSiteRoot = ((tenantUrls?.website_url as string)
+          || (tenantUrls?.preview_url as string)
+          || Deno.env.get('LIVV_PUBLIC_URL')
+          || 'https://livvvv.com').replace(/\/+$/, '')
+
+        const projects = (portfolioRows || []).map((r: any) => ({
+          title: r.title,
+          subtitle: r.subtitle || r.summary || undefined,
+          category: r.category || undefined,
+          year: r.year || undefined,
+          url: r.slug ? `${publicSiteRoot}/work/${r.slug}` : undefined,
+        }))
+
+        // SLA banner — overridable via env so the same code base can run for
+        // tenants with different response promises. Default keeps it punchy
+        // and realistic (4 business hours during the day).
+        const responseTimeText = Deno.env.get('LEAD_RESPONSE_SLA')
+          || "We'll get back to you within 4 business hours."
+
         const welcomeHtml = buildLeadWelcomeReplyEmail({
           brandName: branding.name,
           logoUrl: branding.logoUrl,
           leadFirstName: firstName,
           fromName,
           fromTitle: 'Founder · Livv Studio · Buenos Aires',
-          ctaUrl: 'https://cal.com/livv',
+          ctaUrl: Deno.env.get('LEAD_CALENDAR_URL') || 'https://cal.com/livv',
+          responseTimeText,
+          projects: projects.length > 0 ? projects : undefined,
+          portfolioUrl: projects.length > 0 ? `${publicSiteRoot}/work` : undefined,
         })
         try {
           const r = await fetch('https://api.resend.com/emails', {
