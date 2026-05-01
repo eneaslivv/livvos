@@ -127,7 +127,10 @@
       "Bash(vercel link -y --scope eneasaldabe-gmailcoms-projects)",
       "Read(//c/Users/eneas/.claude/projects/c--Users-eneas-Downloads-livv-eneas-os/memory/**)",
       "Bash(npx netlify deploy --prod --dir=dist)",
-      "Bash(npx vercel --prod --team team_nRwvViFzIIjl9b3wvGaERtCF)"
+      "Bash(npx vercel --prod --team team_nRwvViFzIIjl9b3wvGaERtCF)",
+      "Bash(supabase --version)",
+      "PowerShell(supabase --version)",
+      "PowerShell($accessTokenFile = \"$env:APPDATA\\\\supabase\\\\access-token\"; $altPath = \"$env:USERPROFILE\\\\.supabase\\\\access-token\"; if \\(Test-Path $accessTokenFile\\) { Write-Output \"FOUND_APPDATA: $accessTokenFile\" } elseif \\(Test-Path $altPath\\) { Write-Output \"FOUND_HOME: $altPath\" } else { Write-Output \"NO_TOKEN_FILE\" }; if \\($env:SUPABASE_ACCESS_TOKEN\\) { Write-Output \"ENV_VAR_SET \\(length=$\\($env:SUPABASE_ACCESS_TOKEN.Length\\)\\)\" } else { Write-Output \"ENV_VAR_NOT_SET\" })"
     ]
   }
 }
