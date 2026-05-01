@@ -583,29 +583,29 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} />
 
         {/* Workspace Switcher */}
-        {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0">
+        {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
           <button
             onClick={() => onSwitchMode(currentMode === 'os' ? 'sales' : 'os')}
-            className={`w-full flex items-center p-1.5 rounded-full bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
+            className={`w-full flex items-center p-1 rounded-full bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
             title={currentMode === 'os' ? "Switch to Sales (2)" : "Switch to OS (1)"}
           >
             {/* Visual Indicator Background */}
             <div className={`absolute top-0 bottom-0 w-1/2 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-all duration-300 ${currentMode === 'os' ? 'left-0' : 'left-1/2'}`}></div>
 
-            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Home size={16} className={currentMode === 'os' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
-              <span className="absolute -bottom-0.5 text-[8px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">1</span>
+            <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
+              <Icons.Home size={13} className={currentMode === 'os' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
+              <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">1</span>
             </div>
-            <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Chart size={16} className={currentMode === 'sales' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
-              <span className="absolute -bottom-0.5 text-[8px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">2</span>
+            <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
+              <Icons.Chart size={13} className={currentMode === 'sales' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
+              <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">2</span>
             </div>
 
-            <div className={`transition-opacity duration-300 absolute left-20 whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+            <div className={`transition-opacity duration-300 absolute left-16 whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 leading-tight">
                 {currentMode === 'os' ? 'System' : 'Sales'}
               </div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Switch View</div>
+              <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
             </div>
           </button>
         </div>}

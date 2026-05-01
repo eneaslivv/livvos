@@ -54,24 +54,24 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
 
     return (
         <>
-            <div className="relative w-[calc(100%-24px)] mx-3 mb-2 shrink-0" ref={dropdownRef}>
+            <div className="relative w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0" ref={dropdownRef}>
                 <button
                     onClick={() => setIsOpen(prev => !prev)}
                     className={`
-                        w-full flex items-center gap-2 rounded-2xl
+                        w-full flex items-center gap-1.5 rounded-lg
                         bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-800
                         border border-zinc-200 dark:border-zinc-800
                         transition-all
-                        ${isInChildTenant ? 'ring-2 ring-amber-300 dark:ring-amber-700' : ''}
-                        ${expanded ? 'p-2 justify-start' : 'p-1 justify-center'}
+                        ${isInChildTenant ? 'ring-1 ring-amber-300 dark:ring-amber-700' : ''}
+                        ${expanded ? 'p-1.5 justify-start' : 'p-1 justify-center'}
                     `}
                     title={expanded ? undefined : currentTenant.name}
                 >
-                    <div className={`relative flex items-center justify-center rounded-full shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 shadow-sm ${expanded ? 'w-11 h-11' : 'w-10 h-10'}`}>
+                    <div className={`relative flex items-center justify-center rounded-md shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 ${expanded ? 'w-7 h-7' : 'w-8 h-8'}`}>
                         {logoSrc ? (
-                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain p-1" />
+                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain p-0.5" />
                         ) : (
-                            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 select-none">
+                            <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 select-none">
                                 {currentTenant.name.slice(0, 2).toUpperCase()}
                             </span>
                         )}
@@ -79,23 +79,23 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                     {expanded && (
                         <>
                             <div className="flex-1 min-w-0 text-left">
-                                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-tight">
                                     {currentTenant.name}
                                 </div>
-                                <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
+                                <div className="text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 truncate leading-tight mt-0.5">
                                     {isSuperAgency ? 'Super agency' : isInChildTenant ? 'Connected agency' : 'Workspace'}
                                 </div>
                             </div>
-                            <Icons.ChevronDown size={14} className="text-zinc-400 shrink-0" />
+                            <Icons.ChevronDown size={12} className="text-zinc-400 shrink-0" />
                         </>
                     )}
                 </button>
 
                 {isOpen && (
                     <div className={`
-                        absolute z-[60] mt-2 left-0 right-0 ${expanded ? 'w-full' : 'min-w-[260px]'}
+                        absolute z-[60] mt-1.5 left-0 right-0 ${expanded ? 'w-full' : 'min-w-[240px]'}
                         bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800
-                        rounded-2xl shadow-2xl shadow-zinc-200/60 dark:shadow-black/80
+                        rounded-xl shadow-xl shadow-zinc-200/60 dark:shadow-black/80
                         overflow-hidden
                     `}>
                         {/* Native workspaces */}
@@ -170,7 +170,7 @@ const TenantRow: React.FC<{
         onClick={onClick}
         disabled={isLoading}
         className={`
-            w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-colors
+            w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors
             ${membership.is_active
                 ? 'bg-zinc-100 dark:bg-zinc-800'
                 : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
@@ -178,29 +178,29 @@ const TenantRow: React.FC<{
             disabled:opacity-50 disabled:cursor-wait
         `}
     >
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 shrink-0 overflow-hidden shadow-sm">
+        <div className="flex items-center justify-center w-6 h-6 rounded bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 shrink-0 overflow-hidden">
             {membership.logo_url ? (
                 <img src={membership.logo_url} alt="" className="w-full h-full object-contain p-0.5" />
             ) : (
-                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 select-none">
+                <span className="text-[9px] font-bold text-zinc-600 dark:text-zinc-400 select-none">
                     {membership.tenant_name.slice(0, 2).toUpperCase()}
                 </span>
             )}
         </div>
         <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+            <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate leading-tight">
                 {membership.tenant_name}
             </div>
             {membership.is_super_agency && (
-                <div className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                <div className="text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400 leading-tight mt-0.5">
                     Super agency
                 </div>
             )}
         </div>
         {isLoading ? (
-            <Icons.Loader size={14} className="text-zinc-400 animate-spin shrink-0" />
+            <Icons.Loader size={12} className="text-zinc-400 animate-spin shrink-0" />
         ) : membership.is_active ? (
-            <Icons.Check size={14} className="text-emerald-500 shrink-0" />
+            <Icons.Check size={12} className="text-emerald-500 shrink-0" />
         ) : null}
     </button>
 );
