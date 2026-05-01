@@ -2,9 +2,26 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
 import { useTeam, TeamMember, TeamTask } from '../context/TeamContext';
-import { useRBAC } from '../context/RBACContext';
+import { useRBAC, Permission } from '../context/RBACContext';
 import { useSupabase } from '../hooks/useSupabase';
 import { useAuth } from '../hooks/useAuth';
+
+// Friendly names for the role-preview chips. Mirrors MODULE_META in Security.tsx.
+const ROLE_MODULE_LABELS: Record<string, string> = {
+    crm: 'CRM',
+    sales: 'Sales',
+    finance: 'Finance',
+    projects: 'Projects',
+    team: 'Team',
+    calendar: 'Calendar',
+    documents: 'Documents',
+    analytics: 'Analytics',
+    tenant: 'Workspace',
+    security: 'Security',
+    system: 'System',
+    auth: 'Auth',
+    settings: 'Settings',
+};
 
 const AGENT_TYPES = [
     { value: 'ai-assistant', label: 'AI Assistant', icon: 'Brain' },
@@ -50,9 +67,11 @@ type FilterTab = 'all' | 'people' | 'agents';
 
 export const Team: React.FC = () => {
     const { members, isLoading, error, refresh, getMemberTasks, updateMemberAgent, updateMemberStatus, updateMemberRole, removeMember } = useTeam();
-    const { isAdmin } = useRBAC();
+    const { isAdmin, getRolePermissions } = useRBAC();
     const { user: authUser } = useAuth();
     const { data: rolesData } = useSupabase<{ id: string; name: string; is_system: boolean }>('roles', { subscribe: false });
+    const [rolePreviewPerms, setRolePreviewPerms] = useState<Permission[]>([]);
+    const [rolePreviewLoading, setRolePreviewLoading] = useState(false);
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
     const [memberTasks, setMemberTasks] = useState<TeamTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
@@ -98,6 +117,29 @@ export const Team: React.FC = () => {
             setMemberTasks([]);
         }
     }, [selectedMember, getMemberTasks]);
+
+    // Load the permissions for the selected member's current role to show
+    // a preview of what they can see across the system.
+    useEffect(() => {
+        let cancelled = false;
+        if (!selectedMember?.role_id) {
+            setRolePreviewPerms([]);
+            return;
+        }
+        setRolePreviewLoading(true);
+        getRolePermissions(selectedMember.role_id)
+            .then((perms) => { if (!cancelled) setRolePreviewPerms(perms); })
+            .finally(() => { if (!cancelled) setRolePreviewLoading(false); });
+        return () => { cancelled = true; };
+    }, [selectedMember?.role_id, getRolePermissions]);
+
+    const previewVisibleModules = useMemo(() => {
+        const set = new Set<string>();
+        rolePreviewPerms.forEach((p) => set.add(p.module));
+        return [...set]
+            .map((m) => ROLE_MODULE_LABELS[m] || m)
+            .sort();
+    }, [rolePreviewPerms]);
 
     const handleSelectMember = (member: TeamMember) => {
         setSelectedMember(member);
@@ -608,7 +650,7 @@ export const Team: React.FC = () => {
                                     Member Management
                                 </h3>
                                 <div className="space-y-3">
-                                    {/* Role selector */}
+                                    {/* Role selector + access preview */}
                                     <div>
                                         <label className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wide mb-1.5 block">Role</label>
                                         <select
@@ -624,6 +666,31 @@ export const Team: React.FC = () => {
                                                 </option>
                                             ))}
                                         </select>
+
+                                        {/* Access preview — what this role unlocks */}
+                                        <div className="mt-2 p-3 rounded-xl bg-violet-500/5 border border-violet-500/10">
+                                            <div className="flex items-center gap-1.5 mb-1.5">
+                                                <Icons.Eye size={12} className="text-violet-500" />
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Will be able to see</span>
+                                            </div>
+                                            {rolePreviewLoading ? (
+                                                <p className="text-xs text-zinc-400">Loading…</p>
+                                            ) : !selectedMember.role_id ? (
+                                                <p className="text-xs text-zinc-500 dark:text-zinc-400">No role assigned — this member has no access.</p>
+                                            ) : isMemberOwner(selectedMember) ? (
+                                                <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">Full access to everything (Owner).</p>
+                                            ) : previewVisibleModules.length === 0 ? (
+                                                <p className="text-xs text-amber-600 dark:text-amber-400">This role has no permissions yet — configure it in Security → Roles.</p>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {previewVisibleModules.map((m) => (
+                                                        <span key={m} className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-white dark:bg-zinc-800 border border-violet-500/20 text-violet-700 dark:text-violet-300">
+                                                            {m}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Status toggle + Remove */}

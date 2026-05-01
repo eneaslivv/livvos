@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { useRBAC, Permission, Role } from '../context/RBACContext';
 import { useSecurity } from '../context/SecurityContext';
@@ -23,6 +23,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
     createRole: rbacCreateRole,
     updateRole: rbacUpdateRole,
     deleteRole: rbacDeleteRole,
+    setRolePermissions,
     getRolePermissions
   } = useRBAC();
   const {
@@ -72,14 +73,24 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
   }, [getAllRoles, getAllPermissions, getRolePermissions]);
 
   const createRole = useCallback(async (data: any) => {
-    await rbacCreateRole(data);
+    const { permission_ids = [], ...roleData } = data;
+    const created = await rbacCreateRole(roleData);
+    if (created?.id && Array.isArray(permission_ids)) {
+      await setRolePermissions(created.id, permission_ids);
+    }
     await loadRolesAndPermissions();
-  }, [rbacCreateRole, loadRolesAndPermissions]);
+  }, [rbacCreateRole, setRolePermissions, loadRolesAndPermissions]);
 
   const updateRole = useCallback(async (id: string, data: any) => {
-    await rbacUpdateRole(id, data);
+    const { permission_ids, ...roleData } = data;
+    if (Object.keys(roleData).length > 0) {
+      await rbacUpdateRole(id, roleData);
+    }
+    if (Array.isArray(permission_ids)) {
+      await setRolePermissions(id, permission_ids);
+    }
     await loadRolesAndPermissions();
-  }, [rbacUpdateRole, loadRolesAndPermissions]);
+  }, [rbacUpdateRole, setRolePermissions, loadRolesAndPermissions]);
 
   const deleteRole = useCallback(async (id: string) => {
     await rbacDeleteRole(id);
@@ -441,6 +452,7 @@ const SecurityDashboard: React.FC<SecurityDashboardProps> = ({ onNavigate }) => 
         <RoleModal
           role={selectedRole}
           permissions={allPermissions || []}
+          initialPermissionIds={selectedRole?.rolePermissions?.map((p: Permission) => p.id) || []}
           onClose={() => setShowRoleModal(false)}
           onSave={async (data) => {
             if (selectedRole) {
@@ -565,19 +577,117 @@ const CredentialModal: React.FC<{
   );
 };
 
+// ----- Module metadata for the permission matrix -----
+const MODULE_META: Record<string, { label: string; description: string }> = {
+  crm:       { label: 'CRM',         description: 'Contacts, leads, deals' },
+  sales:     { label: 'Sales',       description: 'Sales pipeline & dashboards' },
+  finance:   { label: 'Finance',     description: 'Income, expenses, invoicing' },
+  projects:  { label: 'Projects',    description: 'Projects & assigned work' },
+  team:      { label: 'Team',        description: 'Members & invitations' },
+  calendar:  { label: 'Calendar',    description: 'Events & integrations' },
+  documents: { label: 'Documents',   description: 'Files & folders' },
+  analytics: { label: 'Analytics',   description: 'Reports & insights' },
+  tenant:    { label: 'Workspace',   description: 'Branding, billing, connections' },
+  security:  { label: 'Security',    description: 'Roles, credentials, audit' },
+  system:    { label: 'System',      description: 'Platform-wide admin' },
+  auth:      { label: 'Auth',        description: 'Authentication' },
+  settings:  { label: 'Settings',    description: 'General settings' },
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  view: 'View',
+  view_dashboard: 'Dashboard',
+  view_leads: 'Leads',
+  view_analytics: 'Analytics',
+  create: 'Create',
+  edit: 'Edit',
+  delete: 'Delete',
+  manage: 'Manage',
+  assign: 'Assign',
+  access: 'Access',
+};
+
+// Presets that match the SQL defaults — clicking one fills the matrix
+const PRESETS: Record<string, (perm: Permission) => boolean> = {
+  Owner:   () => true,
+  Admin:   (p) => !(p.module === 'system' && p.action === 'manage'),
+  Manager: (p) =>
+    ['view', 'view_dashboard', 'view_leads', 'view_analytics', 'access'].includes(p.action) ||
+    (['crm','sales','projects','calendar','documents','team'].includes(p.module) && ['create','edit'].includes(p.action)) ||
+    (p.module === 'projects' && p.action === 'assign'),
+  Sales:   (p) => ['sales','crm'].includes(p.module),
+  Finance: (p) => ['finance','analytics'].includes(p.module),
+  Viewer:  (p) => ['view','view_dashboard','view_leads','view_analytics','access'].includes(p.action),
+  None:    () => false,
+};
+
 // Role Modal Component
 const RoleModal: React.FC<{
   role: any;
-  permissions: any[];
+  permissions: Permission[];
+  initialPermissionIds: string[];
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
-}> = ({ role, permissions, onClose, onSave }) => {
+}> = ({ role, permissions, initialPermissionIds, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: role?.name || '',
     description: role?.description || '',
-    permission_ids: role?.permissions?.map((p: any) => p.id) || [],
+    permission_ids: initialPermissionIds,
   });
   const [loading, setLoading] = useState(false);
+  const isOwnerRole = role?.name?.toLowerCase() === 'owner';
+
+  const togglePermission = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      permission_ids: prev.permission_ids.includes(id)
+        ? prev.permission_ids.filter((x: string) => x !== id)
+        : [...prev.permission_ids, id],
+    }));
+  };
+
+  const applyPreset = (presetName: keyof typeof PRESETS) => {
+    const filter = PRESETS[presetName];
+    setFormData((prev) => ({
+      ...prev,
+      permission_ids: permissions.filter(filter).map((p) => p.id),
+    }));
+  };
+
+  // Group permissions by module
+  const grouped = useMemo(() => {
+    const map: Record<string, Permission[]> = {};
+    permissions.forEach((p) => {
+      if (!map[p.module]) map[p.module] = [];
+      map[p.module].push(p);
+    });
+    // Sort actions within each module by a stable order
+    const order = ['view','view_dashboard','view_leads','view_analytics','access','create','edit','assign','manage','delete'];
+    Object.keys(map).forEach((m) => {
+      map[m].sort((a, b) => (order.indexOf(a.action) - order.indexOf(b.action)) || a.action.localeCompare(b.action));
+    });
+    return map;
+  }, [permissions]);
+
+  const moduleKeys = useMemo(() => {
+    const known = Object.keys(MODULE_META);
+    return Object.keys(grouped).sort((a, b) => {
+      const ai = known.indexOf(a); const bi = known.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }, [grouped]);
+
+  const visibleModules = useMemo(() => {
+    const set = new Set<string>();
+    formData.permission_ids.forEach((id: string) => {
+      const p = permissions.find((x) => x.id === id);
+      if (p) set.add(p.module);
+    });
+    return [...set].map((m) => MODULE_META[m]?.label || m).sort();
+  }, [formData.permission_ids, permissions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -591,82 +701,184 @@ const RoleModal: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-zinc-200 dark:border-zinc-700">
           <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {role ? 'Edit Role' : 'Create Role'}
+            {role ? `Edit role · ${role.name}` : 'Create role'}
           </h3>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Pick what this role can see and do across the system. Use a preset to start, then fine-tune.
+          </p>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Role Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Permissions</label>
-            <div className="max-h-64 overflow-y-auto border border-zinc-300 dark:border-zinc-600 rounded-lg p-4">
-              {permissions.map(permission => (
-                <label key={permission.id} className="flex items-center gap-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.permission_ids.includes(permission.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setFormData({
-                          ...formData,
-                          permission_ids: [...formData.permission_ids, permission.id],
-                        });
-                      } else {
-                        setFormData({
-                          ...formData,
-                          permission_ids: formData.permission_ids.filter(id => id !== permission.id),
-                        });
-                      }
-                    }}
-                    className="rounded border-zinc-300 dark:border-zinc-600 text-blue-600"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {permission.module}:{permission.action}
-                    </p>
-                    {permission.description && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">{permission.description}</p>
-                    )}
-                  </div>
-                </label>
-              ))}
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Name + Description */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-1">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">Role Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                  disabled={role?.is_system}
+                  required
+                />
+                {role?.is_system && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">System role — name cannot be changed.</p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="What does this role do?"
+                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            {/* Presets */}
+            {!isOwnerRole && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-2">Quick Presets</label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => applyPreset(name)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 transition-colors"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Visibility summary */}
+            <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 mb-2">
+                What members with this role will see
+              </p>
+              {visibleModules.length === 0 ? (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Nothing yet — pick permissions below or apply a preset.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleModules.map((m) => (
+                    <span key={m} className="inline-flex items-center px-2 py-0.5 text-xs rounded-md bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300 font-medium">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2">
+                {formData.permission_ids.length} of {permissions.length} permissions granted
+              </p>
+            </div>
+
+            {/* Permission Matrix */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-2">Permissions</label>
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                {moduleKeys.map((moduleKey, idx) => {
+                  const meta = MODULE_META[moduleKey];
+                  const perms = grouped[moduleKey];
+                  const granted = perms.filter((p) => formData.permission_ids.includes(p.id)).length;
+                  const allOn = granted === perms.length;
+                  const noneOn = granted === 0;
+
+                  return (
+                    <div
+                      key={moduleKey}
+                      className={`p-4 ${idx > 0 ? 'border-t border-zinc-200 dark:border-zinc-700' : ''} ${allOn ? 'bg-emerald-50/40 dark:bg-emerald-900/5' : noneOn ? 'bg-zinc-50/40 dark:bg-zinc-900/30' : ''}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                              {meta?.label || moduleKey}
+                            </h4>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium">
+                              {granted}/{perms.length}
+                            </span>
+                          </div>
+                          {meta?.description && (
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">{meta.description}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => {
+                              const otherIds = prev.permission_ids.filter((id: string) => !perms.some((p) => p.id === id));
+                              return {
+                                ...prev,
+                                permission_ids: allOn ? otherIds : [...otherIds, ...perms.map((p) => p.id)],
+                              };
+                            });
+                          }}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        >
+                          {allOn ? 'Clear all' : 'Grant all'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {perms.map((p) => {
+                          const checked = formData.permission_ids.includes(p.id);
+                          return (
+                            <label
+                              key={p.id}
+                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border cursor-pointer transition-colors text-xs ${
+                                checked
+                                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300'
+                                  : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
+                              }`}
+                              title={p.description || `${p.module}:${p.action}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => togglePermission(p.id)}
+                                className="rounded border-zinc-300 dark:border-zinc-600 text-blue-600"
+                              />
+                              <span className="font-medium">{ACTION_LABELS[p.action] || p.action}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
-            >
-              {loading ? 'Saving...' : role ? 'Update' : 'Create'}
-            </button>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-900/30">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {formData.permission_ids.length} permission{formData.permission_ids.length === 1 ? '' : 's'} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !formData.name.trim()}
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 font-medium"
+              >
+                {loading ? 'Saving...' : role ? 'Save changes' : 'Create role'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

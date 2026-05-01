@@ -101,6 +101,7 @@ interface RBACContextType {
   // Role-Permission assignments
   assignPermissionToRole: (roleId: string, permissionId: string) => Promise<void>;
   removePermissionFromRole: (roleId: string, permissionId: string) => Promise<void>;
+  setRolePermissions: (roleId: string, permissionIds: string[]) => Promise<void>;
   getRolePermissions: (roleId: string) => Promise<Permission[]>;
 
   // User-Role assignments
@@ -550,6 +551,46 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     }
   }, [hasPermission, refreshRBAC]);
 
+  const setRolePermissions = useCallback(async (roleId: string, permissionIds: string[]) => {
+    if (!hasPermission('security', 'manage')) {
+      throw new Error('Insufficient permissions to update role permissions');
+    }
+
+    try {
+      const { data: existing, error: fetchError } = await supabase
+        .from('role_permissions')
+        .select('permission_id')
+        .eq('role_id', roleId);
+      if (fetchError) throw fetchError;
+
+      const currentIds = new Set((existing || []).map((r: any) => r.permission_id));
+      const targetIds = new Set(permissionIds);
+
+      const toAdd = [...targetIds].filter((id) => !currentIds.has(id));
+      const toRemove = [...currentIds].filter((id) => !targetIds.has(id));
+
+      if (toRemove.length > 0) {
+        const { error: delError } = await supabase
+          .from('role_permissions')
+          .delete()
+          .eq('role_id', roleId)
+          .in('permission_id', toRemove);
+        if (delError) throw delError;
+      }
+
+      if (toAdd.length > 0) {
+        const rows = toAdd.map((permission_id) => ({ role_id: roleId, permission_id }));
+        const { error: insError } = await supabase.from('role_permissions').insert(rows);
+        if (insError) throw insError;
+      }
+
+      await refreshRBAC();
+    } catch (err) {
+      errorLogger.error('Error setting role permissions:', err);
+      throw new Error(err instanceof Error ? err.message : 'Failed to set role permissions');
+    }
+  }, [hasPermission, refreshRBAC]);
+
   const getRolePermissions = useCallback(async (roleId: string): Promise<Permission[]> => {
     try {
       const { data, error } = await supabase
@@ -753,7 +794,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     hasPermission, hasRole, hasAnyRole, isAdmin, isOwner,
     createRole, updateRole, deleteRole, getRole, getAllRoles,
     createPermission, updatePermission, deletePermission, getAllPermissions,
-    assignPermissionToRole, removePermissionFromRole, getRolePermissions,
+    assignPermissionToRole, removePermissionFromRole, setRolePermissions, getRolePermissions,
     assignRoleToUser, removeRoleFromUser, getUserRoles, getUserPermissions,
     refreshRBAC, checkAccess, getUserRoleHierarchy,
     logPermissionCheck, getPermissionAudit,
@@ -761,7 +802,7 @@ export const RBACProvider: React.FC<RBACProviderProps> = ({ children }) => {
     hasPermission, hasRole, hasAnyRole, isAdmin, isOwner,
     createRole, updateRole, deleteRole, getRole, getAllRoles,
     createPermission, updatePermission, deletePermission, getAllPermissions,
-    assignPermissionToRole, removePermissionFromRole, getRolePermissions,
+    assignPermissionToRole, removePermissionFromRole, setRolePermissions, getRolePermissions,
     assignRoleToUser, removeRoleFromUser, getUserRoles, getUserPermissions,
     refreshRBAC, checkAccess, getUserRoleHierarchy,
     logPermissionCheck, getPermissionAudit]);
