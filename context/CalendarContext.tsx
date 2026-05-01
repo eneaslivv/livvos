@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { notifyWithEmail } from '../lib/notifyWithEmail'
+import { logActivity } from '../lib/activity'
 
 export interface CalendarEvent {
   id: string
@@ -403,7 +404,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
 
-          // Notify all assignees (fire-and-forget)
+          // Notify all assignees (fire-and-forget) + log to activity feed
           const allAssignees: string[] = data.assignee_ids?.length ? data.assignee_ids : (data.assigned_to ? [data.assigned_to] : [])
           const tenantIdForNotify = data.tenant_id || currentPayload.tenant_id
           if (tenantIdForNotify) {
@@ -419,6 +420,13 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 actionText: 'View Task',
               }).catch(() => {})
             })
+            logActivity({
+              action: 'created task',
+              target: data.title,
+              type: 'task_created',
+              tenant_id: tenantIdForNotify,
+              metadata: { task_id: data.id, assignee_ids: allAssignees },
+            }).catch(() => {})
           }
 
           return normalized
@@ -488,44 +496,35 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const addedAssignees = newIds.filter((id: string) => !oldIds.includes(id))
           const tenantIdNotif = cachedTenantIdRef.current
           if (tenantIdNotif && addedAssignees.length > 0) {
-            addedAssignees.forEach((uid: string) => {
-              supabase.from('notifications').insert({
-                user_id: uid,
-                tenant_id: tenantIdNotif,
-                type: 'task',
-                title: `Task assigned: ${normalized.title}`,
-                message: `You have been assigned a new task`,
-                priority: normalized.priority === 'urgent' ? 'urgent' : normalized.priority === 'high' ? 'high' : 'medium',
-                read: false,
-                action_required: true,
-                category: 'task',
-                metadata: { task_id: id },
-              }).then(({ error: nErr }) => {
-                if (nErr && import.meta.env.DEV) console.warn('Failed to create assignment notification:', nErr.message)
-              })
-            })
+            // Log a single activity entry + fan out notifications to new assignees
+            logActivity({
+              action: 'assigned task',
+              target: normalized.title,
+              type: 'task_assigned',
+              tenant_id: tenantIdNotif,
+              metadata: { task_id: id, assignee_ids: addedAssignees },
+              notify: addedAssignees.map((uid: string) => ({
+                userId: uid,
+                notifType: 'task' as const,
+                priority: (normalized.priority === 'urgent' ? 'urgent' : normalized.priority === 'high' ? 'high' : 'medium') as 'urgent' | 'high' | 'medium',
+                link: '/calendar',
+              })),
+            }).catch(() => {})
           }
 
           // Notify all assignees when task status changes (completed/cancelled)
           if (updates.status && updates.status !== backup?.status) {
             const statusMsg = updates.status === 'done' ? 'completed' : updates.status === 'cancelled' ? 'cancelled' : null
             if (statusMsg && tenantIdNotif) {
-              (backup?.assignee_ids || []).filter((uid: string) => uid !== backup?.owner_id).forEach((uid: string) => {
-                supabase.from('notifications').insert({
-                  user_id: uid,
-                  tenant_id: tenantIdNotif,
-                  type: 'task',
-                  title: `Task ${statusMsg}: ${normalized.title}`,
-                  message: `A task assigned to you has been ${statusMsg}`,
-                  priority: 'low',
-                  read: false,
-                  action_required: false,
-                  category: 'task',
-                  metadata: { task_id: id, status: updates.status },
-                }).then(({ error: nErr }) => {
-                  if (nErr && import.meta.env.DEV) console.warn('Failed to create status notification:', nErr.message)
-                })
-              })
+              const watchers = (backup?.assignee_ids || []).filter((uid: string) => uid !== backup?.owner_id)
+              logActivity({
+                action: statusMsg === 'completed' ? 'completed task' : 'cancelled task',
+                target: normalized.title,
+                type: statusMsg === 'completed' ? 'task_completed' : 'status_change',
+                tenant_id: tenantIdNotif,
+                metadata: { task_id: id, status: updates.status },
+                notify: watchers.map((uid: string) => ({ userId: uid, notifType: 'task' as const, priority: 'low' as const, link: '/calendar' })),
+              }).catch(() => {})
             }
           }
 

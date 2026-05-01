@@ -17,6 +17,7 @@ import { useTenant } from '../context/TenantContext';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
+import { IconPicker } from '../components/ui/IconPicker';
 
 /* ─── AI Preview types ─── */
 export interface AiPreviewSubtask {
@@ -333,6 +334,7 @@ interface SidebarGroup {
   category: ProjectCategory;
   clientId?: string;
   clientAvatar?: string;
+  clientIcon?: string | null;
   clientEmail?: string;
   projects: Project[];
 }
@@ -473,6 +475,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
             category: 'client',
             clientId: p.client_id,
             clientAvatar: client?.avatar_url,
+            clientIcon: client?.icon ?? null,
             clientEmail: client?.email,
             projects: [],
           });
@@ -679,7 +682,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
       await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: 'General', start_date: today, due_date: today } as any);
       setQuickTaskTitle('');
       setTimeout(() => refreshTasks(), 1000);
-      await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
+      await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'task_created' });
     } catch (err: any) {
       errorLogger.error('Error creating quick task', err);
       setTaskError(err?.message || 'Error creating task');
@@ -699,7 +702,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
       setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }));
       // Safety net: refresh tasks after a short delay in case realtime doesn't fire
       setTimeout(() => refreshTasks(), 1000);
-      await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'project_update' });
+      await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'task_created' });
     } catch (err: any) {
       errorLogger.error('Error creating task', err);
       setTaskError(err?.message || 'Error creating task');
@@ -719,7 +722,20 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         status: newDone ? 'done' : 'todo',
       } as any);
       setTimeout(() => refreshTasks(), 800);
-      await logActivity({ action: newDone ? 'completed task' : 'reopened task', target: task.title, project_title: selectedProject.title, type: 'task_completed' });
+      // Notify the task's assignee/owner if someone else completes/reopens their task.
+      const rawTask = (syncedTasks || []).find((t: any) => t.id === taskId);
+      const assigneeId = rawTask?.assignee_id || rawTask?.assigned_to || null;
+      const notifyTargets = assigneeId && assigneeId !== currentUser?.id
+        ? [{ userId: assigneeId, notifType: 'task' as const }]
+        : [];
+      await logActivity({
+        action: newDone ? 'completed task' : 'reopened task',
+        target: task.title,
+        project_title: selectedProject.title,
+        type: newDone ? 'task_completed' : 'task_reopened',
+        metadata: { task_id: taskId, assignee_id: assigneeId },
+        notify: notifyTargets,
+      });
     } catch (err: any) {
       errorLogger.error('Error updating task', err);
       alert('Error updating task: ' + (err?.message || 'Unknown error'));
@@ -731,7 +747,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     try {
       await removeSyncedTask(taskId);
       setTimeout(() => refreshTasks(), 500);
-      await logActivity({ action: 'deleted task', target: taskTitle, project_title: selectedProject.title, type: 'project_update' });
+      await logActivity({ action: 'deleted task', target: taskTitle, project_title: selectedProject.title, type: 'task_deleted' });
     } catch (err: any) {
       errorLogger.error('Error deleting task', err);
     }
@@ -1356,7 +1372,9 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
               <div key={group.id}>
                 {/* Group header */}
                 <div className="flex items-center gap-1.5 px-2 pt-2.5 pb-1">
-                  {group.category === 'client' && group.clientAvatar ? (
+                  {group.category === 'client' && group.clientIcon ? (
+                    <span className="text-[12px] leading-none">{group.clientIcon}</span>
+                  ) : group.category === 'client' && group.clientAvatar ? (
                     <img src={group.clientAvatar} alt={group.label} className="w-3.5 h-3.5 rounded object-cover" />
                   ) : group.category === 'client' ? (
                     <div className="w-3.5 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[7px] font-medium text-zinc-600 dark:text-zinc-300">
@@ -1386,12 +1404,16 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <div
-                          className="w-5 h-5 rounded flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: colorToBg(p.color || '#3b82f6', 0.12) }}
-                        >
-                          <ProgressRing progress={p.progress} size={16} stroke={2} color={p.color || '#3b82f6'} />
-                        </div>
+                        {p.icon ? (
+                          <span className="w-5 h-5 flex items-center justify-center text-[14px] leading-none shrink-0">{p.icon}</span>
+                        ) : (
+                          <div
+                            className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: colorToBg(p.color || '#3b82f6', 0.12) }}
+                          >
+                            <ProgressRing progress={p.progress} size={16} stroke={2} color={p.color || '#3b82f6'} />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className={`text-[12px] truncate transition-colors ${
                             isSelected ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-400'
@@ -1446,7 +1468,21 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                   </span>
                 </nav>
               )}
-              <h1 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
+              <div className="flex items-center gap-2">
+                {selectedProject && (
+                  <IconPicker
+                    value={selectedProject.icon}
+                    onChange={async (icon) => {
+                      try {
+                        await updateProject(selectedProject.id, { icon });
+                      } catch (err) { errorLogger.error('Error updating project icon', err); }
+                    }}
+                    size={28}
+                    title="Pick an icon for this project"
+                  />
+                )}
+                <h1 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
+              </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
                 {selectedProject && <StatusBadge status={selectedProject.status} />}
                 {selectedProject && (

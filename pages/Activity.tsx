@@ -61,6 +61,22 @@ function getAvatarColor(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+// Tiny chip per activity type — rendered next to the action verb.
+type ActivityBadge = { icon: React.ComponentType<{ size?: number; className?: string }>; tone: string };
+function getActivityBadge(type: string): ActivityBadge | null {
+  switch (type) {
+    case 'task_completed':  return { icon: Icons.CheckCircle, tone: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400' };
+    case 'task_assigned':   return { icon: Icons.User,        tone: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400' };
+    case 'task_created':    return { icon: Icons.Plus,        tone: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10 dark:text-violet-400' };
+    case 'task_reopened':   return { icon: Icons.RefreshCw,   tone: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400' };
+    case 'task_deleted':    return { icon: Icons.Trash,       tone: 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 dark:text-rose-400' };
+    case 'project_created': return { icon: Icons.Briefcase,   tone: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400' };
+    case 'file_uploaded':   return { icon: Icons.Paperclip,   tone: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-500/10 dark:text-cyan-400' };
+    case 'status_change':   return { icon: Icons.Flag,        tone: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400' };
+    default: return null;
+  }
+}
+
 function extractContent(details: any): string | null {
   if (!details) return null;
   if (typeof details === 'string') {
@@ -231,9 +247,13 @@ export const Activity: React.FC = () => {
           userAvatar: a.user_avatar || getInitials(a.user_name || a.metadata?.user_name),
           action: a.action,
           displayAction: a.action === 'posted update' ? 'shared an update in' :
-                        a.type === 'task_completed' ? 'completed a task in' :
-                        a.type === 'file_uploaded' ? 'uploaded a file to' :
-                        a.type === 'status_change' ? 'changed status in' :
+                        a.type === 'task_completed' ? 'completed' :
+                        a.type === 'task_reopened' ? 'reopened' :
+                        a.type === 'task_assigned' ? 'assigned' :
+                        a.type === 'task_created' ? 'added task' :
+                        a.type === 'task_deleted' ? 'removed task' :
+                        a.type === 'file_uploaded' ? 'uploaded' :
+                        a.type === 'status_change' ? 'changed status of' :
                         a.type === 'project_created' ? 'created project' :
                         (a.action || 'updated'),
           target: a.target || 'General',
@@ -718,14 +738,14 @@ export const Activity: React.FC = () => {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — compact */}
       <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="flex gap-8">
+        <div className="flex gap-5">
           {(['All Activity', 'My Updates', 'Comments', 'Files'] as TabType[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-sm font-medium transition-colors relative flex items-center gap-2 ${
+              className={`pb-1.5 text-[12px] font-medium transition-colors relative flex items-center gap-1.5 ${
                 activeTab === tab
                   ? 'text-zinc-900 dark:text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
@@ -733,7 +753,7 @@ export const Activity: React.FC = () => {
             >
               {tab}
               {tabCounts[tab] > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                <span className={`text-[9px] px-1 py-0 rounded-full font-bold tabular-nums ${
                   activeTab === tab
                     ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                     : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
@@ -749,49 +769,49 @@ export const Activity: React.FC = () => {
         </div>
       </div>
 
-      {/* Input Area */}
-      <Card className="p-6 border-zinc-200 dark:border-zinc-800 shadow-sm rounded-xl">
-        <div className="flex gap-4">
-          <div className={`h-10 w-10 rounded-full ${userAvatarColor} text-white flex items-center justify-center font-bold text-xs shrink-0`}>
+      {/* Input Area — compact */}
+      <Card className="p-3 border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg">
+        <div className="flex gap-2.5">
+          <div className={`h-8 w-8 rounded-full ${userAvatarColor} text-white flex items-center justify-center font-bold text-[10px] shrink-0`}>
             {userInitials}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <textarea
               ref={textareaRef}
               value={newPost}
               onChange={handleTextareaChange}
               onKeyDown={handleTextareaKeyDown}
-              placeholder={canPost ? "What's on your mind? Share an update..." : "Loading..."}
+              placeholder={canPost ? "Share an update..." : "Loading..."}
               disabled={!canPost}
-              className="w-full bg-transparent border-none focus:ring-0 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none text-base p-0 min-h-[60px] disabled:opacity-50 outline-none"
-              rows={2}
+              className="w-full bg-transparent border-none focus:ring-0 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none text-sm p-0 min-h-[36px] disabled:opacity-50 outline-none"
+              rows={1}
             />
-            <div className="flex justify-between items-center pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-2">
-              <div className="flex gap-4 text-zinc-400">
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Attach file"><Icons.Paperclip size={18} /></button>
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add image"><Icons.Image size={18} /></button>
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add document"><Icons.Docs size={18} /></button>
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-1.5">
+              <div className="flex gap-3 text-zinc-400">
+                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Attach file"><Icons.Paperclip size={14} /></button>
+                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add image"><Icons.Image size={14} /></button>
+                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add document"><Icons.Docs size={14} /></button>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {newPost.trim() && (
-                  <span className="text-[10px] text-zinc-400 hidden sm:block">Ctrl+Enter to post</span>
+                  <span className="text-[9px] text-zinc-400 hidden sm:block">⌘+Enter</span>
                 )}
                 <button
                   onClick={handlePost}
                   disabled={posting || !newPost.trim() || !canPost}
-                  className="bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                  className="bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white px-3 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                 >
                   {posting ? (
-                    <span className="flex items-center gap-2">
-                      <Icons.Loader size={14} className="animate-spin" /> Posting...
+                    <span className="flex items-center gap-1.5">
+                      <Icons.Loader size={11} className="animate-spin" /> Posting
                     </span>
-                  ) : 'Post Update'}
+                  ) : 'Post'}
                 </button>
               </div>
             </div>
             {postError && (
-              <div className="mt-2 text-xs text-red-500 font-medium flex items-center gap-1">
-                <Icons.AlertCircle size={12} /> {postError}
+              <div className="mt-1.5 text-[11px] text-red-500 font-medium flex items-center gap-1">
+                <Icons.AlertCircle size={11} /> {postError}
               </div>
             )}
           </div>
@@ -821,92 +841,96 @@ export const Activity: React.FC = () => {
         </div>
       )}
 
-      {/* Feed */}
-      <div className="space-y-8">
+      {/* Feed — compact rows, per-type icon badge */}
+      <div className="space-y-3">
         {Object.entries(groupedActivities).map(([date, items]) => (
           <div key={date} className="relative">
-            <div className="uppercase text-xs font-bold text-zinc-400 dark:text-zinc-500 tracking-wider mb-6 pl-14">
+            <div className="uppercase text-[10px] font-bold text-zinc-400 dark:text-zinc-500 tracking-wider mb-1.5 pl-10">
               {date}
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-0">
               {(items as TransformedActivity[]).map((act, idx) => {
                 const isOwn = act.userId === effectiveUser?.id;
                 const isLiked = effectiveUser ? act.likes.includes(effectiveUser.id) : false;
                 const isOptimistic = (act as any)._optimistic;
+                const badge = getActivityBadge(act.type);
 
                 return (
-                  <div key={act.id} className={`flex gap-4 group ${isOptimistic ? 'opacity-70' : ''}`}>
-                    {/* Avatar Column */}
-                    <div className="w-10 flex flex-col items-center">
-                      <div className={`h-10 w-10 rounded-full ${getAvatarColor(act.userName)} text-white flex items-center justify-center text-xs font-bold z-10 shrink-0`}>
-                        {getInitials(act.userName)}
+                  <div key={act.id} className={`flex gap-2.5 group ${isOptimistic ? 'opacity-70' : ''}`}>
+                    {/* Avatar Column with type badge overlay */}
+                    <div className="w-7 flex flex-col items-center">
+                      <div className="relative">
+                        <div className={`h-7 w-7 rounded-full ${getAvatarColor(act.userName)} text-white flex items-center justify-center text-[9px] font-bold z-10 shrink-0`}>
+                          {getInitials(act.userName)}
+                        </div>
+                        {badge && (
+                          <div className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ${badge.tone} flex items-center justify-center ring-2 ring-white dark:ring-zinc-950`}>
+                            <badge.icon size={8} />
+                          </div>
+                        )}
                       </div>
                       {idx < (items as TransformedActivity[]).length - 1 && (
-                        <div className="w-px flex-1 bg-zinc-200 dark:bg-zinc-800 mt-2" />
+                        <div className="w-px flex-1 bg-zinc-100 dark:bg-zinc-800/60 mt-1" />
                       )}
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 pb-6">
+                    <div className="flex-1 pb-2 min-w-0">
                       <div
-                        className="cursor-pointer hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30 rounded-xl p-3 -mx-3 transition-colors"
+                        className="cursor-pointer hover:bg-zinc-50/60 dark:hover:bg-zinc-800/20 rounded-md px-2 py-1 -mx-2 transition-colors"
                         onClick={() => openDetail(act.id)}
                       >
-                        <div className="flex justify-between items-start">
-                          <p className="text-sm text-zinc-900 dark:text-zinc-100 leading-relaxed">
+                        <div className="flex justify-between items-start gap-3">
+                          <p className="text-[13px] text-zinc-900 dark:text-zinc-100 leading-snug min-w-0">
                             <span className="font-semibold">{act.userName}</span>{' '}
                             <span className="text-zinc-500 dark:text-zinc-400">{act.displayAction}</span>{' '}
                             <span className="font-semibold">{act.target}</span>
+                            {act.projectTitle && (
+                              <span className="text-zinc-400 dark:text-zinc-500"> · {act.projectTitle}</span>
+                            )}
                           </p>
-                          <span className="text-xs text-zinc-400 whitespace-nowrap ml-4" title={act.timestamp}>
+                          <span className="text-[10px] text-zinc-400 whitespace-nowrap tabular-nums" title={act.timestamp}>
                             {act.relativeTime}
                           </span>
                         </div>
 
-                        {act.projectTitle && (
-                          <div className="mt-2 text-xs flex items-center gap-1.5 text-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1 rounded-md w-fit border border-zinc-200/50 dark:border-zinc-700/50">
-                            <Icons.Grid size={12} className="text-zinc-400" />
-                            {act.projectTitle}
-                          </div>
-                        )}
-
                         {act.details && (
-                          <div className="mt-3 text-sm text-zinc-700 dark:text-zinc-300 pl-4 border-l-2 border-zinc-200 dark:border-zinc-700 py-1 leading-relaxed whitespace-pre-wrap">
+                          <div className="mt-1 text-[12px] text-zinc-600 dark:text-zinc-300 pl-2 border-l border-zinc-200 dark:border-zinc-700 leading-snug whitespace-pre-wrap">
                             {act.details}
                           </div>
                         )}
-                      </div>
 
-                      {/* Action Bar */}
-                      <div className="mt-2 flex gap-1 ml-0">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openDetail(act.id); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        >
-                          <Icons.Message size={14} />
-                          {act.commentCount > 0 ? act.commentCount : 'Comment'}
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleLike(act.id, act.likes); }}
-                          disabled={likingIds.has(act.id)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            isLiked
-                              ? 'text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-900/20'
-                              : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                          }`}
-                        >
-                          <Icons.Heart size={14} className={isLiked ? 'fill-current' : ''} />
-                          {act.likes.length > 0 ? act.likes.length : 'Like'}
-                        </button>
-                        {isOwn && (
+                        {/* Inline action bar — appears on hover, kept tight */}
+                        <div className="mt-1 flex gap-0.5 -ml-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(act.id); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                            onClick={(e) => { e.stopPropagation(); openDetail(act.id); }}
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                           >
-                            <Icons.Trash size={14} />
+                            <Icons.Message size={11} />
+                            {act.commentCount > 0 ? act.commentCount : ''}
                           </button>
-                        )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleLike(act.id, act.likes); }}
+                            disabled={likingIds.has(act.id)}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                              isLiked
+                                ? 'text-rose-500 bg-rose-50 dark:bg-rose-900/20'
+                                : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                            }`}
+                          >
+                            <Icons.Heart size={11} className={isLiked ? 'fill-current' : ''} />
+                            {act.likes.length > 0 ? act.likes.length : ''}
+                          </button>
+                          {isOwn && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDelete(act.id); }}
+                              className="flex items-center px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Icons.Trash size={11} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
