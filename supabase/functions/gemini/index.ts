@@ -93,6 +93,34 @@ type StandupResponse = {
   risks: { type: string; title: string; description: string; severity: 'low' | 'medium' | 'high' }[]
 }
 
+type FinanceEntryResponse = {
+  kind: 'income' | 'expense'
+  concept: string
+  amount: number
+  date: string // YYYY-MM-DD
+  client_id?: string | null
+  client_name?: string | null
+  project_id?: string | null
+  project_name?: string | null
+  category?: string | null   // expense only — must match one of the provided EXPENSE_CATEGORIES
+  vendor?: string | null     // expense only
+  num_installments?: number  // income only — defaults to 1
+  status?: 'paid' | 'pending'
+  recurring?: boolean
+  questions?: string[]       // open questions to ask the user before saving
+  confidence: number         // 0..1 — how sure the model is
+  notes?: string | null
+}
+
+type FinanceBatchResponse = {
+  entries: FinanceEntryResponse[]
+  // Names found in the input that did not match any existing client/project.
+  // The frontend can then offer to create them.
+  unknown_clients?: string[]
+  unknown_projects?: string[]
+  summary?: string
+}
+
 // ─── Simple in-memory rate limiter (per edge function instance) ──
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 10     // max requests per window
@@ -483,12 +511,89 @@ Rules:
 - Respond in the SAME language as the user's question (Spanish if Spanish).
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
+        : type === 'finance_entries_batch'
+        ? `You are a finance data-entry assistant. The user uploaded a CSV / spreadsheet and you must turn EACH ROW into a structured income or expense, RESOLVING references to existing clients and projects from the lists provided in the input.
+
+Return ONLY valid JSON with this shape:
+{
+  "summary": "1 sentence describing what was found",
+  "entries": [
+    {
+      "kind": "income" | "expense",
+      "concept": "short label",
+      "amount": number,
+      "date": "YYYY-MM-DD",
+      "client_id": "exact-id-from-CLIENTS-or-null",
+      "client_name": "matched-name-or-extracted-name-or-null",
+      "project_id": "exact-id-from-PROJECTS-or-null",
+      "project_name": "matched-title-or-null",
+      "category": "EXPENSE_CATEGORY-if-expense-else-null",
+      "vendor": "vendor-if-expense-else-null",
+      "num_installments": number,
+      "status": "paid" | "pending",
+      "recurring": boolean,
+      "confidence": 0..1,
+      "notes": "anything-extra-from-the-row-or-null"
+    }
+  ],
+  "unknown_clients": ["names that appeared in the data but did NOT match any CLIENTS row"],
+  "unknown_projects": ["titles that appeared in the data but did NOT match any PROJECTS row"]
+}
+
+Rules — CRITICAL:
+- Return ONE entry per data row. Skip header rows, totals, blank rows.
+- Same per-entry rules as a single entry: never invent client_id / project_id, only use IDs from the provided lists. If no fuzzy match (case + accent insensitive, partial OK), set the id to null and put the raw name in client_name / project_name AND add the name to unknown_clients / unknown_projects so the frontend can offer to create it.
+- kind: positive amounts in an "income"-style column → income; negative or "expense"/"gasto" labels → expense. Use column headers and adjacent context to decide.
+- amount: always positive in the output. Strip currency symbols. Parse "2k" as 2000.
+- date: parse common formats (DD/MM/YYYY, MM-DD-YYYY, ISO). If missing, use TODAY from the input.
+- category (expenses): pick from EXPENSE_CATEGORIES exactly. If not obvious, default to "Operations".
+- Limit: max 50 entries per call. If the input has more rows, return the first 50 and add a note in summary.
+- Respond strictly with the JSON object — no prose, no markdown fences.
+- Match the user's language for concept/vendor/notes/summary text.`
+        : type === 'finance_entry'
+        ? `You are a finance data-entry assistant for a creative agency platform. The user describes an income or expense in natural language and you turn it into structured fields, RESOLVING references to existing clients and projects from the lists provided in the input.
+
+Return ONLY valid JSON with this shape:
+{
+  "kind": "income" | "expense",
+  "concept": "short label for the entry",
+  "amount": number,
+  "date": "YYYY-MM-DD",
+  "client_id": "exact-id-from-CLIENTS-list-or-null",
+  "client_name": "name-from-CLIENTS-list-or-null",
+  "project_id": "exact-id-from-PROJECTS-list-or-null",
+  "project_name": "title-from-PROJECTS-list-or-null",
+  "category": "one of EXPENSE_CATEGORIES if kind is expense, otherwise null",
+  "vendor": "vendor name if kind is expense, otherwise null",
+  "num_installments": number (income only, default 1),
+  "status": "paid" | "pending",
+  "recurring": boolean,
+  "questions": ["short question 1", "short question 2"],
+  "confidence": 0..1,
+  "notes": "any leftover context or null"
+}
+
+Rules — CRITICAL:
+- kind: infer from semantics. Money the user RECEIVES from a client = income. Money the user PAYS = expense. If ambiguous, default to expense and ask a clarifying question.
+- amount: extract numeric value (strip currency symbols, parse "2k" as 2000, "1.5k" as 1500).
+- date: parse natural-language dates ("yesterday", "ayer", "el 15"). If none mentioned, use the TODAY date provided in the input. Always emit ISO YYYY-MM-DD.
+- client_id / project_id: ONLY use IDs that appear in the CLIENTS / PROJECTS sections of the input. Match by fuzzy name (case + accent insensitive, partial OK). If no match, set both id and name to null. NEVER fabricate an id.
+- If a project is matched and it has a client, also fill the client_id/client_name from that project's client.
+- category (expenses only): pick from EXPENSE_CATEGORIES exactly as listed. If no clear match, pick the closest, OR add a question.
+- num_installments: only when the user mentions splitting payments ("3 cuotas", "in 3 installments"). Otherwise 1.
+- status: "paid" if user says "ya pagué/cobré", "paid", "received". "pending" if "voy a", "next month", future-tense. Default "pending".
+- recurring: true if "cada mes", "monthly", "subscription", "suscripción". Otherwise false.
+- questions: list ONLY genuinely missing critical info (max 3). Examples: "What's the amount?", "Which client?", "What date?". If everything is clear, return []. NEVER ask about fields that are optional.
+- confidence: 0.9+ if all critical fields are unambiguous and matched. 0.6-0.8 if some inference. <0.5 if you had to guess heavily.
+- concept: a short human label, NOT the full sentence. E.g. user says "pagué $50 a Figma de licencias", concept = "Figma licenses".
+- Respond strictly with the JSON object — no prose, no markdown fences.
+- Match the user's language for concept/vendor/notes/questions text.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 8000 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0.2 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
@@ -618,7 +723,7 @@ Rules:
     }
 
     // ─── Parse JSON from rawText (works for both providers) ────────
-    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | StandupResponse | null = null
+    let json: TaskResponse | TasksBulkResponse | ProposalResponse | BlogResponse | WeeklySummaryResponse | AdvisorResponse | PlanPeriodResponse | StandupResponse | FinanceEntryResponse | FinanceBatchResponse | null = null
     const trimmed = rawText.trim()
     if (trimmed) {
       try { json = JSON.parse(trimmed) } catch {}
@@ -710,6 +815,28 @@ Rules:
         if (chat.reply) json = chat
       }
       if (!chat?.reply || typeof chat.reply !== 'string') {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'finance_entry') {
+      const entry = json as FinanceEntryResponse
+      if (
+        !entry ||
+        (entry.kind !== 'income' && entry.kind !== 'expense') ||
+        typeof entry.concept !== 'string' ||
+        typeof entry.amount !== 'number' ||
+        typeof entry.date !== 'string'
+      ) {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'finance_entries_batch') {
+      const batch = json as FinanceBatchResponse
+      if (!batch || !Array.isArray(batch.entries)) {
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

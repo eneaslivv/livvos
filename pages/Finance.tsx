@@ -6,21 +6,20 @@ import {
   ChevronLeft, ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
-  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers
+  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles
 } from 'lucide-react';
 import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
+import { FinanceAssistant } from '../components/finance/FinanceAssistant';
 import {
   useFinance,
   type IncomeEntry,
   type Installment,
   type ExpenseEntry,
   type Budget,
-  type Withdrawal,
   type CreateIncomeData,
   type CreateExpenseData,
   type CreateBudgetData,
-  type CreateWithdrawalData,
 } from '../context/FinanceContext';
 import { useProjects } from '../context/ProjectsContext';
 import { supabase } from '../lib/supabase';
@@ -41,7 +40,7 @@ interface LiquidityPoint {
   balance: number;
 }
 
-type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'retiros' | 'budgets' | 'propuestas' | 'proyectos' | 'livv' | 'config';
+type FinanceTab = 'dashboard' | 'ingresos' | 'gastos' | 'budgets' | 'propuestas' | 'proyectos' | 'livv' | 'config';
 
 // ─── Formatters ───────────────────────────────────────────────────
 
@@ -124,7 +123,6 @@ export const Finance: React.FC = () => {
     incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome,
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense, refreshExpenses,
     budgets, budgetsLoading, createBudget, updateBudget, deleteBudget,
-    withdrawals, withdrawalsLoading, createWithdrawal, updateWithdrawal, deleteWithdrawal,
   } = useFinance();
   const { projects } = useProjects();
   const { clients } = useClients();
@@ -184,7 +182,7 @@ export const Finance: React.FC = () => {
 
   // Slide panel state
   const [isEntryOpen, setIsEntryOpen] = useState(false);
-  const [entryType, setEntryType] = useState<'income' | 'expense' | 'budget' | 'withdrawal'>('income');
+  const [entryType, setEntryType] = useState<'income' | 'expense' | 'budget'>('income');
   const [entryError, setEntryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
@@ -192,6 +190,9 @@ export const Finance: React.FC = () => {
   // When materializing a projected (virtual) recurring row, this holds the source id
   // so the new INSERT can be linked back to the original recurring expense.
   const [materializingSourceId, setMaterializingSourceId] = useState<string | null>(null);
+
+  // AI assistant state
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -219,18 +220,6 @@ export const Finance: React.FC = () => {
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
   });
-
-  // Withdrawal form state
-  const [editingWithdrawalId, setEditingWithdrawalId] = useState<string | null>(null);
-  const [withdrawalForm, setWithdrawalForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    amount: '', transfer_fee: '',
-    source: 'bank', destination: '', notes: '',
-  });
-  const [withdrawalViewMonth, setWithdrawalViewMonth] = useState({ year: now.getFullYear(), month: now.getMonth() });
-  const [withdrawalDateFrom, setWithdrawalDateFrom] = useState(INITIAL_MONTH_BOUNDS.from);
-  const [withdrawalDateTo, setWithdrawalDateTo] = useState(INITIAL_MONTH_BOUNDS.to);
-  const [withdrawalCustomDateRange, setWithdrawalCustomDateRange] = useState(false);
 
   // ─── Project tasks cache for linking installments to deliveries ───
   const [projectTasksCache, setProjectTasksCache] = useState<Record<string, { id: string; title: string }[]>>({});
@@ -661,39 +650,7 @@ export const Finance: React.FC = () => {
     setEditingIncomeId(null);
     setEditingExpenseId(null);
     setEditingBudgetId(null);
-    setEditingWithdrawalId(null);
     setMaterializingSourceId(null);
-  }, []);
-
-  const resetWithdrawalForm = useCallback(() => {
-    setWithdrawalForm({
-      date: new Date().toISOString().split('T')[0],
-      amount: '', transfer_fee: '',
-      source: 'bank', destination: '', notes: '',
-    });
-  }, []);
-
-  const openWithdrawalForm = useCallback(() => {
-    resetWithdrawalForm();
-    setEditingWithdrawalId(null);
-    setEntryType('withdrawal');
-    setEntryError(null);
-    setIsEntryOpen(true);
-  }, [resetWithdrawalForm]);
-
-  const openEditWithdrawal = useCallback((w: Withdrawal) => {
-    setWithdrawalForm({
-      date: w.date,
-      amount: String(w.amount),
-      transfer_fee: String(w.transfer_fee),
-      source: w.source,
-      destination: w.destination,
-      notes: w.notes,
-    });
-    setEditingWithdrawalId(w.id);
-    setEntryType('withdrawal');
-    setEntryError(null);
-    setIsEntryOpen(true);
   }, []);
 
   const resetBudgetForm = useCallback(() => {
@@ -889,77 +846,6 @@ export const Finance: React.FC = () => {
     }
   }, [deleteBudget]);
 
-  const handleSubmitWithdrawal = useCallback(async () => {
-    if (!withdrawalForm.amount || Number(withdrawalForm.amount) <= 0) { setEntryError('Amount must be greater than 0.'); return; }
-    if (!withdrawalForm.date) { setEntryError('Select a date.'); return; }
-    const amount = Number(withdrawalForm.amount);
-    const fee = Number(withdrawalForm.transfer_fee || 0);
-    if (fee < 0) { setEntryError('Fee cannot be negative.'); return; }
-    if (fee > amount) { setEntryError('Fee cannot exceed amount.'); return; }
-
-    setIsSubmitting(true);
-    setEntryError(null);
-
-    try {
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out. Please try again.')), 15000)
-      );
-
-      if (editingWithdrawalId) {
-        const updates: Partial<Withdrawal> = {
-          date: withdrawalForm.date,
-          amount,
-          transfer_fee: fee,
-          source: withdrawalForm.source.trim() || 'bank',
-          destination: withdrawalForm.destination.trim(),
-          notes: withdrawalForm.notes.trim(),
-        };
-        await Promise.race([updateWithdrawal(editingWithdrawalId, updates), timeout]);
-      } else {
-        const data: CreateWithdrawalData = {
-          date: withdrawalForm.date,
-          amount,
-          transfer_fee: fee,
-          source: withdrawalForm.source.trim() || 'bank',
-          destination: withdrawalForm.destination.trim(),
-          notes: withdrawalForm.notes.trim(),
-        };
-        await Promise.race([createWithdrawal(data), timeout]);
-      }
-
-      closeForm();
-    } catch (err: any) {
-      console.error('[Finance] Error saving withdrawal:', err);
-      setEntryError(err?.message || 'Error saving withdrawal.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [withdrawalForm, createWithdrawal, updateWithdrawal, editingWithdrawalId, closeForm]);
-
-  const handleDeleteWithdrawal = useCallback(async (id: string) => {
-    try {
-      await deleteWithdrawal(id);
-    } catch (err) {
-      console.error('Error deleting withdrawal:', err);
-    }
-  }, [deleteWithdrawal]);
-
-  // ─── Withdrawals computed ────────────────────────────────────
-  const filteredWithdrawals = useMemo(() => {
-    let result = withdrawals;
-    if (withdrawalDateFrom) result = result.filter(w => w.date >= withdrawalDateFrom);
-    if (withdrawalDateTo) result = result.filter(w => w.date <= withdrawalDateTo);
-    return result;
-  }, [withdrawals, withdrawalDateFrom, withdrawalDateTo]);
-
-  const withdrawalTotals = useMemo(() => {
-    const gross = filteredWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
-    const fees = filteredWithdrawals.reduce((s, w) => s + Number(w.transfer_fee), 0);
-    const net = gross - fees;
-    const avgFeePct = gross > 0 ? (fees / gross) * 100 : 0;
-    return { gross, fees, net, avgFeePct, count: filteredWithdrawals.length };
-  }, [filteredWithdrawals]);
-
   const handleMarkInstallmentPaid = useCallback(async (installment: Installment) => {
     try {
       await updateInstallment(installment.id, {
@@ -1018,9 +904,16 @@ export const Finance: React.FC = () => {
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finance</h1>
           <p className="text-zinc-400 text-xs max-w-md">Track income, expenses, margins, and team liquidity.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {hasPermission('finance', 'create') && (
             <>
+              <button onClick={() => setIsAssistantOpen(true)}
+                className="group flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200 text-white"
+                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}
+                title="Add an entry by describing it in natural language">
+                <Sparkles size={14} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
+                <span>Add with AI</span>
+              </button>
               <button onClick={openIncomeForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
                 <ArrowDownLeft size={14} strokeWidth={2.5} />
                 <span>Income</span>
@@ -1028,10 +921,6 @@ export const Finance: React.FC = () => {
               <button onClick={openExpenseForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-medium shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200">
                 <ArrowUpFromLine size={14} strokeWidth={2.5} />
                 <span>Expense</span>
-              </button>
-              <button onClick={openWithdrawalForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
-                <Banknote size={14} strokeWidth={2.5} />
-                <span>Withdrawal</span>
               </button>
               <button onClick={openBudgetForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
                 <Wallet size={14} strokeWidth={2.5} />
@@ -1053,7 +942,6 @@ export const Finance: React.FC = () => {
           { id: 'livv', label: 'LIVV', icon: Layers },
           { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
           { id: 'gastos', label: 'Expenses', icon: Receipt },
-          { id: 'retiros', label: 'Withdrawals', icon: Banknote },
           { id: 'budgets', label: 'Budgets', icon: Wallet },
           { id: 'propuestas', label: 'Proposals', icon: FileText },
           { id: 'proyectos', label: 'Projects P&L', icon: Target },
@@ -1803,143 +1691,6 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════ WITHDRAWALS ═══════════════ */}
-      {activeTab === 'retiros' && (
-        <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
-          {/* Summary strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Withdrawn</div>
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(withdrawalTotals.gross)}</div>
-              <div className="text-[10px] text-zinc-400">{withdrawalTotals.count} {withdrawalTotals.count === 1 ? 'withdrawal' : 'withdrawals'}</div>
-            </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Transfer Fees</div>
-              <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">{fmtCurrency(withdrawalTotals.fees)}</div>
-              <div className="text-[10px] text-zinc-400">Lost to transfers</div>
-            </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Net Received</div>
-              <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(withdrawalTotals.net)}</div>
-              <div className="text-[10px] text-zinc-400">After fees</div>
-            </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
-              <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Avg Fee %</div>
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{withdrawalTotals.avgFeePct.toFixed(2)}%</div>
-              <div className="text-[10px] text-zinc-400">Weighted by amount</div>
-            </div>
-          </div>
-
-          {/* Date filter */}
-          <div className="flex items-center gap-1.5 justify-end">
-            {!withdrawalCustomDateRange ? (
-              <>
-                <button onClick={() => {
-                  const prev = new Date(withdrawalViewMonth.year, withdrawalViewMonth.month - 1, 1);
-                  const m = { year: prev.getFullYear(), month: prev.getMonth() };
-                  setWithdrawalViewMonth(m);
-                  const b = getMonthBounds(m.year, m.month);
-                  setWithdrawalDateFrom(b.from); setWithdrawalDateTo(b.to);
-                }} className="p-2 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all">
-                  <ChevronLeft size={14} className="text-zinc-500" />
-                </button>
-                <span className="px-3 py-2 text-[11px] font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg min-w-[120px] text-center">
-                  {MONTH_NAMES[withdrawalViewMonth.month]} {withdrawalViewMonth.year}
-                </span>
-                <button onClick={() => {
-                  const next = new Date(withdrawalViewMonth.year, withdrawalViewMonth.month + 1, 1);
-                  const m = { year: next.getFullYear(), month: next.getMonth() };
-                  setWithdrawalViewMonth(m);
-                  const b = getMonthBounds(m.year, m.month);
-                  setWithdrawalDateFrom(b.from); setWithdrawalDateTo(b.to);
-                }} className="p-2 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all">
-                  <ChevronRight size={14} className="text-zinc-500" />
-                </button>
-                <button onClick={() => { setWithdrawalCustomDateRange(true); setWithdrawalDateFrom(''); setWithdrawalDateTo(''); }}
-                  className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                  All time
-                </button>
-              </>
-            ) : (
-              <>
-                <input type="date" value={withdrawalDateFrom} onChange={e => setWithdrawalDateFrom(e.target.value)}
-                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
-                <span className="text-[10px] text-zinc-400">to</span>
-                <input type="date" value={withdrawalDateTo} onChange={e => setWithdrawalDateTo(e.target.value)}
-                  className="px-2.5 py-2 text-[11px] bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-400 transition-all text-zinc-600 dark:text-zinc-300" />
-                <button onClick={() => {
-                  setWithdrawalCustomDateRange(false);
-                  const m = { year: now.getFullYear(), month: now.getMonth() };
-                  setWithdrawalViewMonth(m);
-                  const b = getMonthBounds(m.year, m.month);
-                  setWithdrawalDateFrom(b.from); setWithdrawalDateTo(b.to);
-                }} className="px-2 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                  Reset
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Withdrawals list */}
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
-            {withdrawalsLoading ? (
-              <div className="flex flex-col items-center justify-center p-10 gap-2">
-                <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
-                <p className="text-zinc-400 text-[10px] font-medium uppercase tracking-wider">Loading withdrawals...</p>
-              </div>
-            ) : filteredWithdrawals.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-10 gap-2">
-                <Banknote size={24} className="text-zinc-300" />
-                <p className="text-zinc-400 text-xs">No withdrawals recorded. Use the &quot;Withdrawal&quot; button to record one.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px]">
-                  <thead>
-                    <tr className="bg-zinc-50/50 dark:bg-zinc-800/20">
-                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Date</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Source → Destination</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Gross</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Fee</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Fee %</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800/60">Net</th>
-                      <th className="px-4 py-2.5 w-10 border-b border-zinc-100 dark:border-zinc-800/60" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/40">
-                    {filteredWithdrawals.map((w) => (
-                      <tr key={w.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition-colors">
-                        <td className="px-5 py-3 text-[11px] text-zinc-500 dark:text-zinc-400">{fmtDate(w.date)}</td>
-                        <td className="px-4 py-3">
-                          <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100">{w.source}{w.destination ? ` → ${w.destination}` : ''}</div>
-                          {w.notes && <div className="text-[10px] text-zinc-400 truncate max-w-[280px]">{w.notes}</div>}
-                        </td>
-                        <td className="px-4 py-3 text-xs font-semibold text-zinc-900 dark:text-zinc-100 text-right">{fmtCurrency(Number(w.amount))}</td>
-                        <td className="px-4 py-3 text-xs text-rose-600 dark:text-rose-400 text-right">{fmtCurrency(Number(w.transfer_fee))}</td>
-                        <td className="px-4 py-3 text-[11px] text-zinc-500 text-right">{Number(w.fee_percentage).toFixed(2)}%</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400 text-right">{fmtCurrency(Number(w.net_amount))}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-all">
-                            <button onClick={() => openEditWithdrawal(w)}
-                              className="p-1 rounded text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                              <Pencil size={12} />
-                            </button>
-                            <button onClick={() => handleDeleteWithdrawal(w.id)}
-                              className="p-1 rounded text-zinc-300 hover:text-rose-500 transition-colors">
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ═══════════════ BUDGETS ═══════════════ */}
       {activeTab === 'budgets' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
@@ -2486,13 +2237,11 @@ export const Finance: React.FC = () => {
         title={
           entryType === 'income' ? (editingIncomeId ? 'Edit Income' : 'New Income') :
           entryType === 'budget' ? (editingBudgetId ? 'Edit Budget' : 'New Budget') :
-          entryType === 'withdrawal' ? (editingWithdrawalId ? 'Edit Withdrawal' : 'New Withdrawal') :
           (editingExpenseId ? 'Edit Expense' : 'New Expense')
         }
         subtitle={
           entryType === 'income' ? (editingIncomeId ? 'Update income details' : 'Select a project or register a general income') :
           entryType === 'budget' ? (editingBudgetId ? 'Update budget details' : 'Create a fund to track spending') :
-          entryType === 'withdrawal' ? (editingWithdrawalId ? 'Update withdrawal details' : 'Record a fund withdrawal and its transfer fee') :
           (editingExpenseId ? 'Update expense details' : materializingSourceId ? 'Adjust this month’s copy of the recurring expense' : 'Register expense')
         }
         width="md"
@@ -2506,7 +2255,6 @@ export const Finance: React.FC = () => {
               onClick={
                 entryType === 'income' ? handleSubmitIncome :
                 entryType === 'budget' ? handleSubmitBudget :
-                entryType === 'withdrawal' ? handleSubmitWithdrawal :
                 handleSubmitExpense
               }
               disabled={isSubmitting}
@@ -2514,7 +2262,6 @@ export const Finance: React.FC = () => {
                 ${
                   entryType === 'income' ? 'bg-emerald-600' :
                   entryType === 'budget' ? 'bg-blue-600' :
-                  entryType === 'withdrawal' ? 'bg-rose-600' :
                   'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900'
                 }`}
             >
@@ -2728,85 +2475,6 @@ export const Finance: React.FC = () => {
                 </div>
               </div>
             </>
-          ) : entryType === 'withdrawal' ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Date *</label>
-                  <input type="date" value={withdrawalForm.date}
-                    onChange={e => setWithdrawalForm(p => ({ ...p, date: e.target.value }))}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Source</label>
-                  <input type="text" value={withdrawalForm.source}
-                    onChange={e => setWithdrawalForm(p => ({ ...p, source: e.target.value }))}
-                    placeholder="bank, cash, paypal..."
-                    list="withdrawal-sources"
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
-                  <datalist id="withdrawal-sources">
-                    <option value="bank" />
-                    <option value="cash" />
-                    <option value="paypal" />
-                    <option value="stripe" />
-                    <option value="crypto" />
-                  </datalist>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Gross Amount *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">$</span>
-                    <input type="number" min="0" step="0.01" value={withdrawalForm.amount}
-                      onChange={e => setWithdrawalForm(p => ({ ...p, amount: e.target.value }))}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Transfer Fee</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">$</span>
-                    <input type="number" min="0" step="0.01" value={withdrawalForm.transfer_fee}
-                      onChange={e => setWithdrawalForm(p => ({ ...p, transfer_fee: e.target.value }))}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
-                  </div>
-                </div>
-              </div>
-              {withdrawalForm.amount && Number(withdrawalForm.amount) > 0 && (
-                <div className="grid grid-cols-2 gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                  <div>
-                    <div className="text-[10px] text-zinc-400 uppercase tracking-wider">Net received</div>
-                    <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                      {fmtCurrency(Number(withdrawalForm.amount) - Number(withdrawalForm.transfer_fee || 0))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-zinc-400 uppercase tracking-wider">Fee %</div>
-                    <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">
-                      {((Number(withdrawalForm.transfer_fee || 0) / Number(withdrawalForm.amount)) * 100).toFixed(2)}%
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Destination</label>
-                <input type="text" value={withdrawalForm.destination}
-                  onChange={e => setWithdrawalForm(p => ({ ...p, destination: e.target.value }))}
-                  placeholder="Owner account, savings, etc."
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Notes</label>
-                <textarea value={withdrawalForm.notes}
-                  onChange={e => setWithdrawalForm(p => ({ ...p, notes: e.target.value }))}
-                  placeholder="Reason, reference, etc."
-                  rows={2}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 resize-none" />
-              </div>
-            </>
           ) : (
             <>
               <div className="space-y-1.5">
@@ -2894,6 +2562,9 @@ export const Finance: React.FC = () => {
           )}
         </div>
       </SlidePanel>
+
+      {/* ═══════════════ AI ASSISTANT ═══════════════ */}
+      <FinanceAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
     </div>
   );
 };

@@ -20,6 +20,8 @@ const CACHE_TTL: Record<string, number> = {
   plan_period: 5 * 60 * 1000,     // 5 min — plans are context-heavy
   task: 0,                         // no cache — single tasks are quick & varied
   standup: 0,                      // no cache — each standup is unique per day
+  finance_entry: 0,                // no cache — every entry is unique
+  finance_entries_batch: 0,        // no cache — file content is unique per upload
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -468,6 +470,64 @@ export type StandupAIResult = {
 
 export const processStandupFromAI = (input: string, profile?: LiveAIProfile): Promise<StandupAIResult> =>
   callGemini('standup', input, (r) => !!r?.summary && Array.isArray(r?.actions), profile)
+
+// ─── AI Finance Entry parser ─────────────────────────────────────
+// Turns a natural-language description into a structured income/expense draft.
+// The frontend supplies the lists of clients/projects/categories the model is
+// allowed to reference (the model never invents IDs).
+
+export type FinanceEntryAIResult = {
+  kind: 'income' | 'expense'
+  concept: string
+  amount: number
+  date: string
+  client_id?: string | null
+  client_name?: string | null
+  project_id?: string | null
+  project_name?: string | null
+  category?: string | null
+  vendor?: string | null
+  num_installments?: number
+  status?: 'paid' | 'pending'
+  recurring?: boolean
+  questions?: string[]
+  confidence: number
+  notes?: string | null
+}
+
+export const parseFinanceEntryFromAI = (
+  input: string,
+  profile?: LiveAIProfile,
+): Promise<FinanceEntryAIResult> =>
+  callGemini(
+    'finance_entry',
+    input,
+    (r) =>
+      r &&
+      (r.kind === 'income' || r.kind === 'expense') &&
+      typeof r.concept === 'string' &&
+      typeof r.amount === 'number' &&
+      typeof r.date === 'string',
+    profile,
+  )
+
+export type FinanceBatchAIResult = {
+  entries: FinanceEntryAIResult[]
+  unknown_clients?: string[]
+  unknown_projects?: string[]
+  summary?: string
+}
+
+export const parseFinanceBatchFromAI = (
+  input: string,
+  profile?: LiveAIProfile,
+): Promise<FinanceBatchAIResult> =>
+  callGemini(
+    'finance_entries_batch',
+    input,
+    (r) => r && Array.isArray(r.entries),
+    profile,
+  )
 
 // ─── Tenant AI Profile (CRUD) ────────────────────────────────────
 // Static per-tenant context that the user fills in via Settings → AI Preferences.

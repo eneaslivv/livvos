@@ -68,7 +68,8 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "recharts": "^3.6.0"
+    "recharts": "^3.6.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.0.0",
