@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
-import { emailCorsHeaders, resolveTenantBranding, wrapEmailHtml } from '../_shared/emailTemplate.ts'
+import { emailCorsHeaders, resolveTenantBranding, buildWeeklyDigestTeamEmail } from '../_shared/emailTemplate.ts'
 
 /**
  * Task Reminders + Daily Schedule Edge Function
@@ -17,56 +17,9 @@ import { emailCorsHeaders, resolveTenantBranding, wrapEmailHtml } from '../_shar
  * Auth: service_role key (called from cron, not from client)
  */
 
-const digestAccents: Record<string, string> = {
-  task_overdue:       '#ef4444',
-  deadline_reminder:  '#f59e0b',
-  daily_schedule:     '#3b82f6',
-}
-
-function buildDigestBody(
-  overdue: any[],
-  dueToday: any[],
-  events: any[],
-  today: string
-): string {
-  const lines: string[] = []
-
-  if (overdue.length > 0) {
-    lines.push(`<div style="margin-bottom:16px;">`)
-    lines.push(`<div style="font-size:13px;font-weight:600;color:#ef4444;margin-bottom:8px;">&#128308; ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}</div>`)
-    for (const t of overdue.slice(0, 5)) {
-      const days = Math.ceil((new Date(today).getTime() - new Date(t.due_date).getTime()) / 86400000)
-      lines.push(`<div style="padding:8px 12px;background:#fef2f2;border-radius:8px;margin-bottom:4px;font-size:13px;color:#18181b;border-left:3px solid #ef4444;">&bull; ${t.title} <span style="color:#ef4444;font-size:12px;">(${days}d overdue)</span></div>`)
-    }
-    if (overdue.length > 5) lines.push(`<div style="font-size:12px;color:#a1a1aa;padding-left:12px;">...and ${overdue.length - 5} more</div>`)
-    lines.push(`</div>`)
-  }
-
-  if (dueToday.length > 0) {
-    lines.push(`<div style="margin-bottom:16px;">`)
-    lines.push(`<div style="font-size:13px;font-weight:600;color:#f59e0b;margin-bottom:8px;">&#9200; ${dueToday.length} task${dueToday.length > 1 ? 's' : ''} due today</div>`)
-    for (const t of dueToday.slice(0, 5)) {
-      lines.push(`<div style="padding:8px 12px;background:#fffbeb;border-radius:8px;margin-bottom:4px;font-size:13px;color:#18181b;border-left:3px solid #f59e0b;">&bull; ${t.title}</div>`)
-    }
-    if (dueToday.length > 5) lines.push(`<div style="font-size:12px;color:#a1a1aa;padding-left:12px;">...and ${dueToday.length - 5} more</div>`)
-    lines.push(`</div>`)
-  }
-
-  if (events.length > 0) {
-    lines.push(`<div style="margin-bottom:16px;">`)
-    lines.push(`<div style="font-size:13px;font-weight:600;color:#3b82f6;margin-bottom:8px;">&#128197; ${events.length} event${events.length > 1 ? 's' : ''} today</div>`)
-    const sorted = [...events].sort((a: any, b: any) => (a.start_time || '').localeCompare(b.start_time || ''))
-    for (const ev of sorted.slice(0, 5)) {
-      const time = ev.start_time ? ev.start_time.slice(0, 5) : ''
-      const endTime = ev.end_time ? ` - ${ev.end_time.slice(0, 5)}` : ''
-      lines.push(`<div style="padding:8px 12px;background:#eff6ff;border-radius:8px;margin-bottom:4px;font-size:13px;color:#18181b;border-left:3px solid #3b82f6;"><span style="color:#3b82f6;font-weight:600;">${time}${endTime}</span> &nbsp;${ev.title}</div>`)
-    }
-    if (events.length > 5) lines.push(`<div style="font-size:12px;color:#a1a1aa;padding-left:12px;">...and ${events.length - 5} more</div>`)
-    lines.push(`</div>`)
-  }
-
-  return lines.join('')
-}
+// Daily briefing layout is composed via buildWeeklyDigestTeamEmail in the
+// per-user loop below — the dark wine hero with stats + lists fits this
+// "what's on your plate today" template better than the old colored boxes.
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -211,7 +164,10 @@ serve(async (req) => {
         })
       }
 
-      // Send digest email
+      // Send digest email — uses the wine-hero "weekly digest" layout from
+      // the Livv Mailing System, adapted for a single-day briefing. Maps the
+      // user's overdue/due-today/events into the same Stats + Shipped +
+      // Attention sections.
       if (resendApiKey && profile.email) {
         const { data: shouldSend } = await supabase.rpc('should_send_email', {
           p_user_id: userId, p_type: 'deadline', p_priority: 'high',
@@ -224,25 +180,46 @@ serve(async (req) => {
           if (overdue.length > 0) parts.push(`${overdue.length} overdue`)
           if (dueToday.length > 0) parts.push(`${dueToday.length} due today`)
           if (events.length > 0) parts.push(`${events.length} event${events.length > 1 ? 's' : ''}`)
-          const subject = parts.join(', ') + ' — Daily briefing'
-
-          const tpl = overdue.length > 0 ? 'task_overdue' : dueToday.length > 0 ? 'deadline_reminder' : 'daily_schedule'
-          const accent = digestAccents[tpl] || digestAccents.deadline_reminder
+          const subject = (parts.join(', ') || 'A quiet day') + ' — daily briefing'
 
           const firstName = profile.name?.split(' ')[0] || ''
-          const greeting = firstName ? `Good morning, ${firstName}` : 'Good morning'
+          const dateLabel = new Date(today).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          const headline = firstName
+            ? `${firstName}, here's your day — ${parts.length ? parts.join(', ') + '.' : 'no fires today.'}`
+            : `Your day ahead — ${parts.length ? parts.join(', ') + '.' : 'a clear runway.'}`
 
-          const digestBody = buildDigestBody(overdue, dueToday, events, today)
+          const appUrl = Deno.env.get('APP_URL') || 'https://app.livv.systems'
 
-          const html = wrapEmailHtml({
-            accent,
+          const html = buildWeeklyDigestTeamEmail({
             brandName: branding.name,
             logoUrl: branding.logoUrl,
-            greeting,
-            title: subject,
-            bodyHtml: `<p style="margin:0 0 24px;font-size:14px;color:#78736A;">Here's your daily briefing</p>${digestBody}`,
-            ctaUrl: `${Deno.env.get('APP_URL') || 'https://app.livv.systems'}/calendar`,
-            ctaText: 'Open Dashboard',
+            weekLabel: dateLabel,
+            digestNumber: 'DAILY',
+            headline,
+            intro: 'Pulled fresh from your boards. Tap any item to jump straight to it.',
+            stats: {
+              tasksClosed: 0,
+              openInProgress: dueToday.length,
+              overdue: overdue.length,
+              velocityPerDay: events.length ? `${events.length}` : '—',
+            },
+            shipped: dueToday.slice(0, 6).map((t: any) => ({
+              title: t.title,
+              project: t.project_id ? `Project ${String(t.project_id).slice(0, 6)}` : undefined,
+              due: 'today',
+            })),
+            attention: overdue.slice(0, 6).map((t: any) => {
+              const days = Math.ceil((new Date(today).getTime() - new Date(t.due_date).getTime()) / 86400000)
+              return {
+                title: t.title,
+                project: t.project_id ? `Project ${String(t.project_id).slice(0, 6)}` : undefined,
+                due: days === 1 ? 'yesterday' : `${days}d ago`,
+                priority: 'high' as const,
+              }
+            }),
+            ctaUrl: `${appUrl}/calendar`,
+            unsubscribeUrl: `${appUrl}/settings/notifications`,
+            settingsUrl: `${appUrl}/settings/notifications`,
           })
 
           try {

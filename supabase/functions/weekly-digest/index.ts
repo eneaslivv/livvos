@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
-import { emailCorsHeaders, resolveTenantBranding, wrapEmailHtml } from '../_shared/emailTemplate.ts'
+import { emailCorsHeaders, resolveTenantBranding, buildWeeklyDigestTeamEmail } from '../_shared/emailTemplate.ts'
 
 /**
  * Weekly Digest Edge Function
@@ -239,19 +239,43 @@ serve(async (req) => {
       const hasContent = userData.completed.length > 0 || userData.pending.length > 0 || userData.upcoming.length > 0 || userData.events.length > 0
       if (!hasContent) continue
 
-      const weeklyBody = buildWeeklyBody(userData.completed, userData.pending, userData.upcoming, userData.events)
+      // Compute the calendar week label like "Wk 18 · 28 apr — 03 may"
+      const weekStartDate = new Date(now)
+      weekStartDate.setDate(now.getDate() - 7)
+      const fmtShort = (d: Date) => d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' }).toLowerCase()
+      const weekNum = (() => {
+        const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+      })()
 
-      const divider = `<div style="height:1px;background:linear-gradient(90deg,transparent,#e6e2d8,transparent);margin-bottom:24px;"></div>`
-
-      const html = wrapEmailHtml({
-        accent: '#8b5cf6',
+      const html = buildWeeklyDigestTeamEmail({
         brandName: branding.name,
         logoUrl: branding.logoUrl,
-        greeting: `Weekly Overview &#128202;`,
-        bodyHtml: `<div style="font-size:14px;color:#78736A;margin-bottom:24px;">Hi ${firstName}, here's your week at a glance.</div>${divider}${weeklyBody}`,
+        weekLabel: `Wk ${weekNum} · ${fmtShort(weekStartDate)} — ${fmtShort(now)}`,
+        digestNumber: `WK${String(weekNum).padStart(2, '0')}`,
+        headline: `${firstName}, ${userData.completed.length} closed, ${userData.upcoming.length} deadline${userData.upcoming.length === 1 ? '' : 's'} ahead, ${userData.events.length} event${userData.events.length === 1 ? '' : 's'} on the calendar.`,
+        intro: 'Pulled fresh from your boards — every metric below links back to its source.',
+        stats: {
+          tasksClosed: userData.completed.length,
+          openInProgress: userData.pending.length,
+          overdue: userData.pending.filter((t: any) => t.due_date && t.due_date < today).length,
+          velocityPerDay: userData.completed.length > 0 ? Math.round((userData.completed.length / 7) * 10) / 10 : '—',
+        },
+        shipped: userData.completed.slice(0, 6).map((t: any) => ({
+          title: t.title,
+          assignee: t.assignee_id ? 'You' : undefined,
+          due: t.completed_at ? formatDate(t.completed_at.slice(0, 10)) : undefined,
+        })),
+        attention: userData.upcoming.slice(0, 6).map((t: any) => ({
+          title: t.title,
+          due: formatDate(t.due_date),
+          priority: (t.priority === 'high' || t.priority === 'urgent') ? 'high' : 'med',
+        })),
         ctaUrl: dashboardUrl,
-        ctaText: 'Open Dashboard',
-        footerExtra: 'You received this because weekly digests are enabled.',
+        unsubscribeUrl: `${dashboardUrl}/settings/notifications`,
+        settingsUrl: `${dashboardUrl}/settings/notifications`,
       })
 
       const subject = `Your week ahead — ${userData.upcoming.length} deadline${userData.upcoming.length !== 1 ? 's' : ''}, ${userData.events.length} event${userData.events.length !== 1 ? 's' : ''}`

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.2'
+import { buildNewLeadTeamEmail, buildLeadWelcomeReplyEmail, resolveTenantBranding } from '../_shared/emailTemplate.ts'
 
 const allowedOrigin = Deno.env.get('ALLOWED_ORIGINS') || '*'
 const corsHeaders = {
@@ -287,49 +288,111 @@ serve(async (req) => {
       }
     }
 
-    // Notification to the inbox. Errors are surfaced in response for debugging.
-    let notifyStatus: any = { attempted: false }
+    // Two emails go out in parallel:
+    //   1. Internal alert to the founder/sales inbox using the new "new lead"
+    //      template (fit score, contact card, quote, suggested next step).
+    //   2. A warm welcome reply to the prospect using the "welcome" template
+    //      (3-step onboarding, founder signature). Auto-disabled if
+    //      LEAD_AUTO_REPLY=false to keep room for hand-written follow-ups.
+    let notifyStatus: any = { internal: { attempted: false }, welcome: { attempted: false } }
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const notifyTo = Deno.env.get('LEAD_NOTIFY_EMAIL') || 'hola@livv.systems'
+    const fromName = Deno.env.get('LEAD_FROM_NAME') || 'Eneas Aldabe'
+    const fromAddress = Deno.env.get('LEAD_FROM_ADDRESS') || 'eneas@livv.systems'
+    const appUrl = Deno.env.get('APP_URL') || 'https://app.livv.systems'
+    const autoReplyDisabled = Deno.env.get('LEAD_AUTO_REPLY') === 'false'
+
     if (resendApiKey) {
-      notifyStatus.attempted = true
-      const esc = (s: string) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
-      const rows = [
-        ['Name', name],
-        ['Email', email],
-        ['Company', company || '—'],
-        ['Project type', project_type || '—'],
-        ['Origin', origin || 'Web Form'],
-        ['Source', source || 'livvvv.com'],
-        ['UTM', [utm_source, utm_medium, utm_campaign].filter(Boolean).join(' / ') || '—'],
-      ].map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#78736A;font-size:12px;">${esc(k)}</td><td style="padding:4px 0;font-size:13px;color:#18181b;">${esc(String(v))}</td></tr>`).join('')
-      const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;">
-        <h2 style="margin:0 0 12px;font-size:18px;">New lead via web form</h2>
-        <table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>
-        <div style="margin-top:16px;padding:12px;background:#fafaf8;border-left:3px solid #3b82f6;border-radius:6px;white-space:pre-wrap;font-size:13px;">${esc(message)}</div>
-      </div>`
+      const branding = await resolveTenantBranding(supabase, tenant.id)
+
+      // Heuristic fit score: project_type provided + company provided + UTM
+      // attribution all bump the score. Range 30-90 keeps it informative
+      // without faking certainty.
+      let fit = 50
+      if (project_type) fit += 15
+      if (company) fit += 12
+      if (utm_source) fit += 8
+      if (temperature === 'hot') fit += 15
+      else if (temperature === 'warm') fit += 5
+      fit = Math.max(30, Math.min(95, fit))
+
+      // 1. Internal alert
+      notifyStatus.internal.attempted = true
+      const internalHtml = buildNewLeadTeamEmail({
+        brandName: branding.name,
+        logoUrl: branding.logoUrl,
+        leadName: name,
+        leadCompany: company || undefined,
+        leadEmail: email,
+        leadRole: project_type ? `Looking for ${project_type}` : undefined,
+        fitScore: fit,
+        scope: project_type || undefined,
+        budget: temperature ? `Temperature: ${temperature}` : undefined,
+        source: [origin, source, utm_source].filter(Boolean).join(' · ') || 'Web Form',
+        quote: message,
+        leadUrl: `${appUrl}/sales?lead=${lead.id}`,
+        leadNumber: String(lead.id).slice(0, 4).toUpperCase(),
+        suggestedNextStep: 'Reply within 2h to keep your average up. Open the lead in livv space to draft a personal note or pass it on.',
+      })
       try {
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: 'LIVV OS <noreply@livv.space>',
+            from: `${branding.name} <noreply@livv.space>`,
             to: [notifyTo],
             reply_to: email,
             subject: `New lead · ${name}${company ? ' · ' + company : ''}`,
-            html,
+            html: internalHtml,
           }),
         })
         const bodyText = await r.text()
-        notifyStatus.status = r.status
-        notifyStatus.body = bodyText.slice(0, 400)
-        if (!r.ok) console.error('lead-ingest resend fail', r.status, bodyText)
+        notifyStatus.internal.status = r.status
+        notifyStatus.internal.body = bodyText.slice(0, 400)
+        if (!r.ok) console.error('lead-ingest internal resend fail', r.status, bodyText)
       } catch (e) {
-        notifyStatus.error = String(e)
-        console.error('lead-ingest resend throw', e)
+        notifyStatus.internal.error = String(e)
+        console.error('lead-ingest internal resend throw', e)
+      }
+
+      // 2. Welcome reply to the lead (skip if disabled or in newsletter category)
+      if (!autoReplyDisabled && category !== 'newsletter') {
+        notifyStatus.welcome.attempted = true
+        const firstName = name.trim().split(/\s+/)[0] || name
+        const welcomeHtml = buildLeadWelcomeReplyEmail({
+          brandName: branding.name,
+          logoUrl: branding.logoUrl,
+          leadFirstName: firstName,
+          fromName,
+          fromTitle: 'Founder · Livv Studio · Buenos Aires',
+          ctaUrl: 'https://cal.com/livv',
+        })
+        try {
+          const r = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: `${fromName} <${fromAddress}>`,
+              to: [email],
+              reply_to: fromAddress,
+              subject: `Got your message · let's build something worth the wait`,
+              html: welcomeHtml,
+            }),
+          })
+          const bodyText = await r.text()
+          notifyStatus.welcome.status = r.status
+          notifyStatus.welcome.body = bodyText.slice(0, 400)
+          if (!r.ok) console.error('lead-ingest welcome resend fail', r.status, bodyText)
+        } catch (e) {
+          notifyStatus.welcome.error = String(e)
+          console.error('lead-ingest welcome resend throw', e)
+        }
+      } else {
+        notifyStatus.welcome.skipped = autoReplyDisabled ? 'LEAD_AUTO_REPLY=false' : 'category=newsletter'
       }
     } else {
-      notifyStatus.skipped = 'no RESEND_API_KEY'
+      notifyStatus.internal.skipped = 'no RESEND_API_KEY'
+      notifyStatus.welcome.skipped = 'no RESEND_API_KEY'
     }
 
     // Meta CAPI — server-side Lead event, deduplicated with client Pixel via event_id
