@@ -88,7 +88,7 @@ export const Activity: React.FC = () => {
   const { data: allTasks } = useSupabase<any>('tasks', {
     enabled: tenantReady,
     subscribe: true,
-    select: 'id,assignee_id,completed,completed_at,priority',
+    select: 'id,title,assignee_id,completed,completed_at,completed_by,priority',
   });
   const { members } = useTeam();
 
@@ -105,8 +105,9 @@ export const Activity: React.FC = () => {
   const [optimisticReplies, setOptimisticReplies] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Leaderboard toggle
+  // Leaderboard toggle + drill-down
   const [showLeaderboard, setShowLeaderboard] = useState(true);
+  const [drillDownPersonId, setDrillDownPersonId] = useState<string | null>(null);
 
   // Likes in-flight tracking
   const [likingIds, setLikingIds] = useState<Set<string>>(new Set());
@@ -528,139 +529,187 @@ export const Activity: React.FC = () => {
   const canPost = isReady || contextTimedOut;
 
   return (
-    <div className="max-w-5xl mx-auto pt-4 pb-8 space-y-8 font-sans">
-      {/* Header */}
+    <div className="max-w-5xl mx-auto pt-3 pb-6 space-y-3 font-sans">
+      {/* Compact header — h2 instead of h3, inline KPI strip */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">Activity Feed</h1>
-          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Activity</h1>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
+            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
             Live
           </span>
         </div>
         <button
           onClick={() => refresh()}
-          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition"
         >
-          <Icons.RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+          <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 p-5 rounded-2xl flex flex-col justify-between h-32">
-          <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-400 mb-1">
-            <Icons.CheckCircle size={18} />
-            <span className="text-xs font-bold tracking-wider uppercase">COMPLETED</span>
+      {/* KPI strip — denser, single-row inline */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
+          <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10">
+            <Icons.CheckCircle size={12} className="text-emerald-500" />
           </div>
-          <div>
-            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{weeklyStats.thisWeekTotal} Tasks</div>
-            <div className="text-sm text-zinc-500 mt-1">
-              {weeklyStats.topPerformerName ? (
-                <>
-                  <Icons.Star size={12} className="inline text-amber-500 mr-1" />
-                  Top: <span className="font-medium text-zinc-700 dark:text-zinc-300">{weeklyStats.topPerformerName}</span>
-                  <span className="text-zinc-400 ml-1">({weeklyStats.topPerformerCount})</span>
-                </>
-              ) : 'No completions this week yet'}
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Completed</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{weeklyStats.thisWeekTotal}</span>
+              <span className="text-[10px] text-zinc-500">tasks</span>
+              {weeklyStats.topPerformerName && (
+                <span className="text-[10px] text-zinc-400 truncate">· top {weeklyStats.topPerformerName} ({weeklyStats.topPerformerCount})</span>
+              )}
             </div>
           </div>
         </div>
-
-        <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-5 rounded-2xl flex flex-col justify-between h-32">
-          <div className="flex items-center gap-2 text-blue-800 dark:text-blue-400 mb-1">
-            <Icons.Zap size={18} />
-            <span className="text-xs font-bold tracking-wider uppercase">VELOCITY</span>
+        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
+          <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-500/10">
+            <Icons.Zap size={12} className="text-blue-500" />
           </div>
-          <div>
-            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-              {weeklyStats.velocity >= 0 ? '+' : ''}{weeklyStats.velocity}%
-            </div>
-            <div className="text-sm text-zinc-500 mt-1">
-              {weeklyStats.thisWeekTotal} this week vs {weeklyStats.lastWeekTotal} last week
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Velocity</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className={`text-sm font-semibold tabular-nums ${weeklyStats.velocity >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {weeklyStats.velocity >= 0 ? '+' : ''}{weeklyStats.velocity}%
+              </span>
+              <span className="text-[10px] text-zinc-400 truncate">{weeklyStats.thisWeekTotal} vs {weeklyStats.lastWeekTotal} last wk</span>
             </div>
           </div>
         </div>
-
-        <div className="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30 p-5 rounded-2xl flex flex-col justify-between h-32">
-          <div className="flex items-center gap-2 text-purple-800 dark:text-purple-400 mb-1">
-            <Icons.Message size={18} />
-            <span className="text-xs font-bold tracking-wider uppercase">DISCUSSIONS</span>
+        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
+          <div className="p-1 rounded-md bg-violet-50 dark:bg-violet-500/10">
+            <Icons.Message size={12} className="text-violet-500" />
           </div>
-          <div>
-            <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{threadCount} Threads</div>
-            <div className="text-sm text-zinc-500 mt-1">
-              {allActivities.length > 0
-                ? <>Most active: <span className="font-medium text-zinc-700 dark:text-zinc-300">{allActivities[0]?.target || 'General'}</span></>
-                : 'Start a conversation!'
-              }
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Discussions</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{threadCount}</span>
+              <span className="text-[10px] text-zinc-500">threads</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Team Performance - This Week */}
+      {/* Team Performance — compact roster with click-to-drill-down */}
       {weeklyStats.ranking.length > 0 && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+        <div className="bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden">
           <button
             onClick={() => setShowLeaderboard(prev => !prev)}
-            className="w-full flex items-center justify-between"
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30"
           >
-            <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              <Icons.Users size={16} className="text-zinc-400" />
-              Team Performance
-              <span className="text-xs font-normal text-zinc-400">This week</span>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <Icons.Users size={11} />
+              Team
+              <span className="text-[10px] font-normal normal-case tracking-normal text-zinc-400">· this week</span>
             </div>
-            <Icons.ChevronDown
-              size={16}
-              className={`text-zinc-400 transition-transform duration-200 ${showLeaderboard ? 'rotate-180' : ''}`}
-            />
+            <Icons.ChevronDown size={12} className={`text-zinc-400 transition-transform ${showLeaderboard ? 'rotate-180' : ''}`} />
           </button>
 
           {showLeaderboard && (
-            <div className="mt-4 space-y-2">
+            <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
               {weeklyStats.ranking.map((member, idx) => {
                 const maxTasks = weeklyStats.ranking[0]?.thisWeek || 1;
                 const barWidth = maxTasks > 0 ? (member.thisWeek / maxTasks) * 100 : 0;
                 const weekDelta = member.thisWeek - member.lastWeek;
+                const isOpen = drillDownPersonId === member.id;
+
+                // Tasks for this person, split open vs completed
+                const personTasks = (allTasks || []).filter((t: any) => t.assignee_id === member.id);
+                const openTasks = personTasks.filter((t: any) => !t.completed);
+                const completedTasks = personTasks
+                  .filter((t: any) => t.completed)
+                  .sort((a: any, b: any) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
 
                 return (
-                  <div key={member.id} className="flex items-center gap-3 py-1.5">
-                    <span className={`w-5 text-xs font-bold text-center ${
-                      idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-zinc-400' : idx === 2 ? 'text-amber-700' : 'text-zinc-300 dark:text-zinc-600'
-                    }`}>
-                      {idx + 1}
-                    </span>
+                  <div key={member.id}>
+                    <button
+                      onClick={() => setDrillDownPersonId(prev => prev === member.id ? null : member.id)}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 transition ${isOpen ? 'bg-zinc-50/80 dark:bg-zinc-800/40' : 'hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20'}`}
+                    >
+                      <span className={`w-4 text-[10px] font-semibold text-center tabular-nums ${
+                        idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-zinc-400' : idx === 2 ? 'text-amber-700' : 'text-zinc-300 dark:text-zinc-600'
+                      }`}>{idx + 1}</span>
+                      <div className={`h-5 w-5 rounded-full ${getAvatarColor(member.name)} text-white flex items-center justify-center text-[9px] font-bold shrink-0`}>
+                        {member.avatar_url
+                          ? <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                          : getInitials(member.name)}
+                      </div>
+                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200 w-24 truncate text-left">{member.name}</span>
+                      <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${barWidth}%` }} />
+                      </div>
+                      <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums w-5 text-right">{member.thisWeek}</span>
+                      {weekDelta !== 0 ? (
+                        <span className={`text-[9px] font-medium w-7 tabular-nums text-right ${weekDelta > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {weekDelta > 0 ? '+' : ''}{weekDelta}
+                        </span>
+                      ) : <span className="w-7" />}
+                      <Icons.ChevronDown size={11} className={`text-zinc-300 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    <div className={`h-7 w-7 rounded-full ${getAvatarColor(member.name)} text-white flex items-center justify-center text-[10px] font-bold shrink-0`}>
-                      {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                      ) : (
-                        getInitials(member.name)
-                      )}
-                    </div>
+                    {isOpen && (
+                      <div className="px-3 pb-2 pt-1 bg-zinc-50/40 dark:bg-zinc-800/20 space-y-2">
+                        {personTasks.length === 0 && (
+                          <p className="text-[10px] text-zinc-400 italic px-1">No tasks assigned to this person.</p>
+                        )}
 
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 w-28 truncate">
-                      {member.name}
-                    </span>
+                        {openTasks.length > 0 && (
+                          <div>
+                            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold mb-1 px-1">
+                              Open · {openTasks.length}
+                            </div>
+                            <div className="space-y-0.5">
+                              {openTasks.slice(0, 8).map((t: any) => (
+                                <div key={t.id} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px]">
+                                  <span className="w-3 h-3 rounded border border-zinc-300 dark:border-zinc-600 shrink-0" />
+                                  <span className="flex-1 text-zinc-700 dark:text-zinc-200 truncate">{t.title || 'Untitled'}</span>
+                                  {t.priority && (
+                                    <span className={`text-[9px] px-1 py-0 rounded uppercase font-semibold tracking-wider ${
+                                      t.priority === 'high' ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
+                                      : t.priority === 'medium' ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
+                                      : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                                    }`}>{t.priority}</span>
+                                  )}
+                                </div>
+                              ))}
+                              {openTasks.length > 8 && (
+                                <p className="text-[9px] text-zinc-400 px-1">+{openTasks.length - 8} more</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                    <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                        style={{ width: `${barWidth}%` }}
-                      />
-                    </div>
-
-                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 w-6 text-right">
-                      {member.thisWeek}
-                    </span>
-
-                    {weekDelta !== 0 && (
-                      <span className={`text-[10px] font-medium w-8 ${weekDelta > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {weekDelta > 0 ? '+' : ''}{weekDelta}
-                      </span>
+                        {completedTasks.length > 0 && (
+                          <div>
+                            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold mb-1 px-1">
+                              Completed · {completedTasks.length}
+                            </div>
+                            <div className="space-y-0.5">
+                              {completedTasks.slice(0, 8).map((t: any) => {
+                                const completedById = t.completed_by || t.assignee_id;
+                                const completedByName = memberMap[completedById]?.name || 'Team Member';
+                                const sameAsAssignee = completedById === t.assignee_id;
+                                return (
+                                  <div key={t.id} className="flex items-center gap-1.5 px-1 py-0.5 text-[11px]">
+                                    <Icons.CheckCircle size={10} className="text-emerald-500 shrink-0" />
+                                    <span className="flex-1 text-zinc-500 dark:text-zinc-400 line-through truncate">{t.title || 'Untitled'}</span>
+                                    <span className="text-[9px] text-zinc-400 whitespace-nowrap">
+                                      {sameAsAssignee ? 'self' : `by ${completedByName}`}
+                                      {t.completed_at && ` · ${getRelativeTime(new Date(t.completed_at))}`}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              {completedTasks.length > 8 && (
+                                <p className="text-[9px] text-zinc-400 px-1">+{completedTasks.length - 8} more</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
-                    {weekDelta === 0 && <span className="w-8" />}
                   </div>
                 );
               })}
