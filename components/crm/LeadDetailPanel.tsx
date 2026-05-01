@@ -260,7 +260,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
                 <textarea
                   value={draft.message}
                   onChange={(e) => setDraft({ ...draft, message: e.target.value })}
-                  className={`${inputClass} min-h-[64px] max-h-[120px] resize-none`}
+                  className={`${inputClass} min-h-[200px] max-h-[480px] resize-y leading-relaxed`}
                   placeholder="Add notes about this lead..."
                 />
               </Field>
