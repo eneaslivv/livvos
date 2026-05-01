@@ -48,6 +48,11 @@ export interface File {
   updated_at: string
 }
 
+export interface DocsFilter {
+  clientId: string | null
+  projectId: string | null
+}
+
 interface DocumentsContextType {
   folders: Folder[]
   files: File[]
@@ -55,10 +60,14 @@ interface DocumentsContextType {
   allFolders: Folder[]
   breadcrumbs: Folder[]
   currentFolderId: string | null
+  filter: DocsFilter
+  isFiltering: boolean
   loading: boolean
   error: string | null
   isInitialized: boolean
   setCurrentFolderId: (id: string | null) => void
+  setFilter: (filter: DocsFilter) => void
+  clearFilter: () => void
   createFolder: (name: string, color?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Folder>
   uploadFile: (file: any, options?: { clientId?: string | null; projectId?: string | null }) => Promise<File>
   updateFile: (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
@@ -83,6 +92,8 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<Folder[]>([])
   const [documents, setDocuments] = useState<Document[]>([])
+  const [filter, setFilterState] = useState<DocsFilter>({ clientId: null, projectId: null })
+  const isFiltering = !!(filter.clientId || filter.projectId)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -96,24 +107,40 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       errorLogger.log('Loading documents...')
 
-      // Load folders for the current level
+      // When a client/project filter is active we ignore folder hierarchy and
+      // return a flat list of every matching item across the tenant.
+      const filterClient = filter.clientId
+      const filterProject = filter.projectId
+      const filtering = !!(filterClient || filterProject)
+
+      // Load folders for the current level (or matching the filter)
       let foldersQuery = supabase.from('folders').select('*').order('name', { ascending: true })
-      if (currentFolderId) {
+      if (filtering) {
+        if (filterClient) foldersQuery = foldersQuery.eq('client_id', filterClient)
+        if (filterProject) foldersQuery = foldersQuery.eq('project_id', filterProject)
+      } else if (currentFolderId) {
         foldersQuery = foldersQuery.eq('parent_id', currentFolderId)
       } else {
         foldersQuery = foldersQuery.is('parent_id', null)
       }
 
-      // Load files for the current level
+      // Load files for the current level (or matching the filter)
       let filesQuery = supabase.from('files').select('*').order('name', { ascending: true })
-      if (currentFolderId) {
+      if (filtering) {
+        if (filterClient) filesQuery = filesQuery.eq('client_id', filterClient)
+        if (filterProject) filesQuery = filesQuery.eq('project_id', filterProject)
+      } else if (currentFolderId) {
         filesQuery = filesQuery.eq('folder_id', currentFolderId)
       } else {
         filesQuery = filesQuery.is('folder_id', null)
       }
 
-      // Load rich-text documents for the current level
+      // Load rich-text documents (already flat) — apply filter when active
       let docsQuery = supabase.from('documents').select('*').order('updated_at', { ascending: false })
+      if (filtering) {
+        if (filterClient) docsQuery = docsQuery.eq('client_id', filterClient)
+        if (filterProject) docsQuery = docsQuery.eq('project_id', filterProject)
+      }
 
       const [foldersRes, filesRes, docsRes] = await withTimeout(
         Promise.all([Promise.resolve(foldersQuery), Promise.resolve(filesQuery), Promise.resolve(docsQuery)]),
@@ -142,8 +169,8 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setDocuments(docsRes.data || [])
       }
 
-      // Build breadcrumbs
-      if (currentFolderId) {
+      // Build breadcrumbs (skipped while filtering — view is flat)
+      if (currentFolderId && !filtering) {
         const buildBreadcrumbs = async (folderId: string, path: Folder[] = []): Promise<Folder[]> => {
           const { data, error } = await supabase.from('folders').select('*').eq('id', folderId).single()
           if (error || !data) return path
@@ -165,7 +192,15 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false)
     }
-  }, [currentFolderId])
+  }, [currentFolderId, filter.clientId, filter.projectId])
+
+  const setFilter = useCallback((next: DocsFilter) => {
+    setFilterState(next)
+  }, [])
+
+  const clearFilter = useCallback(() => {
+    setFilterState({ clientId: null, projectId: null })
+  }, [])
 
   useEffect(() => {
     loadDocuments()
@@ -389,8 +424,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   return (
     <DocumentsContext.Provider value={{
-      folders, files, documents, allFolders, breadcrumbs, currentFolderId, loading, error, isInitialized,
-      setCurrentFolderId, createFolder, uploadFile, updateFile, updateFolder, deleteFolder, deleteFile,
+      folders, files, documents, allFolders, breadcrumbs, currentFolderId,
+      filter, isFiltering,
+      loading, error, isInitialized,
+      setCurrentFolderId, setFilter, clearFilter,
+      createFolder, uploadFile, updateFile, updateFolder, deleteFolder, deleteFile,
       createDocument, updateDocument, deleteDocument, getDocumentsByTask,
       refresh: async () => loadDocuments()
     }}>

@@ -13,6 +13,9 @@ import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import { Icons } from '../ui/Icons';
 import { DocumentToolbar } from './DocumentToolbar';
+import { SlashCommand, type SlashState } from './extensions/SlashCommand';
+import { SlashCommandMenu, type SlashItem, type SlashCommandMenuHandle } from './SlashCommandMenu';
+import { TaskCreatePopover } from './TaskCreatePopover';
 import { supabase } from '../../lib/supabase';
 import { useDocuments } from '../../context/DocumentsContext';
 import { useClients } from '../../context/ClientsContext';
@@ -89,6 +92,22 @@ const extractTableTasks = (content: Record<string, any>): DocTaskItem[] => {
   return items;
 };
 
+// Tabs (sub-pages) stored inside document.content
+interface DocTab { id: string; title: string; content: Record<string, any> }
+
+const EMPTY_DOC = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+const parseTabs = (content: Record<string, any> | null | undefined): DocTab[] => {
+  if (content && Array.isArray((content as any).tabs) && (content as any).tabs.length > 0) {
+    return (content as any).tabs as DocTab[];
+  }
+  // Legacy single-doc → wrap as one tab
+  if (content && Object.keys(content).length > 0 && (content as any).type) {
+    return [{ id: 'tab-1', title: 'Page 1', content: content as Record<string, any> }];
+  }
+  return [{ id: 'tab-1', title: 'Page 1', content: EMPTY_DOC }];
+};
+
 export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onClose }) => {
   const { documents, updateDocument, deleteDocument } = useDocuments();
   const { clients } = useClients();
@@ -105,11 +124,25 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showPagesSidebar, setShowPagesSidebar] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [tabs, setTabs] = useState<DocTab[]>(() => parseTabs(doc?.content));
+  const [activeTabId, setActiveTabId] = useState<string>(() => parseTabs(doc?.content)[0].id);
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
   const isSyncingBackRef = useRef(false);
+  const tabsRef = useRef<DocTab[]>(tabs);
+  const activeTabIdRef = useRef<string>(activeTabId);
+  tabsRef.current = tabs;
+  activeTabIdRef.current = activeTabId;
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+
+  // Slash command menu state
+  const [slashState, setSlashState] = useState<SlashState>({ active: false, query: '', range: null, coords: null });
+  const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
+  const [taskPopover, setTaskPopover] = useState<null | { coords: { left: number; top: number; bottom: number }; range: { from: number; to: number } }>(null);
 
   // Tasks linked to this document
   const linkedTasks = useMemo(() => tasks.filter((t: any) => t.document_id === documentId), [tasks, documentId]);
@@ -134,15 +167,19 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Start writing...' }),
+      Placeholder.configure({ placeholder: 'Empezá a escribir, o tipeá / para comandos...' }),
       Underline,
       Table.configure({ resizable: true }),
       TableRow,
       TableCellCheckbox,
       TableHeader,
       Image.configure({ inline: false, allowBase64: true }),
+      SlashCommand.configure({
+        onStateChange: (state) => setSlashState(state),
+        onKeyDown: (event) => slashMenuRef.current?.onKeyDown(event) ?? false,
+      }),
     ],
-    content: doc?.content && Object.keys(doc.content).length > 0 ? doc.content : undefined,
+    content: activeTab?.content || EMPTY_DOC,
     editorProps: {
       attributes: {
         class: 'prose prose-zinc dark:prose-invert max-w-none outline-none min-h-[300px] px-8 py-6',
@@ -188,7 +225,13 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     },
     onUpdate: ({ editor: e }) => {
       if (!initializedRef.current || isSyncingBackRef.current) return;
-      debouncedSave(e.getJSON(), e.getText());
+      const json = e.getJSON();
+      const nextTabs = tabsRef.current.map(t =>
+        t.id === activeTabIdRef.current ? { ...t, content: json } : t
+      );
+      tabsRef.current = nextTabs;
+      setTabs(nextTabs);
+      debouncedSave();
     },
   });
 
@@ -197,6 +240,146 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     const timer = setTimeout(() => { initializedRef.current = true; }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Slash command items
+  const slashItems = useMemo<SlashItem[]>(() => [
+    {
+      id: 'task',
+      label: 'Tarea con fecha',
+      hint: 'Crea una tarea en este doc y la pone en el calendario',
+      icon: 'SquareCheck',
+      keywords: ['tarea', 'task', 'todo', 'fecha', 'date', 'calendario'],
+      run: (ed, range) => {
+        if (!slashState.coords) return false;
+        const coords = slashState.coords;
+        ed.chain().focus().deleteRange(range).run();
+        setTaskPopover({ coords, range: { from: range.from, to: range.from } });
+        return false;
+      },
+    },
+    {
+      id: 'h1',
+      label: 'Título 1',
+      hint: 'Encabezado grande',
+      icon: 'Hash',
+      keywords: ['h1', 'heading', 'titulo', 'header'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).setNode('heading', { level: 1 }).run(); },
+    },
+    {
+      id: 'h2',
+      label: 'Título 2',
+      hint: 'Encabezado mediano',
+      icon: 'Hash',
+      keywords: ['h2', 'heading', 'titulo', 'header'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).setNode('heading', { level: 2 }).run(); },
+    },
+    {
+      id: 'h3',
+      label: 'Título 3',
+      hint: 'Encabezado chico',
+      icon: 'Hash',
+      keywords: ['h3', 'heading', 'titulo', 'header'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run(); },
+    },
+    {
+      id: 'checklist',
+      label: 'Checklist',
+      hint: 'Lista de tareas con checkboxes',
+      icon: 'ListChecks',
+      keywords: ['checklist', 'todo', 'task list', 'tareas'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).toggleTaskList().run(); },
+    },
+    {
+      id: 'bullet',
+      label: 'Lista',
+      hint: 'Lista con viñetas',
+      icon: 'List',
+      keywords: ['lista', 'list', 'bullet', 'viñetas'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).toggleBulletList().run(); },
+    },
+    {
+      id: 'numbered',
+      label: 'Lista numerada',
+      hint: 'Lista 1. 2. 3.',
+      icon: 'ListOrdered',
+      keywords: ['numerada', 'numbered', 'ordered'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).toggleOrderedList().run(); },
+    },
+    {
+      id: 'table',
+      label: 'Tabla',
+      hint: 'Tabla 3x3 con checkboxes',
+      icon: 'Table',
+      keywords: ['tabla', 'table', 'grid'],
+      run: (ed, range) => {
+        ed.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+      },
+    },
+    {
+      id: 'quote',
+      label: 'Cita',
+      hint: 'Bloque destacado',
+      icon: 'Quote',
+      keywords: ['cita', 'quote', 'blockquote'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).toggleBlockquote().run(); },
+    },
+    {
+      id: 'code',
+      label: 'Código',
+      hint: 'Bloque de código',
+      icon: 'Code',
+      keywords: ['code', 'codigo', 'snippet'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).toggleCodeBlock().run(); },
+    },
+    {
+      id: 'divider',
+      label: 'Separador',
+      hint: 'Línea horizontal',
+      icon: 'Minus',
+      keywords: ['divider', 'separador', 'hr', 'line'],
+      run: (ed, range) => { ed.chain().focus().deleteRange(range).setHorizontalRule().run(); },
+    },
+  ], [slashState.coords]);
+
+  const closeSlash = useCallback(() => {
+    setSlashState({ active: false, query: '', range: null, coords: null });
+  }, []);
+
+  const handleCreateTaskFromPopover = useCallback(async (data: { title: string; date: string | null }) => {
+    if (!editor || !user) return;
+    const range = taskPopover?.range;
+    setTaskPopover(null);
+
+    // Insert a checklist item with the title in the doc
+    if (range) {
+      editor.chain()
+        .focus()
+        .insertContentAt(range.from, {
+          type: 'taskList',
+          content: [{ type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: data.title }] }] }],
+        })
+        .run();
+    }
+
+    // Create the task in the calendar/db, linked to this document
+    try {
+      await createTask({
+        title: data.title,
+        completed: false,
+        status: 'todo',
+        priority: 'medium',
+        owner_id: user.id,
+        assignee_ids: [],
+        order_index: 0,
+        document_id: documentId,
+        client_id: doc?.client_id || undefined,
+        project_id: doc?.project_id || undefined,
+        ...(data.date ? { start_date: data.date } : {}),
+      } as any);
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('Failed to create task from doc:', err);
+    }
+  }, [editor, user, taskPopover, createTask, documentId, doc?.client_id, doc?.project_id]);
 
   // Bidirectional sync: when a linked task's completion changes externally, update document checkboxes
   useEffect(() => {
@@ -269,18 +452,30 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     if (changed) {
       isSyncingBackRef.current = true;
       editor.commands.setContent(updatedJson);
-      // Save the synced state
-      debouncedSave(updatedJson, editor.getText());
+      // Mirror the synced state into the active tab and persist
+      const nextTabs = tabsRef.current.map(t =>
+        t.id === activeTabIdRef.current ? { ...t, content: updatedJson } : t
+      );
+      tabsRef.current = nextTabs;
+      setTabs(nextTabs);
+      debouncedSave();
       requestAnimationFrame(() => { isSyncingBackRef.current = false; });
     }
   }, [linkedTasks]);
 
-  const debouncedSave = useCallback((content: Record<string, any>, text: string) => {
+  const debouncedSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await updateDocument(documentId, { content, content_text: text });
+        const allTabs = tabsRef.current;
+        const aggregateText = allTabs
+          .map(t => extractNodeText(t.content || {}))
+          .join('\n\n');
+        await updateDocument(documentId, {
+          content: { tabs: allTabs },
+          content_text: aggregateText,
+        });
       } catch (err) {
         if (import.meta.env.DEV) console.error('Auto-save failed:', err);
       } finally {
@@ -288,6 +483,52 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       }
     }, 1500);
   }, [documentId, updateDocument]);
+
+  // Swap editor content when active tab changes
+  useEffect(() => {
+    if (!editor || !activeTab) return;
+    const current = editor.getJSON();
+    const next = activeTab.content || EMPTY_DOC;
+    if (JSON.stringify(current) === JSON.stringify(next)) return;
+    isSyncingBackRef.current = true;
+    editor.commands.setContent(next);
+    requestAnimationFrame(() => { isSyncingBackRef.current = false; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabId, editor]);
+
+  const addTab = () => {
+    const newTab: DocTab = {
+      id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: `Page ${tabs.length + 1}`,
+      content: EMPTY_DOC,
+    };
+    const next = [...tabs, newTab];
+    setTabs(next);
+    tabsRef.current = next;
+    setActiveTabId(newTab.id);
+    activeTabIdRef.current = newTab.id;
+    debouncedSave();
+  };
+
+  const renameTab = (id: string, title: string) => {
+    const next = tabs.map(t => t.id === id ? { ...t, title: title || 'Untitled' } : t);
+    setTabs(next);
+    tabsRef.current = next;
+    debouncedSave();
+  };
+
+  const deleteTab = (id: string) => {
+    if (tabs.length <= 1) return;
+    if (!confirm('Delete this page?')) return;
+    const next = tabs.filter(t => t.id !== id);
+    setTabs(next);
+    tabsRef.current = next;
+    if (activeTabId === id) {
+      setActiveTabId(next[0].id);
+      activeTabIdRef.current = next[0].id;
+    }
+    debouncedSave();
+  };
 
   // Save title on blur
   const handleTitleBlur = async () => {
@@ -340,9 +581,11 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     if (!editor || !user) return;
     setSyncing(true);
     try {
-      const checklistTasks = extractTaskItems(editor.getJSON());
-      const tableTasks = extractTableTasks(editor.getJSON());
-      const docTasks = [...checklistTasks, ...tableTasks];
+      // Scan checklist items + table-row checkboxes across all pages
+      const docTasks: DocTaskItem[] = tabs.flatMap(t => [
+        ...extractTaskItems(t.content || {}),
+        ...extractTableTasks(t.content || {}),
+      ]);
 
       for (const item of docTasks) {
         // Check if task already exists (match by title + document_id)
@@ -425,6 +668,13 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
           >
             <Icons.ArrowLeft size={18} />
           </button>
+          <button
+            onClick={() => setShowPagesSidebar(s => !s)}
+            className={`p-1.5 rounded-lg transition-colors ${showPagesSidebar ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}
+            title="Toggle pages panel"
+          >
+            <Icons.Menu size={16} />
+          </button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Icons.Docs size={18} className="text-blue-500 shrink-0" />
             <input
@@ -463,12 +713,109 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
 
       {/* Content area */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Pages sidebar (left) */}
+        {showPagesSidebar && (
+          <div className="w-56 border-r border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-y-auto shrink-0 flex flex-col">
+            <div className="px-3 py-2.5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/60">
+              <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Pages</span>
+              <button
+                onClick={addTab}
+                className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                title="Add page"
+              >
+                <Icons.Plus size={13} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+              {tabs.map(t => {
+                const isActive = t.id === activeTabId;
+                const isRenaming = renamingTabId === t.id;
+                return (
+                  <div
+                    key={t.id}
+                    className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                      isActive
+                        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                        : 'text-zinc-500 dark:text-zinc-400 hover:bg-white/60 dark:hover:bg-zinc-800/50'
+                    }`}
+                    onClick={() => { if (!isRenaming) setActiveTabId(t.id); }}
+                  >
+                    <Icons.Docs size={13} className={isActive ? 'text-blue-500' : 'text-zinc-400'} />
+                    {isRenaming ? (
+                      <input
+                        autoFocus
+                        defaultValue={t.title}
+                        onClick={e => e.stopPropagation()}
+                        onBlur={e => { renameTab(t.id, e.target.value.trim()); setRenamingTabId(null); }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { renameTab(t.id, (e.target as HTMLInputElement).value.trim()); setRenamingTabId(null); }
+                          else if (e.key === 'Escape') setRenamingTabId(null);
+                        }}
+                        className="flex-1 min-w-0 bg-transparent outline-none text-xs text-zinc-900 dark:text-zinc-100 border-b border-blue-400"
+                      />
+                    ) : (
+                      <span
+                        className="flex-1 min-w-0 truncate text-xs"
+                        onDoubleClick={e => { e.stopPropagation(); setRenamingTabId(t.id); }}
+                      >
+                        {t.title}
+                      </span>
+                    )}
+                    {!isRenaming && (
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={e => { e.stopPropagation(); setRenamingTabId(t.id); }}
+                          className="p-0.5 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                          title="Rename"
+                        >
+                          <Icons.Edit size={11} />
+                        </button>
+                        {tabs.length > 1 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteTab(t.id); }}
+                            className="p-0.5 rounded text-zinc-400 hover:text-red-500"
+                            title="Delete page"
+                          >
+                            <Icons.Trash size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Editor */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto py-8">
             <EditorContent editor={editor} />
           </div>
         </div>
+
+        {/* Slash command menu */}
+        {slashState.active && slashState.coords && slashState.range && !taskPopover && (
+          <SlashCommandMenu
+            ref={slashMenuRef}
+            editor={editor}
+            query={slashState.query}
+            range={slashState.range}
+            coords={slashState.coords}
+            items={slashItems}
+            onClose={closeSlash}
+          />
+        )}
+
+        {/* Inline task creator (triggered from /tarea) */}
+        {taskPopover && (
+          <TaskCreatePopover
+            coords={taskPopover.coords}
+            onSubmit={handleCreateTaskFromPopover}
+            onCancel={() => setTaskPopover(null)}
+          />
+        )}
 
         {/* Sidebar */}
         {showSidebar && (

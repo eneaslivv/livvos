@@ -17,9 +17,13 @@ export const Docs: React.FC = () => {
     allFolders,
     breadcrumbs,
     currentFolderId,
+    filter: docsFilter,
+    isFiltering,
     loading,
     error,
     setCurrentFolderId,
+    setFilter: setDocsFilter,
+    clearFilter: clearDocsFilter,
     createFolder,
     uploadFile,
     updateFile,
@@ -60,6 +64,9 @@ export const Docs: React.FC = () => {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  // In-app drag state — used to dim the source and highlight the hovered drop target
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -147,6 +154,37 @@ export const Docs: React.FC = () => {
   // Reset selection when navigating folders or switching tabs
   useEffect(() => { clearSelection(); }, [currentFolderId, activeTab]);
 
+  // Sync the "Assign to" picker with the global Documents filter so the same
+  // control both filters the visible items and assigns newly created items.
+  useEffect(() => {
+    if (linkType === 'client' && selectedClientId) {
+      setDocsFilter({ clientId: selectedClientId, projectId: null });
+    } else if (linkType === 'project' && selectedProjectId) {
+      setDocsFilter({ clientId: null, projectId: selectedProjectId });
+    } else {
+      clearDocsFilter();
+    }
+  }, [linkType, selectedClientId, selectedProjectId, setDocsFilter, clearDocsFilter]);
+
+  // Clear the filter on unmount so other surfaces aren't left filtered.
+  useEffect(() => () => { clearDocsFilter(); }, [clearDocsFilter]);
+
+  // Lookup helpers for the active-filter chip
+  const activeFilterLabel = isFiltering
+    ? docsFilter.clientId
+      ? clients.find(c => c.id === docsFilter.clientId)?.name || 'Client'
+      : projects.find(p => p.id === docsFilter.projectId)?.title || 'Project'
+    : null;
+  const activeFilterKind: 'client' | 'project' | null = isFiltering
+    ? (docsFilter.clientId ? 'client' : 'project')
+    : null;
+  const handleClearFilter = () => {
+    setLinkType('none');
+    setSelectedClientId('');
+    setSelectedProjectId('');
+    clearDocsFilter();
+  };
+
   // Drag-and-drop within the app: move single item onto folder
   const moveItem = useCallback(async (kind: SelKind, id: string, targetFolderId: string | null) => {
     try {
@@ -164,11 +202,23 @@ export const Docs: React.FC = () => {
   const onCardDragStart = (e: React.DragEvent, kind: SelKind, id: string) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-eneas-doc', JSON.stringify({ kind, id }));
+    setDraggedItemId(id);
     // Prevent the page-level OS-file overlay from triggering on internal drags
     e.stopPropagation();
   };
 
+  const onCardDragEnd = () => {
+    setDraggedItemId(null);
+    setDropTargetFolderId(null);
+  };
+
   const onFolderDropTarget = {
+    onDragEnter: (e: React.DragEvent, folderId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropTargetFolderId(folderId);
+    },
     onDragOver: (e: React.DragEvent) => {
       if (e.dataTransfer.types.includes('application/x-eneas-doc')) {
         e.preventDefault();
@@ -176,11 +226,18 @@ export const Docs: React.FC = () => {
         e.dataTransfer.dropEffect = 'move';
       }
     },
+    onDragLeave: (e: React.DragEvent, folderId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.stopPropagation();
+      setDropTargetFolderId(prev => (prev === folderId ? null : prev));
+    },
     onDrop: (e: React.DragEvent, folderId: string) => {
       const raw = e.dataTransfer.getData('application/x-eneas-doc');
       if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
+      setDropTargetFolderId(null);
+      setDraggedItemId(null);
       try {
         const { kind, id } = JSON.parse(raw) as { kind: SelKind; id: string };
         moveItem(kind, id, folderId);
@@ -412,8 +469,32 @@ export const Docs: React.FC = () => {
               </h1>
             </div>
 
-            {/* Breadcrumbs */}
-            {activeTab === 'documents' && breadcrumbs.length > 0 && (
+            {/* Active filter chip — visible while a client/project filter is on */}
+            <AnimatePresence>
+            {activeTab === 'documents' && isFiltering && (
+              <motion.button
+                key="filter-chip"
+                onClick={handleClearFilter}
+                initial={{ opacity: 0, y: -4, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.9 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className={`mt-2 ml-0.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                  activeFilterKind === 'client'
+                    ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/30 text-violet-700 dark:text-violet-300'
+                    : 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                }`}
+                title="Clear filter"
+              >
+                {activeFilterKind === 'client' ? <Icons.Users size={12} /> : <Icons.Briefcase size={12} />}
+                <span className="truncate max-w-[200px]">{activeFilterLabel}</span>
+                <Icons.X size={12} className="opacity-60" />
+              </motion.button>
+            )}
+            </AnimatePresence>
+
+            {/* Breadcrumbs (hidden while filtering — view is flat) */}
+            {activeTab === 'documents' && !isFiltering && breadcrumbs.length > 0 && (
               <div className="flex items-center gap-1.5 text-sm mt-2 ml-0.5">
                 <button
                   onClick={() => setCurrentFolderId(null)}
@@ -511,9 +592,10 @@ export const Docs: React.FC = () => {
 
           {activeTab === 'documents' && (
             <div className="flex items-center gap-3 flex-wrap">
-              {/* Assign selector */}
+              {/* Filter / assign selector — picking a client or project filters the
+                  visible items and also becomes the default assignment for new uploads. */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:inline">Assign to</span>
+                <span className="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:inline">Filter</span>
                 <select
                   value={linkType}
                   onChange={(e) => {
@@ -770,32 +852,48 @@ export const Docs: React.FC = () => {
             </div>
           ) : (
             /* Documents grid / list */
-            <div className={
-              view === 'grid'
-                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
-                : 'space-y-1.5'
-            }>
+            <motion.div
+              layout
+              className={
+                view === 'grid'
+                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
+                  : 'space-y-1.5'
+              }
+            >
+              <AnimatePresence mode="popLayout" initial={false}>
               {/* Folders */}
               {folders.map((folder, i) => {
                 const sel = isSelected(folder.id);
                 const selItem: SelectedItem = { kind: 'folder', id: folder.id, name: folder.name };
+                const isDragSource = draggedItemId === folder.id;
+                const isDropHover = dropTargetFolderId === folder.id && draggedItemId !== folder.id;
                 return view === 'grid' ? (
                   <motion.div
                     key={folder.id}
+                    layout
                     initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
+                    animate={{
+                      opacity: isDragSource ? 0.4 : 1,
+                      scale: isDropHover ? 1.04 : isDragSource ? 0.96 : 1,
+                    }}
+                    exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
                     onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
+                    onDragEnd={onCardDragEnd}
+                    onDragEnter={(e) => onFolderDropTarget.onDragEnter(e, folder.id)}
                     onDragOver={onFolderDropTarget.onDragOver}
+                    onDragLeave={(e) => onFolderDropTarget.onDragLeave(e, folder.id)}
                     onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
-                    className={`group cursor-pointer bg-white dark:bg-zinc-900 border rounded-xl p-4 hover:shadow-sm transition-[border-color,background-color,box-shadow] duration-200 ${
-                      sel
+                    className={`group cursor-pointer bg-white dark:bg-zinc-900 border rounded-xl p-4 transition-[border-color,background-color,box-shadow] duration-200 ${
+                      isDropHover
+                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-300/60 dark:ring-blue-500/40 bg-blue-50 dark:bg-blue-950/40 shadow-lg shadow-blue-500/20'
+                        : sel
                         ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900 bg-blue-50/40 dark:bg-blue-950/30'
-                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm'
                     }`}
-                    whileHover={{ y: -2 }}
+                    whileHover={isDropHover ? undefined : { y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -828,16 +926,27 @@ export const Docs: React.FC = () => {
                 ) : (
                   <motion.div
                     key={folder.id}
+                    layout
                     initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
+                    animate={{
+                      opacity: isDragSource ? 0.4 : 1,
+                      x: 0,
+                      scale: isDropHover ? 1.015 : 1,
+                    }}
+                    exit={{ opacity: 0, x: -8, transition: { duration: 0.15 } }}
+                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
                     onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
+                    onDragEnd={onCardDragEnd}
+                    onDragEnter={(e) => onFolderDropTarget.onDragEnter(e, folder.id)}
                     onDragOver={onFolderDropTarget.onDragOver}
+                    onDragLeave={(e) => onFolderDropTarget.onDragLeave(e, folder.id)}
                     onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
                     className={`group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color,background-color] duration-200 ${
-                      sel
+                      isDropHover
+                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-300/60 dark:ring-blue-500/40 bg-blue-50 dark:bg-blue-950/40 shadow-md shadow-blue-500/10'
+                        : sel
                         ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
                         : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
                     }`}
@@ -890,14 +999,18 @@ export const Docs: React.FC = () => {
               {files.map((file, i) => {
                 const fSel = isSelected(file.id);
                 const fSelItem: SelectedItem = { kind: 'file', id: file.id, name: file.name, url: file.url };
+                const fIsDragSource = draggedItemId === file.id;
                 return view === 'grid' ? (
                   <motion.div
                     key={file.id}
+                    layout
                     initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: fIsDragSource ? 0.4 : 1, scale: fIsDragSource ? 0.96 : 1 }}
+                    exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
                     transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
+                    onDragEnd={onCardDragEnd}
                     onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
                     className={`group relative bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden hover:shadow-sm transition-[border-color,box-shadow] duration-200 ${
                       fSel
@@ -987,11 +1100,14 @@ export const Docs: React.FC = () => {
                 ) : (
                   <motion.div
                     key={file.id}
+                    layout
                     initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
+                    animate={{ opacity: fIsDragSource ? 0.4 : 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8, transition: { duration: 0.15 } }}
                     transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
+                    onDragEnd={onCardDragEnd}
                     onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
                     className={`group flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color] duration-200 ${
                       fSel
@@ -1046,7 +1162,8 @@ export const Docs: React.FC = () => {
                   </motion.div>
                 );
               })}
-            </div>
+              </AnimatePresence>
+            </motion.div>
           )}
         </motion.div>
       )}
