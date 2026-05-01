@@ -23,7 +23,7 @@ export const AcceptConnection: React.FC = () => {
 
     useEffect(() => {
         if (!token) {
-            setError('Invitation link is missing a token.');
+            setError('El link de invitación no tiene token.');
             setIsLoading(false);
             return;
         }
@@ -37,12 +37,12 @@ export const AcceptConnection: React.FC = () => {
                 if (rpcError) throw rpcError;
                 const row = Array.isArray(data) ? data[0] : data;
                 if (!row) {
-                    setError('Invitation not found or expired.');
+                    setError('Invitación no encontrada o expirada.');
                 } else if (row.status !== 'pending') {
                     setError(
                         row.status === 'accepted'
-                            ? 'This invitation has already been accepted.'
-                            : `This invitation is no longer pending (status: ${row.status}).`
+                            ? 'Esta invitación ya fue aceptada.'
+                            : `Esta invitación ya no está pendiente (status: ${row.status}).`
                     );
                     setInfo(row as ConnectionInfo);
                 } else {
@@ -50,7 +50,7 @@ export const AcceptConnection: React.FC = () => {
                 }
             } catch (err: any) {
                 errorLogger.error('verify_connection_token failed:', err);
-                setError(err?.message || 'Failed to verify invitation.');
+                setError(err?.message || 'No pude verificar la invitación.');
             } finally {
                 setIsLoading(false);
             }
@@ -67,14 +67,16 @@ export const AcceptConnection: React.FC = () => {
             const { data, error: rpcError } = await supabase.rpc('accept_connection', { p_token: token });
             if (rpcError) throw rpcError;
             if ((data as any)?.ok) {
+                // Stay on the success screen until the user clicks Continuar.
+                // Auto-redirect 2s after acceptance was hiding the welcome
+                // message that explains the workspace is brand-new.
                 setAccepted(true);
-                setTimeout(() => { window.location.href = '/'; }, 2000);
             } else {
                 throw new Error('Acceptance failed');
             }
         } catch (err: any) {
             errorLogger.error('accept_connection failed:', err);
-            setError(err?.message || 'Failed to accept the connection.');
+            setError(err?.message || 'No pude aceptar la conexión.');
         } finally {
             setIsAccepting(false);
         }
@@ -90,7 +92,7 @@ export const AcceptConnection: React.FC = () => {
             <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
                 <div className="flex items-center gap-3 text-zinc-500">
                     <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-                    <span className="text-sm">Verifying invitation...</span>
+                    <span className="text-sm">Verificando invitación…</span>
                 </div>
             </div>
         );
@@ -99,12 +101,57 @@ export const AcceptConnection: React.FC = () => {
     if (accepted) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
-                <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
+                <div className="w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 shadow-xl">
                     <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icons.CheckCircle size={24} className="text-emerald-600" />
                     </div>
-                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Connection accepted</h2>
-                    <p className="text-sm text-zinc-500">Redirecting to your workspace…</p>
+                    <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 text-center mb-2">
+                        ¡Bienvenido{info?.invited_agency_name ? `, ${info.invited_agency_name}` : ''}!
+                    </h2>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6">
+                        Tu agencia está conectada con <strong>{info?.parent_tenant_name}</strong>.
+                    </p>
+
+                    {/* Explain exactly what the user can/can't see. The previous version
+                        just said "redirecting" and confused new agency owners who landed
+                        in an empty workspace expecting to see the parent's data. */}
+                    <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 mb-6 space-y-3 text-xs">
+                        <div className="flex items-start gap-2">
+                            <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                            <div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Tu workspace empieza vacío</div>
+                                <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                    Vas a tener tus propios clientes, proyectos, finanzas y equipo. Nada se mezcla con {info?.parent_tenant_name}.
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                            <div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">{info?.parent_tenant_name} puede entrar a tu workspace</div>
+                                <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                    Como agencia padre puede ver y gestionar lo que vos hagas acá. Vos NO ves lo de ellos.
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                            <div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Próximo paso: invitá a tu equipo</div>
+                                <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                    Desde Settings → Team podés sumar a las personas que trabajan con vos.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => { window.location.href = '/'; }}
+                        className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
+                    >
+                        Entrar a mi workspace
+                        <Icons.ChevronRight size={14} />
+                    </button>
                 </div>
             </div>
         );
@@ -117,10 +164,10 @@ export const AcceptConnection: React.FC = () => {
                     <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icons.AlertCircle size={24} className="text-red-500" />
                     </div>
-                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitation error</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Error en la invitación</h2>
                     <p className="text-sm text-zinc-500 mb-6">{error}</p>
                     <a href="/" className="text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline">
-                        Back to home
+                        Volver al inicio
                     </a>
                 </div>
             </div>
@@ -154,30 +201,31 @@ export const AcceptConnection: React.FC = () => {
                 </div>
 
                 <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 text-center mb-2">
-                    {info.parent_tenant_name} wants to connect
+                    {info.parent_tenant_name} te invita a conectarte
                 </h1>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6">
-                    They invited <strong>{info.invited_agency_name}</strong> ({info.invited_email}) to be managed from their super-agency dashboard.
+                    Te invitaron como agencia <strong>{info.invited_agency_name}</strong> ({info.invited_email}) para que tu workspace quede vinculado al de ellos.
                 </p>
 
-                {/* Permissions */}
+                {/* Permissions — be explicit about who sees what so the new agency
+                    owner does NOT expect to see the parent's data after accepting. */}
                 <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 mb-6 space-y-2.5">
                     <div className="flex items-start gap-2.5">
                         <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            They can switch into your workspace as an admin
+                            Tu workspace empieza <strong>vacío</strong> — vas a tener tus propios clientes, proyectos y finanzas.
                         </span>
                     </div>
                     <div className="flex items-start gap-2.5">
                         <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            Your team can mention them on tasks (mirroring soon)
+                            <strong>{info.parent_tenant_name}</strong> puede entrar a tu workspace como admin (es la agencia padre).
                         </span>
                     </div>
                     <div className="flex items-start gap-2.5">
                         <Icons.Close size={14} className="text-zinc-400 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            They will not see anything you don't explicitly share
+                            Vos NO ves los datos de {info.parent_tenant_name}, ni de otras agencias conectadas.
                         </span>
                     </div>
                 </div>
@@ -191,31 +239,31 @@ export const AcceptConnection: React.FC = () => {
 
                 {isAlreadyResolved ? (
                     <div className="text-center text-sm text-zinc-500">
-                        Status: <span className="font-semibold uppercase tracking-wider">{info.status}</span>
+                        Estado: <span className="font-semibold uppercase tracking-wider">{info.status}</span>
                     </div>
                 ) : !isSignedIn ? (
                     <div className="space-y-3">
                         <p className="text-xs text-zinc-500 text-center">
-                            Sign in as <strong>{info.invited_email}</strong> to continue.
+                            Iniciá sesión como <strong>{info.invited_email}</strong> para continuar. Si no tenés cuenta, primero creala con ese email.
                         </p>
                         <button
                             onClick={handleSignIn}
                             className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
                         >
-                            Sign in to accept
+                            Iniciar sesión y aceptar
                             <Icons.ChevronRight size={14} />
                         </button>
                     </div>
                 ) : wrongEmail ? (
                     <div className="space-y-3">
                         <div className="p-3 rounded-xl text-xs bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
-                            You're signed in as <strong>{signedInEmail}</strong> but this invitation is for <strong>{info.invited_email}</strong>.
+                            Estás logueado como <strong>{signedInEmail}</strong> pero esta invitación es para <strong>{info.invited_email}</strong>.
                         </div>
                         <button
                             onClick={async () => { await supabase.auth.signOut(); handleSignIn(); }}
                             className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90"
                         >
-                            Sign out and switch account
+                            Cerrar sesión y cambiar de cuenta
                         </button>
                     </div>
                 ) : (
@@ -224,7 +272,7 @@ export const AcceptConnection: React.FC = () => {
                             onClick={() => { window.location.href = '/'; }}
                             className="flex-1 py-3 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700"
                         >
-                            Reject
+                            Rechazar
                         </button>
                         <button
                             onClick={handleAccept}
@@ -234,11 +282,11 @@ export const AcceptConnection: React.FC = () => {
                             {isAccepting ? (
                                 <>
                                     <Icons.Loader size={14} className="animate-spin" />
-                                    Accepting…
+                                    Aceptando…
                                 </>
                             ) : (
                                 <>
-                                    Accept connection
+                                    Aceptar conexión
                                     <Icons.Check size={14} />
                                 </>
                             )}

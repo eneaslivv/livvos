@@ -506,8 +506,86 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         }
     };
 
+    // Welcome banner for fresh tenants — surfaces only when the workspace
+    // has zero clients, projects, and expenses. Dismissible per-tenant via
+    // localStorage so it disappears once the user closes it (and never comes
+    // back for that workspace, even if they later delete everything).
+    const isFreshTenant = clients.length === 0 && projectsRaw.length === 0 && expenses.length === 0;
+    const welcomeKey = currentTenant ? `welcome_dismissed_${currentTenant.id}` : null;
+    const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(() => {
+        if (!welcomeKey) return true;
+        try { return localStorage.getItem(welcomeKey) === '1'; } catch { return false; }
+    });
+    const dismissWelcome = () => {
+        if (welcomeKey) { try { localStorage.setItem(welcomeKey, '1'); } catch {} }
+        setWelcomeDismissed(true);
+    };
+    const showWelcome = isFreshTenant && !welcomeDismissed && !!currentTenant;
+
     return (
         <div className={`space-y-6 max-w-[1600px] mx-auto relative ${isMobile ? 'pb-6 pt-4' : 'pb-10 pt-6'}`}>
+
+            {/* Welcome banner for brand-new workspaces */}
+            {showWelcome && (
+                <div className="rounded-2xl border border-fuchsia-200 dark:border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-50 via-white to-indigo-50 dark:from-fuchsia-950/20 dark:via-zinc-900 dark:to-indigo-950/20 p-5 sm:p-6 relative">
+                    <button onClick={dismissWelcome} type="button"
+                        className="absolute top-3 right-3 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-800/60 transition-colors"
+                        title="Cerrar bienvenida">
+                        <Icons.Close size={14} />
+                    </button>
+                    <div className="flex items-start gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-fuchsia-100 dark:bg-fuchsia-500/20 flex items-center justify-center shrink-0">
+                            <Icons.Sparkles size={18} className="text-fuchsia-600 dark:text-fuchsia-300" />
+                        </div>
+                        <div>
+                            <h2 className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                                ¡Bienvenido a {currentTenant?.name || 'tu workspace'}!
+                            </h2>
+                            <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                Este es tu propio espacio. Lo que cargues acá no es visible para otras agencias.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button onClick={() => onNavigate('clients' as PageView)}
+                            className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Icons.Users size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">1. Cargá un cliente</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Empezá por el CRM — desde ahí podés crear proyectos y propuestas.</p>
+                        </button>
+                        <button onClick={() => onNavigate('projects' as PageView)}
+                            className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Icons.Briefcase size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">2. Creá un proyecto</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Asignalo al cliente y trackeá milestones, tareas y tiempo.</p>
+                        </button>
+                        <button onClick={() => onNavigate('finance' as PageView)}
+                            className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Icons.DollarSign size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">3. Cargá tus finanzas</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Subí un Excel con la IA o cargá ingresos/gastos manualmente.</p>
+                        </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <span className="flex items-center gap-1.5">
+                            <Icons.Users size={11} className="text-zinc-400" />
+                            Sumá a tu equipo desde <strong className="text-zinc-700 dark:text-zinc-300">Settings → Team</strong>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <Icons.Sparkles size={11} className="text-zinc-400" />
+                            Probá el botón <strong className="text-zinc-700 dark:text-zinc-300">Add with AI</strong> en Finance
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Daily Briefing Modal */}
             {authUser && (
