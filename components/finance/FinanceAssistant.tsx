@@ -3,6 +3,7 @@ import {
   Sparkles, Mic, MicOff, Wand2, CheckCircle2, X,
   ArrowDownLeft, ArrowUpFromLine, Loader2, Pencil, AlertCircle,
   FileSpreadsheet, Upload, ChevronDown, ChevronRight, UserPlus, Plus,
+  Flag, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SlidePanel } from '../ui/SlidePanel';
@@ -11,17 +12,45 @@ import {
   parseFinanceBatchFromAI,
   type FinanceEntryAIResult,
 } from '../../lib/ai';
-import { useFinance, type CreateIncomeData, type CreateExpenseData } from '../../context/FinanceContext';
+import { supabase } from '../../lib/supabase';
+import {
+  useFinance,
+  type CreateIncomeData,
+  type CreateExpenseData,
+  type ExpenseEntry,
+  type IncomeEntry,
+  type Budget,
+} from '../../context/FinanceContext';
 import { useProjects, type Project } from '../../context/ProjectsContext';
 import { useClients, type Client } from '../../context/ClientsContext';
+import { useTenant } from '../../context/TenantContext';
 
 const EXPENSE_CATEGORIES = ['Software', 'Talent', 'Marketing', 'Operations', 'Legal'] as const;
-const MAX_BATCH_ROWS = 50;
+
+// Anti-hallucination guardrails: cap how many rows the IA processes per call
+// (chunked sequentially) and how many rows total we'll touch from a single
+// upload. Tunables below; raising MAX_TOTAL_ROWS just means more sequential AI
+// calls — the user already accepts that for correctness over speed.
+const BATCH_CHUNK_SIZE = 25;
+const MAX_TOTAL_ROWS = 500;
 
 const fmtCurrency = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
 type Step = 'input' | 'parsing' | 'preview' | 'preview_batch' | 'saving' | 'done';
+
+type SheetRow = {
+  source_row: number;            // 1-indexed position in the original file (header is row 0, data starts at 1)
+  cells: Record<string, string>; // header → cell value as string
+};
+
+type SheetData = {
+  headers: string[];
+  rows: SheetRow[];
+  totalRows: number;             // total non-blank data rows in the file (may exceed rows.length when capped)
+};
+
+type MatchStatus = 'new' | 'duplicate' | 'update' | 'low_confidence';
 
 type DraftEntry = {
   kind: 'income' | 'expense';
@@ -38,7 +67,24 @@ type DraftEntry = {
   status: 'paid' | 'pending';
   recurring: boolean;
   notes: string | null;
+  // ─── Anti-hallucination + sync metadata ───
+  source_row: number | null;
+  source_row_data: Record<string, string> | null;
+  needs_review: boolean;
+  validation_errors: string[];
+  match_status: MatchStatus;
+  match_existing_id: string | null;
+  match_existing_kind: 'expense' | 'income' | null;
+  match_reason: string | null;
+  budget_id: string | null;
+  budget_name: string | null;
+  confidence: number;
+  // For Updates: lets the user pick "create new" / "update existing" / "skip"
+  // per-row from the dropdown in the Updates section.
+  update_action: 'update' | 'create' | 'skip';
 };
+
+type AIOutputRef = { type: 'finance_entries_batch' | 'finance_entry'; output_id: string | null };
 
 const buildSinglePrompt = (
   text: string,
@@ -65,9 +111,16 @@ const buildSinglePrompt = (
   ].join('\n');
 };
 
+// Builds a chunk-aware prompt where each row is a JSON object with a stable,
+// 1-indexed `source_row`. The IA echoes that index so the frontend can verify
+// every emitted entry's amount/date came from a real cell of that row — the
+// fix for "phantom $3,000 expenses" caused by silent CSV truncation.
 const buildBatchPrompt = (
-  csvText: string,
   fileName: string,
+  headers: string[],
+  rows: SheetRow[],
+  totalInFile: number,
+  chunkRange: { from: number; to: number },
   clients: Client[],
   projects: Project[],
 ): string => {
@@ -77,8 +130,9 @@ const buildBatchPrompt = (
   return [
     `TODAY: ${today}`,
     `FILE: ${fileName}`,
+    `CHUNK: rows ${chunkRange.from}-${chunkRange.to} of ${totalInFile}`,
     '',
-    'EXPENSE_CATEGORIES:',
+    'EXPENSE_CATEGORIES (use one of these EXACTLY, or "Operations" if uncertain):',
     ...EXPENSE_CATEGORIES.map(c => `- ${c}`),
     '',
     'CLIENTS:',
@@ -87,27 +141,244 @@ const buildBatchPrompt = (
     'PROJECTS:',
     projectLines || '(none)',
     '',
-    'SPREADSHEET_DATA (CSV):',
-    csvText,
+    `SHEET_HEADERS: ${JSON.stringify(headers)}`,
+    '',
+    'ROWS (JSON, source_row is the 1-indexed row number in the original file; never invent rows):',
+    JSON.stringify(rows.map(r => ({ source_row: r.source_row, ...r.cells }))),
   ].join('\n');
 };
 
-const toDraft = (r: FinanceEntryAIResult): DraftEntry => ({
-  kind: r.kind,
-  concept: r.concept || '',
-  amount: Number(r.amount) || 0,
-  date: r.date || new Date().toISOString().slice(0, 10),
-  client_id: r.client_id || null,
-  client_name: r.client_name || null,
-  project_id: r.project_id || null,
-  project_name: r.project_name || null,
-  category: r.category || (r.kind === 'expense' ? 'Operations' : null),
-  vendor: r.vendor || null,
-  num_installments: Math.max(1, Number(r.num_installments) || 1),
-  status: r.status === 'paid' ? 'paid' : 'pending',
-  recurring: !!r.recurring,
-  notes: r.notes || null,
-});
+// ─── Helpers: number/date parsing for source-row validation ───────────
+
+// Strip currency symbols, thousand separators, and convert European decimals.
+// "$1.234,56" → 1234.56 ; "2k" → 2000 ; "USD 89,00" → 89.
+const parseCellNumber = (raw: string): number | null => {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+  // "2k" / "2.5k"
+  const kMatch = s.match(/^([0-9]+(?:[.,][0-9]+)?)\s*k$/i);
+  if (kMatch) return parseFloat(kMatch[1].replace(',', '.')) * 1000;
+  // strip currency words/symbols and spaces
+  s = s.replace(/[A-Za-z$€£¥]/g, '').replace(/\s+/g, '').trim();
+  if (!s) return null;
+  // If both . and , are present, the last one is the decimal separator.
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      // European: 1.234,56
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US: 1,234.56
+      s = s.replace(/,/g, '');
+    }
+  } else if (lastComma >= 0) {
+    // Only comma — could be European decimal (1234,56) or thousands grouping
+    // (1,234). Heuristic: 2 digits after the last comma → decimal.
+    if (s.length - lastComma - 1 === 2) s = s.replace(/,/g, '.');
+    else s = s.replace(/,/g, '');
+  } else if (lastDot >= 0) {
+    // Only dot — same heuristic in reverse: 3 digits after means thousands.
+    if (s.length - lastDot - 1 === 3 && (s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+};
+
+// Try to find `target` numerically in any cell of the row. Tolerance ±0.01.
+const rowContainsNumber = (row: SheetRow, target: number): string | null => {
+  for (const [header, cell] of Object.entries(row.cells)) {
+    const n = parseCellNumber(cell);
+    if (n !== null && Math.abs(n - target) <= 0.01) return header;
+  }
+  return null;
+};
+
+// Returns true if any cell of the row, after normalising, contains the ISO
+// date components — handles "15/04/2026", "2026-04-15", "Apr 15 2026", etc.
+const rowContainsDate = (row: SheetRow, isoDate: string): boolean => {
+  const [yyyy, mm, dd] = isoDate.split('-');
+  if (!yyyy || !mm || !dd) return false;
+  const dNoZero = String(parseInt(dd, 10));
+  const mNoZero = String(parseInt(mm, 10));
+  for (const cell of Object.values(row.cells)) {
+    const c = String(cell ?? '').toLowerCase();
+    if (!c) continue;
+    if (c.includes(yyyy) && (c.includes(mm) || c.includes(mNoZero)) && (c.includes(dd) || c.includes(dNoZero))) {
+      return true;
+    }
+    // Fallback: try parsing the cell as a date and comparing components.
+    const parsed = new Date(c);
+    if (!isNaN(parsed.getTime())) {
+      if (
+        parsed.getFullYear() === parseInt(yyyy, 10) &&
+        parsed.getMonth() + 1 === parseInt(mm, 10) &&
+        parsed.getDate() === parseInt(dd, 10)
+      ) return true;
+    }
+  }
+  return false;
+};
+
+// ─── Helpers: dedup + recurring + budget matching ────────────────────
+
+// Tiny Levenshtein — used only to fuzzy-match concepts/vendors against
+// existing rows when classifying duplicates. ~15 lines, no extra dep.
+const levenshtein = (a: string, b: string): number => {
+  if (!a) return b.length;
+  if (!b) return a.length;
+  const m = a.length, n = b.length;
+  const dp: number[] = Array(n + 1).fill(0);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+};
+
+const norm = (s: string | null | undefined) => String(s ?? '').toLowerCase().trim();
+const conceptsLooseMatch = (a: string, b: string): boolean => {
+  const an = norm(a), bn = norm(b);
+  if (!an || !bn) return false;
+  if (an === bn) return true;
+  if (an.includes(bn) || bn.includes(an)) return true;
+  return levenshtein(an, bn) <= 3;
+};
+
+const daysBetween = (a: string, b: string): number => {
+  const ta = new Date(a + 'T12:00:00').getTime();
+  const tb = new Date(b + 'T12:00:00').getTime();
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return Infinity;
+  return Math.abs(ta - tb) / 86400000;
+};
+
+type Classification = {
+  status: MatchStatus;
+  match?: { id: string; kind: 'expense' | 'income'; reason: string };
+};
+
+const classifyDraft = (
+  draft: Pick<DraftEntry, 'kind' | 'amount' | 'date' | 'concept' | 'vendor' | 'recurring' | 'status'>,
+  expenses: ExpenseEntry[],
+  incomes: IncomeEntry[],
+): Classification => {
+  const amountTol = Math.max(1, draft.amount * 0.01);
+  if (draft.kind === 'expense') {
+    for (const e of expenses) {
+      if (Math.abs(e.amount - draft.amount) > amountTol) continue;
+      if (daysBetween(e.date, draft.date) > 3) continue;
+      const sameVendor = norm(e.vendor) && norm(e.vendor) === norm(draft.vendor);
+      const closeConcept = conceptsLooseMatch(e.concept, draft.concept);
+      if (!sameVendor && !closeConcept) continue;
+      // Match found
+      if (e.recurring || draft.recurring) {
+        return { status: 'update', match: { id: e.id, kind: 'expense', reason: 'Coincide con un gasto recurrente existente' } };
+      }
+      if (e.status !== draft.status) {
+        return { status: 'update', match: { id: e.id, kind: 'expense', reason: `Mismo gasto, status difiere (${e.status} → ${draft.status})` } };
+      }
+      return { status: 'duplicate', match: { id: e.id, kind: 'expense', reason: 'Gasto idéntico ya existe' } };
+    }
+  } else {
+    for (const i of incomes) {
+      if (Math.abs(i.total_amount - draft.amount) > amountTol) continue;
+      const incomeDate = i.due_date || '';
+      if (incomeDate && daysBetween(incomeDate, draft.date) > 3) continue;
+      const closeConcept = conceptsLooseMatch(i.concept, draft.concept);
+      if (!closeConcept) continue;
+      if (i.status !== draft.status) {
+        return { status: 'update', match: { id: i.id, kind: 'income', reason: `Mismo income, status difiere (${i.status} → ${draft.status})` } };
+      }
+      return { status: 'duplicate', match: { id: i.id, kind: 'income', reason: 'Income idéntico ya existe' } };
+    }
+  }
+  return { status: 'new' };
+};
+
+// Pick the active budget whose category matches and whose date range covers
+// `date`. Used to auto-link `budget_id` so the user's allocations stay in sync
+// without re-typing the budget on every expense.
+const findMatchingBudget = (category: string, date: string, budgets: Budget[]): Budget | null => {
+  if (!category || !date) return null;
+  const d = new Date(date + 'T12:00:00').getTime();
+  if (!Number.isFinite(d)) return null;
+  for (const b of budgets) {
+    if (!b.is_active) continue;
+    if (norm(b.category) !== norm(category)) continue;
+    const startOk = !b.start_date || new Date(b.start_date + 'T12:00:00').getTime() <= d;
+    const endOk   = !b.end_date   || new Date(b.end_date   + 'T12:00:00').getTime() >= d;
+    if (startOk && endOk) return b;
+  }
+  return null;
+};
+
+const toDraft = (
+  r: FinanceEntryAIResult,
+  rowsByIndex: Map<number, SheetRow>,
+): DraftEntry => {
+  const sourceRow = typeof r.source_row === 'number' ? rowsByIndex.get(r.source_row) : undefined;
+  return {
+    kind: r.kind,
+    concept: r.concept || '',
+    amount: Number(r.amount) || 0,
+    date: r.date || new Date().toISOString().slice(0, 10),
+    client_id: r.client_id || null,
+    client_name: r.client_name || null,
+    project_id: r.project_id || null,
+    project_name: r.project_name || null,
+    category: r.category || (r.kind === 'expense' ? 'Operations' : null),
+    vendor: r.vendor || null,
+    num_installments: Math.max(1, Number(r.num_installments) || 1),
+    status: r.status === 'paid' ? 'paid' : 'pending',
+    recurring: !!r.recurring,
+    notes: r.notes || null,
+    source_row: typeof r.source_row === 'number' ? r.source_row : null,
+    source_row_data: sourceRow ? sourceRow.cells : null,
+    needs_review: !!r.needs_review,
+    validation_errors: [],
+    match_status: 'new',
+    match_existing_id: null,
+    match_existing_kind: null,
+    match_reason: null,
+    budget_id: null,
+    budget_name: null,
+    confidence: typeof r.confidence === 'number' ? Math.max(0, Math.min(1, r.confidence)) : 0.7,
+    update_action: 'update',
+  };
+};
+
+// Run amount/date binding checks. Pushes errors to draft.validation_errors and
+// flips needs_review when the IA's claim doesn't match the source cell.
+const validateAgainstSource = (draft: DraftEntry): DraftEntry => {
+  const errors: string[] = [];
+  if (draft.source_row == null) {
+    errors.push('La IA no devolvió source_row para esta fila.');
+  } else if (!draft.source_row_data) {
+    errors.push(`La IA referenció source_row=${draft.source_row}, pero no existe en el archivo.`);
+  } else {
+    const fakeRow: SheetRow = { source_row: draft.source_row, cells: draft.source_row_data };
+    if (draft.amount > 0 && !rowContainsNumber(fakeRow, draft.amount)) {
+      errors.push(`El monto ${fmtCurrency(draft.amount)} no aparece en la fila origen — posible alucinación.`);
+    }
+    // Skip date validation when the IA explicitly inferred it from TODAY.
+    // The `date_inferred` flag isn't on DraftEntry, but if needs_review is
+    // true and date matches today, we trust the inference.
+    const today = new Date().toISOString().slice(0, 10);
+    if (draft.date && draft.date !== today && !rowContainsDate(fakeRow, draft.date)) {
+      errors.push(`La fecha ${draft.date} no aparece en la fila origen.`);
+    }
+  }
+  return errors.length > 0
+    ? { ...draft, needs_review: true, validation_errors: errors }
+    : draft;
+};
 
 const EXAMPLES = [
   'Recibí $2.500 de Coffe Payper por la consultoría de menú, factura el 15',
@@ -121,9 +392,10 @@ interface FinanceAssistantProps {
 }
 
 export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onClose }) => {
-  const { createIncome, createExpense } = useFinance();
+  const { createIncome, createExpense, updateIncome, updateExpense, expenses, incomes, budgets } = useFinance();
   const { projects } = useProjects();
   const { clients, createClient } = useClients();
+  const { currentTenant } = useTenant();
 
   const [step, setStep] = useState<Step>('input');
   const [userInput, setUserInput] = useState('');
@@ -137,11 +409,16 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
   const [confidence, setConfidence] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  const [editedRows, setEditedRows] = useState<Set<number>>(new Set());
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [aiOutputRef, setAIOutputRef] = useState<AIOutputRef | null>(null);
 
-  // File upload state
+  // File upload state — sheetData replaces the old csvText/filePreview pair.
+  // Keeping headers + per-row cells lets the AI see structured JSON instead of
+  // a possibly-truncated CSV string, which is the root-cause fix for amount
+  // hallucination.
   const [fileName, setFileName] = useState<string | null>(null);
-  const [filePreview, setFilePreview] = useState<{ headers: string[]; rows: any[][]; totalRows: number } | null>(null);
-  const [csvText, setCsvText] = useState<string | null>(null);
+  const [sheetData, setSheetData] = useState<SheetData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isListening, setIsListening] = useState(false);
@@ -164,9 +441,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setConfidence(0);
       setError(null);
       setSavedCount(0);
+      setEditedRows(new Set());
+      setBatchProgress(null);
+      setAIOutputRef(null);
       setFileName(null);
-      setFilePreview(null);
-      setCsvText(null);
+      setSheetData(null);
       setTimeout(() => textareaRef.current?.focus(), 80);
     } else {
       try { recognitionRef.current?.abort?.(); } catch { /* noop */ }
@@ -186,7 +465,6 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       try { recognitionRef.current?.stop(); } catch { /* noop */ }
       return;
     }
-    // Tear down any leftover instance from a fast double-click before spinning up a new one.
     try { recognitionRef.current?.abort?.(); } catch { /* noop */ }
     recognitionRef.current = null;
 
@@ -196,9 +474,6 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     rec.interimResults = true;
     rec.continuous = false;
 
-    // Snapshot whatever the user had typed before pressing the mic.
-    // Every onresult call rewrites the textarea as `base + final + interim`,
-    // so we never accumulate stale partial transcripts.
     voiceBaseRef.current = userInput.trim();
     let finalTranscript = '';
 
@@ -237,23 +512,26 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     }
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true, cellNF: false, cellText: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       if (!sheet) {
         setError('No pude leer la primera hoja del archivo.');
         return;
       }
-      const aoa: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+      const aoa: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
       if (aoa.length === 0) {
         setError('El archivo está vacío.');
         return;
       }
-      const headers = (aoa[0] || []).map(v => String(v ?? '').trim());
-      const rows = aoa.slice(1, MAX_BATCH_ROWS + 1);
-      const csv = XLSX.utils.sheet_to_csv(sheet);
+      const headers = (aoa[0] || []).map((v, i) => String(v ?? '').trim() || `col${i + 1}`);
+      const dataRows = aoa.slice(1, MAX_TOTAL_ROWS + 1);
+      const rows: SheetRow[] = dataRows.map((row, idx) => {
+        const cells: Record<string, string> = {};
+        headers.forEach((h, ci) => { cells[h] = String(row[ci] ?? '').trim(); });
+        return { source_row: idx + 1, cells };
+      });
       setFileName(file.name);
-      setFilePreview({ headers, rows, totalRows: aoa.length - 1 });
-      setCsvText(csv.length > 24000 ? csv.slice(0, 24000) : csv);
+      setSheetData({ headers, rows, totalRows: aoa.length - 1 });
     } catch (err: any) {
       console.error('[FinanceAssistant] file parse error', err);
       setError('No pude leer ese archivo. Asegurate de que sea CSV o Excel válido.');
@@ -274,35 +552,101 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
 
   const clearFile = useCallback(() => {
     setFileName(null);
-    setFilePreview(null);
-    setCsvText(null);
+    setSheetData(null);
   }, []);
 
   // ─── Submit → AI parse (single OR batch depending on file presence) ─
   const handleParse = useCallback(async () => {
     setError(null);
 
-    // Batch mode: a file was uploaded
-    if (csvText && filePreview) {
+    // Batch mode
+    if (sheetData && sheetData.rows.length > 0) {
       setStep('parsing');
+      setBatchProgress({ current: 0, total: Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE) });
       try {
-        const prompt = buildBatchPrompt(csvText, fileName || 'data.csv', clients, projects);
-        const result = await parseFinanceBatchFromAI(prompt);
-        const drafts = (result.entries || []).map(toDraft);
-        if (drafts.length === 0) {
+        const allEntries: FinanceEntryAIResult[] = [];
+        const allUnknownClients: string[] = [];
+        const allUnknownProjects: string[] = [];
+        let lastOutputId: string | null = null;
+
+        const chunks: SheetRow[][] = [];
+        for (let i = 0; i < sheetData.rows.length; i += BATCH_CHUNK_SIZE) {
+          chunks.push(sheetData.rows.slice(i, i + BATCH_CHUNK_SIZE));
+        }
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          const range = { from: chunk[0].source_row, to: chunk[chunk.length - 1].source_row };
+          const prompt = buildBatchPrompt(
+            fileName || 'data.csv',
+            sheetData.headers,
+            chunk,
+            sheetData.totalRows,
+            range,
+            clients,
+            projects,
+          );
+          const result = await parseFinanceBatchFromAI(prompt);
+          if ((result as any)._outputId) lastOutputId = (result as any)._outputId;
+          allEntries.push(...(result.entries || []));
+          (result.unknown_clients || []).forEach(s => { if (typeof s === 'string' && s.trim()) allUnknownClients.push(s.trim()); });
+          (result.unknown_projects || []).forEach(s => { if (typeof s === 'string' && s.trim()) allUnknownProjects.push(s.trim()); });
+          setBatchProgress({ current: i + 1, total: chunks.length });
+        }
+
+        if (allEntries.length === 0) {
           setError('La IA no encontró filas válidas en el archivo. Verificá los encabezados.');
           setStep('input');
+          setBatchProgress(null);
           return;
         }
+
+        // Index rows for O(1) source lookup during validation.
+        const rowsByIndex = new Map<number, SheetRow>();
+        sheetData.rows.forEach(r => rowsByIndex.set(r.source_row, r));
+
+        // 1. Convert + validate against source rows (anti-hallucination).
+        // 2. Classify against existing data (dedup / update vs create).
+        // 3. Auto-link budget when category + date matches an active budget.
+        const drafts = allEntries.map(e => {
+          let d = toDraft(e, rowsByIndex);
+          d = validateAgainstSource(d);
+          const classification = classifyDraft(d, expenses, incomes);
+          d.match_status = classification.status;
+          d.match_existing_id = classification.match?.id || null;
+          d.match_existing_kind = classification.match?.kind || null;
+          d.match_reason = classification.match?.reason || null;
+          if (d.kind === 'expense' && d.category) {
+            const b = findMatchingBudget(d.category, d.date, budgets);
+            if (b) {
+              d.budget_id = b.id;
+              d.budget_name = b.name;
+            }
+          }
+          return d;
+        });
+
         setBatchDrafts(drafts);
-        setSelectedRows(new Set(drafts.map((_, i) => i)));
-        setUnknownClients(Array.from(new Set((result.unknown_clients || []).filter(s => typeof s === 'string' && s.trim()))));
-        setUnknownProjects(Array.from(new Set((result.unknown_projects || []).filter(s => typeof s === 'string' && s.trim()))));
+        // Auto-select only confident `new` and `update` rows. Skip duplicates
+        // and rows flagged for review by default — user can opt them in.
+        const initialSelection = new Set<number>();
+        drafts.forEach((d, i) => {
+          if (d.match_status === 'duplicate') return;
+          if (d.needs_review) return;
+          if (d.confidence > 0 && d.confidence < 0.6) return;
+          initialSelection.add(i);
+        });
+        setSelectedRows(initialSelection);
+        setUnknownClients(Array.from(new Set(allUnknownClients)));
+        setUnknownProjects(Array.from(new Set(allUnknownProjects)));
+        setAIOutputRef(lastOutputId ? { type: 'finance_entries_batch', output_id: lastOutputId } : null);
+        setBatchProgress(null);
         setStep('preview_batch');
       } catch (err: any) {
         console.error('[FinanceAssistant] batch parse error', err);
         setError(err?.message || 'No pude procesar el archivo.');
         setStep('input');
+        setBatchProgress(null);
       }
       return;
     }
@@ -317,21 +661,74 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     try {
       const prompt = buildSinglePrompt(input, clients, projects);
       const result = await parseFinanceEntryFromAI(prompt);
-      setDraft(toDraft(result));
+      const draft = toDraft(result, new Map());
+      // Single entries don't have a source row — clear the validation noise.
+      draft.validation_errors = [];
+      draft.needs_review = false;
+      // Still classify so the user sees if they're about to dup an existing row.
+      const classification = classifyDraft(draft, expenses, incomes);
+      draft.match_status = classification.status;
+      draft.match_existing_id = classification.match?.id || null;
+      draft.match_existing_kind = classification.match?.kind || null;
+      draft.match_reason = classification.match?.reason || null;
+      if (draft.kind === 'expense' && draft.category) {
+        const b = findMatchingBudget(draft.category, draft.date, budgets);
+        if (b) { draft.budget_id = b.id; draft.budget_name = b.name; }
+      }
+      setDraft(draft);
       setQuestions(Array.isArray(result.questions) ? result.questions.filter(q => typeof q === 'string' && q.trim().length > 0) : []);
       setConfidence(typeof result.confidence === 'number' ? Math.max(0, Math.min(1, result.confidence)) : 0.7);
+      setAIOutputRef((result as any)._outputId ? { type: 'finance_entry', output_id: (result as any)._outputId } : null);
       setStep('preview');
     } catch (err: any) {
       console.error('[FinanceAssistant] parse error', err);
       setError(err?.message || 'No pude procesar la descripción. Probá reformular.');
       setStep('input');
     }
-  }, [csvText, filePreview, fileName, userInput, clients, projects]);
+  }, [sheetData, fileName, userInput, clients, projects, expenses, incomes, budgets]);
 
   // ─── Persist a single draft ──────────────────────────────────────
+  // Honors match_status: a draft tagged `update` can be applied to the
+  // matched existing expense/income (toggling status, adjusting amount) or
+  // recorded as a new instance of a recurring expense via `recurring_source_id`.
   const persistDraft = useCallback(async (d: DraftEntry) => {
     const project = d.project_id ? projects.find(p => p.id === d.project_id) : null;
     const client = d.client_id ? clients.find(c => c.id === d.client_id) : null;
+
+    // Skip explicit duplicates and update-action=skip rows.
+    if (d.match_status === 'duplicate') return;
+    if (d.match_status === 'update' && d.update_action === 'skip') return;
+
+    if (d.match_status === 'update' && d.update_action === 'update' && d.match_existing_id) {
+      if (d.match_existing_kind === 'expense') {
+        // Update existing expense with the new amount/status/budget link.
+        await updateExpense(d.match_existing_id, {
+          status: d.status,
+          amount: d.amount,
+          date: d.date,
+          ...(d.budget_id ? { budget_id: d.budget_id } : {}),
+        });
+        return;
+      }
+      if (d.match_existing_kind === 'income') {
+        await updateIncome(d.match_existing_id, {
+          status: d.status,
+          total_amount: d.amount,
+          due_date: d.date,
+        });
+        return;
+      }
+    }
+
+    // Recurring instance: create a new expense linked to the recurring source
+    // so the dashboard correctly groups them and the renewer skips this month.
+    const isRecurringInstance =
+      d.match_status === 'update' &&
+      d.update_action === 'create' &&
+      d.match_existing_kind === 'expense' &&
+      d.match_existing_id &&
+      expenses.some(e => e.id === d.match_existing_id && e.recurring);
+
     if (d.kind === 'income') {
       const data: CreateIncomeData = {
         client_id: d.client_id || null,
@@ -354,12 +751,14 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         project_name: project?.title || d.project_name || 'General',
         client_id: d.client_id || null,
         vendor: d.vendor?.trim() || '',
-        recurring: !!d.recurring,
+        recurring: !!d.recurring && !isRecurringInstance,
         status: d.status,
+        ...(d.budget_id ? { budget_id: d.budget_id } : {}),
+        ...(isRecurringInstance && d.match_existing_id ? { recurring_source_id: d.match_existing_id } : {}),
       };
       await createExpense(data);
     }
-  }, [projects, clients, createIncome, createExpense]);
+  }, [projects, clients, createIncome, createExpense, updateExpense, updateIncome, expenses]);
 
   // ─── Confirm single ──────────────────────────────────────────────
   const handleConfirm = useCallback(async () => {
@@ -383,17 +782,35 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
 
   // ─── Confirm batch ───────────────────────────────────────────────
   const handleConfirmBatch = useCallback(async () => {
-    const toSave = batchDrafts.filter((_, i) => selectedRows.has(i));
+    const toSave = batchDrafts
+      .map((d, i) => ({ d, i }))
+      .filter(({ i }) => selectedRows.has(i));
     if (toSave.length === 0) { setError('Seleccioná al menos una fila.'); return; }
     setStep('saving');
     setError(null);
     let ok = 0;
     let firstErr: string | null = null;
-    for (const d of toSave) {
+    for (const { d, i } of toSave) {
       try {
         if (!d.concept.trim() || !d.amount || d.amount <= 0 || !d.date) continue;
         await persistDraft(d);
         ok++;
+        // Telemetry: log corrections for rows the user edited before saving.
+        if (editedRows.has(i) && aiOutputRef?.output_id && currentTenant?.id) {
+          const original = batchDrafts[i];
+          // Fire-and-forget — never let telemetry block the save flow.
+          supabase.from('ai_feedback').insert({
+            output_id: aiOutputRef.output_id,
+            tenant_id: currentTenant.id,
+            rating: 0,
+            correction: JSON.stringify({
+              reason: 'user_edited_before_save',
+              source_row: d.source_row,
+              original: { amount: original.amount, date: original.date, kind: original.kind, category: original.category, vendor: original.vendor, concept: original.concept },
+              edited:   { amount: d.amount,        date: d.date,        kind: d.kind,        category: d.category,        vendor: d.vendor,        concept: d.concept },
+            }).slice(0, 4000),
+          }).then(({ error: e }) => { if (e && import.meta.env.DEV) console.warn('[FinanceAssistant] telemetry failed', e); });
+        }
       } catch (err: any) {
         if (!firstErr) firstErr = err?.message || 'Error guardando alguna fila.';
       }
@@ -406,7 +823,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     }
     setStep('done');
     setTimeout(() => onClose(), 1200);
-  }, [batchDrafts, selectedRows, persistDraft, onClose]);
+  }, [batchDrafts, selectedRows, persistDraft, onClose, editedRows, aiOutputRef, currentTenant?.id]);
 
   // ─── Create unknown client on the fly + backfill drafts ──────────
   const handleCreateUnknownClient = useCallback(async (name: string) => {
@@ -437,6 +854,17 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     () => (draft?.client_id ? clients.find(c => c.id === draft.client_id) : null),
     [draft?.client_id, clients],
   );
+  // Inconsistency: project has a canonical client that differs from the
+  // draft's client. Surface it so the user can one-click-fix instead of
+  // shipping mis-attributed data.
+  const projectClientMismatch = useMemo(() => {
+    if (!matchedProject || !draft) return null;
+    const projClientId = matchedProject.client_id;
+    if (!projClientId) return null;
+    if (draft.client_id === projClientId) return null;
+    const projClient = clients.find(c => c.id === projClientId);
+    return projClient ? { id: projClientId, name: projClient.name } : null;
+  }, [matchedProject, draft?.client_id, clients]);
 
   const updateDraft = useCallback((patch: Partial<DraftEntry>) => {
     setDraft(prev => (prev ? { ...prev, ...patch } : prev));
@@ -444,7 +872,36 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
 
   const updateBatchRow = useCallback((idx: number, patch: Partial<DraftEntry>) => {
     setBatchDrafts(prev => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
+    setEditedRows(prev => {
+      if (prev.has(idx)) return prev;
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
   }, []);
+
+  const flagBadParse = useCallback(async (idx: number) => {
+    if (!aiOutputRef?.output_id || !currentTenant?.id) return;
+    const d = batchDrafts[idx];
+    try {
+      await supabase.from('ai_feedback').insert({
+        output_id: aiOutputRef.output_id,
+        tenant_id: currentTenant.id,
+        rating: -1,
+        correction: JSON.stringify({
+          reason: 'user_flagged_bad_parse',
+          source_row: d.source_row,
+          source_row_data: d.source_row_data,
+          ai_output: { amount: d.amount, date: d.date, kind: d.kind, category: d.category, vendor: d.vendor, concept: d.concept },
+          validation_errors: d.validation_errors,
+        }).slice(0, 4000),
+      });
+      // Visual ack via match_reason — keeps the chip in place.
+      updateBatchRow(idx, { match_reason: 'Reportado como mal parseo' });
+    } catch (err: any) {
+      console.warn('[FinanceAssistant] flag failed', err);
+    }
+  }, [aiOutputRef, currentTenant?.id, batchDrafts, updateBatchRow]);
 
   const switchKind = useCallback((kind: 'income' | 'expense') => {
     setDraft(prev => prev ? { ...prev, kind, category: kind === 'expense' ? (prev.category || 'Operations') : null } : prev);
@@ -461,6 +918,23 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     });
     return { income, expense, n };
   }, [batchDrafts, selectedRows]);
+
+  // Group drafts by status for the preview UI.
+  const groupedDrafts = useMemo(() => {
+    const groups = {
+      new: [] as { d: DraftEntry; i: number }[],
+      update: [] as { d: DraftEntry; i: number }[],
+      needs_review: [] as { d: DraftEntry; i: number }[],
+      duplicate: [] as { d: DraftEntry; i: number }[],
+    };
+    batchDrafts.forEach((d, i) => {
+      if (d.needs_review) groups.needs_review.push({ d, i });
+      else if (d.match_status === 'duplicate') groups.duplicate.push({ d, i });
+      else if (d.match_status === 'update') groups.update.push({ d, i });
+      else groups.new.push({ d, i });
+    });
+    return groups;
+  }, [batchDrafts]);
 
   // ─── Render ──────────────────────────────────────────────────────
   return (
@@ -519,7 +993,6 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         {/* ─── INPUT STEP ─────────────────────────────────────── */}
         {step === 'input' && (
           <>
-            {/* Bigger textarea with optional voice input */}
             <div className="relative">
               <textarea
                 ref={textareaRef}
@@ -546,7 +1019,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             </div>
 
             {/* File upload zone */}
-            {!filePreview ? (
+            {!sheetData ? (
               <div
                 onDrop={onDrop}
                 onDragOver={e => e.preventDefault()}
@@ -558,7 +1031,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Subí un Excel o CSV</div>
-                  <div className="text-[10px] text-zinc-400">Arrastrá un archivo o hacé click — la IA procesa hasta {MAX_BATCH_ROWS} filas por vez</div>
+                  <div className="text-[10px] text-zinc-400">Arrastrá un archivo o hacé click — cada fila se valida contra la IA en tandas de {BATCH_CHUNK_SIZE}</div>
                 </div>
                 <Upload size={14} className="text-zinc-400 group-hover:text-fuchsia-600 transition-colors" />
                 <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.tsv,text/csv" onChange={onPickFile} className="hidden" />
@@ -572,31 +1045,49 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{fileName}</div>
                     <div className="text-[10px] text-zinc-500">
-                      {filePreview.totalRows} filas · {filePreview.headers.length} columnas
-                      {filePreview.totalRows > MAX_BATCH_ROWS && ` · primeras ${MAX_BATCH_ROWS} se procesarán`}
+                      {sheetData.totalRows} filas · {sheetData.headers.length} columnas
                     </div>
                   </div>
                   <button onClick={clearFile} type="button" className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
                     <X size={13} />
                   </button>
                 </div>
+
+                {/* Pagination warning */}
+                {sheetData.rows.length > BATCH_CHUNK_SIZE && (
+                  <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1.5">
+                    <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                    <span>
+                      Se procesará en {Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE)} tandas de {BATCH_CHUNK_SIZE} filas (~{Math.ceil(sheetData.rows.length / BATCH_CHUNK_SIZE) * 4}s).
+                    </span>
+                  </div>
+                )}
+                {sheetData.totalRows > MAX_TOTAL_ROWS && (
+                  <div className="flex items-start gap-1.5 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded px-2 py-1.5">
+                    <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                    <span>
+                      El archivo tiene {sheetData.totalRows} filas — solo se procesarán las primeras {MAX_TOTAL_ROWS}.
+                    </span>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto rounded-lg border border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/60">
                   <table className="w-full text-[10px]">
                     <thead className="bg-zinc-50/70 dark:bg-zinc-800/30">
                       <tr>
-                        {filePreview.headers.slice(0, 6).map((h, i) => (
+                        {sheetData.headers.slice(0, 6).map((h, i) => (
                           <th key={i} className="px-2 py-1.5 text-left font-semibold text-zinc-500 uppercase tracking-wider whitespace-nowrap">{h || `col${i + 1}`}</th>
                         ))}
-                        {filePreview.headers.length > 6 && <th className="px-2 py-1.5 text-left text-zinc-400">+{filePreview.headers.length - 6}</th>}
+                        {sheetData.headers.length > 6 && <th className="px-2 py-1.5 text-left text-zinc-400">+{sheetData.headers.length - 6}</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {filePreview.rows.slice(0, 3).map((row, ri) => (
+                      {sheetData.rows.slice(0, 3).map((row, ri) => (
                         <tr key={ri} className="border-t border-zinc-100 dark:border-zinc-800/40">
-                          {row.slice(0, 6).map((cell, ci) => (
-                            <td key={ci} className="px-2 py-1.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap max-w-[140px] truncate">{String(cell ?? '')}</td>
+                          {sheetData.headers.slice(0, 6).map((h, ci) => (
+                            <td key={ci} className="px-2 py-1.5 text-zinc-600 dark:text-zinc-400 whitespace-nowrap max-w-[140px] truncate">{String(row.cells[h] ?? '')}</td>
                           ))}
-                          {row.length > 6 && <td className="px-2 py-1.5 text-zinc-300">…</td>}
+                          {sheetData.headers.length > 6 && <td className="px-2 py-1.5 text-zinc-300">…</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -606,7 +1097,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             )}
 
             {/* Examples — only when no file is loaded */}
-            {!filePreview && (
+            {!sheetData && (
               <div className="space-y-1.5">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Ejemplos rápidos</div>
                 <div className="flex flex-col gap-1.5">
@@ -631,11 +1122,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             <div className="flex items-center justify-between pt-1">
               <p className="text-[10px] text-zinc-400">⌘/Ctrl + Enter para enviar</p>
               <button onClick={handleParse} type="button"
-                disabled={!userInput.trim() && !filePreview}
+                disabled={!userInput.trim() && !sheetData}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
                 style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}>
                 <Wand2 size={13} />
-                {filePreview ? 'Procesar archivo' : 'Parse with AI'}
+                {sheetData ? 'Procesar archivo' : 'Parse with AI'}
               </button>
             </div>
           </>
@@ -649,8 +1140,17 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
               <Sparkles size={14} className="absolute -top-1 -right-1 text-indigo-500 animate-pulse" />
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {filePreview ? 'Analizando filas y matcheando con tu CRM…' : 'Procesando…'}
+              {sheetData
+                ? batchProgress
+                  ? `Tanda ${batchProgress.current} de ${batchProgress.total} — analizando filas y matcheando con tu CRM…`
+                  : 'Preparando tandas…'
+                : 'Procesando…'}
             </p>
+            {batchProgress && (
+              <div className="w-48 h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                <div className="h-full bg-fuchsia-500 transition-all" style={{ width: `${(batchProgress.current / Math.max(1, batchProgress.total)) * 100}%` }} />
+              </div>
+            )}
           </div>
         )}
 
@@ -662,10 +1162,9 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
           </div>
         )}
 
-        {/* ─── PREVIEW STEP ─────────────────────────────────── */}
+        {/* ─── PREVIEW STEP (single) ─────────────────────────────── */}
         {step === 'preview' && draft && (
           <>
-            {/* Confidence + kind toggle */}
             <div className="flex items-center justify-between gap-3">
               <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-zinc-100/70 dark:bg-zinc-900/70">
                 <button type="button" onClick={() => switchKind('income')}
@@ -697,6 +1196,34 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
               </div>
             </div>
 
+            {/* Match status banner — surfaces when this entry would dup or update an existing row */}
+            {draft.match_status === 'duplicate' && (
+              <div className="flex items-start gap-2 text-xs font-medium text-zinc-600 bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                <RefreshCw size={13} className="shrink-0 mt-0.5" />
+                <span>{draft.match_reason || 'Esta entrada ya existe — confirmar igual creará un duplicado.'}</span>
+              </div>
+            )}
+            {draft.match_status === 'update' && draft.match_existing_id && (
+              <div className="flex items-start gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-lg px-3 py-2">
+                <RefreshCw size={13} className="shrink-0 mt-0.5" />
+                <span>{draft.match_reason || 'Coincide con un registro existente.'}</span>
+              </div>
+            )}
+
+            {/* Project↔client inconsistency hint */}
+            {projectClientMismatch && (
+              <div className="flex items-start gap-2 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-2">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  El proyecto pertenece a <span className="font-semibold">{projectClientMismatch.name}</span>.
+                </div>
+                <button type="button" onClick={() => updateDraft({ client_id: projectClientMismatch.id, client_name: projectClientMismatch.name })}
+                  className="px-2 py-0.5 rounded-md bg-amber-600 text-white text-[10px] font-semibold hover:bg-amber-700 transition-colors">
+                  Usar ese
+                </button>
+              </div>
+            )}
+
             {/* AI questions, if any */}
             {questions.length > 0 && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50/60 dark:bg-amber-500/5 p-3 space-y-1.5">
@@ -725,7 +1252,6 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
               </div>
 
               <div className="p-4 space-y-3">
-                {/* Amount + Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Amount</label>
@@ -821,7 +1347,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Category</label>
                         <select value={draft.category || 'Operations'}
-                          onChange={e => updateDraft({ category: e.target.value })}
+                          onChange={e => {
+                            const cat = e.target.value;
+                            const b = findMatchingBudget(cat, draft.date, budgets);
+                            updateDraft({ category: cat, budget_id: b?.id || null, budget_name: b?.name || null });
+                          }}
                           className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20">
                           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -835,6 +1365,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                         </select>
                       </div>
                     </div>
+                    {draft.budget_name && (
+                      <p className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                        <CheckCircle2 size={10} />Auto-link al budget <strong>{draft.budget_name}</strong>
+                      </p>
+                    )}
                     <div className="space-y-1">
                       <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Vendor</label>
                       <input type="text" value={draft.vendor || ''}
@@ -865,6 +1400,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         {/* ─── BATCH PREVIEW STEP ────────────────────────── */}
         {step === 'preview_batch' && (
           <BatchPreview
+            grouped={groupedDrafts}
             drafts={batchDrafts}
             selectedRows={selectedRows}
             setSelectedRows={setSelectedRows}
@@ -873,9 +1409,11 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             updateBatchRow={updateBatchRow}
             projects={projects}
             clients={clients}
+            budgets={budgets}
             unknownClients={unknownClients}
             unknownProjects={unknownProjects}
             onCreateClient={handleCreateUnknownClient}
+            onFlagBadParse={flagBadParse}
             error={error}
           />
         )}
@@ -900,9 +1438,17 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
 };
 
 // ════════════════════════════════════════════════════════════════════
-// BatchPreview — table of parsed rows with per-row edit + bulk select
+// BatchPreview — sectioned by match_status (new/update/needs_review/dup)
 // ════════════════════════════════════════════════════════════════════
+type GroupedDrafts = {
+  new: { d: DraftEntry; i: number }[];
+  update: { d: DraftEntry; i: number }[];
+  needs_review: { d: DraftEntry; i: number }[];
+  duplicate: { d: DraftEntry; i: number }[];
+};
+
 type BatchPreviewProps = {
+  grouped: GroupedDrafts;
   drafts: DraftEntry[];
   selectedRows: Set<number>;
   setSelectedRows: React.Dispatch<React.SetStateAction<Set<number>>>;
@@ -911,15 +1457,18 @@ type BatchPreviewProps = {
   updateBatchRow: (idx: number, patch: Partial<DraftEntry>) => void;
   projects: Project[];
   clients: Client[];
+  budgets: Budget[];
   unknownClients: string[];
   unknownProjects: string[];
   onCreateClient: (name: string) => Promise<void>;
+  onFlagBadParse: (idx: number) => Promise<void>;
   error: string | null;
 };
 
 const BatchPreview: React.FC<BatchPreviewProps> = ({
-  drafts, selectedRows, setSelectedRows, expandedRow, setExpandedRow,
-  updateBatchRow, projects, clients, unknownClients, unknownProjects, onCreateClient, error,
+  grouped, drafts, selectedRows, setSelectedRows, expandedRow, setExpandedRow,
+  updateBatchRow, projects, clients, budgets, unknownClients, unknownProjects,
+  onCreateClient, onFlagBadParse, error,
 }) => {
   const allSelected = selectedRows.size === drafts.length;
   const toggleAll = () => {
@@ -977,14 +1526,97 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
           <span className="text-[10px] text-zinc-400">{selectedRows.size} seleccionadas</span>
         </div>
 
-        <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60 max-h-[55vh] overflow-y-auto">
-          {drafts.map((d, i) => {
+        <div className="max-h-[55vh] overflow-y-auto">
+          {(['new', 'update', 'needs_review', 'duplicate'] as const).map(group => {
+            const items = grouped[group];
+            if (items.length === 0) return null;
+            const meta = GROUP_META[group];
+            return (
+              <BatchPreviewSection
+                key={group}
+                title={meta.title}
+                count={items.length}
+                color={meta.color}
+                icon={meta.icon}
+                items={items}
+                selectedRows={selectedRows}
+                expandedRow={expandedRow}
+                setExpandedRow={setExpandedRow}
+                onToggleRow={toggleRow}
+                updateBatchRow={updateBatchRow}
+                projects={projects}
+                clients={clients}
+                budgets={budgets}
+                onFlagBadParse={onFlagBadParse}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg px-3 py-2">
+          <AlertCircle size={13} className="shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+    </>
+  );
+};
+
+const GROUP_META = {
+  new: { title: 'New', color: 'emerald', icon: Plus },
+  update: { title: 'Updates', color: 'indigo', icon: RefreshCw },
+  needs_review: { title: 'Needs review', color: 'amber', icon: AlertTriangle },
+  duplicate: { title: 'Duplicates', color: 'zinc', icon: RefreshCw },
+} as const;
+
+type BatchPreviewSectionProps = {
+  title: string;
+  count: number;
+  color: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  items: { d: DraftEntry; i: number }[];
+  selectedRows: Set<number>;
+  expandedRow: number | null;
+  setExpandedRow: React.Dispatch<React.SetStateAction<number | null>>;
+  onToggleRow: (i: number) => void;
+  updateBatchRow: (idx: number, patch: Partial<DraftEntry>) => void;
+  projects: Project[];
+  clients: Client[];
+  budgets: Budget[];
+  onFlagBadParse: (idx: number) => Promise<void>;
+};
+
+const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
+  title, count, color, icon: Icon, items, selectedRows, expandedRow, setExpandedRow,
+  onToggleRow, updateBatchRow, projects, clients, budgets, onFlagBadParse,
+}) => {
+  const [collapsed, setCollapsed] = useState(title === 'Duplicates');
+  const colorClasses: Record<string, string> = {
+    emerald: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50/60 dark:bg-emerald-500/5',
+    indigo:  'text-indigo-700 dark:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-500/5',
+    amber:   'text-amber-700 dark:text-amber-300 bg-amber-50/60 dark:bg-amber-500/5',
+    zinc:    'text-zinc-600 dark:text-zinc-400 bg-zinc-100/40 dark:bg-zinc-800/20',
+  };
+  return (
+    <div className="border-t border-zinc-100 dark:border-zinc-800/60 first:border-t-0">
+      <button type="button" onClick={() => setCollapsed(c => !c)}
+        className={`w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${colorClasses[color]}`}>
+        {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+        <Icon size={11} />
+        <span>{title}</span>
+        <span className="opacity-60">({count})</span>
+      </button>
+      {!collapsed && (
+        <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+          {items.map(({ d, i }) => {
             const isSelected = selectedRows.has(i);
             const isExpanded = expandedRow === i;
             return (
               <div key={i} className={`transition-colors ${isSelected ? '' : 'opacity-50'}`}>
                 <div className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/20">
-                  <input type="checkbox" checked={isSelected} onChange={() => toggleRow(i)}
+                  <input type="checkbox" checked={isSelected} onChange={() => onToggleRow(i)}
                     className="rounded border-zinc-300 dark:border-zinc-700 text-fuchsia-600 focus:ring-fuchsia-500" />
                   <button onClick={() => setExpandedRow(isExpanded ? null : i)} type="button"
                     className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
@@ -995,23 +1627,78 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
                       ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
                       : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200'
                   }`}>{d.kind === 'income' ? 'IN' : 'EX'}</div>
+                  {d.source_row != null && (
+                    <span className="shrink-0 text-[9px] font-mono text-zinc-400">#{d.source_row}</span>
+                  )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{d.concept || <span className="italic text-zinc-400">sin concepto</span>}</div>
+                    <div className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                      {d.concept || <span className="italic text-zinc-400">sin concepto</span>}
+                    </div>
                     <div className="text-[10px] text-zinc-400 truncate">
                       {d.client_name || (d.client_id ? '' : 'sin cliente')}
                       {d.project_name ? ` · ${d.project_name}` : ''}
                       {' · '}{d.date}
+                      {d.match_reason ? ` · ${d.match_reason}` : ''}
                     </div>
                   </div>
+                  {d.budget_name && (
+                    <span className="shrink-0 hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-200 text-[9px] font-semibold">
+                      ${d.budget_name}
+                    </span>
+                  )}
                   <div className={`text-xs font-semibold tabular-nums ${
                     d.kind === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-700 dark:text-zinc-200'
                   }`}>
                     {d.kind === 'income' ? '+' : '−'}{fmtCurrency(d.amount)}
                   </div>
+                  <button type="button" onClick={() => onFlagBadParse(i)} title="Reportar mal parseo"
+                    className="shrink-0 p-1 rounded text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
+                    <Flag size={11} />
+                  </button>
                 </div>
 
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 space-y-2 bg-zinc-50/40 dark:bg-zinc-800/10">
+                    {/* Validation errors banner */}
+                    {d.validation_errors.length > 0 && (
+                      <div className="text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded px-2 py-1.5 space-y-0.5">
+                        {d.validation_errors.map((err, ei) => (
+                          <div key={ei} className="flex items-start gap-1"><AlertCircle size={10} className="shrink-0 mt-0.5" /><span>{err}</span></div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Source row audit panel */}
+                    {d.source_row_data && (
+                      <div className="rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 text-[10px]">
+                        <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                          <FileSpreadsheet size={10} /> Fila origen #{d.source_row}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                          {Object.entries(d.source_row_data).map(([h, v]) => (
+                            <div key={h} className="truncate">
+                              <span className="text-zinc-400">{h}:</span>{' '}
+                              <span className="text-zinc-700 dark:text-zinc-300">{String(v ?? '') || <span className="italic text-zinc-300">vacío</span>}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Update action selector — only for `update` rows */}
+                    {d.match_status === 'update' && d.match_existing_id && (
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="text-zinc-500 font-medium">Acción:</span>
+                        <select value={d.update_action}
+                          onChange={e => updateBatchRow(i, { update_action: e.target.value as DraftEntry['update_action'] })}
+                          className="rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-[10px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/30">
+                          <option value="update">Actualizar existente</option>
+                          <option value="create">Crear nuevo (ej. nueva instancia)</option>
+                          <option value="skip">Skip</option>
+                        </select>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" value={d.concept}
                         onChange={e => updateBatchRow(i, { concept: e.target.value })}
@@ -1056,7 +1743,11 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
                     </div>
                     {d.kind === 'expense' && (
                       <div className="grid grid-cols-2 gap-2">
-                        <select value={d.category || 'Operations'} onChange={e => updateBatchRow(i, { category: e.target.value })}
+                        <select value={d.category || 'Operations'} onChange={e => {
+                          const cat = e.target.value;
+                          const b = findMatchingBudget(cat, d.date, budgets);
+                          updateBatchRow(i, { category: cat, budget_id: b?.id || null, budget_name: b?.name || null });
+                        }}
                           className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-[11px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/30">
                           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -1072,14 +1763,7 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
             );
           })}
         </div>
-      </div>
-
-      {error && (
-        <div className="flex items-start gap-2 text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg px-3 py-2">
-          <AlertCircle size={13} className="shrink-0 mt-0.5" />
-          <span>{error}</span>
-        </div>
       )}
-    </>
+    </div>
   );
 };

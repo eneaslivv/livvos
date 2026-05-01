@@ -909,9 +909,27 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         status: 'pending',
         created_by: user.id,
       }
-      // Only include FK references when they are valid UUIDs (not empty strings)
-      if (data.client_id) incomePayload.client_id = data.client_id
-      if (data.project_id) incomePayload.project_id = data.project_id
+      // Only include FK references when they are valid UUIDs (not empty strings).
+      // Tenant-scope each FK before insert so an AI-fabricated UUID belonging
+      // to a different tenant fails fast with a clear message rather than via
+      // the database trigger (which surfaces a less actionable error).
+      if (data.client_id) {
+        const { data: c } = await supabase
+          .from('clients').select('id').eq('id', data.client_id).eq('tenant_id', currentTenant.id).maybeSingle()
+        if (!c) throw new Error('El cliente referenciado no pertenece a este tenant.')
+        incomePayload.client_id = data.client_id
+      }
+      if (data.project_id) {
+        const { data: p } = await supabase
+          .from('projects').select('id, client_id').eq('id', data.project_id).eq('tenant_id', currentTenant.id).maybeSingle()
+        if (!p) throw new Error('El proyecto referenciado no pertenece a este tenant.')
+        incomePayload.project_id = data.project_id
+        // Auto-sync: if the project has a canonical client and the income's
+        // client_id is missing or contradicts it, prefer the project's client.
+        if (p.client_id && (!incomePayload.client_id || incomePayload.client_id !== p.client_id)) {
+          incomePayload.client_id = p.client_id
+        }
+      }
 
       if (import.meta.env.DEV) console.log('[FinanceContext] Inserting income:', incomePayload)
 
@@ -1030,9 +1048,29 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         status: data.status || 'pending',
         created_by: user.id,
       }
-      if (data.project_id) expensePayload.project_id = data.project_id
-      if (data.client_id) expensePayload.client_id = data.client_id
-      if (data.budget_id) expensePayload.budget_id = data.budget_id
+      // Tenant-scope every FK and auto-sync project↔client. Catches
+      // AI-fabricated UUIDs from another tenant before the DB trigger does, and
+      // resolves cases where the AI inferred a client that contradicts the
+      // project's canonical client.
+      if (data.project_id) {
+        const { data: p } = await supabase
+          .from('projects').select('id, client_id').eq('id', data.project_id).eq('tenant_id', currentTenant.id).maybeSingle()
+        if (!p) throw new Error('El proyecto referenciado no pertenece a este tenant.')
+        expensePayload.project_id = data.project_id
+        if (p.client_id) expensePayload.client_id = p.client_id
+      }
+      if (data.client_id && !expensePayload.client_id) {
+        const { data: c } = await supabase
+          .from('clients').select('id').eq('id', data.client_id).eq('tenant_id', currentTenant.id).maybeSingle()
+        if (!c) throw new Error('El cliente referenciado no pertenece a este tenant.')
+        expensePayload.client_id = data.client_id
+      }
+      if (data.budget_id) {
+        const { data: b } = await supabase
+          .from('budgets').select('id').eq('id', data.budget_id).eq('tenant_id', currentTenant.id).maybeSingle()
+        if (!b) throw new Error('El presupuesto referenciado no pertenece a este tenant.')
+        expensePayload.budget_id = data.budget_id
+      }
       if (data.recurring_source_id) expensePayload.recurring_source_id = data.recurring_source_id
 
       if (import.meta.env.DEV) console.log('[FinanceContext] Inserting expense:', expensePayload)

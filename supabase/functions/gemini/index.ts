@@ -512,17 +512,20 @@ Rules:
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
         : type === 'finance_entries_batch'
-        ? `You are a finance data-entry assistant. The user uploaded a CSV / spreadsheet and you must turn EACH ROW into a structured income or expense, RESOLVING references to existing clients and projects from the lists provided in the input.
+        ? `You are a finance data-entry assistant. The user uploaded a spreadsheet (already parsed to JSON) and you must turn EACH ROW into a structured income or expense, RESOLVING references to existing clients and projects from the lists provided.
 
 Return ONLY valid JSON with this shape:
 {
   "summary": "1 sentence describing what was found",
   "entries": [
     {
+      "source_row": number,
       "kind": "income" | "expense",
       "concept": "short label",
       "amount": number,
+      "amount_source_cell": "the column header from which amount was taken (e.g. 'Amount','Total','Importe')",
       "date": "YYYY-MM-DD",
+      "date_inferred": boolean,
       "client_id": "exact-id-from-CLIENTS-or-null",
       "client_name": "matched-name-or-extracted-name-or-null",
       "project_id": "exact-id-from-PROJECTS-or-null",
@@ -533,21 +536,23 @@ Return ONLY valid JSON with this shape:
       "status": "paid" | "pending",
       "recurring": boolean,
       "confidence": 0..1,
+      "needs_review": boolean,
       "notes": "anything-extra-from-the-row-or-null"
     }
   ],
-  "unknown_clients": ["names that appeared in the data but did NOT match any CLIENTS row"],
-  "unknown_projects": ["titles that appeared in the data but did NOT match any PROJECTS row"]
+  "unknown_clients": ["names from data not matching any CLIENTS row"],
+  "unknown_projects": ["titles from data not matching any PROJECTS row"],
+  "skipped_rows": [{"source_row": number, "reason": "header" | "total" | "blank" | "unparseable"}]
 }
 
-Rules — CRITICAL:
-- Return ONE entry per data row. Skip header rows, totals, blank rows.
-- Same per-entry rules as a single entry: never invent client_id / project_id, only use IDs from the provided lists. If no fuzzy match (case + accent insensitive, partial OK), set the id to null and put the raw name in client_name / project_name AND add the name to unknown_clients / unknown_projects so the frontend can offer to create it.
-- kind: positive amounts in an "income"-style column → income; negative or "expense"/"gasto" labels → expense. Use column headers and adjacent context to decide.
-- amount: always positive in the output. Strip currency symbols. Parse "2k" as 2000.
-- date: parse common formats (DD/MM/YYYY, MM-DD-YYYY, ISO). If missing, use TODAY from the input.
-- category (expenses): pick from EXPENSE_CATEGORIES exactly. If not obvious, default to "Operations".
-- Limit: max 50 entries per call. If the input has more rows, return the first 50 and add a note in summary.
+Rules — CRITICAL anti-hallucination:
+- ONE entry per data row. Skip header / totals / blank rows by listing them in skipped_rows. Do NOT silently drop rows.
+- AMOUNT BINDING: the "amount" MUST be the literal numeric value present in the row's Amount/Total/Importe-like cell. Strip currency symbols and thousand separators (parse "1.234,56" as 1234.56 and "$2,500" as 2500). If the row has NO amount cell, set amount=0 and needs_review=true. NEVER invent or infer amounts from concept/vendor.
+- DATE BINDING: parse the row's date cell. If empty, set date=TODAY and date_inferred=true. NEVER invent a date that was not in the row.
+- CATEGORY: pick from EXPENSE_CATEGORIES exactly (case-sensitive). If not obvious, default to "Operations" and set needs_review=true.
+- IDs: never invent client_id / project_id. Only use IDs from CLIENTS / PROJECTS lists. Fuzzy match by name (case + accent insensitive). If no match, set id=null and add the raw name to unknown_clients / unknown_projects so the frontend can offer to create it.
+- source_row MUST equal the source_row of the input ROW you derived this entry from. Do NOT reuse a source_row across two entries.
+- needs_review=true whenever ANY of: amount inferred, date inferred, kind ambiguous, category guessed.
 - Respond strictly with the JSON object — no prose, no markdown fences.
 - Match the user's language for concept/vendor/notes/summary text.`
         : type === 'finance_entry'
@@ -592,8 +597,8 @@ Rules — CRITICAL:
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 8000 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0.2 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3

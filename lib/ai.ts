@@ -493,7 +493,19 @@ export type FinanceEntryAIResult = {
   questions?: string[]
   confidence: number
   notes?: string | null
+  // Batch-only anti-hallucination fields. The server prompt requires source_row
+  // for batch entries so the frontend can verify amount/date came from a real
+  // cell of the uploaded file. Single-entry calls leave these undefined.
+  source_row?: number
+  amount_source_cell?: string | null
+  date_inferred?: boolean
+  needs_review?: boolean
 }
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+const isFiniteNonNeg = (n: unknown): n is number =>
+  typeof n === 'number' && Number.isFinite(n) && n >= 0
 
 export const parseFinanceEntryFromAI = (
   input: string,
@@ -506,8 +518,8 @@ export const parseFinanceEntryFromAI = (
       r &&
       (r.kind === 'income' || r.kind === 'expense') &&
       typeof r.concept === 'string' &&
-      typeof r.amount === 'number' &&
-      typeof r.date === 'string',
+      isFiniteNonNeg(r.amount) &&
+      typeof r.date === 'string' && ISO_DATE_RE.test(r.date),
     profile,
   )
 
@@ -515,6 +527,7 @@ export type FinanceBatchAIResult = {
   entries: FinanceEntryAIResult[]
   unknown_clients?: string[]
   unknown_projects?: string[]
+  skipped_rows?: { source_row: number; reason: string }[]
   summary?: string
 }
 
@@ -525,7 +538,15 @@ export const parseFinanceBatchFromAI = (
   callGemini(
     'finance_entries_batch',
     input,
-    (r) => r && Array.isArray(r.entries),
+    (r) =>
+      r && Array.isArray(r.entries) &&
+      r.entries.every((e: any) =>
+        e &&
+        (e.kind === 'income' || e.kind === 'expense') &&
+        typeof e.source_row === 'number' && Number.isFinite(e.source_row) &&
+        isFiniteNonNeg(e.amount) &&
+        typeof e.date === 'string' && ISO_DATE_RE.test(e.date)
+      ),
     profile,
   )
 
