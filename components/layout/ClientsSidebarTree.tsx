@@ -125,10 +125,24 @@ export const ClientsSidebarTree: React.FC<Props> = ({
       .map(s => {
         if (s.kind === 'client') {
           const c = clients.find(x => x.id === s.id);
-          return c ? { kind: 'client' as const, id: c.id, label: c.name || c.company || 'Client', color: c.color || '#71717a' } : null;
+          return c ? {
+            kind: 'client' as const,
+            id: c.id,
+            label: c.name || c.company || 'Client',
+            color: c.color || '#71717a',
+            avatarUrl: c.avatar_url || null,
+            icon: c.icon || null,
+          } : null;
         }
         const p = projects.find(x => x.id === s.id);
-        return p ? { kind: 'project' as const, id: p.id, label: p.title, color: p.color || '#3b82f6' } : null;
+        return p ? {
+          kind: 'project' as const,
+          id: p.id,
+          label: p.title,
+          color: p.color || '#3b82f6',
+          avatarUrl: null,
+          icon: p.icon || null,
+        } : null;
       })
       .filter((x): x is NonNullable<typeof x> => !!x);
   }, [stars, clients, projects]);
@@ -192,6 +206,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                 key={`star-${item.kind}-${item.id}`}
                 label={item.label}
                 color={item.color}
+                avatarUrl={item.avatarUrl}
+                icon={item.icon}
                 active={isActive}
                 starred
                 onClick={() => item.kind === 'client' ? goToClient(item.id) : goToProject(item.id)}
@@ -218,7 +234,18 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                   isActive ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
                 }`}
               >
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                {item.avatarUrl ? (
+                  <img
+                    src={item.avatarUrl}
+                    alt=""
+                    className="w-4 h-4 rounded-full object-cover"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : item.icon ? (
+                  <span className="text-[13px] leading-none">{item.icon}</span>
+                ) : (
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                )}
                 <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-medium rounded-lg opacity-0 -translate-x-2 group-hover/cpin:opacity-100 group-hover/cpin:translate-x-0 transition-all pointer-events-none whitespace-nowrap z-50 shadow-xl border border-zinc-800 dark:border-zinc-700">
                   {item.label}
                 </div>
@@ -264,6 +291,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                     <TreeRow
                       label={clientLabel}
                       color={clientColor}
+                      avatarUrl={client.avatar_url || null}
+                      icon={client.icon || null}
                       active={isActive}
                       starred={isStarred('client', client.id)}
                       childrenCount={clientProjects.length}
@@ -286,6 +315,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                                 key={p.id}
                                 label={p.title}
                                 color={p.color || '#3b82f6'}
+                                avatarUrl={null}
+                                icon={p.icon || null}
                                 active={currentPage === 'projects' && currentProjectId === p.id}
                                 starred={isStarred('project', p.id)}
                                 onClick={() => goToProject(p.id)}
@@ -309,6 +340,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                       key={p.id}
                       label={p.title}
                       color={p.color || '#3b82f6'}
+                      avatarUrl={null}
+                      icon={p.icon || null}
                       active={currentPage === 'projects' && currentProjectId === p.id}
                       starred={isStarred('project', p.id)}
                       onClick={() => goToProject(p.id)}
@@ -329,6 +362,8 @@ export const ClientsSidebarTree: React.FC<Props> = ({
 const TreeRow: React.FC<{
   label: string;
   color: string;
+  avatarUrl?: string | null;
+  icon?: string | null;
   active: boolean;
   starred: boolean;
   childrenCount?: number;
@@ -336,7 +371,7 @@ const TreeRow: React.FC<{
   onToggleChildren?: () => void;
   onClick: () => void;
   onToggleStar: () => void;
-}> = ({ label, color, active, starred, childrenCount, childrenOpen, onToggleChildren, onClick, onToggleStar }) => {
+}> = ({ label, color, avatarUrl, icon, active, starred, childrenCount, childrenOpen, onToggleChildren, onClick, onToggleStar }) => {
   const hasToggle = !!onToggleChildren;
   return (
     <div className={`group/row relative flex items-center rounded-md transition-colors duration-150 ${
@@ -362,10 +397,23 @@ const TreeRow: React.FC<{
         onClick={onClick}
         className={`flex items-center flex-1 min-w-0 py-1 ${hasToggle ? 'pl-0.5 pr-2' : 'px-2'}`}
       >
-        <span
-          className="w-[8px] h-[8px] rounded-full shrink-0"
-          style={{ backgroundColor: color }}
-        />
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className="w-[14px] h-[14px] rounded-full object-cover shrink-0"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : icon ? (
+          <span className="w-[14px] h-[14px] flex items-center justify-center text-[12px] leading-none shrink-0">
+            {icon}
+          </span>
+        ) : (
+          <span
+            className="w-[8px] h-[8px] rounded-full shrink-0"
+            style={{ backgroundColor: color }}
+          />
+        )}
         <span className={`ml-2 text-[12px] truncate text-left ${
           active ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-300'
         }`}>
