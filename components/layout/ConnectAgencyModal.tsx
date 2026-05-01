@@ -4,6 +4,7 @@ import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
 import { errorLogger } from '../../lib/errorLogger';
+import { appUrl } from '../../lib/appUrl';
 
 interface ConnectAgencyModalProps {
     isOpen: boolean;
@@ -66,7 +67,7 @@ export const ConnectAgencyModal: React.FC<ConnectAgencyModalProps> = ({
 
             // Best-effort email send (non-blocking — UI shows the link either way)
             try {
-                const link = `${window.location.origin}/accept-connection?token=${row.invite_token}`;
+                const link = `${appUrl()}/accept-connection?token=${row.invite_token}`;
                 const res = await fetch(
                     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invite-email`,
                     {

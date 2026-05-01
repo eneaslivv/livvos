@@ -18,11 +18,12 @@ export const AcceptInvite: React.FC = () => {
   const queryParams = new URLSearchParams(window.location.search);
   const token = queryParams.get('token');
   const isClientInvite = queryParams.get('portal') === 'client' || inviteType === 'client';
+  const [tenantName, setTenantName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
       setIsLoading(false);
-      setError('The invitation link is not valid. Check the URL.');
+      setError('El link de invitación no es válido. Verificá la URL.');
       return;
     }
 
@@ -35,16 +36,25 @@ export const AcceptInvite: React.FC = () => {
         const row = Array.isArray(data) ? data[0] : data;
 
         if (error || !row) {
-          setError('Invitation not found or expired.');
+          setError('Invitación no encontrada o expirada.');
         } else if (row.status === 'accepted') {
-          setError('This invitation has already been used.');
+          setError('Esta invitación ya fue utilizada.');
         } else {
           setEmail(row.email);
           setInviteType(row.type || 'team');
+          setTenantName(row.tenant_name || row.tenant || null);
           setIsValidToken(true);
+
+          // Detect existing-user case up front so the form opens in the right mode
+          // and we never surprise the user with a "switch to sign-in" mid-flow.
+          try {
+            const probe = await supabase.rpc('check_user_exists', { p_email: row.email });
+            const exists = Array.isArray(probe.data) ? probe.data[0]?.exists : probe.data?.exists;
+            if (exists === true) setExistingUserFlow(true);
+          } catch { /* probe is best-effort; the signup-then-fallback path still works */ }
         }
       } catch {
-        setError('An error occurred while verifying the invitation.');
+        setError('Ocurrió un error al verificar la invitación.');
       } finally {
         setIsLoading(false);
       }
@@ -74,11 +84,11 @@ export const AcceptInvite: React.FC = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError('La contraseña debe tener al menos 6 caracteres.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError('Las contraseñas no coinciden.');
       return;
     }
 
@@ -102,7 +112,7 @@ export const AcceptInvite: React.FC = () => {
             userId: authData.session.user.id,
             token,
           });
-          setError('Account was created but setup is taking longer than expected. Please try signing in.');
+          setError('La cuenta se creó pero la configuración está demorando. Probá iniciar sesión en unos segundos.');
           setIsSubmitting(false);
           return;
         }
@@ -144,7 +154,7 @@ export const AcceptInvite: React.FC = () => {
           // Silent fail — show manual message as fallback
         }
         setSuccessMessage(
-          'Account created. Check your email to confirm your account before signing in.'
+          'Cuenta creada. Revisá tu email para confirmar la cuenta antes de iniciar sesión.'
         );
         setIsSubmitting(false);
       } else {
@@ -159,7 +169,7 @@ export const AcceptInvite: React.FC = () => {
         setConfirmPassword('');
         setError(null);
       } else {
-        setError(message || 'Error registering the account.');
+        setError(message || 'Error al crear la cuenta.');
       }
       setIsSubmitting(false);
     }
@@ -169,7 +179,7 @@ export const AcceptInvite: React.FC = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) {
-      setError('Enter your password.');
+      setError('Ingresá tu contraseña.');
       return;
     }
 
@@ -198,7 +208,7 @@ export const AcceptInvite: React.FC = () => {
       const redirectType = inviteType === 'client' ? '/?portal=client' : '/';
       window.location.href = redirectType;
     } catch (err: any) {
-      setError(err.message || 'Error signing in.');
+      setError(err.message || 'Error al iniciar sesión.');
       setIsSubmitting(false);
     }
   };
@@ -209,7 +219,7 @@ export const AcceptInvite: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
         <div className="flex items-center gap-3 text-zinc-500">
           <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-          <span className="text-sm">Verifying invitation...</span>
+          <span className="text-sm">Verificando invitación…</span>
         </div>
       </div>
     );
@@ -223,13 +233,13 @@ export const AcceptInvite: React.FC = () => {
           <div className="w-14 h-14 bg-[#2C0405]/5 dark:bg-[#2C0405]/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.Mail size={24} className="text-[#2C0405] dark:text-[#e8b4b4]" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Check your email</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Revisá tu email</h2>
           <p className="text-sm text-zinc-500 mb-6">{successMessage}</p>
           <a
             href={isClientInvite ? '/?portal=client' : '/auth'}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2C0405] hover:text-[#1a0203] hover:underline"
           >
-            Go to sign in
+            Ir a iniciar sesión
             <Icons.ChevronRight size={14} />
           </a>
         </div>
@@ -245,13 +255,13 @@ export const AcceptInvite: React.FC = () => {
           <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.AlertCircle size={24} className="text-red-500" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitation error</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Error en la invitación</h2>
           <p className="text-sm text-zinc-500 mb-6">{error}</p>
           <a
             href={isClientInvite ? '/?portal=client' : '/auth'}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
           >
-            Go to sign in
+            Ir a iniciar sesión
             <Icons.ChevronRight size={14} />
           </a>
         </div>
@@ -280,24 +290,26 @@ export const AcceptInvite: React.FC = () => {
           <div>
             <h1 className="text-4xl font-light leading-tight mb-4 text-white" style={{ fontFamily: 'serif' }}>
               {isClientInvite ? (
-                <>Welcome to your <span className="text-[#e8b4b4]">Portal</span></>
+                <>Bienvenido a tu <span className="text-[#e8b4b4]">Portal</span></>
               ) : (
-                <>Join the <span className="text-amber-500">team</span></>
+                <>Sumate al <span className="text-amber-500">equipo</span></>
               )}
             </h1>
             <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
               {isClientInvite
-                ? 'Access real-time project tracking. Progress, payments, documents and direct communication with the team.'
-                : 'You were invited to collaborate on Eneas OS. Complete your registration to get started.'}
+                ? 'Accedé al seguimiento de tu proyecto en tiempo real. Progreso, pagos, documentos y comunicación directa con el equipo.'
+                : tenantName
+                  ? `Fuiste invitado a colaborar en ${tenantName}. Completá tu registro para comenzar.`
+                  : 'Fuiste invitado a colaborar en Eneas OS. Completá tu registro para comenzar.'}
             </p>
           </div>
 
           {isClientInvite && (
             <div className="space-y-5 mt-8">
               {[
-                { icon: '◎', title: 'Live Progress', desc: 'Track your project progress with milestones and timeline.' },
-                { icon: '◈', title: 'Payments & Finance', desc: 'Check your payment plan and billing status.' },
-                { icon: '⌘', title: 'Secure Documents', desc: 'Access contracts, credentials and project files.' },
+                { icon: '◎', title: 'Progreso en vivo', desc: 'Seguí el avance de tu proyecto con hitos y timeline.' },
+                { icon: '◈', title: 'Pagos y finanzas', desc: 'Revisá tu plan de pagos y estado de facturación.' },
+                { icon: '⌘', title: 'Documentos seguros', desc: 'Accedé a contratos, credenciales y archivos del proyecto.' },
               ].map((f, i) => (
                 <div key={i} className="flex items-start gap-4 group">
                   <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
@@ -315,9 +327,9 @@ export const AcceptInvite: React.FC = () => {
 
         {/* Footer */}
         <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-          <span className={isClientInvite ? 'text-[#e8b4b4]' : 'text-amber-600'}>SECURE PORTAL</span>
+          <span className={isClientInvite ? 'text-[#e8b4b4]' : 'text-amber-600'}>PORTAL SEGURO</span>
           <span className="text-zinc-700">&bull;</span>
-          <span>Encrypted data</span>
+          <span>Datos encriptados</span>
         </div>
       </div>
 
@@ -331,17 +343,17 @@ export const AcceptInvite: React.FC = () => {
             </div>
             <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
               {existingUserFlow
-                ? 'Sign in to accept'
+                ? 'Iniciá sesión para aceptar'
                 : isClientInvite
-                  ? 'Create your account'
-                  : 'Complete your registration'}
+                  ? 'Creá tu cuenta'
+                  : 'Completá tu registro'}
             </h2>
             <p className="text-zinc-500 text-sm">
               {existingUserFlow
-                ? 'An account with this email already exists. Sign in to accept the invitation.'
+                ? `Ya existe una cuenta con ${email}. Ingresá tu contraseña para aceptar la invitación${tenantName ? ` a ${tenantName}` : ''}.`
                 : isClientInvite
-                  ? 'Set up your client portal access.'
-                  : 'You were invited to join the team.'}
+                  ? `Creá una contraseña para acceder al portal${tenantName ? ` de ${tenantName}` : ''}. Te llevará 30 segundos.`
+                  : `Creá una contraseña para sumarte al equipo${tenantName ? ` de ${tenantName}` : ''}. Te llevará 30 segundos.`}
             </p>
           </div>
 
@@ -350,7 +362,7 @@ export const AcceptInvite: React.FC = () => {
             <form onSubmit={handleSignIn} className="space-y-5">
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                  Email
+                  Tu email
                 </label>
                 <div className="relative">
                   <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -365,7 +377,7 @@ export const AcceptInvite: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                  Password
+                  Contraseña
                 </label>
                 <div className="relative">
                   <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -373,7 +385,7 @@ export const AcceptInvite: React.FC = () => {
                     type="password"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    placeholder="Enter your password"
+                    placeholder="Ingresá tu contraseña"
                     className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                       isClientInvite
                         ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
@@ -404,11 +416,11 @@ export const AcceptInvite: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Signing in...
+                    Iniciando sesión…
                   </>
                 ) : (
                   <>
-                    Sign in and accept invitation
+                    Iniciar sesión y aceptar
                     <Icons.ChevronRight size={16} />
                   </>
                 )}
@@ -419,7 +431,7 @@ export const AcceptInvite: React.FC = () => {
                 onClick={() => { setExistingUserFlow(false); setPassword(''); setError(null); }}
                 className="w-full text-center text-sm text-zinc-400 hover:text-zinc-700 transition-colors mt-2"
               >
-                Back to registration
+                Volver al registro
               </button>
             </form>
           ) : (
@@ -427,7 +439,7 @@ export const AcceptInvite: React.FC = () => {
             <form onSubmit={handleSignup} className="space-y-5">
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                  Email
+                  Tu email
                 </label>
                 <div className="relative">
                   <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -442,7 +454,7 @@ export const AcceptInvite: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                  Password
+                  Creá tu contraseña
                 </label>
                 <div className="relative">
                   <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -450,7 +462,7 @@ export const AcceptInvite: React.FC = () => {
                     type="password"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    placeholder="Minimum 6 characters"
+                    placeholder="Mínimo 6 caracteres"
                     className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                       isClientInvite
                         ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
@@ -464,7 +476,7 @@ export const AcceptInvite: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                  Confirm password
+                  Repetir contraseña
                 </label>
                 <div className="relative">
                   <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -472,7 +484,7 @@ export const AcceptInvite: React.FC = () => {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                    placeholder="Repeat password"
+                    placeholder="Repetí la contraseña"
                     className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all ${
                       isClientInvite
                         ? 'border-zinc-200 focus:ring-[#2C0405]/15 focus:border-[#2C0405]'
@@ -503,14 +515,26 @@ export const AcceptInvite: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating account...
+                    Creando cuenta…
                   </>
                 ) : (
                   <>
-                    Create account and access
+                    Crear cuenta y entrar
                     <Icons.ChevronRight size={16} />
                   </>
                 )}
+              </button>
+
+              {/* Sign-in escape hatch — opt-in for users who realize they already
+                  have an account before submitting. The post-submit fallback in
+                  handleSignup also flips them to existingUserFlow if signup
+                  errors with "already registered". */}
+              <button
+                type="button"
+                onClick={() => { setExistingUserFlow(true); setPassword(''); setConfirmPassword(''); setError(null); }}
+                className="w-full text-center text-xs text-zinc-400 hover:text-zinc-700 transition-colors mt-1"
+              >
+                ¿Ya tenés cuenta? Iniciá sesión
               </button>
             </form>
           )}
@@ -519,26 +543,17 @@ export const AcceptInvite: React.FC = () => {
           <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
             <p className="text-zinc-400 text-xs">
               {existingUserFlow
-                ? 'Need a new account? '
-                : isClientInvite
-                  ? 'Already have an account? '
-                  : 'Restricted access · Invite only'}
+                ? '¿Necesitás una cuenta nueva? '
+                : 'Acceso restringido · Solo por invitación'}
             </p>
-            {existingUserFlow ? (
+            {existingUserFlow && (
               <button
                 onClick={() => { setExistingUserFlow(false); setPassword(''); setError(null); }}
                 className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
               >
-                Create account
+                Crear cuenta
               </button>
-            ) : isClientInvite ? (
-              <button
-                onClick={() => { setExistingUserFlow(true); setPassword(''); setConfirmPassword(''); setError(null); }}
-                className="text-xs text-[#2C0405] hover:text-[#1a0203] font-medium hover:underline"
-              >
-                Sign in
-              </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { errorLogger } from '../../lib/errorLogger';
 import { Role } from '../../types/rbac';
 import { SCREEN_PERMISSIONS, OS_SCREENS, SALES_SCREENS, ALL_SCREEN_IDS } from '../../lib/screenPermissions';
 import { sendInviteEmail } from '../../lib/sendInviteEmail';
+import { appUrl } from '../../lib/appUrl';
 
 interface Invitation {
   id: string;
@@ -268,7 +269,7 @@ export const UserManagement: React.FC = () => {
 
       if (error) throw error;
 
-      const link = `${window.location.origin}/accept-invite?token=${data.token}`;
+      const link = `${appUrl()}/accept-invite?token=${data.token}`;
       setInviteLink(link);
       setInvitations(prev => [...prev, data]);
 
