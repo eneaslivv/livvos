@@ -85,13 +85,52 @@ serve(async (req) => {
       )
     }
 
+    // Authenticate the caller and verify they actually belong to the
+    // tenant_id they claim. Without this check any signed-in user could
+    // pass a different tenant_id and send emails using that org's branding,
+    // impersonating them.
+    const sbAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    let verifiedTenantId: string | null = null
+    if (tenant_id) {
+      const authHeader = req.headers.get('Authorization')
+      const token = authHeader?.replace('Bearer ', '')
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Missing Authorization' }), {
+          status: 401, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { data: { user }, error: authErr } = await sbAdmin.auth.getUser(token)
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), {
+          status: 401, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      // Allow tenant_id IF (a) it matches the caller's profile.tenant_id, OR
+      // (b) the caller is a member of that tenant. Either is sufficient — a
+      // super agency owner who's a member of multiple tenants can send mail
+      // branded as any tenant they belong to.
+      const { data: profile } = await sbAdmin
+        .from('profiles').select('tenant_id').eq('id', user.id).maybeSingle()
+      let allowed = profile?.tenant_id === tenant_id
+      if (!allowed) {
+        const { data: membership } = await sbAdmin
+          .from('tenant_members').select('tenant_id').eq('user_id', user.id).eq('tenant_id', tenant_id).maybeSingle()
+        allowed = !!membership
+      }
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: 'You do not belong to that tenant' }), {
+          status: 403, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      verifiedTenantId = tenant_id
+    }
+
     // Resolve branding: prefer DB lookup, fallback to params
     let resolvedLogo: string | null = logo_url || null
     let brandName = brand_name || 'LIVV OS'
 
-    if (tenant_id) {
-      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-      const branding = await resolveTenantBranding(sb, tenant_id)
+    if (verifiedTenantId) {
+      const branding = await resolveTenantBranding(sbAdmin, verifiedTenantId)
       if (branding.logoUrl) resolvedLogo = branding.logoUrl
       if (!brand_name) brandName = branding.name
     }

@@ -114,12 +114,31 @@ serve(async (req) => {
       ...(dueTodayTasks || []).map(t => ({ ...t, isOverdue: false })),
     ]
 
-    // 4. Collect unique user IDs from tasks + events
+    // 4. Look up active profiles up front so we can enforce tenant isolation
+    // when grouping. The job runs as service-role and queries every tenant,
+    // so a task assigned to user A in tenant X must NOT end up in A's email
+    // if A's current profile.tenant_id is tenant Y. (Cross-tenant leak.)
+    const candidateUserIds = Array.from(new Set([
+      ...allTasks.map(t => t.assignee_id || t.owner_id).filter(Boolean),
+      ...(todayEvents || []).map(e => e.owner_id).filter(Boolean),
+    ])) as string[]
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, name, tenant_id, status')
+      .in('id', candidateUserIds)
+      .eq('status', 'active')
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+
     const userDataMap = new Map<string, { overdue: any[]; dueToday: any[]; events: any[] }>()
 
     for (const task of allTasks) {
       const userId = task.assignee_id || task.owner_id
       if (!userId) continue
+      const profile = profileMap.get(userId)
+      // Drop tasks whose tenant doesn't match the recipient's current tenant.
+      if (!profile || !profile.tenant_id || profile.tenant_id !== task.tenant_id) continue
       if (!userDataMap.has(userId)) userDataMap.set(userId, { overdue: [], dueToday: [], events: [] })
       const entry = userDataMap.get(userId)!
       if (task.isOverdue) entry.overdue.push(task)
@@ -129,6 +148,8 @@ serve(async (req) => {
     for (const event of (todayEvents || [])) {
       const userId = event.owner_id
       if (!userId) continue
+      const profile = profileMap.get(userId)
+      if (!profile || !profile.tenant_id || profile.tenant_id !== event.tenant_id) continue
       if (!userDataMap.has(userId)) userDataMap.set(userId, { overdue: [], dueToday: [], events: [] })
       userDataMap.get(userId)!.events.push(event)
     }
@@ -138,16 +159,6 @@ serve(async (req) => {
         headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    // 5. Look up profiles
-    const userIds = Array.from(userDataMap.keys())
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, email, name, tenant_id, status')
-      .in('id', userIds)
-      .eq('status', 'active')
-
-    const profileMap = new Map((profiles || []).map(p => [p.id, p]))
 
     // 6. Avoid duplicate notifications
     const { data: existingNotifs } = await supabase

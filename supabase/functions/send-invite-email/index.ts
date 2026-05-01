@@ -76,6 +76,41 @@ serve(async (req) => {
       })
     }
 
+    // Authenticate caller and verify they belong to the tenant they're
+    // sending mail for. Without this check anyone signed in could trigger
+    // invite emails using another organisation's branding.
+    const sbAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    let verifiedTenantId: string | null = null
+    if (tenant_id) {
+      const authHeader = req.headers.get('Authorization')
+      const token = authHeader?.replace('Bearer ', '')
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Missing Authorization' }), {
+          status: 401, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { data: { user }, error: authErr } = await sbAdmin.auth.getUser(token)
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), {
+          status: 401, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { data: profile } = await sbAdmin
+        .from('profiles').select('tenant_id').eq('id', user.id).maybeSingle()
+      let allowed = profile?.tenant_id === tenant_id
+      if (!allowed) {
+        const { data: membership } = await sbAdmin
+          .from('tenant_members').select('tenant_id').eq('user_id', user.id).eq('tenant_id', tenant_id).maybeSingle()
+        allowed = !!membership
+      }
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: 'You do not belong to that tenant' }), {
+          status: 403, headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      verifiedTenantId = tenant_id
+    }
+
     const type = invite_type || 'team'
     const displayName = client_name || client_email.split('@')[0]
     const firstName = displayName.split(' ')[0]
@@ -84,9 +119,8 @@ serve(async (req) => {
     let brandName = tenant_name || 'livv'
     let resolvedLogo: string | null = logo_url || null
 
-    if (tenant_id) {
-      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-      const branding = await resolveTenantBranding(sb, tenant_id)
+    if (verifiedTenantId) {
+      const branding = await resolveTenantBranding(sbAdmin, verifiedTenantId)
       if (branding.logoUrl) resolvedLogo = branding.logoUrl
       if (!tenant_name) brandName = branding.name
     }

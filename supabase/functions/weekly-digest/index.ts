@@ -152,7 +152,25 @@ serve(async (req) => {
       .lte('start_date', nextWeekStr)
       .order('start_date', { ascending: true })
 
-    // Group by user
+    // Look up profiles up-front so we can enforce tenant isolation while
+    // grouping. The job runs as service-role and queries every tenant; a task
+    // assigned to user A in tenant X must NOT end up in A's digest if A's
+    // current profile.tenant_id is tenant Y.
+    const candidateUserIds = Array.from(new Set([
+      ...(completedTasks || []).map(t => t.assignee_id || t.owner_id),
+      ...(pendingTasks   || []).map(t => t.assignee_id || t.owner_id),
+      ...(upcomingDeadlines || []).map(t => t.assignee_id || t.owner_id),
+      ...(weekEvents || []).map(e => e.owner_id),
+    ].filter(Boolean))) as string[]
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, name, tenant_id, status')
+      .in('id', candidateUserIds)
+      .eq('status', 'active')
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+
     const userDataMap = new Map<string, { completed: any[]; pending: any[]; upcoming: any[]; events: any[] }>()
 
     const ensureUser = (userId: string) => {
@@ -162,23 +180,28 @@ serve(async (req) => {
       return userDataMap.get(userId)!
     }
 
+    const sameTenant = (userId: string, rowTenantId: string | null) => {
+      const p = profileMap.get(userId)
+      return !!(p && p.tenant_id && rowTenantId && p.tenant_id === rowTenantId)
+    }
+
     for (const t of (completedTasks || [])) {
       const userId = t.assignee_id || t.owner_id
-      if (userId) ensureUser(userId).completed.push(t)
+      if (userId && sameTenant(userId, t.tenant_id)) ensureUser(userId).completed.push(t)
     }
 
     for (const t of (pendingTasks || [])) {
       const userId = t.assignee_id || t.owner_id
-      if (userId) ensureUser(userId).pending.push(t)
+      if (userId && sameTenant(userId, t.tenant_id)) ensureUser(userId).pending.push(t)
     }
 
     for (const t of (upcomingDeadlines || [])) {
       const userId = t.assignee_id || t.owner_id
-      if (userId) ensureUser(userId).upcoming.push(t)
+      if (userId && sameTenant(userId, t.tenant_id)) ensureUser(userId).upcoming.push(t)
     }
 
     for (const e of (weekEvents || [])) {
-      if (e.owner_id) ensureUser(e.owner_id).events.push(e)
+      if (e.owner_id && sameTenant(e.owner_id, e.tenant_id)) ensureUser(e.owner_id).events.push(e)
     }
 
     if (userDataMap.size === 0) {
@@ -186,16 +209,6 @@ serve(async (req) => {
         headers: { ...emailCorsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    // Look up profiles
-    const userIds = Array.from(userDataMap.keys())
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, email, name, tenant_id, status')
-      .in('id', userIds)
-      .eq('status', 'active')
-
-    const profileMap = new Map((profiles || []).map(p => [p.id, p]))
 
     let sentCount = 0
 
