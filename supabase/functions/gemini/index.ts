@@ -511,6 +511,38 @@ Rules:
 - Respond in the SAME language as the user's question (Spanish if Spanish).
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
+        : type === 'finance_chat'
+        ? `You are a finance assistant continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (finance snapshot — recent expenses, incomes, budgets, totals — each row carries an "id" you can reference), "history" (prior turns), and "question" (the new user message).
+
+Reply in plain language AND, when the user clearly asks to change something, propose actions for the frontend to execute after the user confirms. NEVER auto-execute. NEVER invent ids — only reference ids present in the context.
+
+Return ONLY valid JSON with this shape:
+{
+  "reply": "1-5 sentence answer in the user's language",
+  "actions": [
+    {
+      "kind": "expense" | "income",
+      "op": "mark_paid" | "mark_pending" | "update_amount" | "update_date" | "link_budget" | "delete",
+      "target_id": "exact id from context.recent_expenses[].id or context.recent_incomes[].id",
+      "params": {
+        "amount": number,           // only for update_amount
+        "date": "YYYY-MM-DD",       // only for update_date
+        "budget_id": "uuid",        // only for link_budget; must come from context.active_budgets[].id
+        "budget_name": "string"     // optional helper for the UI
+      },
+      "summary": "human-readable description like 'Marcar como paid el gasto de Figma ($89, 2026-04-12)'"
+    }
+  ]
+}
+
+Rules — CRITICAL:
+- "actions" is OPTIONAL. Only include it when the user explicitly asks for a change ("marcá como pagado", "cambiá el monto a 200", "vinculá al budget de Marketing"). For pure questions ("¿cuánto gasté?") return actions: [] or omit it.
+- target_id MUST be an id present in the context. NEVER fabricate an id. If the user's request is ambiguous (e.g. "marcá Figma como pagado" but there are 3 Figma expenses), include in "reply" a clarifying question and DO NOT propose actions.
+- params MUST only contain the field relevant to op. Do not include amount for mark_paid, etc.
+- For link_budget: budget_id MUST exist in context.active_budgets and the budget's category should match (or be compatible with) the expense category.
+- Keep "reply" concise (1-3 sentences) when proposing actions — the action card itself shows the details.
+- Respond in the SAME language as the user's question.
+- No markdown code fences; plain text only in the reply field.`
         : type === 'finance_entries_batch'
         ? `You are a finance data-entry assistant. The user uploaded a spreadsheet (already parsed to JSON) and you must turn EACH ROW into a structured income or expense, RESOLVING references to existing clients and projects from the lists provided.
 
@@ -600,8 +632,8 @@ Rules — CRITICAL:
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
@@ -828,6 +860,24 @@ Rules — CRITICAL:
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+    } else if (type === 'finance_chat') {
+      // Same salvage logic as advisor_chat for the reply field; actions[] stays
+      // as-is. We don't reject when actions is missing — many turns are
+      // pure-Q&A and shouldn't carry actions.
+      let chat = json as { reply?: string; actions?: unknown[] }
+      if (json && (!chat?.reply || typeof chat.reply !== 'string')) {
+        const obj = json as Record<string, unknown>
+        const stringField = Object.values(obj).find((v) => typeof v === 'string') as string | undefined
+        if (stringField) chat = { ...chat, reply: stringField }
+      }
+      if (!chat?.reply || typeof chat.reply !== 'string') {
+        return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (chat.actions && !Array.isArray(chat.actions)) chat.actions = []
+      json = chat
     } else if (type === 'finance_entry') {
       const entry = json as FinanceEntryResponse
       if (

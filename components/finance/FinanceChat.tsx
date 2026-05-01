@@ -1,11 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, Send, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
+import { Sparkles, Send, Loader2, AlertCircle, MessageSquare, CheckCircle2, XCircle, Wand2 } from 'lucide-react';
 import { SlidePanel } from '../ui/SlidePanel';
-import { sendAdvisorChat, type AdvisorChatMessage } from '../../lib/ai';
+import { sendFinanceChat, type AdvisorChatMessage, type FinanceChatAction } from '../../lib/ai';
 import { useFinance } from '../../context/FinanceContext';
 import { useTenant } from '../../context/TenantContext';
 
-type Message = AdvisorChatMessage & { ts: number };
+type ActionState = 'pending' | 'executing' | 'done' | 'cancelled' | 'error';
+type Message = AdvisorChatMessage & {
+  ts: number;
+  actions?: FinanceChatAction[];
+  // action_state[i] mirrors actions[i] so the UI knows what each card is
+  // doing (waiting for click, mid-mutation, or settled).
+  action_state?: ActionState[];
+  action_error?: string[];
+};
 
 const SUGGESTIONS = [
   '¿Cuánto gasté en Software este mes?',
@@ -13,6 +21,7 @@ const SUGGESTIONS = [
   '¿Cuál es mi runway si mantengo este nivel de gastos?',
   'Mostrame mis 5 mayores gastos del mes',
   '¿Estoy cerca del límite de algún budget?',
+  'Marcá como pagado el último gasto de Figma',
 ];
 
 interface FinanceChatProps {
@@ -21,7 +30,7 @@ interface FinanceChatProps {
 }
 
 export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => {
-  const { expenses, incomes, budgets } = useFinance();
+  const { expenses, incomes, budgets, updateExpense, updateIncome, deleteExpense, deleteIncome } = useFinance();
   const { currentTenant } = useTenant();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -75,19 +84,24 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
     const totalIncomeMonthPending = totalIncomeMonth - totalIncomeMonthPaid;
 
     // Top recent rows (sorted desc by date) — provides concrete grounding for
-    // questions like "what was my biggest expense this week?".
+    // questions like "what was my biggest expense this week?". `id` is
+    // included so the IA can target rows in proposed actions; the prompt
+    // forbids fabricating ids outside this list.
     const sortedExpenses = [...expenses]
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, RECENT_LIMIT)
       .map(e => ({
+        id: e.id,
         date: e.date, concept: e.concept, vendor: e.vendor || null,
         amount: Number(e.amount || 0), category: e.category, status: e.status,
         recurring: !!e.recurring,
+        budget_id: e.budget_id || null,
       }));
     const sortedIncomes = [...incomes]
       .sort((a, b) => (b.due_date || '').localeCompare(a.due_date || ''))
       .slice(0, RECENT_LIMIT)
       .map(i => ({
+        id: i.id,
         due_date: i.due_date, concept: i.concept, client: i.client_name,
         total_amount: Number(i.total_amount || 0), status: i.status,
       }));
@@ -97,6 +111,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
         .filter(e => e.budget_id === b.id || (e.category && e.category === b.category))
         .reduce((s, e) => s + Number(e.amount || 0), 0);
       return {
+        id: b.id,
         name: b.name, category: b.category, period: b.period,
         allocated: Number(b.allocated_amount || 0),
         spent,
@@ -128,19 +143,79 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
     setInput('');
     setIsSending(true);
     try {
-      const result = await sendAdvisorChat(
+      const result = await sendFinanceChat(
         context,
         newHistory.map(m => ({ role: m.role, content: m.content })),
         question,
       );
-      setMessages(prev => [...prev, { role: 'assistant', content: result.reply, ts: Date.now() }]);
+      // Defensive: only keep actions whose target_id actually exists in our
+      // current data. If the IA hallucinated an id we drop it instead of
+      // letting the user try to execute against a phantom row.
+      const validActions = (result.actions || []).filter(a => {
+        if (!a || !a.target_id || !a.kind || !a.op) return false;
+        if (a.kind === 'expense') return expenses.some(e => e.id === a.target_id);
+        if (a.kind === 'income') return incomes.some(i => i.id === a.target_id);
+        return false;
+      });
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: result.reply,
+        ts: Date.now(),
+        actions: validActions.length > 0 ? validActions : undefined,
+        action_state: validActions.length > 0 ? validActions.map(() => 'pending' as ActionState) : undefined,
+        action_error: validActions.length > 0 ? validActions.map(() => '') : undefined,
+      }]);
     } catch (err: any) {
       setError(err?.message || 'No pude responder. Probá de nuevo.');
     } finally {
       setIsSending(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [input, isSending, messages, context]);
+  }, [input, isSending, messages, context, expenses, incomes]);
+
+  const setActionState = useCallback((msgIdx: number, actionIdx: number, state: ActionState, errMsg?: string) => {
+    setMessages(prev => prev.map((m, i) => {
+      if (i !== msgIdx || !m.action_state) return m;
+      const next_state = [...m.action_state]; next_state[actionIdx] = state;
+      const next_err = [...(m.action_error || [])]; next_err[actionIdx] = errMsg || '';
+      return { ...m, action_state: next_state, action_error: next_err };
+    }));
+  }, []);
+
+  const executeAction = useCallback(async (msgIdx: number, actionIdx: number) => {
+    const msg = messages[msgIdx];
+    const action = msg?.actions?.[actionIdx];
+    if (!action) return;
+    setActionState(msgIdx, actionIdx, 'executing');
+    try {
+      if (action.kind === 'expense') {
+        switch (action.op) {
+          case 'mark_paid':       await updateExpense(action.target_id, { status: 'paid' }); break;
+          case 'mark_pending':    await updateExpense(action.target_id, { status: 'pending' }); break;
+          case 'update_amount':   if (typeof action.params?.amount === 'number') await updateExpense(action.target_id, { amount: action.params.amount }); break;
+          case 'update_date':     if (action.params?.date) await updateExpense(action.target_id, { date: action.params.date }); break;
+          case 'link_budget':     if (action.params?.budget_id) await updateExpense(action.target_id, { budget_id: action.params.budget_id }); break;
+          case 'delete':          await deleteExpense(action.target_id); break;
+        }
+      } else {
+        switch (action.op) {
+          case 'mark_paid':       await updateIncome(action.target_id, { status: 'paid' }); break;
+          case 'mark_pending':    await updateIncome(action.target_id, { status: 'pending' }); break;
+          case 'update_amount':   if (typeof action.params?.amount === 'number') await updateIncome(action.target_id, { total_amount: action.params.amount }); break;
+          case 'update_date':     if (action.params?.date) await updateIncome(action.target_id, { due_date: action.params.date }); break;
+          case 'delete':          await deleteIncome(action.target_id); break;
+          // link_budget is expense-only — silently no-op for incomes
+        }
+      }
+      setActionState(msgIdx, actionIdx, 'done');
+    } catch (err: any) {
+      setActionState(msgIdx, actionIdx, 'error', err?.message || 'Error al ejecutar');
+    }
+  }, [messages, updateExpense, updateIncome, deleteExpense, deleteIncome, setActionState]);
+
+  const cancelAction = useCallback((msgIdx: number, actionIdx: number) => {
+    setActionState(msgIdx, actionIdx, 'cancelled');
+  }, [setActionState]);
 
   return (
     <SlidePanel
@@ -185,7 +260,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
             </div>
           ) : (
             messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} gap-2`}>
                 <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed whitespace-pre-wrap ${
                   m.role === 'user'
                     ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
@@ -193,6 +268,88 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
                 }`}>
                   {m.content}
                 </div>
+
+                {/* Action cards — confirm before executing */}
+                {m.role === 'assistant' && m.actions && m.actions.length > 0 && (
+                  <div className="w-full max-w-[85%] space-y-1.5">
+                    {m.actions.map((a, ai) => {
+                      const state: ActionState = m.action_state?.[ai] ?? 'pending';
+                      const err = m.action_error?.[ai] || '';
+                      const isExpense = a.kind === 'expense';
+                      const opLabel: Record<string, string> = {
+                        mark_paid: 'Marcar como paid',
+                        mark_pending: 'Marcar como pending',
+                        update_amount: 'Actualizar monto',
+                        update_date: 'Actualizar fecha',
+                        link_budget: 'Vincular a budget',
+                        delete: 'Eliminar',
+                      };
+                      const isDanger = a.op === 'delete';
+                      return (
+                        <div key={ai} className={`rounded-xl border px-3 py-2 ${
+                          isDanger
+                            ? 'border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/5'
+                            : 'border-fuchsia-200 dark:border-fuchsia-500/30 bg-fuchsia-50/40 dark:bg-fuchsia-500/5'
+                        }`}>
+                          <div className="flex items-start gap-2">
+                            <div className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              isExpense ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                            }`}>
+                              {isExpense ? 'EX' : 'IN'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                {opLabel[a.op] || a.op}
+                              </div>
+                              <div className="text-xs text-zinc-800 dark:text-zinc-200 mt-0.5">{a.summary}</div>
+                              {err && state === 'error' && (
+                                <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-1">{err}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-1.5 mt-2">
+                            {state === 'pending' && (
+                              <>
+                                <button type="button" onClick={() => cancelAction(i, ai)}
+                                  className="px-2.5 py-1 rounded-md text-[10px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                                  Cancelar
+                                </button>
+                                <button type="button" onClick={() => executeAction(i, ai)}
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white shadow-sm hover:opacity-90 transition-opacity ${
+                                    isDanger ? 'bg-rose-600' : 'bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900'
+                                  }`}>
+                                  <Wand2 size={10} /> Ejecutar
+                                </button>
+                              </>
+                            )}
+                            {state === 'executing' && (
+                              <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+                                <Loader2 size={10} className="animate-spin" /> Ejecutando…
+                              </span>
+                            )}
+                            {state === 'done' && (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 size={11} /> Hecho
+                              </span>
+                            )}
+                            {state === 'cancelled' && (
+                              <span className="flex items-center gap-1 text-[10px] text-zinc-400">
+                                <XCircle size={11} /> Cancelada
+                              </span>
+                            )}
+                            {state === 'error' && (
+                              <button type="button" onClick={() => executeAction(i, ai)}
+                                className="px-2.5 py-1 rounded-md text-[10px] font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
+                                Reintentar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))
           )}

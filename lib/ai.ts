@@ -22,6 +22,7 @@ const CACHE_TTL: Record<string, number> = {
   standup: 0,                      // no cache — each standup is unique per day
   finance_entry: 0,                // no cache — every entry is unique
   finance_entries_batch: 0,        // no cache — file content is unique per upload
+  finance_chat: 0,                 // no cache — each chat turn is unique
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -415,6 +416,47 @@ export const sendAdvisorChat = (
 ): Promise<AdvisorChatResult> => {
   const payload = JSON.stringify({ context, history, question })
   return callGemini<AdvisorChatResult>('advisor_chat', payload, (r) => typeof r?.reply === 'string', profile)
+}
+
+// ─── Finance chat (with optional executable actions) ─────────────
+// Same input shape as advisor_chat but the model may include action proposals
+// the frontend will render as confirm-cards and execute against FinanceContext
+// only after the user clicks. Never auto-executed.
+
+export type FinanceChatActionOp =
+  | 'mark_paid'
+  | 'mark_pending'
+  | 'update_amount'
+  | 'update_date'
+  | 'link_budget'
+  | 'delete'
+
+export type FinanceChatAction = {
+  kind: 'expense' | 'income'
+  op: FinanceChatActionOp
+  target_id: string
+  params?: {
+    amount?: number
+    date?: string
+    budget_id?: string
+    budget_name?: string
+  }
+  summary: string
+}
+
+export type FinanceChatResult = {
+  reply: string
+  actions?: FinanceChatAction[]
+}
+
+export const sendFinanceChat = (
+  context: string,
+  history: AdvisorChatMessage[],
+  question: string,
+  profile?: LiveAIProfile,
+): Promise<FinanceChatResult> => {
+  const payload = JSON.stringify({ context, history, question })
+  return callGemini<FinanceChatResult>('finance_chat', payload, (r) => typeof r?.reply === 'string', profile)
 }
 
 export const generateBlogFromAI = (input: string, profile?: LiveAIProfile): Promise<BlogAIResult> =>
