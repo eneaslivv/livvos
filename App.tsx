@@ -779,9 +779,33 @@ const AppContent: React.FC<{
 // Run cleanup again at App module load (supabase.ts already runs it once at import)
 cleanupLocalStorage();
 
+const LAST_PAGE_KEY = 'eneas:lastPage';
+const LAST_MODE_KEY = 'eneas:lastMode';
+const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
+  'home', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
+  'activity', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
+  'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
+]);
+
+const readLastPage = (): PageView => {
+  try {
+    const stored = window.localStorage.getItem(LAST_PAGE_KEY);
+    if (stored && VALID_PAGES.has(stored as PageView)) return stored as PageView;
+  } catch {}
+  return 'home';
+};
+
+const readLastMode = (): AppMode => {
+  try {
+    const stored = window.localStorage.getItem(LAST_MODE_KEY);
+    if (stored === 'os' || stored === 'sales') return stored;
+  } catch {}
+  return 'os';
+};
+
 const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<PageView>('home');
-  const [appMode, setAppMode] = useState<AppMode>('os');
+  const [currentPage, setCurrentPage] = useState<PageView>(readLastPage);
+  const [appMode, setAppMode] = useState<AppMode>(readLastMode);
   const [showDebug, setShowDebug] = useState(false);
   const [navParams, setNavParams] = useState<NavParams | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -809,6 +833,14 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString()
     });
   }, [currentPage, appMode]);
+
+  // Persistir página y modo para que F5 mantenga la ubicación
+  useEffect(() => {
+    try { window.localStorage.setItem(LAST_PAGE_KEY, currentPage); } catch {}
+  }, [currentPage]);
+  useEffect(() => {
+    try { window.localStorage.setItem(LAST_MODE_KEY, appMode); } catch {}
+  }, [appMode]);
 
   useEffect(() => {
     if (portalFlag === 'client') {
@@ -842,6 +874,10 @@ const App: React.FC = () => {
           setIsAuthenticated(true);
         } else if (_event === 'SIGNED_OUT') {
           setIsAuthenticated(false);
+          try {
+            window.localStorage.removeItem(LAST_PAGE_KEY);
+            window.localStorage.removeItem(LAST_MODE_KEY);
+          } catch {}
         }
 
         // Log auth state changes for security monitoring

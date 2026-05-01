@@ -644,22 +644,24 @@ const DatePickerButton: React.FC<{
     onChange(newDate);
   };
 
-  const isOverdue = localValue && parseLocalDate(localValue) < parseLocalDate(todayLocal()) && !done;
+  const parsedDate = parseLocalDate(localValue);
+  const today = parseLocalDate(todayLocal());
+  const isOverdue = !!(parsedDate && today && parsedDate < today && !done);
 
   return (
     <div className="relative">
       <button
         onClick={() => inputRef.current?.showPicker()}
         className={`text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
-          !localValue
+          !parsedDate
             ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             : isOverdue
             ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
             : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
         }`}
       >
-        {localValue
-          ? parseLocalDate(localValue).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        {parsedDate
+          ? parsedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
           : 'Set date'}
       </button>
       <input

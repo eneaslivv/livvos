@@ -7,9 +7,8 @@ import { TeamMember } from '../../context/TeamContext';
 import { parseLocalDate } from '../../lib/dateUtils';
 
 const fmtShortDate = (d: string | null | undefined) => {
-  if (!d) return '—';
-  const date = d.includes('T') ? new Date(d) : parseLocalDate(d);
-  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+  const date = parseLocalDate(d);
+  return date ? date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : '—';
 };
 
 const fmtMoney = (v: number) => `$${v.toLocaleString()}`;

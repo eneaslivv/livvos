@@ -61,7 +61,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             .filter(inst => inst.status === 'paid' && inst.paid_date)
             .reduce((sum, inst) => {
                 const pDate = parseLocalDate(inst.paid_date);
-                if (pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) return sum + inst.amount;
+                if (pDate && pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) return sum + inst.amount;
                 return sum;
             }, 0);
         return acc + paidThisMonth;
@@ -70,7 +70,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const monthlyExpenses = expenses.reduce((acc, exp) => {
         if (exp.status === 'paid' && exp.date) {
             const expDate = parseLocalDate(exp.date);
-            if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) return acc + exp.amount;
+            if (expDate && expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) return acc + exp.amount;
         }
         return acc;
     }, 0);
