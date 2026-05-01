@@ -189,6 +189,9 @@ export const Finance: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  // When materializing a projected (virtual) recurring row, this holds the source id
+  // so the new INSERT can be linked back to the original recurring expense.
+  const [materializingSourceId, setMaterializingSourceId] = useState<string | null>(null);
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -490,22 +493,28 @@ export const Finance: React.FC = () => {
   }, [incomeSearch, incomeStatusFilter, incomeDateFrom, incomeDateTo, incomes]);
 
   const filteredExpenses = useMemo(() => {
-    // 1. Project recurring expenses forward as virtual rows for future months.
-    //    The DB only materializes copies up to the current month; the user still
-    //    needs to see them in the navigator when looking at upcoming months.
+    // Project recurring expenses as virtual rows for the current and future months
+    // when no real DB copy exists yet. The DB-side RPC backfills past/current months,
+    // but it runs once per session and can lag — projecting client-side guarantees
+    // the user always sees a row to act on (and to materialize via Edit if they need
+    // to tweak the amount this month).
     let working: ExpenseEntry[] = expenses;
     if (!expenseCustomDateRange) {
       const today = new Date();
       const todayMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const viewMonthStart = new Date(expenseViewMonth.year, expenseViewMonth.month, 1);
-      if (viewMonthStart > todayMonthStart) {
+      if (viewMonthStart >= todayMonthStart) {
         const monthFirst = `${expenseViewMonth.year}-${String(expenseViewMonth.month + 1).padStart(2, '0')}-01`;
         const projected: ExpenseEntry[] = expenses
           .filter((e) => e.recurring && !e.recurring_source_id && e.date <= monthFirst)
+          // Skip if a real DB copy already exists in the viewed range.
           .filter((src) => !expenses.some((e) =>
             e.recurring_source_id === src.id &&
             e.date >= expenseDateFrom && e.date <= expenseDateTo
           ))
+          // Skip if the source itself already lives in the viewed range — its
+          // own creation month should display the original, not a projection.
+          .filter((src) => !(src.date >= expenseDateFrom && src.date <= expenseDateTo))
           .map((src) => ({
             ...src,
             id: `proj-${src.id}-${monthFirst}`,
@@ -621,6 +630,7 @@ export const Finance: React.FC = () => {
   }, []);
 
   const openEditExpense = useCallback((exp: ExpenseEntry) => {
+    const isProjected = exp.id.startsWith('proj-');
     setExpenseForm({
       concept: exp.concept,
       category: exp.category,
@@ -628,11 +638,18 @@ export const Finance: React.FC = () => {
       vendor: exp.vendor || '',
       project_id: exp.project_id || '',
       date: exp.date,
-      recurring: exp.recurring,
+      // Projected/materialized copies are themselves not recurring — the source drives renewal.
+      recurring: isProjected ? false : exp.recurring,
       status: exp.status as 'paid' | 'pending',
       budget_id: exp.budget_id || '',
     });
-    setEditingExpenseId(exp.id);
+    if (isProjected) {
+      setEditingExpenseId(null);
+      setMaterializingSourceId(exp.recurring_source_id || null);
+    } else {
+      setEditingExpenseId(exp.id);
+      setMaterializingSourceId(null);
+    }
     setEntryType('expense');
     setEntryError(null);
     setIsEntryOpen(true);
@@ -645,6 +662,7 @@ export const Finance: React.FC = () => {
     setEditingExpenseId(null);
     setEditingBudgetId(null);
     setEditingWithdrawalId(null);
+    setMaterializingSourceId(null);
   }, []);
 
   const resetWithdrawalForm = useCallback(() => {
@@ -796,9 +814,12 @@ export const Finance: React.FC = () => {
           project_id: expenseForm.project_id || null,
           project_name: project?.title || 'General',
           vendor: expenseForm.vendor.trim(),
-          recurring: expenseForm.recurring,
+          // Materialized copies of a recurring source aren't themselves recurring —
+          // the source row drives renewal.
+          recurring: materializingSourceId ? false : expenseForm.recurring,
           status: expenseForm.status,
           budget_id: expenseForm.budget_id || null,
+          recurring_source_id: materializingSourceId,
         };
         if (import.meta.env.DEV) console.log('[Finance] Creating expense:', data);
         await Promise.race([createExpense(data), timeout]);
@@ -811,7 +832,7 @@ export const Finance: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [expenseForm, projects, createExpense, updateExpense, editingExpenseId, closeForm]);
+  }, [expenseForm, projects, createExpense, updateExpense, editingExpenseId, materializingSourceId, closeForm]);
 
   const handleSubmitBudget = useCallback(async () => {
     if (!budgetForm.name.trim()) { setEntryError('Enter a name.'); return; }
@@ -1757,18 +1778,19 @@ export const Finance: React.FC = () => {
                           <td className="px-4 py-3 text-[11px] text-zinc-400 text-center">{fmtDate(exp.date)}</td>
                           <td className="px-4 py-3 text-center"><StatusBadge status={exp.status} /></td>
                           <td className="px-4 py-3">
-                            {!isProjected && (
-                              <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-all">
-                                <button onClick={() => openEditExpense(exp)}
-                                  className="p-1 rounded text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                                  <Pencil size={12} />
-                                </button>
+                            <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => openEditExpense(exp)}
+                                title={isProjected ? 'Materialize and edit this month’s copy' : 'Edit'}
+                                className="p-1 rounded text-zinc-300 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                                <Pencil size={12} />
+                              </button>
+                              {!isProjected && (
                                 <button onClick={() => handleDeleteExpense(exp.id)}
                                   className="p-1 rounded text-zinc-300 hover:text-rose-500 transition-colors">
                                   <Trash2 size={12} />
                                 </button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2471,7 +2493,7 @@ export const Finance: React.FC = () => {
           entryType === 'income' ? (editingIncomeId ? 'Update income details' : 'Select a project or register a general income') :
           entryType === 'budget' ? (editingBudgetId ? 'Update budget details' : 'Create a fund to track spending') :
           entryType === 'withdrawal' ? (editingWithdrawalId ? 'Update withdrawal details' : 'Record a fund withdrawal and its transfer fee') :
-          (editingExpenseId ? 'Update expense details' : 'Register expense')
+          (editingExpenseId ? 'Update expense details' : materializingSourceId ? 'Adjust this month’s copy of the recurring expense' : 'Register expense')
         }
         width="md"
         footer={

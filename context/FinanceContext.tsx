@@ -120,6 +120,7 @@ export interface CreateExpenseData {
   recurring?: boolean
   status?: 'paid' | 'pending'
   budget_id?: string | null
+  recurring_source_id?: string | null
 }
 
 export interface TimeEntry {
@@ -1032,6 +1033,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       if (data.project_id) expensePayload.project_id = data.project_id
       if (data.client_id) expensePayload.client_id = data.client_id
       if (data.budget_id) expensePayload.budget_id = data.budget_id
+      if (data.recurring_source_id) expensePayload.recurring_source_id = data.recurring_source_id
 
       if (import.meta.env.DEV) console.log('[FinanceContext] Inserting expense:', expensePayload)
 
