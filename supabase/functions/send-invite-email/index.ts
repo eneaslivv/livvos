@@ -10,6 +10,12 @@ function buildFeaturesHtml(type: string, accent: string): string {
         { icon: '&#128179;', label: 'Payments', desc: 'View your payment plan and status' },
         { icon: '&#128196;', label: 'Documents', desc: 'Contracts, files, and credentials' },
       ]
+    : type === 'agency_connection'
+    ? [
+        { icon: '&#128279;', label: 'Connected workspaces', desc: 'They can switch into yours, you keep yours private' },
+        { icon: '&#128221;', label: 'Shared tasks', desc: 'Create tasks once, mirror them across both agencies' },
+        { icon: '&#128274;', label: 'Strict isolation', desc: 'Only what you choose to share is visible' },
+      ]
     : [
         { icon: '&#128188;', label: 'Projects', desc: 'Full project and task management' },
         { icon: '&#128197;', label: 'Calendar', desc: 'Events, deadlines, and planning' },
@@ -86,11 +92,18 @@ serve(async (req) => {
     }
 
     const isClient = type === 'client'
-    const accent = isClient ? '#2C0405' : '#E8BC59'
-    const ctaText = isClient ? 'Access Your Portal' : 'Join the Team'
+    const isAgencyConnection = type === 'agency_connection'
+    const accent = isClient ? '#2C0405' : isAgencyConnection ? '#7C3AED' : '#E8BC59'
+    const ctaText = isClient
+      ? 'Access Your Portal'
+      : isAgencyConnection
+      ? 'Accept Connection'
+      : 'Join the Team'
 
     const intro = isClient
       ? 'You\'ve been invited to access your client portal. Track your project\'s progress, payments, documents, and communicate directly with the team.'
+      : isAgencyConnection
+      ? `<strong>${brandName}</strong> wants to connect their super-agency workspace with yours. Once you accept, you both keep your own data private — but you can mirror tasks back and forth and switch between workspaces from a single dropdown.`
       : `You've been invited to join the <strong>${brandName}</strong> team. Complete your registration to start collaborating.`
 
     const fallbackLink = `<p style="margin:28px 0 0;font-size:11px;color:#a1a1aa;line-height:1.5;">
@@ -105,6 +118,8 @@ serve(async (req) => {
 
     const subject = isClient
       ? `${displayName}, your portal access is ready`
+      : isAgencyConnection
+      ? `${brandName} invited ${displayName} to connect agencies`
       : `${displayName}, you've been invited to the team`
 
     const htmlBody = wrapEmailHtml({

@@ -55,6 +55,8 @@ export interface CalendarTask {
   created_at: string
   updated_at: string
   completed_at?: string | null
+  mirror_pair_id?: string | null
+  mirror_origin_tenant_id?: string | null
 }
 
 export interface CalendarLabel {
@@ -130,6 +132,8 @@ const normalizeTask = (task: any): CalendarTask => ({
   created_at: task.created_at ?? new Date().toISOString(),
   updated_at: task.updated_at ?? new Date().toISOString(),
   completed_at: task.completed_at ?? null,
+  mirror_pair_id: task.mirror_pair_id ?? null,
+  mirror_origin_tenant_id: task.mirror_origin_tenant_id ?? null,
 })
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

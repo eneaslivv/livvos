@@ -7,6 +7,10 @@ import { CalendarTask } from '../../hooks/useCalendar';
 import { TaskCommentsSection } from './TaskCommentsSection';
 import { useDocuments } from '../../context/DocumentsContext';
 import { DocumentEditor } from '../docs/DocumentEditor';
+import { useTenant } from '../../context/TenantContext';
+import { useConnectedAgencies } from '../../hooks/useConnectedAgencies';
+import { supabase } from '../../lib/supabase';
+import { errorLogger } from '../../lib/errorLogger';
 
 interface TeamMember {
   id: string;
@@ -115,6 +119,24 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   const completedCount = subtasksForSelected.filter(s => s.completed).length;
   const totalSubtasks = subtasksForSelected.length;
   const progressPct = totalSubtasks > 0 ? Math.round((completedCount / totalSubtasks) * 100) : 0;
+
+  const { currentTenant } = useTenant();
+  const { agencies: connectedAgencies, refresh: refreshAgencies } = useConnectedAgencies();
+  const mirrorOtherTenantId = (() => {
+    if (!selectedTask?.mirror_pair_id) return null;
+    if (selectedTask.mirror_origin_tenant_id && selectedTask.mirror_origin_tenant_id !== currentTenant?.id) {
+      return selectedTask.mirror_origin_tenant_id;
+    }
+    return null;
+  })();
+  const mirrorOtherAgency = mirrorOtherTenantId
+    ? connectedAgencies.find(a => a.tenant_id === mirrorOtherTenantId)
+    : null;
+  const isOriginOfMirror = !!selectedTask?.mirror_pair_id
+    && selectedTask?.mirror_origin_tenant_id === currentTenant?.id;
+  const sharedWithAgency = isOriginOfMirror
+    ? connectedAgencies.find(a => a.tenant_id !== currentTenant?.id) || null
+    : null;
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     subtasks: false,
@@ -248,6 +270,33 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             <p className="mt-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
               Created {new Date(selectedTask.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
+
+            {selectedTask.mirror_pair_id && (
+              <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30">
+                <Icons.Link size={12} className="text-violet-600 dark:text-violet-400 flex-shrink-0" />
+                <span className="text-[11px] text-violet-700 dark:text-violet-300 flex-1">
+                  {mirrorOtherAgency
+                    ? <>Mirrored from <strong>{mirrorOtherAgency.tenant_name}</strong> — changes sync both ways</>
+                    : isOriginOfMirror && sharedWithAgency
+                    ? <>Shared with <strong>{sharedWithAgency.tenant_name}</strong> — changes sync both ways</>
+                    : <>Mirrored across connected agencies — changes sync both ways</>
+                  }
+                </span>
+                {isOriginOfMirror && (
+                  <button
+                    onClick={async () => {
+                      if (!selectedTask?.id) return;
+                      const { error } = await supabase.rpc('unshare_task', { p_task_id: selectedTask.id });
+                      if (error) errorLogger.error('unshare_task failed:', error);
+                      else refreshAgencies();
+                    }}
+                    className="text-[10px] font-medium text-violet-700 dark:text-violet-300 hover:underline"
+                  >
+                    Stop sharing
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ─── Blocked banner ─── */}

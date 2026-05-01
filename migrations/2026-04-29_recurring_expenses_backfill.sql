@@ -45,13 +45,13 @@ BEGIN
       IF NOT v_existing THEN
         INSERT INTO expenses (
           tenant_id, category, subcategory, concept, amount, currency,
-          date, project_id, project_name, client_id, vendor,
+          date, project_id, project_name, vendor,
           recurring, status, budget_id, created_by, recurring_source_id
         ) VALUES (
           v_rec.tenant_id, v_rec.category, v_rec.subcategory, v_rec.concept,
           v_rec.amount, v_rec.currency,
           v_iter_month,
-          v_rec.project_id, v_rec.project_name, v_rec.client_id, v_rec.vendor,
+          v_rec.project_id, v_rec.project_name, v_rec.vendor,
           false,
           'paid',
           v_rec.budget_id, v_rec.created_by, v_rec.id

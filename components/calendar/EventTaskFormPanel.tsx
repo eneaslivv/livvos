@@ -33,6 +33,13 @@ interface ClientOption {
   name: string;
 }
 
+interface ConnectedAgencyOption {
+  tenant_id: string;
+  tenant_name: string;
+  logo_url: string | null;
+  relationship: 'parent' | 'child';
+}
+
 export interface EventTaskFormPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -77,8 +84,11 @@ export interface EventTaskFormPanelProps {
     client_id: string;
     assignee_id: string;
     assignee_ids?: string[];
+    share_with_tenant_ids?: string[];
   };
   setNewTaskData: React.Dispatch<React.SetStateAction<any>>;
+  // Connected agencies (for task sharing)
+  connectedAgencies?: ConnectedAgencyOption[];
   // Handlers
   onCreateEvent: () => void;
   onCreateContent: () => void;
@@ -120,6 +130,7 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
   clients,
   teamMembers,
   userId,
+  connectedAgencies = [],
 }) => {
   return (
     <SlidePanel
@@ -493,6 +504,54 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
                 compact
               />
             </div>
+
+            {/* Share with connected agencies */}
+            {connectedAgencies.length > 0 && (
+              <div>
+                <label className="block text-[10px] font-medium text-zinc-400 mb-1.5">
+                  Share with connected agency
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {connectedAgencies.map(a => {
+                    const selected = (newTaskData.share_with_tenant_ids || []).includes(a.tenant_id);
+                    return (
+                      <button
+                        key={a.tenant_id}
+                        type="button"
+                        onClick={() => setNewTaskData((prev: any) => {
+                          const cur: string[] = prev.share_with_tenant_ids || [];
+                          const next = selected
+                            ? cur.filter((id: string) => id !== a.tenant_id)
+                            : [...cur, a.tenant_id];
+                          return { ...prev, share_with_tenant_ids: next };
+                        })}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
+                          selected
+                            ? 'bg-violet-50 dark:bg-violet-500/15 border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-400'
+                            : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
+                        }`}
+                      >
+                        <span className="w-3.5 h-3.5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
+                          {a.logo_url ? (
+                            <img src={a.logo_url} alt="" className="w-full h-full object-contain" />
+                          ) : (
+                            <span className="text-[8px] font-bold text-zinc-500">
+                              {a.tenant_name.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </span>
+                        {a.tenant_name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(newTaskData.share_with_tenant_ids || []).length > 0 && (
+                  <p className="mt-1.5 text-[10px] text-zinc-400">
+                    A mirror copy will appear in the selected workspace and stay in sync.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Description */}
             <input

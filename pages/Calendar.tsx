@@ -24,6 +24,7 @@ import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { DayAgendaView } from '../components/calendar/DayAgendaView';
 import { Icons } from '../components/ui/Icons';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 
 export const Calendar: React.FC = () => {
   const isMobile = useIsMobile();
@@ -48,6 +49,7 @@ export const Calendar: React.FC = () => {
 
   const { members: teamMembers } = useTeam();
   const { clients } = useClients();
+  const { agencies: connectedAgencies } = useConnectedAgencies();
 
   // Loading timeout
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -351,6 +353,7 @@ export const Calendar: React.FC = () => {
     client_id: '',
     assignee_id: '',
     assignee_ids: [] as string[],
+    share_with_tenant_ids: [] as string[],
   });
 
   // Open task detail panel
@@ -648,7 +651,7 @@ export const Calendar: React.FC = () => {
     if (!newTaskData.title.trim()) return;
 
     try {
-      await createTask({
+      const created: any = await createTask({
         ...newTaskData,
         owner_id: user?.id || '',
         start_date: newTaskData.start_date || selectedDate,
@@ -662,6 +665,19 @@ export const Calendar: React.FC = () => {
         order_index: 0,
       } as any);
 
+      // Mirror to connected agencies (fire-and-forget)
+      const shareTargets = newTaskData.share_with_tenant_ids || [];
+      if (created?.id && shareTargets.length > 0) {
+        for (const targetId of shareTargets) {
+          supabase.rpc('share_task_with_tenant', {
+            p_task_id: created.id,
+            p_target_tenant_id: targetId,
+          }).then(({ error }) => {
+            if (error) errorLogger.error('share_task_with_tenant failed:', error);
+          });
+        }
+      }
+
       setNewTaskData({
         title: '',
         description: '',
@@ -674,6 +690,7 @@ export const Calendar: React.FC = () => {
         client_id: '',
         assignee_id: '',
         assignee_ids: [],
+        share_with_tenant_ids: [],
       });
       setShowNewTaskForm(false);
     } catch (err) {
@@ -1360,6 +1377,7 @@ export const Calendar: React.FC = () => {
         clients={clients}
         teamMembers={teamMembers}
         userId={user?.id}
+        connectedAgencies={connectedAgencies}
       />
 
       {/* Task Detail / Edit Panel */}
