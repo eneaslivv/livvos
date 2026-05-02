@@ -7,6 +7,7 @@ interface CRMBoardProps {
     onStatusChange: (id: string, status: 'new' | 'contacted' | 'following' | 'closed' | 'lost') => void;
     onConvert: (lead: Lead) => void;
     onLeadClick?: (lead: Lead) => void;
+    onDelete?: (id: string) => Promise<void> | void;
     convertingId?: string | null;
 }
 
@@ -35,9 +36,18 @@ function formatRelative(value?: string): string {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onConvert, onLeadClick, convertingId }) => {
+export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onConvert, onLeadClick, onDelete, convertingId }) => {
     const [draggedLead, setDraggedLead] = useState<string | null>(null);
     const [dragOverCol, setDragOverCol] = useState<ColId | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const handleDelete = async (lead: Lead) => {
+        if (!onDelete || deletingId) return;
+        const label = lead.name || lead.email || 'this lead';
+        if (!window.confirm(`¿Eliminar "${label}"? No se puede deshacer.`)) return;
+        setDeletingId(lead.id);
+        try { await onDelete(lead.id); } finally { setDeletingId(null); }
+    };
 
     const leadsByStatus = useMemo(() => {
         const acc: Record<string, Lead[]> = {};
@@ -192,20 +202,36 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
                                                     )}
                                                 </div>
 
-                                                {col.id !== 'closed' && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onConvert(lead); }}
-                                                        disabled={convertingId === lead.id}
-                                                        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[9.5px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 px-1.5 py-px rounded shrink-0"
-                                                    >
-                                                        {convertingId === lead.id ? (
-                                                            <Icons.Loader size={9} className="animate-spin" />
-                                                        ) : (
-                                                            <Icons.Sparkles size={9} />
-                                                        )}
-                                                        <span>Convert</span>
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center gap-0.5 shrink-0">
+                                                    {col.id !== 'closed' && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); onConvert(lead); }}
+                                                            disabled={convertingId === lead.id}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[9.5px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 px-1.5 py-px rounded"
+                                                        >
+                                                            {convertingId === lead.id ? (
+                                                                <Icons.Loader size={9} className="animate-spin" />
+                                                            ) : (
+                                                                <Icons.Sparkles size={9} />
+                                                            )}
+                                                            <span>Convert</span>
+                                                        </button>
+                                                    )}
+                                                    {onDelete && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(lead); }}
+                                                            disabled={deletingId === lead.id}
+                                                            title="Eliminar lead"
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                                                        >
+                                                            {deletingId === lead.id ? (
+                                                                <Icons.Loader size={10} className="animate-spin" />
+                                                            ) : (
+                                                                <Icons.Trash size={10} />
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );

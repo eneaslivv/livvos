@@ -21,7 +21,7 @@ interface SalesProps {
 export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
   const leadsEnabled = view !== 'analytics';
   const analyticsEnabled = view === 'analytics';
-  const { data: leads, loading: leadsLoading, error: leadsError, add: addLead, update: updateLead, refresh: refreshLeads } = useSupabase<Lead>('leads', {
+  const { data: leads, loading: leadsLoading, error: leadsError, add: addLead, update: updateLead, remove: removeLead, refresh: refreshLeads } = useSupabase<Lead>('leads', {
     enabled: leadsEnabled,
     subscribe: leadsEnabled,
   });
@@ -86,6 +86,18 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
       } as any);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Error updating lead status';
+      alert(message);
+      await refreshLeads();
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    try {
+      await removeLead(id);
+      // If the lead being deleted is the one open in the side panel, close it.
+      if (selectedLeadId === id) setSelectedLeadId(null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'No pude eliminar el lead.';
       alert(message);
       await refreshLeads();
     }
@@ -440,6 +452,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
               onStatusChange={handleStatusChange}
               onConvert={lead => setShowConvertModal(lead)}
               onLeadClick={(lead) => setSelectedLeadId(lead.id)}
+              onDelete={handleDeleteLead}
               convertingId={convertingLeadId}
             />
           </div>
