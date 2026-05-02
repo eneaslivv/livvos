@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { emailCorsHeaders, resolveTenantBranding, wrapEmailHtml } from '../_shared/emailTemplate.ts'
+import { emailCorsHeaders, resolveTenantBranding, wrapEmailHtml, buildWeeklyDigestTeamEmail } from '../_shared/emailTemplate.ts'
 
 interface EmailData {
   recipient_name?: string
@@ -139,23 +139,78 @@ serve(async (req) => {
     const firstName = (data as EmailData).recipient_name?.split(' ')[0] || ''
     const greeting = firstName ? `Hi ${firstName},` : 'Hi,'
 
-    // Build inner body content
-    let innerBody = (data as EmailData).message
-    if (template === 'welcome') {
-      innerBody += buildWelcomeSection()
-    }
+    // Rich-template branch — when the caller passes structured arrays for the
+    // deadline templates, render the wine-hero "weekly digest" layout instead
+    // of the generic plain-text shell. This is what the in-app
+    // NotificationsContext now uses so the daily reminder doesn't render as
+    // a flat paragraph.
+    const richDeadline = (template === 'task_overdue' || template === 'deadline_reminder' || template === 'daily_schedule')
+      && (Array.isArray((data as any)?.overdue_tasks) || Array.isArray((data as any)?.due_today_tasks) || Array.isArray((data as any)?.today_events))
 
-    const htmlBody = wrapEmailHtml({
-      accent: config.accent,
-      brandName,
-      logoUrl: resolvedLogo,
-      greeting,
-      title: (data as EmailData).title,
-      icon: config.icon,
-      bodyHtml: innerBody,
-      ctaUrl: (data as EmailData).cta_url,
-      ctaText: (data as EmailData).cta_text,
-    })
+    let htmlBody: string
+    if (richDeadline) {
+      const overdueItems = (((data as any).overdue_tasks || []) as any[])
+      const dueTodayItems = (((data as any).due_today_tasks || []) as any[])
+      const eventItems = (((data as any).today_events || []) as any[])
+      const totalOverdue = overdueItems.length
+      const totalDueToday = dueTodayItems.length
+      const totalEvents = eventItems.length
+      const headlineParts: string[] = []
+      if (totalOverdue > 0) headlineParts.push(`${totalOverdue} overdue`)
+      if (totalDueToday > 0) headlineParts.push(`${totalDueToday} due today`)
+      if (totalEvents > 0) headlineParts.push(`${totalEvents} event${totalEvents === 1 ? '' : 's'}`)
+      const headline = firstName
+        ? `${firstName}, ${headlineParts.length ? headlineParts.join(', ') + '.' : 'your day is clear.'}`
+        : (headlineParts.length ? headlineParts.join(', ') + '.' : 'Your day is clear.')
+
+      const todayIso = new Date().toISOString().slice(0, 10)
+      const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+      htmlBody = buildWeeklyDigestTeamEmail({
+        brandName,
+        logoUrl: resolvedLogo,
+        weekLabel: dateLabel,
+        digestNumber: 'DAILY',
+        headline,
+        intro: 'Pulled fresh from your boards. Tap any item to jump to it.',
+        stats: {
+          tasksClosed: 0,
+          openInProgress: totalDueToday,
+          overdue: totalOverdue,
+          velocityPerDay: totalEvents > 0 ? String(totalEvents) : '—',
+        },
+        shipped: dueTodayItems.slice(0, 6).map((t: any) => ({
+          title: t.title || t.name || 'Untitled',
+          due: 'today',
+          project: t.project_name || undefined,
+        })),
+        attention: overdueItems.slice(0, 6).map((t: any) => {
+          const due = t.due_date || t.start_date
+          let label = 'overdue'
+          if (due) {
+            const days = Math.max(1, Math.ceil((new Date(todayIso).getTime() - new Date(due).getTime()) / 86400000))
+            label = days === 1 ? 'yesterday' : `${days}d ago`
+          }
+          return { title: t.title || t.name || 'Untitled', due: label, priority: 'high' as const, project: t.project_name || undefined }
+        }),
+        ctaUrl: (data as EmailData).cta_url || `${Deno.env.get('APP_URL') || 'https://app.livv.systems'}/calendar`,
+      })
+    } else {
+      // Build inner body content (legacy plain-text path).
+      let innerBody = (data as EmailData).message
+      if (template === 'welcome') innerBody += buildWelcomeSection()
+      htmlBody = wrapEmailHtml({
+        accent: config.accent,
+        brandName,
+        logoUrl: resolvedLogo,
+        greeting,
+        title: (data as EmailData).title,
+        icon: config.icon,
+        bodyHtml: innerBody,
+        ctaUrl: (data as EmailData).cta_url,
+        ctaText: (data as EmailData).cta_text,
+      })
+    }
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',

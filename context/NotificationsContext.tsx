@@ -366,8 +366,11 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
           if (profile?.email) {
             const overdue = newTasks.filter(t => t.start_date < today);
             const dueToday = newTasks.filter(t => t.start_date === today);
-            const lines: string[] = [];
 
+            // Plain-text fallback kept for any client that ignores the rich
+            // arrays (the edge function falls back to this when the structured
+            // path isn't available).
+            const lines: string[] = [];
             if (overdue.length > 0) {
               lines.push(`You have ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}:`);
               overdue.slice(0, 5).forEach(t => lines.push(`- ${t.title}`));
@@ -392,6 +395,14 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                 message: lines.join('\n'),
                 ctaUrl: `${window.location.origin}/calendar`,
                 ctaText: 'View Calendar',
+                // Structured payload — triggers the rich wine-hero digest
+                // layout in the edge function.
+                overdue_tasks: overdue.slice(0, 8).map(t => ({
+                  id: t.id, title: t.title, due_date: t.start_date,
+                })),
+                due_today_tasks: dueToday.slice(0, 8).map(t => ({
+                  id: t.id, title: t.title, due_date: t.start_date,
+                })),
               },
             });
           }

@@ -13,6 +13,12 @@ export interface SendEmailParams {
     message: string
     ctaUrl?: string
     ctaText?: string
+    // Optional structured payload for daily/weekly digest templates. When
+    // present the edge function renders the wine-hero "weekly digest" layout
+    // instead of the plain-text fallback.
+    overdue_tasks?: Array<{ id?: string; title: string; due_date?: string; project_name?: string }>
+    due_today_tasks?: Array<{ id?: string; title: string; due_date?: string; project_name?: string }>
+    today_events?: Array<{ id?: string; title: string; start_date?: string; project_name?: string }>
   }
 }
 
@@ -31,6 +37,11 @@ export const sendEmail = async (params: SendEmailParams): Promise<{ ok: boolean;
         message: params.data.message,
         cta_url: params.data.ctaUrl,
         cta_text: params.data.ctaText,
+        // Forward structured arrays untouched so the edge function can pick
+        // the rich layout when they're present.
+        overdue_tasks: params.data.overdue_tasks,
+        due_today_tasks: params.data.due_today_tasks,
+        today_events: params.data.today_events,
       },
     },
   })
