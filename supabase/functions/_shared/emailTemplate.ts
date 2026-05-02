@@ -43,6 +43,20 @@ const FONT_SANS = `Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
 const FONT_MONO = `"JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`
 const FONT_SERIF = `Georgia, "Times New Roman", serif`
 
+// Public asset CDN — Supabase Storage tenant-assets bucket. Hosted under
+// /livv-mail/ so the mailing system has stable, branded assets even when a
+// tenant doesn't override its logo.
+const ASSET_BASE = 'https://ngswutcpsgdgmmjnfddi.supabase.co/storage/v1/object/public/tenant-assets/livv-mail'
+const ASSETS = {
+  aboutBg: `${ASSET_BASE}/about-bg.jpg`,            // wine-hero overlay
+  heroBg:  `${ASSET_BASE}/hero-bg.webp`,            // welcome hero
+  footerGradient: `${ASSET_BASE}/footer-gradient.png`, // stepped strip
+  borderGradient: `${ASSET_BASE}/border-gradient.png`,
+  logoLivv: `${ASSET_BASE}/logo-livv.png`,          // dark wordmark
+  logoLight: `${ASSET_BASE}/logo-light.png`,        // light wordmark
+  iconLivv: `${ASSET_BASE}/icon-livv.svg`,
+} as const
+
 // ── Types ────────────────────────────────────────────
 export interface TenantBranding {
   name: string
@@ -99,13 +113,33 @@ const escapeHtml = (s: string) =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 const wordmark = (brandName: string, logoUrl: string | null | undefined, light: boolean) => {
-  if (logoUrl) {
-    return `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brandName)}" height="22" style="display:inline-block;height:22px;width:auto;border:0;outline:none;text-decoration:none;${light ? 'filter:brightness(0) invert(1);' : ''}">`
-  }
-  // Text wordmark fallback — italic serif for the "v" tail to evoke the mark.
-  const color = light ? T.parchment : T.cream900
-  return `<span style="font-family:${FONT_SANS};font-weight:500;font-size:15px;letter-spacing:-0.02em;color:${color};">${escapeHtml(brandName)}<span style="color:${T.gold};">.</span></span>`
+  // Tenant-specific logo wins. Fallback to the bundled Livv wordmark so even
+  // unbranded tenants get a real mark (was ugly text "LIVV OS." in screenshot).
+  const src = logoUrl || (light ? ASSETS.logoLight : ASSETS.logoLivv)
+  return `<img src="${escapeHtml(src)}" alt="${escapeHtml(brandName)}" height="22" style="display:inline-block;height:22px;width:auto;border:0;outline:none;text-decoration:none;">`
 }
+
+// Stepped gradient strip used between header and stats on the client weekly
+// digest. Renders as a simple background-image div with solid-color fallback.
+const steppedStrip = () =>
+  `<div style="height:8px;background:${T.gold} url(${ASSETS.footerGradient}) center/cover no-repeat;line-height:0;font-size:0;">&nbsp;</div>`
+
+// Horizontal progress bar used by the lead "fit score". Solid fill so every
+// client renders it correctly; gradient overlay would drop in Outlook.
+const gradientBar = (pct: number, color: string = T.gold) =>
+  `<div style="height:6px;background:${T.cream200};border-radius:999px;overflow:hidden;line-height:0;font-size:0;">
+    <div style="width:${Math.max(0, Math.min(100, pct))}%;height:6px;background:${color};border-radius:999px;line-height:0;font-size:0;">&nbsp;</div>
+  </div>`
+
+// Row of "Budget ✓ Timeline ✓ Scope ✓ Region ✓" signals under the lead score.
+const signalPills = (signals: { label: string; ok?: boolean }[]) =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:8px;">
+    <tr>
+      ${signals.map(s => `<td align="center" style="font-family:${FONT_MONO};font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:${T.cream500};padding:0 4px;">
+        ${escapeHtml(s.label)} <span style="color:${s.ok === false ? T.cream400 : T.sage};">${s.ok === false ? '·' : '&#10003;'}</span>
+      </td>`).join('')}
+    </tr>
+  </table>`
 
 const eyebrow = (text: string, color?: string) =>
   `<span style="font-family:${FONT_SANS};font-size:10px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:${color || 'rgba(90,62,62,0.6)'};">© ${escapeHtml(text)}</span>`
@@ -410,8 +444,8 @@ export function buildWeeklyDigestTeamEmail(p: WeeklyDigestTeamPayload): string {
   }).join('')
 
   const inner = `
-    <!-- Dark wine hero -->
-    <div style="background:${T.wine400};color:${T.parchment};padding:36px 36px 32px;">
+    <!-- Dark wine hero with subtle texture image (falls back to solid wine) -->
+    <div style="background:${T.wine400} url(${ASSETS.aboutBg}) center/cover no-repeat;color:${T.parchment};padding:36px 36px 32px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:28px;">
         <tr>
           <td>${wordmark(p.brandName, p.logoUrl, true)}</td>
@@ -518,6 +552,9 @@ export function buildWeeklyDigestClientEmail(p: WeeklyDigestClientPayload): stri
       title: p.headline,
     })}
 
+    <!-- Stepped gradient strip — riff on footer-gradient.png -->
+    ${steppedStrip()}
+
     <!-- Stats row -->
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background:${T.cream50};border-bottom:1px solid ${T.cream200};">
       <tr>
@@ -582,12 +619,16 @@ export function buildNewLeadTeamEmail(p: NewLeadTeamPayload): string {
         <tr>
           <td style="vertical-align:middle;width:140px;">
             ${meta('FIT SCORE', T.cream500)}
-            <div style="margin-top:6px;font-family:${FONT_SANS};font-weight:300;font-size:36px;letter-spacing:-0.04em;color:${T.gold};">${fit}<span style="font-size:14px;color:${T.cream500};margin-left:4px;">/100</span></div>
+            <div style="margin-top:6px;font-family:${FONT_SANS};font-weight:300;font-size:38px;letter-spacing:-0.04em;color:${T.gold};">${fit}<span style="font-size:14px;color:${T.cream500};margin-left:4px;">/100</span></div>
           </td>
           <td style="vertical-align:middle;padding-left:16px;">
-            <div style="height:6px;background:${T.cream200};border-radius:999px;overflow:hidden;">
-              <div style="width:${fit}%;height:6px;background:${T.gold};border-radius:999px;line-height:0;font-size:0;">&nbsp;</div>
-            </div>
+            ${gradientBar(fit)}
+            ${signalPills([
+              { label: 'Budget', ok: !!p.budget },
+              { label: 'Timeline', ok: !!p.scope },
+              { label: 'Scope', ok: !!p.scope },
+              { label: 'Region', ok: true },
+            ])}
           </td>
         </tr>
       </table>
@@ -655,7 +696,8 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
   const projects = (p.projects || []).slice(0, 4)
 
   const inner = `
-    <div style="padding:40px 36px 36px;background:${T.cream50};border-bottom:1px solid ${T.cream200};">
+    <!-- Hero with background image (cream gradient at bottom keeps text readable) -->
+    <div style="padding:40px 36px 50px;background:${T.cream50} url(${ASSETS.heroBg}) center/cover no-repeat;border-bottom:1px solid ${T.cream200};position:relative;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:28px;">
         <tr>
           <td>${wordmark(p.brandName, p.logoUrl, false)}</td>
@@ -663,7 +705,7 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
         </tr>
       </table>
       ${eyebrow('Welcome to Livv Studio')}
-      <h1 style="margin:14px 0 0;font-family:${FONT_SANS};font-weight:300;font-size:30px;line-height:1.05;letter-spacing:-0.045em;color:${T.cream900};max-width:460px;">${escapeHtml(p.leadFirstName)} — your message landed. Thank you for reaching out.</h1>
+      <h1 style="margin:14px 0 0;font-family:${FONT_SANS};font-weight:300;font-size:32px;line-height:1.05;letter-spacing:-0.045em;color:${T.cream900};max-width:460px;">${escapeHtml(p.leadFirstName)} — your message landed. Thank you for reaching out.</h1>
     </div>
 
     ${p.responseTimeText ? `<div style="padding:18px 36px;background:${T.wine400};color:${T.parchment};border-bottom:1px solid ${T.wine700};">
