@@ -512,34 +512,46 @@ Rules:
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
         : type === 'finance_chat'
-        ? `You are a finance assistant continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (finance snapshot — recent expenses, incomes, budgets, totals — each row carries an "id" you can reference), "history" (prior turns), and "question" (the new user message).
+        ? `You are a finance assistant continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (finance snapshot — recent expenses, incomes, budgets, totals, available expense_categories, available clients, available projects — each row carries an "id" you can reference), "history" (prior turns), and "question" (the new user message).
 
-Reply in plain language AND, when the user clearly asks to change something, propose actions for the frontend to execute after the user confirms. NEVER auto-execute. NEVER invent ids — only reference ids present in the context.
+Reply in plain language AND, when the user clearly asks to change or add something, propose actions for the frontend to execute after the user confirms. NEVER auto-execute. NEVER invent ids — only reference ids present in the context.
 
 Return ONLY valid JSON with this shape:
 {
   "reply": "1-5 sentence answer in the user's language",
   "actions": [
     {
-      "kind": "expense" | "income",
-      "op": "mark_paid" | "mark_pending" | "update_amount" | "update_date" | "link_budget" | "delete",
-      "target_id": "exact id from context.recent_expenses[].id or context.recent_incomes[].id",
+      "kind": "expense" | "income" | "budget",
+      "op": "mark_paid" | "mark_pending" | "update_amount" | "update_date" | "link_budget" | "delete" | "create_expense" | "create_income" | "update_budget",
+      "target_id": "exact id from context (omit for create_expense/create_income — there is no target yet)",
       "params": {
-        "amount": number,           // only for update_amount
-        "date": "YYYY-MM-DD",       // only for update_date
-        "budget_id": "uuid",        // only for link_budget; must come from context.active_budgets[].id
-        "budget_name": "string"     // optional helper for the UI
+        // Existing-row updates:
+        "amount": number,           // update_amount  | create_expense | create_income | update_budget (allocated)
+        "date": "YYYY-MM-DD",       // update_date    | create_expense | create_income
+        "budget_id": "uuid",        // link_budget    | create_expense (optional)
+        "budget_name": "string",    // optional helper for the UI
+        // Create-only:
+        "concept": "string",        // create_expense | create_income — short label
+        "category": "string",       // create_expense — must come from context.expense_categories
+        "vendor": "string",         // create_expense — optional
+        "client_id": "uuid",        // create_expense | create_income — must come from context.clients
+        "client_name": "string",    // create_income — falls back to a label if no id
+        "project_id": "uuid",       // optional, must come from context.projects
+        "status": "paid" | "pending",
+        "recurring": boolean        // create_expense — optional, default false
       },
-      "summary": "human-readable description like 'Marcar como paid el gasto de Figma ($89, 2026-04-12)'"
+      "summary": "human-readable description like 'Marcar como paid el gasto de Figma ($89, 2026-04-12)' or 'Crear gasto de Software: Figma $89 el 2026-05-02'"
     }
   ]
 }
 
 Rules — CRITICAL:
-- "actions" is OPTIONAL. Only include it when the user explicitly asks for a change ("marcá como pagado", "cambiá el monto a 200", "vinculá al budget de Marketing"). For pure questions ("¿cuánto gasté?") return actions: [] or omit it.
-- target_id MUST be an id present in the context. NEVER fabricate an id. If the user's request is ambiguous (e.g. "marcá Figma como pagado" but there are 3 Figma expenses), include in "reply" a clarifying question and DO NOT propose actions.
-- params MUST only contain the field relevant to op. Do not include amount for mark_paid, etc.
-- For link_budget: budget_id MUST exist in context.active_budgets and the budget's category should match (or be compatible with) the expense category.
+- "actions" is OPTIONAL. Only include it when the user explicitly asks for a change or addition ("marcá como pagado", "agregá un gasto de", "cambiá el budget de Marketing a 5000", "creá un income de Coffe Payper por 2500"). For pure questions ("¿cuánto gasté?") return actions: [] or omit it.
+- target_id MUST be an id present in the context for ops that target an existing row (mark_paid, mark_pending, update_amount, update_date, link_budget, delete, update_budget). Omit target_id for create_expense and create_income.
+- For create_expense / create_income: params MUST include amount and concept at minimum. category for create_expense must come from context.expense_categories. client_id / project_id (when used) must come from context.clients / context.projects. If the user mentions a client/project name that doesn't exist in context, set client_name as a string and DO NOT fabricate an id.
+- For update_budget: target_id is the budget id from context.active_budgets, and params.amount sets the new allocated total.
+- params MUST only contain the fields relevant to op.
+- If the user's request is ambiguous (e.g. "marcá Figma como pagado" but there are 3 Figma expenses), include in "reply" a clarifying question and DO NOT propose actions.
 - Keep "reply" concise (1-3 sentences) when proposing actions — the action card itself shows the details.
 - Respond in the SAME language as the user's question.
 - No markdown code fences; plain text only in the reply field.`
@@ -582,7 +594,19 @@ Return ONLY valid JSON with this shape:
 
 Rules — CRITICAL anti-hallucination:
 - ONE entry per data row. Skip header / totals / blank rows by listing them in skipped_rows. Do NOT silently drop rows.
-- AMOUNT BINDING: the "amount" MUST be the literal numeric value present in the row's Amount/Total/Importe-like cell. Strip currency symbols and thousand separators (parse "1.234,56" as 1234.56 and "$2,500" as 2500). If the row has NO amount cell, set amount=0 and needs_review=true. NEVER invent or infer amounts from concept/vendor.
+- USE EVERY CELL of the row. Don't just look at one column — every header gives you a field. Map them as follows (case + accent insensitive on header names):
+    • Amount/Total/Importe/Monto/Valor/Precio/Price → amount
+    • Date/Fecha/Día/Day → date
+    • Concept/Concepto/Description/Descripción/Detalle/Item → concept
+    • Vendor/Proveedor/Supplier/Provider/Pagado a/Para → vendor
+    • Category/Categoría/Tipo/Type/Rubro → category
+    • Client/Cliente/Customer → client_name
+    • Project/Proyecto/Job → project_name
+    • Notes/Notas/Comments/Comentarios/Observaciones → notes
+    • Status/Estado/Pagado/Paid → status (true/yes/sí/paid → "paid", else "pending")
+    • Recurring/Recurrente/Mensual/Monthly → recurring (true/yes/sí → true)
+  Whatever cells don't fit a known field but carry useful context, append to "notes". Never throw away cell data.
+- AMOUNT BINDING: the "amount" MUST be the literal numeric value present in one of the row's Amount-like cells. Strip currency symbols and thousand separators (parse "1.234,56" as 1234.56 and "$2,500" as 2500). If the row has NO amount cell, set amount=0 and needs_review=true. NEVER invent or infer amounts from concept/vendor.
 - DATE BINDING: parse the row's date cell. If empty, set date=TODAY and date_inferred=true. NEVER invent a date that was not in the row.
 - CATEGORY: pick from EXPENSE_CATEGORIES exactly (case-sensitive). If not obvious, default to "Operations" and set needs_review=true.
 - IDs: never invent client_id / project_id. Only use IDs from CLIENTS / PROJECTS lists. Fuzzy match by name (case + accent insensitive). If no match, set id=null and add the raw name to unknown_clients / unknown_projects so the frontend can offer to create it.

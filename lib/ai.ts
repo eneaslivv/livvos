@@ -430,16 +430,27 @@ export type FinanceChatActionOp =
   | 'update_date'
   | 'link_budget'
   | 'delete'
+  | 'create_expense'
+  | 'create_income'
+  | 'update_budget'
 
 export type FinanceChatAction = {
-  kind: 'expense' | 'income'
+  kind: 'expense' | 'income' | 'budget'
   op: FinanceChatActionOp
-  target_id: string
+  target_id?: string                  // omit for create_expense / create_income
   params?: {
     amount?: number
     date?: string
     budget_id?: string
     budget_name?: string
+    concept?: string
+    category?: string
+    vendor?: string
+    client_id?: string
+    client_name?: string
+    project_id?: string
+    status?: 'paid' | 'pending'
+    recurring?: boolean
   }
   summary: string
 }

@@ -4,6 +4,8 @@ import { SlidePanel } from '../ui/SlidePanel';
 import { sendFinanceChat, type AdvisorChatMessage, type FinanceChatAction } from '../../lib/ai';
 import { useFinance } from '../../context/FinanceContext';
 import { useTenant } from '../../context/TenantContext';
+import { useClients } from '../../context/ClientsContext';
+import { useProjects } from '../../context/ProjectsContext';
 
 type ActionState = 'pending' | 'executing' | 'done' | 'cancelled' | 'error';
 type Message = AdvisorChatMessage & {
@@ -30,8 +32,14 @@ interface FinanceChatProps {
 }
 
 export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => {
-  const { expenses, incomes, budgets, updateExpense, updateIncome, deleteExpense, deleteIncome } = useFinance();
+  const {
+    expenses, incomes, budgets,
+    createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome,
+    updateBudget,
+  } = useFinance();
   const { currentTenant } = useTenant();
+  const { clients } = useClients();
+  const { projects } = useProjects();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -124,6 +132,11 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
       tenant: currentTenant?.name || null,
       today: today.toISOString().slice(0, 10),
       currency: 'USD',
+      // Lookup catalogues so the IA can build create_expense / create_income
+      // / link_budget actions referencing real ids without fabricating any.
+      expense_categories: ['Software', 'Talent', 'Marketing', 'Operations', 'Legal'],
+      clients: clients.slice(0, 60).map(c => ({ id: c.id, name: c.name, company: c.company || null })),
+      projects: projects.slice(0, 60).map(p => ({ id: p.id, title: p.title, client_id: p.client_id || null })),
       month: { totals: { expense: totalExpenseMonth, income_total: totalIncomeMonth, income_paid: totalIncomeMonthPaid, income_pending: totalIncomeMonthPending } },
       expenses_by_category_this_month: expensesByCategory,
       active_budgets: activeBudgets,
@@ -131,7 +144,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
       recent_incomes: sortedIncomes,
       counts: { expenses: expenses.length, incomes: incomes.length, budgets: budgets.length },
     });
-  }, [expenses, incomes, budgets, currentTenant?.name]);
+  }, [expenses, incomes, budgets, clients, projects, currentTenant?.name]);
 
   const send = useCallback(async (text?: string) => {
     const question = (text ?? input).trim();
@@ -148,11 +161,19 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
         newHistory.map(m => ({ role: m.role, content: m.content })),
         question,
       );
-      // Defensive: only keep actions whose target_id actually exists in our
-      // current data. If the IA hallucinated an id we drop it instead of
-      // letting the user try to execute against a phantom row.
+      // Defensive: drop actions the frontend can't safely execute. Targeted
+      // ops require a real id from our current state. Create ops require
+      // amount + concept. The aim is to never let an IA hallucination reach
+      // the confirm UI as a clickable action.
       const validActions = (result.actions || []).filter(a => {
-        if (!a || !a.target_id || !a.kind || !a.op) return false;
+        if (!a || !a.kind || !a.op) return false;
+        if (a.op === 'create_expense' || a.op === 'create_income') {
+          return !!(a.params && typeof a.params.amount === 'number' && a.params.amount > 0 && a.params.concept);
+        }
+        if (a.op === 'update_budget') {
+          return !!(a.target_id && budgets.some(b => b.id === a.target_id) && a.params && typeof a.params.amount === 'number');
+        }
+        if (!a.target_id) return false;
         if (a.kind === 'expense') return expenses.some(e => e.id === a.target_id);
         if (a.kind === 'income') return incomes.some(i => i.id === a.target_id);
         return false;
@@ -188,7 +209,37 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
     if (!action) return;
     setActionState(msgIdx, actionIdx, 'executing');
     try {
-      if (action.kind === 'expense') {
+      // Create ops (no target_id required).
+      if (action.op === 'create_expense') {
+        const p = action.params!;
+        await createExpense({
+          category: p.category || 'Operations',
+          concept: p.concept!.trim(),
+          amount: Number(p.amount || 0),
+          date: p.date || new Date().toISOString().slice(0, 10),
+          vendor: p.vendor || '',
+          status: p.status || 'pending',
+          recurring: !!p.recurring,
+          ...(p.client_id ? { client_id: p.client_id } : {}),
+          ...(p.project_id ? { project_id: p.project_id } : {}),
+          ...(p.budget_id ? { budget_id: p.budget_id } : {}),
+        });
+      } else if (action.op === 'create_income') {
+        const p = action.params!;
+        const client = p.client_id ? clients.find(c => c.id === p.client_id) : null;
+        await createIncome({
+          client_id: p.client_id || null,
+          project_id: p.project_id || null,
+          client_name: client?.name || p.client_name || (p.client_id ? 'Client' : 'No client'),
+          project_name: 'No project',
+          concept: p.concept!.trim(),
+          total_amount: Number(p.amount || 0),
+          due_date: p.date || new Date().toISOString().slice(0, 10),
+          num_installments: 1,
+        });
+      } else if (action.op === 'update_budget' && action.target_id) {
+        await updateBudget(action.target_id, { allocated_amount: Number(action.params?.amount || 0) });
+      } else if (action.kind === 'expense' && action.target_id) {
         switch (action.op) {
           case 'mark_paid':       await updateExpense(action.target_id, { status: 'paid' }); break;
           case 'mark_pending':    await updateExpense(action.target_id, { status: 'pending' }); break;
@@ -197,7 +248,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
           case 'link_budget':     if (action.params?.budget_id) await updateExpense(action.target_id, { budget_id: action.params.budget_id }); break;
           case 'delete':          await deleteExpense(action.target_id); break;
         }
-      } else {
+      } else if (action.kind === 'income' && action.target_id) {
         switch (action.op) {
           case 'mark_paid':       await updateIncome(action.target_id, { status: 'paid' }); break;
           case 'mark_pending':    await updateIncome(action.target_id, { status: 'pending' }); break;
@@ -211,7 +262,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
     } catch (err: any) {
       setActionState(msgIdx, actionIdx, 'error', err?.message || 'Error al ejecutar');
     }
-  }, [messages, updateExpense, updateIncome, deleteExpense, deleteIncome, setActionState]);
+  }, [messages, clients, createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome, updateBudget, setActionState]);
 
   const cancelAction = useCallback((msgIdx: number, actionIdx: number) => {
     setActionState(msgIdx, actionIdx, 'cancelled');
@@ -283,6 +334,9 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
                         update_date: 'Actualizar fecha',
                         link_budget: 'Vincular a budget',
                         delete: 'Eliminar',
+                        create_expense: 'Crear gasto',
+                        create_income: 'Crear ingreso',
+                        update_budget: 'Actualizar budget',
                       };
                       const isDanger = a.op === 'delete';
                       return (

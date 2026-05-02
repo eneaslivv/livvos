@@ -952,6 +952,29 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     });
   }, []);
 
+  // Push an empty draft so the user can fill in entries the IA missed.
+  // Auto-selects + auto-expands the new row so they can edit it immediately.
+  const addManualRow = useCallback(() => {
+    const blank: DraftEntry = {
+      kind: 'expense', concept: '', amount: 0,
+      date: new Date().toISOString().slice(0, 10),
+      client_id: null, client_name: null, project_id: null, project_name: null,
+      category: 'Operations', vendor: null, num_installments: 1,
+      status: 'pending', recurring: false, notes: null,
+      source_sheet: null, source_row: null, source_row_data: null,
+      needs_review: false, validation_errors: [],
+      match_status: 'new', match_existing_id: null, match_existing_kind: null, match_reason: 'Manual',
+      budget_id: null, budget_name: null, confidence: 1, update_action: 'update',
+    };
+    setBatchDrafts(prev => {
+      const next = [...prev, blank];
+      const newIdx = next.length - 1;
+      setSelectedRows(rows => { const s = new Set(rows); s.add(newIdx); return s; });
+      setExpandedRow(newIdx);
+      return next;
+    });
+  }, []);
+
   const flagBadParse = useCallback(async (idx: number) => {
     if (!aiOutputRef?.output_id || !currentTenant?.id) return;
     const d = batchDrafts[idx];
@@ -1502,6 +1525,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             expandedRow={expandedRow}
             setExpandedRow={setExpandedRow}
             updateBatchRow={updateBatchRow}
+            onAddManualRow={addManualRow}
             projects={projects}
             clients={clients}
             budgets={budgets}
@@ -1550,6 +1574,7 @@ type BatchPreviewProps = {
   expandedRow: number | null;
   setExpandedRow: React.Dispatch<React.SetStateAction<number | null>>;
   updateBatchRow: (idx: number, patch: Partial<DraftEntry>) => void;
+  onAddManualRow: () => void;
   projects: Project[];
   clients: Client[];
   budgets: Budget[];
@@ -1562,7 +1587,7 @@ type BatchPreviewProps = {
 
 const BatchPreview: React.FC<BatchPreviewProps> = ({
   grouped, drafts, selectedRows, setSelectedRows, expandedRow, setExpandedRow,
-  updateBatchRow, projects, clients, budgets, unknownClients, unknownProjects,
+  updateBatchRow, onAddManualRow, projects, clients, budgets, unknownClients, unknownProjects,
   onCreateClient, onFlagBadParse, error,
 }) => {
   const allSelected = selectedRows.size === drafts.length;
@@ -1618,7 +1643,14 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
               {drafts.length} filas detectadas
             </span>
           </label>
-          <span className="text-[10px] text-zinc-400">{selectedRows.size} seleccionadas</span>
+          <div className="flex items-center gap-3">
+            <button onClick={onAddManualRow} type="button"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-fuchsia-600 dark:text-fuchsia-400 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-500/10 transition-colors"
+              title="Agregar una fila manualmente (cuando la IA no detectó algo)">
+              <Plus size={11} /> Agregar fila
+            </button>
+            <span className="text-[10px] text-zinc-400">{selectedRows.size} seleccionadas</span>
+          </div>
         </div>
 
         <div className="max-h-[55vh] overflow-y-auto">
