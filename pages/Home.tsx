@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
@@ -27,6 +27,9 @@ type DbProject = {
     status?: Status
     client?: string
     next_steps?: string
+    pinned_at?: string | null
+    updated_at?: string
+    created_at?: string
 }
 
 const FOCUS_MODES = [
@@ -82,14 +85,45 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const tasks = calendarTasks as any[];  // CalendarContext is the single source of truth for tasks
     const { data: projectsRaw } = useSupabase<DbProject>('projects', { subscribe: true });
 
-    const projects = projectsRaw.slice(0, 4).map(p => ({
-        id: p.id,
-        title: p.title,
-        client: p.client ?? '',
-        progress: typeof p.progress === 'number' ? p.progress : 0,
-        status: (p.status ?? Status.Active) as Status,
-        nextSteps: p.next_steps ?? ''
-    }));
+    // Active Projects panel: pinned first (newest pin first), then the rest by
+    // most-recently-updated. Capped at 4 cards. Users pin/unpin from the card
+    // hover actions. If nothing is pinned, the most recently active 4 show by
+    // default — same as before.
+    const projects = [...projectsRaw]
+        .sort((a, b) => {
+            const ap = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+            const bp = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+            if (ap !== bp) return bp - ap;
+            const au = a.updated_at ? new Date(a.updated_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+            const bu = b.updated_at ? new Date(b.updated_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+            return bu - au;
+        })
+        .slice(0, 4)
+        .map(p => ({
+            id: p.id,
+            title: p.title,
+            client: p.client ?? '',
+            progress: typeof p.progress === 'number' ? p.progress : 0,
+            status: (p.status ?? Status.Active) as Status,
+            nextSteps: p.next_steps ?? '',
+            pinnedAt: p.pinned_at ?? null,
+        }));
+
+    const pinnableProjects = projectsRaw
+        .filter(p => !p.pinned_at && !projects.some(s => s.id === p.id))
+        .slice(0, 12);
+
+    const pinProject = useCallback(async (id: string) => {
+        try { await supabase.from('projects').update({ pinned_at: new Date().toISOString() }).eq('id', id); } catch (err) { errorLogger.error('pin project', err); }
+    }, []);
+    const unpinProject = useCallback(async (id: string) => {
+        try { await supabase.from('projects').update({ pinned_at: null }).eq('id', id); } catch (err) { errorLogger.error('unpin project', err); }
+    }, []);
+    const deleteProjectFromHome = useCallback(async (id: string, title: string) => {
+        if (!window.confirm(`¿Eliminar el proyecto "${title}"? Esta acción no se puede deshacer.`)) return;
+        try { await supabase.from('projects').delete().eq('id', id); } catch (err) { errorLogger.error('delete project', err); }
+    }, []);
+    const [showPinPicker, setShowPinPicker] = useState(false);
 
     const projectLookup = projectsRaw.reduce<Record<string, string>>((acc, project) => {
         acc[project.id] = project.title || 'Project';
@@ -1185,36 +1219,119 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                     {/* Active Projects */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Active Projects</h3>
-                            <button onClick={() => onNavigate('projects')} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
-                                View All
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Active Projects</h3>
+                                {projects.some(p => p.pinnedAt) && (
+                                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500/80">{projects.filter(p => p.pinnedAt).length} pinned</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {pinnableProjects.length > 0 && (
+                                    <button onClick={() => setShowPinPicker(v => !v)} className="text-[11px] font-medium text-zinc-400 hover:text-amber-500 transition-colors flex items-center gap-1">
+                                        <Icons.Star size={11} /> Destacar
+                                    </button>
+                                )}
+                                <button onClick={() => onNavigate('projects')} className="text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
+                                    View All
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {projects.map(project => (
-                                <div key={project.id} onClick={() => onNavigate('projects')} className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 p-4 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all cursor-pointer">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
-                                                {project.client?.substring(0, 2).toUpperCase()}
-                                            </div>
-                                            <div>
-                                                <h4 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">{project.title}</h4>
-                                                <span className="text-[10px] text-zinc-400">{project.client}</span>
-                                            </div>
-                                        </div>
-                                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${getStatusColor(project.status)}`} />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
-                                            <div className="bg-zinc-800 dark:bg-zinc-200 h-full rounded-full transition-all" style={{ width: `${project.progress}%` }} />
-                                        </div>
-                                        <span className="text-[10px] text-zinc-400 font-mono w-7 text-right">{project.progress}%</span>
-                                    </div>
+                        {/* Pin picker — opens when "Destacar" is clicked. Lets the user
+                            pick from any non-pinned project to surface here. */}
+                        {showPinPicker && (
+                            <div className="mb-3 p-3 rounded-xl border border-amber-200/60 dark:border-amber-500/20 bg-amber-50/40 dark:bg-amber-500/5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                                        <Icons.Star size={10} /> Destacar otro proyecto
+                                    </span>
+                                    <button onClick={() => setShowPinPicker(false)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300">
+                                        <Icons.Close size={12} />
+                                    </button>
                                 </div>
-                            ))}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {pinnableProjects.map(p => (
+                                        <button key={p.id} onClick={() => { pinProject(p.id); setShowPinPicker(false); }}
+                                            className="px-2.5 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-700 dark:text-zinc-300 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors">
+                                            {p.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {projects.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 text-center">
+                                <p className="text-xs text-zinc-400 mb-2">No tenés proyectos todavía.</p>
+                                <button onClick={() => onNavigate('projects')} className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:underline">
+                                    Crear un proyecto →
+                                </button>
+                            </div>
+                        ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {projects.map(project => {
+                                const initials = (project.client || project.title).substring(0, 2).toUpperCase();
+                                const statusColor = getStatusColor(project.status);
+                                const statusLabel = String(project.status || 'active').toLowerCase();
+                                const isPinned = !!project.pinnedAt;
+                                const progressBg = project.progress >= 75 ? 'bg-emerald-500'
+                                    : project.progress >= 40 ? 'bg-amber-400'
+                                    : project.progress > 0 ? 'bg-zinc-700 dark:bg-zinc-300'
+                                    : 'bg-zinc-300 dark:bg-zinc-700';
+                                return (
+                                <div key={project.id}
+                                    className={`group relative bg-white dark:bg-zinc-900 rounded-xl border p-4 hover:shadow-sm transition-all ${
+                                        isPinned
+                                            ? 'border-amber-300/70 dark:border-amber-500/40 ring-1 ring-amber-200/50 dark:ring-amber-500/10'
+                                            : 'border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
+                                    }`}>
+                                    {/* Hover actions — pinned/unpin + delete + open. Float above
+                                        the card content; only visible on hover. */}
+                                    <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={(e) => { e.stopPropagation(); isPinned ? unpinProject(project.id) : pinProject(project.id); }}
+                                            title={isPinned ? 'Quitar de destacados' : 'Destacar'}
+                                            className={`p-1.5 rounded-md transition-colors ${isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'}`}>
+                                            <Icons.Star size={12} />
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteProjectFromHome(project.id, project.title); }}
+                                            title="Eliminar proyecto"
+                                            className="p-1.5 rounded-md text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
+                                            <Icons.Trash size={12} />
+                                        </button>
+                                    </div>
+
+                                    {/* Persistent pinned indicator */}
+                                    {isPinned && (
+                                        <Icons.Star size={11} className="absolute top-3 left-3 text-amber-500 fill-amber-500" style={{ fill: 'currentColor' }} />
+                                    )}
+
+                                    <button onClick={() => onNavigate('projects')} className="text-left w-full block">
+                                        <div className="flex items-start gap-2.5 mb-3 pr-14">
+                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                                                isPinned ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                                            } ${isPinned ? 'ml-4' : ''}`}>
+                                                {initials}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight truncate">{project.title}</h4>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusColor}`} />
+                                                    <span className="text-[10px] text-zinc-400 truncate">{project.client || statusLabel}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                                                <div className={`${progressBg} h-full rounded-full transition-all`} style={{ width: `${Math.max(2, project.progress)}%` }} />
+                                            </div>
+                                            <span className={`text-[10px] font-mono w-9 text-right tabular-nums ${project.progress > 0 ? 'text-zinc-600 dark:text-zinc-300' : 'text-zinc-300 dark:text-zinc-600'}`}>{project.progress}%</span>
+                                        </div>
+                                    </button>
+                                </div>
+                                );
+                            })}
                         </div>
+                        )}
                     </div>
                 </div>
 
