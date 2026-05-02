@@ -376,18 +376,21 @@ serve(async (req) => {
           .order('created_at', { ascending: false })
           .limit(3)
 
-        // Resolve the public site root once. tenants.website_url is the
-        // explicit field (e.g. https://livvvv.com); fall back to LIVV_PUBLIC_URL
-        // env, then a sensible default. Trailing slash stripped.
+        // Resolve the public site root + calendar URL from the tenant config.
+        // Both fall back through env vars and finally a sensible default so a
+        // tenant that hasn't filled in its calendar still gets a working CTA.
         const { data: tenantUrls } = await supabase
           .from('tenants')
-          .select('website_url, preview_url')
+          .select('website_url, preview_url, calendar_url')
           .eq('id', tenant.id)
           .maybeSingle()
         const publicSiteRoot = ((tenantUrls?.website_url as string)
           || (tenantUrls?.preview_url as string)
           || Deno.env.get('LIVV_PUBLIC_URL')
           || 'https://livvvv.com').replace(/\/+$/, '')
+        const calendarUrl = (tenantUrls?.calendar_url as string)
+          || Deno.env.get('LEAD_CALENDAR_URL')
+          || `${publicSiteRoot}/contact`
 
         const projects = (portfolioRows || []).map((r: any) => ({
           title: r.title,
@@ -409,7 +412,7 @@ serve(async (req) => {
           leadFirstName: firstName,
           fromName,
           fromTitle: 'Founder · Livv Studio · Buenos Aires',
-          ctaUrl: Deno.env.get('LEAD_CALENDAR_URL') || 'https://cal.com/livv',
+          ctaUrl: calendarUrl,
           responseTimeText,
           projects: projects.length > 0 ? projects : undefined,
           portfolioUrl: projects.length > 0 ? `${publicSiteRoot}/work` : undefined,

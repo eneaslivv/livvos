@@ -141,11 +141,26 @@ const signalPills = (signals: { label: string; ok?: boolean }[]) =>
     </tr>
   </table>`
 
-const eyebrow = (text: string, color?: string) =>
-  `<span style="font-family:${FONT_SANS};font-size:10px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:${color || 'rgba(90,62,62,0.6)'};">© ${escapeHtml(text)}</span>`
+// Gmail aggressively overrides the color on bare <span>/<a>/<td> text. Wrapping
+// the actual visible text in an INNER <span> with explicit color forces it to
+// honor the brand palette across Gmail web, iOS Mail and Outlook 365.
+const colored = (text: string, color: string, extra = '') =>
+  `<span style="color:${color};${extra}">${escapeHtml(text)}</span>`
 
-const meta = (text: string, color?: string) =>
-  `<span style="font-family:${FONT_MONO};font-size:10px;letter-spacing:0.1em;color:${color || T.cream500};">${escapeHtml(text)}</span>`
+const eyebrow = (text: string, color?: string) => {
+  const c = color || 'rgba(90,62,62,0.6)'
+  return `<span style="font-family:${FONT_SANS};font-size:10.5px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:${c};">${colored(`© ${text}`, c)}</span>`
+}
+
+const meta = (text: string, color?: string) => {
+  const c = color || T.cream500
+  return `<span style="font-family:${FONT_MONO};font-size:10px;letter-spacing:0.1em;color:${c};">${colored(text, c)}</span>`
+}
+
+// Branded inline link — wraps text in a span so Gmail respects the cream color
+// instead of falling back to the default underlined blue. Optional caret shown.
+const inlineLink = (label: string, href: string, opts: { caret?: boolean } = {}) =>
+  `<a href="${escapeHtml(href)}" style="text-decoration:none;color:${T.cream500};border-bottom:1px solid ${T.cream300};">${colored(label, T.cream500)}${opts.caret ? colored(' →', T.cream500) : ''}</a>`
 
 const dashedRule = (color?: string) =>
   `<div style="height:1px;width:100%;border-top:1px dashed ${color || 'rgba(90,62,62,0.28)'};line-height:0;font-size:0;">&nbsp;</div>`
@@ -732,10 +747,10 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
     <div style="padding:18px 36px 8px;background:#ffffff;">
       ${steps.map((s, i) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-bottom:${i < steps.length - 1 ? `1px dashed ${T.cream200}` : 'none'};">
         <tr>
-          <td style="padding:16px 0;vertical-align:top;width:38px;font-family:${FONT_MONO};font-size:11px;letter-spacing:0.14em;color:${T.gold};">${escapeHtml(s.number)}</td>
+          <td style="padding:16px 0;vertical-align:top;width:38px;font-family:${FONT_MONO};font-size:13px;letter-spacing:0.14em;font-weight:500;color:${T.gold};">${colored(s.number, T.gold)}</td>
           <td style="padding:16px 0;vertical-align:top;">
-            <div style="font-family:${FONT_SANS};font-weight:500;font-size:14px;color:${T.cream900};margin-bottom:4px;">${escapeHtml(s.title)}</div>
-            <div style="font-family:${FONT_SANS};font-size:12.5px;color:${T.fgBody};line-height:1.55;">${escapeHtml(s.description)}</div>
+            <div style="font-family:${FONT_SANS};font-weight:600;font-size:14px;color:${T.cream900};margin-bottom:4px;">${colored(s.title, T.cream900)}</div>
+            <div style="font-family:${FONT_SANS};font-size:12.5px;color:${T.fgBody};line-height:1.55;">${colored(s.description, T.fgBody)}</div>
           </td>
         </tr>
       </table>`).join('')}
@@ -750,7 +765,7 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
       </table>
       ${projects.map((proj, i) => {
         const titleHtml = proj.url
-          ? `<a href="${escapeHtml(proj.url)}" style="color:${T.cream900};text-decoration:none;border-bottom:1px solid ${T.cream300};">${escapeHtml(proj.title)}</a>`
+          ? `<a href="${escapeHtml(proj.url)}" style="text-decoration:none;color:${T.cream900};border-bottom:1px solid ${T.cream300};">${colored(proj.title, T.cream900)}</a>`
           : escapeHtml(proj.title)
         const subtitle = [proj.category, proj.subtitle, proj.year].filter(Boolean).map(escapeHtml as any).join(' · ')
         return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-bottom:${i < projects.length - 1 ? `1px dashed ${T.cream200}` : 'none'};">
@@ -765,8 +780,8 @@ export function buildLeadWelcomeReplyEmail(p: LeadWelcomeReplyPayload): string {
           </tr>
         </table>`
       }).join('')}
-      ${p.portfolioUrl ? `<div style="text-align:center;margin-top:14px;">
-        <a href="${escapeHtml(p.portfolioUrl)}" style="font-family:${FONT_SANS};font-size:11.5px;color:${T.cream500};text-decoration:none;border-bottom:1px solid ${T.cream300};">See all work &rarr;</a>
+      ${p.portfolioUrl ? `<div style="text-align:center;margin-top:14px;font-family:${FONT_SANS};font-size:11.5px;">
+        ${inlineLink('See all work', p.portfolioUrl, { caret: true })}
       </div>` : ''}
     </div>` : ''}
 
