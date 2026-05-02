@@ -298,7 +298,10 @@ serve(async (req) => {
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const notifyTo = Deno.env.get('LEAD_NOTIFY_EMAIL') || 'hola@livv.systems'
     const fromName = Deno.env.get('LEAD_FROM_NAME') || 'Eneas Aldabe'
-    const fromAddress = Deno.env.get('LEAD_FROM_ADDRESS') || 'eneas@livv.systems'
+    // Default to a livv.space sender because that's the domain verified in
+    // Resend right now. To send from eneas@livv.systems instead (more personal),
+    // verify livv.systems in Resend and set LEAD_FROM_ADDRESS=eneas@livv.systems.
+    const fromAddress = Deno.env.get('LEAD_FROM_ADDRESS') || 'eneas@livv.space'
     const appUrl = Deno.env.get('APP_URL') || 'https://app.livv.systems'
     const autoReplyDisabled = Deno.env.get('LEAD_AUTO_REPLY') === 'false'
 
