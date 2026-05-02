@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Icons } from '../ui/Icons';
 import { useClients } from '../../context/ClientsContext';
 import { useProjects } from '../../context/ProjectsContext';
+import { colorToBg } from '../ui/ColorPalette';
 import { PageView, NavParams } from '../../types';
 
 interface Props {
@@ -397,22 +398,30 @@ const TreeRow: React.FC<{
         onClick={onClick}
         className={`flex items-center flex-1 min-w-0 py-1 ${hasToggle ? 'pl-0.5 pr-2' : 'px-2'}`}
       >
+        {/* Visual: mirrors the project list in the middle column of /projects.
+            Avatar > emoji-on-tinted-bg > tinted-bg-with-color-dot. Bigger
+            footprint (18px) so emoji icons render at a readable size. */}
         {avatarUrl ? (
           <img
             src={avatarUrl}
             alt=""
-            className="w-[14px] h-[14px] rounded-full object-cover shrink-0"
+            className="w-[18px] h-[18px] rounded-md object-cover shrink-0"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
           />
         ) : icon ? (
-          <span className="w-[14px] h-[14px] flex items-center justify-center text-[12px] leading-none shrink-0">
+          <span
+            className="w-[18px] h-[18px] rounded-md flex items-center justify-center text-[13px] leading-none shrink-0"
+            style={{ backgroundColor: colorToBg(color, 0.14) }}
+          >
             {icon}
           </span>
         ) : (
           <span
-            className="w-[8px] h-[8px] rounded-full shrink-0"
-            style={{ backgroundColor: color }}
-          />
+            className="w-[18px] h-[18px] rounded-md flex items-center justify-center shrink-0"
+            style={{ backgroundColor: colorToBg(color, 0.14) }}
+          >
+            <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: color }} />
+          </span>
         )}
         <span className={`ml-2 text-[12px] truncate text-left ${
           active ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-300'
