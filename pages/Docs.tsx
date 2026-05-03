@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { useDocuments, File as DocFile } from '../hooks/useDocuments';
 import { useClients } from '../hooks/useClients';
 import { useProjects } from '../context/ProjectsContext';
+import { useCalendar } from '../context/CalendarContext';
 import { ProposalsPanel } from '../components/docs/ProposalsPanel';
 import { BlogPanel } from '../components/docs/BlogPanel';
 import { PasswordsPanel } from '../components/docs/PasswordsPanel';
@@ -32,10 +33,22 @@ export const Docs: React.FC = () => {
     deleteFile,
     documents,
     createDocument,
+    updateDocument,
     deleteDocument
   } = useDocuments();
   const { clients } = useClients();
   const { projects } = useProjects();
+  // Calendar tasks — used by the side panel and the drag/drop link logic.
+  // We only show open (non-done, non-cancelled) tasks to keep the list short.
+  const { tasks: allCalendarTasks, updateTask } = useCalendar();
+  const openTasks = useMemo(
+    () => (allCalendarTasks || []).filter((t: any) => !t.completed && t.status !== 'done' && t.status !== 'cancelled'),
+    [allCalendarTasks]
+  );
+  const taskById = useMemo(
+    () => new Map((allCalendarTasks || []).map((t: any) => [t.id, t])),
+    [allCalendarTasks]
+  );
 
   // Loading timeout
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -67,6 +80,12 @@ export const Docs: React.FC = () => {
   // In-app drag state — used to dim the source and highlight the hovered drop target
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
+  const [dropTargetDocId, setDropTargetDocId] = useState<string | null>(null);
+  // Tasks side-panel: shows open tasks the user can drag onto folders/docs to
+  // link them. Also accepts doc drops in the reverse direction.
+  const [showTasksPanel, setShowTasksPanel] = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dropTargetTaskId, setDropTargetTaskId] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -214,36 +233,135 @@ export const Docs: React.FC = () => {
 
   const onFolderDropTarget = {
     onDragEnter: (e: React.DragEvent, folderId: string) => {
-      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      const types = e.dataTransfer.types;
+      if (!types.includes('application/x-eneas-doc') && !types.includes('application/x-eneas-task')) return;
       e.preventDefault();
       e.stopPropagation();
       setDropTargetFolderId(folderId);
     },
     onDragOver: (e: React.DragEvent) => {
-      if (e.dataTransfer.types.includes('application/x-eneas-doc')) {
+      const types = e.dataTransfer.types;
+      if (types.includes('application/x-eneas-doc') || types.includes('application/x-eneas-task')) {
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
       }
     },
     onDragLeave: (e: React.DragEvent, folderId: string) => {
-      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      const types = e.dataTransfer.types;
+      if (!types.includes('application/x-eneas-doc') && !types.includes('application/x-eneas-task')) return;
       e.stopPropagation();
       setDropTargetFolderId(prev => (prev === folderId ? null : prev));
     },
     onDrop: (e: React.DragEvent, folderId: string) => {
-      const raw = e.dataTransfer.getData('application/x-eneas-doc');
-      if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
       setDropTargetFolderId(null);
       setDraggedItemId(null);
+      setDraggedTaskId(null);
+      // Task drop → link this folder to the task
+      const taskRaw = e.dataTransfer.getData('application/x-eneas-task');
+      if (taskRaw) {
+        try {
+          const { id: taskId } = JSON.parse(taskRaw) as { id: string };
+          updateFolder(folderId, { task_id: taskId }).catch(err => alert(`Error linking task: ${err.message}`));
+        } catch {}
+        return;
+      }
+      // Doc/folder drop → existing move-into-folder behavior
+      const raw = e.dataTransfer.getData('application/x-eneas-doc');
+      if (!raw) return;
       try {
         const { kind, id } = JSON.parse(raw) as { kind: SelKind; id: string };
         moveItem(kind, id, folderId);
       } catch {}
     },
   };
+
+  // Drop target for individual document cards — accepts only task drags.
+  // Doc-onto-doc moves don't make sense here.
+  const onDocDropTarget = {
+    onDragEnter: (e: React.DragEvent, docId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-task')) return;
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetDocId(docId);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-eneas-task')) {
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    },
+    onDragLeave: (e: React.DragEvent, docId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-task')) return;
+      e.stopPropagation();
+      setDropTargetDocId(prev => (prev === docId ? null : prev));
+    },
+    onDrop: (e: React.DragEvent, docId: string) => {
+      const raw = e.dataTransfer.getData('application/x-eneas-task');
+      if (!raw) return;
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetDocId(null);
+      setDraggedTaskId(null);
+      try {
+        const { id: taskId } = JSON.parse(raw) as { id: string };
+        // Two-way link: doc.task_id AND task.document_id, so either side
+        // surfaces the relationship without an extra join.
+        updateDocument(docId, { task_id: taskId }).catch(err => alert(`Error linking task: ${err.message}`));
+        updateTask(taskId, { document_id: docId }).catch(() => { /* best-effort */ });
+      } catch {}
+    },
+  };
+
+  // Task-card drop target (in the side panel) — accepts doc drags so the
+  // user can drag a doc onto a task and link the same way.
+  const onTaskDropTarget = {
+    onDragEnter: (e: React.DragEvent, taskId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetTaskId(taskId);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-eneas-doc')) {
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    },
+    onDragLeave: (e: React.DragEvent, taskId: string) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.stopPropagation();
+      setDropTargetTaskId(prev => (prev === taskId ? null : prev));
+    },
+    onDrop: (e: React.DragEvent, taskId: string) => {
+      const raw = e.dataTransfer.getData('application/x-eneas-doc');
+      if (!raw) return;
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetTaskId(null);
+      setDraggedItemId(null);
+      try {
+        const { kind, id } = JSON.parse(raw) as { kind: SelKind; id: string };
+        if (kind === 'doc') {
+          updateDocument(id, { task_id: taskId }).catch(err => alert(`Error linking task: ${err.message}`));
+          updateTask(taskId, { document_id: id }).catch(() => { /* best-effort */ });
+        } else if (kind === 'folder') {
+          updateFolder(id, { task_id: taskId }).catch(err => alert(`Error linking task: ${err.message}`));
+        } else if (kind === 'file') {
+          updateFile(id, { task_id: taskId }).catch(err => alert(`Error linking task: ${err.message}`));
+        }
+      } catch {}
+    },
+  };
+
+  const onTaskDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.effectAllowed = 'link';
+    e.dataTransfer.setData('application/x-eneas-task', JSON.stringify({ id: taskId }));
+    setDraggedTaskId(taskId);
+    e.stopPropagation();
+  };
+  const onTaskDragEnd = () => { setDraggedTaskId(null); setDropTargetFolderId(null); setDropTargetDocId(null); };
+
+  const unlinkFolderTask = (folderId: string) => updateFolder(folderId, { task_id: null });
+  const unlinkDocTask = (docId: string) => updateDocument(docId, { task_id: null });
 
   const openActionMenu = (type: 'file' | 'folder', item: any) => {
     setActionMenu({
@@ -636,6 +754,23 @@ export const Docs: React.FC = () => {
                 )}
               </div>
 
+              {/* Tasks-link toggle — opens a side panel of open tasks the
+                  user can drag onto folders/docs (and vice-versa). */}
+              <button
+                onClick={() => setShowTasksPanel(v => !v)}
+                title="Vincular tareas a docs"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+                  showTasksPanel
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                }`}>
+                <Icons.CheckCircle size={12} />
+                <span>Tasks</span>
+                {openTasks.length > 0 && (
+                  <span className="font-mono opacity-60">{openTasks.length}</span>
+                )}
+              </button>
+
               {/* View toggle */}
               <div className="flex bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg p-0.5">
                 <button
@@ -922,6 +1057,15 @@ export const Docs: React.FC = () => {
                     </div>
                     <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
                     <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{fmtDate(folder.created_at)}</p>
+                    {folder.task_id && taskById.get(folder.task_id) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); unlinkFolderTask(folder.id); }}
+                        title={`Vinculada: ${(taskById.get(folder.task_id) as any).title} — click para desvincular`}
+                        className="mt-2 inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">
+                        <Icons.CheckCircle size={9} />
+                        <span className="truncate">{(taskById.get(folder.task_id) as any).title}</span>
+                      </button>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -967,6 +1111,15 @@ export const Docs: React.FC = () => {
                       <Icons.Folder size={18} className="text-blue-500" />
                     </div>
                     <span className="flex-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</span>
+                    {folder.task_id && taskById.get(folder.task_id) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); unlinkFolderTask(folder.id); }}
+                        title={`Vinculada: ${(taskById.get(folder.task_id) as any).title} — click para desvincular`}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors max-w-[180px]">
+                        <Icons.CheckCircle size={9} />
+                        <span className="truncate">{(taskById.get(folder.task_id) as any).title}</span>
+                      </button>
+                    )}
                     <span className="text-[11px] text-zinc-400 dark:text-zinc-500 mr-2">{fmtDate(folder.created_at)}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
@@ -979,21 +1132,42 @@ export const Docs: React.FC = () => {
                 );
               })}
 
-              {/* Documents (rich-text) */}
-              {documents.map((doc) => (
-                <DocumentCard
-                  key={doc.id}
-                  document={doc}
-                  view={view}
-                  onClick={() => setEditingDocumentId(doc.id)}
-                  selected={isSelected(doc.id)}
-                  onToggleSelect={() => toggleSelected({ kind: 'doc', id: doc.id, name: doc.title })}
-                  onMore={() => {
-                    if (confirm(`Delete document "${doc.title}"?`)) deleteDocument(doc.id);
-                  }}
-                  onDragStart={(e) => onCardDragStart(e, 'doc' as any, doc.id)}
-                />
-              ))}
+              {/* Documents (rich-text). Wrapped so we can host the
+                  task-drop target + the linked-task pill without editing
+                  the shared DocumentCard component. */}
+              {documents.map((doc) => {
+                const isDocDropHover = dropTargetDocId === doc.id;
+                const linkedTask = doc.task_id ? taskById.get(doc.task_id) : null;
+                return (
+                  <div key={doc.id}
+                    onDragEnter={(e) => onDocDropTarget.onDragEnter(e, doc.id)}
+                    onDragOver={onDocDropTarget.onDragOver}
+                    onDragLeave={(e) => onDocDropTarget.onDragLeave(e, doc.id)}
+                    onDrop={(e) => onDocDropTarget.onDrop(e, doc.id)}
+                    className={`relative rounded-xl transition-all ${isDocDropHover ? 'ring-2 ring-emerald-300/70 dark:ring-emerald-500/40 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900' : ''}`}>
+                    <DocumentCard
+                      document={doc}
+                      view={view}
+                      onClick={() => setEditingDocumentId(doc.id)}
+                      selected={isSelected(doc.id)}
+                      onToggleSelect={() => toggleSelected({ kind: 'doc', id: doc.id, name: doc.title })}
+                      onMore={() => {
+                        if (confirm(`Delete document "${doc.title}"?`)) deleteDocument(doc.id);
+                      }}
+                      onDragStart={(e) => onCardDragStart(e, 'doc' as any, doc.id)}
+                    />
+                    {linkedTask && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); unlinkDocTask(doc.id); }}
+                        title={`Vinculada: ${(linkedTask as any).title} — click para desvincular`}
+                        className="absolute bottom-2 left-2 inline-flex items-center gap-1 max-w-[calc(100%-16px)] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors z-10">
+                        <Icons.CheckCircle size={9} />
+                        <span className="truncate">{(linkedTask as any).title}</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Files */}
               {files.map((file, i) => {
@@ -1461,6 +1635,72 @@ export const Docs: React.FC = () => {
           </motion.div>
         </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* Tasks side panel — open tasks the user can drag onto folders/docs.
+          Reciprocally accepts doc/folder drops to create the same link. Fixed
+          position so it doesn't shift the documents grid layout. */}
+      <AnimatePresence>
+        {showTasksPanel && (
+          <motion.div
+            initial={{ x: 320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 320, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="fixed top-20 right-4 bottom-4 w-[300px] z-30 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Icons.CheckCircle size={14} className="text-emerald-500" />
+                <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">Tasks abiertas</h3>
+                <span className="text-[10px] font-mono text-zinc-400">{openTasks.length}</span>
+              </div>
+              <button onClick={() => setShowTasksPanel(false)}
+                className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
+                <Icons.Close size={14} />
+              </button>
+            </div>
+            <div className="px-4 py-2 text-[10px] text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-zinc-800/60">
+              Arrastrá una tarea sobre una carpeta o doc para vincularlas. O al revés.
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {openTasks.length === 0 && (
+                <p className="text-xs text-zinc-400 italic text-center py-6">No hay tareas abiertas.</p>
+              )}
+              {openTasks.map((task: any) => {
+                const isDragSource = draggedTaskId === task.id;
+                const isDropHover = dropTargetTaskId === task.id;
+                const priColor = task.priority === 'urgent' || task.priority === 'high' ? 'bg-rose-400'
+                  : task.priority === 'medium' ? 'bg-amber-400' : 'bg-zinc-300 dark:bg-zinc-600';
+                return (
+                  <div key={task.id}
+                    draggable
+                    onDragStart={(e) => onTaskDragStart(e, task.id)}
+                    onDragEnd={onTaskDragEnd}
+                    onDragEnter={(e) => onTaskDropTarget.onDragEnter(e, task.id)}
+                    onDragOver={onTaskDropTarget.onDragOver}
+                    onDragLeave={(e) => onTaskDropTarget.onDragLeave(e, task.id)}
+                    onDrop={(e) => onTaskDropTarget.onDrop(e, task.id)}
+                    className={`group flex items-start gap-2 px-2.5 py-2 rounded-lg border cursor-grab active:cursor-grabbing transition-all ${
+                      isDropHover
+                        ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 dark:border-emerald-500'
+                        : isDragSource
+                          ? 'opacity-40 border-zinc-200 dark:border-zinc-800'
+                          : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                    }`}>
+                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${priColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-medium text-zinc-800 dark:text-zinc-200 leading-snug truncate">{task.title}</div>
+                      {task.start_date && (
+                        <div className="text-[10px] text-zinc-400 mt-0.5 font-mono">{task.start_date}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

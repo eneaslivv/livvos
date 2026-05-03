@@ -23,6 +23,7 @@ export interface Folder {
   tenant_id?: string
   client_id?: string | null
   project_id?: string | null
+  task_id?: string | null
   name: string
   parent_id: string | null
   color: string
@@ -37,6 +38,7 @@ export interface File {
   tenant_id?: string
   client_id?: string | null
   project_id?: string | null
+  task_id?: string | null
   folder_id: string | null
   name: string
   type: string
@@ -70,8 +72,8 @@ interface DocumentsContextType {
   clearFilter: () => void
   createFolder: (name: string, color?: string, options?: { clientId?: string | null; projectId?: string | null }) => Promise<Folder>
   uploadFile: (file: any, options?: { clientId?: string | null; projectId?: string | null }) => Promise<File>
-  updateFile: (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
-  updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => Promise<void>
+  updateFile: (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null; task_id?: string | null }) => Promise<void>
+  updateFolder: (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null; task_id?: string | null }) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
   createDocument: (title?: string, options?: { clientId?: string | null; projectId?: string | null; taskId?: string | null }) => Promise<Document>
@@ -331,7 +333,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => { loadAllFolders() }, [loadAllFolders])
 
-  const updateFile = async (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null }) => {
+  const updateFile = async (id: string, updates: { folder_id?: string | null; client_id?: string | null; project_id?: string | null; task_id?: string | null }) => {
     const { error: err } = await supabase.from('files').update(updates).eq('id', id)
     if (err) throw err
     // If folder changed, remove from current view
@@ -342,7 +344,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }
 
-  const updateFolder = async (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null }) => {
+  const updateFolder = async (id: string, updates: { parent_id?: string | null; client_id?: string | null; project_id?: string | null; task_id?: string | null }) => {
     const { error: err } = await supabase.from('folders').update(updates).eq('id', id)
     if (err) throw err
     // If parent changed, remove from current view
