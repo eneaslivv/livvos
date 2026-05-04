@@ -125,6 +125,13 @@ const normalizeTask = (task: any): CalendarTask => ({
   owner_id: task.owner_id ?? task.user_id ?? '',
   title: task.title ?? 'Untitled Task',
   description: task.description ?? task.notes ?? '',
+  // Rich-content fields — added 2026-05-04 along with the
+  // tasks_rich_content migration. Without these the columns get written
+  // to Postgres but normalizeTask drops them when copying back into
+  // local state, so the UI sees them disappear after every save.
+  description_html: task.description_html ?? null,
+  attachments: Array.isArray(task.attachments) ? task.attachments : [],
+  cover_url: task.cover_url ?? null,
   completed: !!task.completed,
   priority: task.priority ?? 'medium',
   start_date: toDateOnly(task.start_date ?? task.due_date),
