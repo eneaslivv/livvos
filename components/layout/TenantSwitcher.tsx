@@ -2,6 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons } from '../ui/Icons';
 import { useTenant } from '../../context/TenantContext';
 import { ConnectAgencyModal } from './ConnectAgencyModal';
+import { supabase } from '../../lib/supabase';
+import { appUrl } from '../../lib/appUrl';
+
+interface PendingInvite {
+  id: string;
+  invited_email: string;
+  invited_agency_name: string;
+  token: string;
+  status: string;
+  created_at: string;
+}
 
 interface TenantSwitcherProps {
     expanded: boolean;
@@ -13,7 +24,49 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
     const [isOpen, setIsOpen] = useState(false);
     const [isSwitching, setIsSwitching] = useState<string | null>(null);
     const [showConnectModal, setShowConnectModal] = useState(false);
+    const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [revokingId, setRevokingId] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Load pending agency invites for the current super-agency tenant. The
+    // dropdown otherwise hides them, so the user has no way to know that
+    // someone hasn't accepted yet — surfacing them here is what they
+    // expected when they said "the agency should appear".
+    const loadPendingInvites = useCallback(async () => {
+        if (!currentTenant?.id) return;
+        const { data } = await supabase
+          .from('tenant_connections')
+          .select('id, invited_email, invited_agency_name, token, status, created_at')
+          .eq('parent_tenant_id', currentTenant.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        setPendingInvites((data as PendingInvite[]) || []);
+    }, [currentTenant?.id]);
+    useEffect(() => { if (isOpen) loadPendingInvites(); }, [isOpen, loadPendingInvites]);
+
+    const copyInviteLink = async (invite: PendingInvite) => {
+        const link = `${appUrl()}/accept-connection?token=${invite.token}`;
+        try { await navigator.clipboard.writeText(link); } catch { /* clipboard blocked */ }
+        setCopiedId(invite.id);
+        setTimeout(() => setCopiedId(null), 1800);
+    };
+
+    const revokeInvite = async (invite: PendingInvite) => {
+        if (!window.confirm(`Cancelar la invitación a "${invite.invited_agency_name}" (${invite.invited_email})?`)) return;
+        setRevokingId(invite.id);
+        try {
+            // Try the SECURITY DEFINER RPC first (cleanest path); fall back to
+            // a direct status update if the RPC isn't available.
+            const { error } = await supabase.rpc('revoke_connection', { p_connection_id: invite.id });
+            if (error) {
+                await supabase.from('tenant_connections').update({ status: 'revoked' }).eq('id', invite.id);
+            }
+            await loadPendingInvites();
+        } finally {
+            setRevokingId(null);
+        }
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -132,6 +185,57 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                                             onClick={() => handleSwitch(m.tenant_id)}
                                         />
                                     ))}
+                                </div>
+                            </>
+                        )}
+
+                        {/* Pending invites — surfaced so the user can copy
+                            the link, resend, or revoke an invitation that
+                            hasn't been accepted yet. */}
+                        {isSuperAgency && pendingInvites.length > 0 && (
+                            <>
+                                <div className="px-3 pt-2 pb-1 border-t border-zinc-100 dark:border-zinc-800">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                                        Pending invitations
+                                    </div>
+                                </div>
+                                <div className="p-1.5 pt-0 space-y-0.5">
+                                    {pendingInvites.map(inv => {
+                                        const isCopied = copiedId === inv.id;
+                                        const isRevoking = revokingId === inv.id;
+                                        return (
+                                            <div key={inv.id} className="group/inv flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors">
+                                                <span className="w-6 h-6 rounded bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-200 dark:ring-amber-500/30 flex items-center justify-center shrink-0">
+                                                    <Icons.Mail size={11} className="text-amber-600 dark:text-amber-400" />
+                                                </span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate leading-tight">
+                                                        {inv.invited_agency_name}
+                                                    </div>
+                                                    <div className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate font-mono leading-tight mt-0.5">
+                                                        {inv.invited_email}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-0.5 shrink-0">
+                                                    <button
+                                                        onClick={() => copyInviteLink(inv)}
+                                                        title="Copiar link"
+                                                        className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                                                    >
+                                                        {isCopied ? <Icons.Check size={11} className="text-emerald-500" /> : <Icons.Copy size={11} />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => revokeInvite(inv)}
+                                                        disabled={isRevoking}
+                                                        title="Cancelar invitación"
+                                                        className="p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors disabled:opacity-40"
+                                                    >
+                                                        {isRevoking ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Close size={11} />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </>
                         )}
