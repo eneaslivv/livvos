@@ -14,6 +14,8 @@ import type { DashboardData, Milestone, LogEntry, PaymentEntry } from '../compon
 import { useTeam } from '../context/TeamContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
+import { useCalendar } from '../context/CalendarContext';
+import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
@@ -349,6 +351,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const { members } = useTeam();
   const { user: currentUser } = useAuth();
   const { currentTenant } = useTenant();
+  const { updateTask } = useCalendar();
   const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense, deleteExpense, timeEntries, createTimeEntry, deleteTimeEntry } = useFinance();
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
@@ -382,6 +385,13 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
     if (navProjectId) setSelectedId(navProjectId);
   }, [navProjectId]);
   const [activeTab, setActiveTab] = useState('overview');
+  // View mode for the Tasks tab inside a project — list (existing TasksTab)
+  // or board (new TaskKanbanBoard). Persisted per session via localStorage.
+  const [tasksView, setTasksView] = useState<'list' | 'board'>(() => {
+    try { return (localStorage.getItem('eneas-os:project-tasks-view') as 'list' | 'board') || 'list'; }
+    catch { return 'list'; }
+  });
+  React.useEffect(() => { try { localStorage.setItem('eneas-os:project-tasks-view', tasksView); } catch {} }, [tasksView]);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isClientPreviewMode, setIsClientPreviewMode] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -1746,7 +1756,39 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
                 {/* ── Tasks Tab ── */}
                 {activeTab === 'tasks' && selectedProject && (
-                  <TasksTab
+                  <>
+                    {/* View switcher — list (existing) or kanban board */}
+                    <div className="flex items-center justify-end mb-3">
+                      <div className="inline-flex items-center gap-0.5 p-0.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
+                        <button
+                          onClick={() => setTasksView('list')}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            tasksView === 'list'
+                              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                          }`}>List</button>
+                        <button
+                          onClick={() => setTasksView('board')}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            tasksView === 'board'
+                              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                          }`}>Board</button>
+                      </div>
+                    </div>
+
+                    {tasksView === 'board' ? (
+                      <div className="h-[calc(100vh-320px)] min-h-[480px]">
+                        <TaskKanbanBoard
+                          tasks={projectTasks as any}
+                          onTaskClick={(t) => setExpandedTaskId(t.id)}
+                          onStatusChange={async (id, status) => {
+                            await updateTask(id, { status, completed: status === 'done' } as any);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <TasksTab
                     project={selectedProject}
                     projectTasks={projectTasks}
                     derivedTasksGroups={derivedTasksGroups}
@@ -1784,6 +1826,8 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                     onAiDiscard={() => { setAiPreview(null); setAiPrompt(''); }}
                     taskError={taskError}
                   />
+                    )}
+                  </>
                 )}
 
                 {/* ── Docs Tab ── (rebranded from Files) */}

@@ -10,8 +10,8 @@ interface ContentPlatformConfig {
 export interface CalendarHeaderProps {
   calendarMode: 'schedule' | 'content';
   setCalendarMode: (mode: 'schedule' | 'content') => void;
-  view: 'day' | 'week' | 'month';
-  setView: (view: 'day' | 'week' | 'month') => void;
+  view: 'day' | 'week' | 'month' | 'board' | 'list';
+  setView: (view: 'day' | 'week' | 'month' | 'board' | 'list') => void;
   stats: { totalEvents: number; totalTasks: number; completedTasks: number };
   filteredEventsCount: number;
   navigateCalendar: (direction: -1 | 1) => void;
@@ -148,12 +148,15 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           </div>
         )}
 
-        {/* View toggle: Week / Month */}
+        {/* View toggle: Day / Week / Month / Board / List — extra modes
+            give a Notion/ClickUp-style way to look at the same data. */}
         <ToggleGroup
           options={[
             { id: 'day' as const, label: 'Day' },
             { id: 'week' as const, label: 'Week' },
             { id: 'month' as const, label: 'Month' },
+            { id: 'board' as const, label: 'Board' },
+            { id: 'list' as const, label: 'List' },
           ]}
           value={view}
           onChange={setView}

@@ -19,6 +19,7 @@ import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
 import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
+import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
 import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
 import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { DayAgendaView } from '../components/calendar/DayAgendaView';
@@ -184,7 +185,7 @@ export const Calendar: React.FC = () => {
   const [showPlanPrefs, setShowPlanPrefs] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<'day' | 'week' | 'month'>(isMobile ? 'day' : 'week');
+  const [view, setView] = useState<'day' | 'week' | 'month' | 'board' | 'list'>(isMobile ? 'day' : 'week');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showNewEventForm, setShowNewEventForm] = useState(false);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
@@ -1536,6 +1537,56 @@ export const Calendar: React.FC = () => {
           contentPlatforms={CONTENT_PLATFORMS}
           updateEvent={async (id, data) => { await updateEvent(id, data); }}
         />
+      )}
+
+      {/* Board view — Notion/ClickUp-style kanban grouped by status. */}
+      {view === 'board' && calendarMode === 'schedule' && (
+        <div className="h-[calc(100vh-260px)] min-h-[480px]">
+          <TaskKanbanBoard
+            tasks={tasks}
+            onTaskClick={handleOpenTaskDetail}
+            onStatusChange={async (id, status) => { await updateTask(id, { status, completed: status === 'done' }); }}
+            onAddTask={(status) => {
+              setShowNewTaskForm(true);
+              // Pre-set status on the form so the new task lands in the right column.
+              setNewTaskData(prev => ({ ...prev, status: status as any }));
+            }}
+          />
+        </div>
+      )}
+
+      {/* List view — flat list grouped by date. Reuses the SelectedDatePanel
+          which already renders today's items; here we render every task. */}
+      {view === 'list' && calendarMode === 'schedule' && (
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800/60">
+          {tasks.length === 0 ? (
+            <div className="p-8 text-center text-xs text-zinc-400">No hay tareas todavía.</div>
+          ) : (
+            [...tasks]
+              .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
+              .map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => handleOpenTaskDetail(t)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${
+                    t.status === 'done' ? 'bg-emerald-500'
+                    : t.status === 'in-progress' ? 'bg-amber-500'
+                    : t.status === 'cancelled' ? 'bg-rose-400'
+                    : 'bg-zinc-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-[13px] font-medium truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{t.title}</div>
+                    <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                      {(t.start_date || '—')}{t.start_time ? ` · ${t.start_time}` : ''}{t.priority && t.priority !== 'medium' ? ` · ${t.priority}` : ''}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 uppercase tracking-wider shrink-0">{t.status || 'todo'}</span>
+                </button>
+              ))
+          )}
+        </div>
       )}
 
       {/* Selected Date Panel + Stats */}
