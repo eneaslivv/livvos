@@ -21,6 +21,7 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from '../ui/Icons';
 
 interface TeamMember {
@@ -118,38 +119,76 @@ const Avatar: React.FC<{
 //  Tooltip — anchored under the trigger, shows person details
 // ──────────────────────────────────────────────────────────────────────
 
+// Tooltip rendered via Portal to escape any transform: ancestor (Calendar
+// uses framer-motion which puts everything inside transformed divs, and
+// position:fixed in a transformed ancestor resolves relative to that
+// ancestor — which is why the tooltip appeared offset to the right).
+// Position is computed on mouseenter, then clamped to viewport edges.
 const HoverTip: React.FC<{
   show: boolean;
   title: string;
   subtitle?: string;
   hint?: string;
   anchorRef: React.RefObject<HTMLElement>;
-}> = ({ show, title, subtitle, hint, anchorRef }) => {
+  placement?: 'below' | 'above';
+}> = ({ show, title, subtitle, hint, anchorRef, placement = 'above' }) => {
+  const tipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
   useEffect(() => {
-    if (!show || !anchorRef.current) return;
+    if (!show || !anchorRef.current) { setPos(null); return; }
+    // Two-pass measure: first render at hidden position to read the tooltip's
+    // own size, then re-position centered + clamped. requestAnimationFrame so
+    // the DOM has flushed before we measure.
     const rect = anchorRef.current.getBoundingClientRect();
-    setPos({ left: rect.left + rect.width / 2, top: rect.bottom + 6 });
-  }, [show, anchorRef]);
-  if (!show || !pos) return null;
-  return (
+    let next = {
+      left: rect.left + rect.width / 2,
+      top: placement === 'above' ? rect.top - 8 : rect.bottom + 6,
+    };
+    setPos(next);
+    requestAnimationFrame(() => {
+      if (!tipRef.current) return;
+      const tipW = tipRef.current.offsetWidth;
+      const tipH = tipRef.current.offsetHeight;
+      const margin = 8;
+      const cx = rect.left + rect.width / 2;
+      let left = cx - tipW / 2;
+      // Clamp horizontally to viewport.
+      if (left < margin) left = margin;
+      if (left + tipW > window.innerWidth - margin) left = window.innerWidth - tipW - margin;
+      let top = placement === 'above' ? rect.top - tipH - 6 : rect.bottom + 6;
+      // If above doesn't fit, flip to below.
+      if (top < margin) top = rect.bottom + 6;
+      setPos({ left, top });
+    });
+  }, [show, anchorRef, placement, title, subtitle, hint]);
+
+  if (!show || !pos || typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
+      ref={tipRef}
       style={{
         position: 'fixed', left: pos.left, top: pos.top,
-        transform: 'translateX(-50%)',
         background: '#09090B', color: '#FFFFFF',
         padding: '7px 11px', borderRadius: 8,
         fontSize: 11, fontFamily: 'Inter', fontWeight: 500,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
         pointerEvents: 'none',
-        zIndex: 60,
+        zIndex: 9999,
         maxWidth: 240, lineHeight: 1.35,
+        whiteSpace: 'nowrap',
       }}
     >
       <div style={{ fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
-      {subtitle && <div style={{ opacity: 0.65, fontSize: 10, marginTop: 2 }}>{subtitle}</div>}
+      {subtitle && <div style={{
+        opacity: 0.65, fontSize: 10, marginTop: 2,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        maxWidth: 220,
+      }}>{subtitle}</div>}
       {hint && <div style={{ opacity: 0.5, fontSize: 9, marginTop: 4, fontStyle: 'italic' }}>{hint}</div>}
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -292,7 +331,7 @@ const ExpandPopover: React.FC<{
     };
   }, [teamMembers, projects, clients, query]);
 
-  if (!open || !pos) return null;
+  if (!open || !pos || typeof document === 'undefined') return null;
 
   const Section: React.FC<{ label: string; count: number; children: React.ReactNode }> = ({ label, count, children }) => (
     count > 0 ? (
@@ -342,16 +381,25 @@ const ExpandPopover: React.FC<{
     </button>
   );
 
-  return (
+  // Clamp popover to viewport (right edge + below-fold).
+  const popW = 320;
+  const popMaxH = 460;
+  const margin = 8;
+  let left = pos.left;
+  let top = pos.top;
+  if (left + popW > window.innerWidth - margin) left = window.innerWidth - popW - margin;
+  if (top + popMaxH > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - popMaxH - margin);
+
+  return createPortal(
     <div
       ref={popRef}
       style={{
-        position: 'fixed', left: pos.left, top: pos.top,
-        width: 320, maxHeight: 460,
+        position: 'fixed', left, top,
+        width: popW, maxHeight: popMaxH,
         background: '#FFFFFF', borderRadius: 14,
         border: '1px solid #E6E2D8',
         boxShadow: '0 16px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.04)',
-        zIndex: 50, display: 'flex', flexDirection: 'column',
+        zIndex: 9000, display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
       }}
       className="dark:bg-zinc-900 dark:border-zinc-800"
@@ -448,7 +496,8 @@ const ExpandPopover: React.FC<{
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

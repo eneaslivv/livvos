@@ -364,6 +364,13 @@ export const Calendar: React.FC = () => {
     setEditingTask({
       title: task.title,
       description: task.description || '',
+      // Rich-content fields — must be copied here so the editor renders
+      // the saved HTML / attachments instead of falling back to selectedTask
+      // (which works most of the time but breaks if selectedTask gets
+      // refreshed by the realtime subscription mid-edit).
+      description_html: task.description_html ?? null,
+      attachments: task.attachments || [],
+      cover_url: task.cover_url ?? null,
       priority: task.priority,
       status: task.status,
       start_date: task.start_date || '',
