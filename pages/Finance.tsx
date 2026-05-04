@@ -12,6 +12,7 @@ import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import { FinanceAssistant } from '../components/finance/FinanceAssistant';
 import { FinanceChat } from '../components/finance/FinanceChat';
+import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
 import {
   useFinance,
   type IncomeEntry,
@@ -896,18 +897,23 @@ export const Finance: React.FC = () => {
   return (
     <div className="max-w-[1600px] mx-auto space-y-5 animate-in fade-in duration-500 pt-4 pb-16">
 
-      {/* ─── Header ────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-zinc-100 dark:border-zinc-800/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-2">
-            <div className="w-1 h-1 rounded-full bg-emerald-500" />
-            Finance Module
+      {/* ─── Header ──────────────────────────────────────────────
+          On the Dashboard tab the Livv editorial hero owns the title + action
+          toolbar, so we collapse this header to a tiny bar (just the tabs +
+          export). On every other tab we keep the original h1 + action set. */}
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 ${activeTab === 'dashboard' ? '' : 'border-b border-zinc-100 dark:border-zinc-800/60'}`}>
+        {activeTab !== 'dashboard' && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-2">
+              <div className="w-1 h-1 rounded-full bg-emerald-500" />
+              Finance Module
+            </div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finance</h1>
+            <p className="text-zinc-400 text-xs max-w-md">Track income, expenses, margins, and team liquidity.</p>
           </div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finance</h1>
-          <p className="text-zinc-400 text-xs max-w-md">Track income, expenses, margins, and team liquidity.</p>
-        </div>
+        )}
         <div className="flex gap-2 flex-wrap">
-          {hasPermission('finance', 'create') && (
+          {hasPermission('finance', 'create') && activeTab !== 'dashboard' && (
             <>
               <button onClick={() => setIsAssistantOpen(true)}
                 className="group flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200 text-white"
@@ -936,10 +942,12 @@ export const Finance: React.FC = () => {
               </button>
             </>
           )}
-          <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
-            <Download size={14} />
-            <span>Export</span>
-          </button>
+          {activeTab !== 'dashboard' && (
+            <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
+              <Download size={14} />
+              <span>Export</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -970,8 +978,37 @@ export const Finance: React.FC = () => {
         ))}
       </div>
 
-      {/* ═══════════════ DASHBOARD ═══════════════ */}
+      {/* ═══════════════ DASHBOARD (Livv editorial) ═══════════════ */}
       {activeTab === 'dashboard' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <LivvFinanceDashboard
+            incomes={incomes}
+            expenses={expenses}
+            budgets={budgets}
+            liquidityData={liquidityData}
+            projectPnL={projectPnL}
+            currentBalance={currentBalance}
+            projection90d={projection90d}
+            margin={margin}
+            totalPaidIncome={totalPaidIncome}
+            totalExpensesPaid={totalExpensesPaid}
+            totalExpensesPending={totalExpensesPending}
+            onAddIncome={openIncomeForm}
+            onAddExpense={openExpenseForm}
+            onOpenAIAssistant={() => setIsAssistantOpen(true)}
+            onOpenAIChat={() => setIsChatOpen(true)}
+            onMarkInstallmentPaid={handleMarkInstallmentPaid}
+            onMarkExpensePaid={async (exp) => { await updateExpense(exp.id, { status: 'paid' }); }}
+            onJumpToTab={setActiveTab}
+            canCreate={hasPermission('finance', 'create')}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════ LEGACY DASHBOARD (replaced by LivvFinanceDashboard) ═══════════════
+          Kept disabled below by `false` so the old code is one-line-flip away if we
+          need to revert. Will be removed after the editorial layout is approved. */}
+      {false && (
         <div className="space-y-5 animate-in slide-in-from-bottom-2 duration-500">
 
           {/* Metric Cards */}
