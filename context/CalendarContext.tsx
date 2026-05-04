@@ -52,11 +52,23 @@ export interface CalendarTask {
   blocked_by?: string
   document_id?: string
   group_name?: string
+  attachments?: TaskAttachment[]
   created_at: string
   updated_at: string
   completed_at?: string | null
   mirror_pair_id?: string | null
   mirror_origin_tenant_id?: string | null
+}
+
+export interface TaskAttachment {
+  id: string                // uuid v4 generated client-side
+  url: string               // public URL in tenant-assets bucket
+  name?: string             // original filename
+  width?: number
+  height?: number
+  size?: number             // bytes
+  mime?: string
+  added_at: string          // ISO
 }
 
 export interface CalendarLabel {

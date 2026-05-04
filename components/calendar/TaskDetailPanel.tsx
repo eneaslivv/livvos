@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
 import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
 import { CalendarTask } from '../../hooks/useCalendar';
+import type { TaskAttachment } from '../../context/CalendarContext';
 import { TaskCommentsSection } from './TaskCommentsSection';
 import { useDocuments } from '../../context/DocumentsContext';
 import { DocumentEditor } from '../docs/DocumentEditor';
@@ -151,6 +152,73 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   const [creatingDoc, setCreatingDoc] = useState(false);
   const linkedDocs = selectedTask ? getDocumentsByTask(selectedTask.id) : [];
 
+  // ─── Attachments (images) — Notion-style ──────────────────────────
+  // Lives on tasks.attachments (jsonb array). Uploads go to the public
+  // tenant-assets bucket under /task-attachments/{task.id}/{filename}.
+  const attachments: TaskAttachment[] = (editingTask.attachments as any) || (selectedTask?.attachments as any) || [];
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dropRef = useRef<HTMLDivElement | null>(null);
+  const [dropActive, setDropActive] = useState(false);
+
+  const persistAttachments = useCallback(async (next: TaskAttachment[]) => {
+    if (!selectedTask?.id) return;
+    setEditingTask(prev => ({ ...prev, attachments: next as any }));
+    if (onQuickUpdate) {
+      try { await onQuickUpdate(selectedTask.id, { attachments: next as any } as any); } catch (err) { errorLogger.warn('attachments save failed', err); }
+    }
+  }, [selectedTask?.id, setEditingTask, onQuickUpdate]);
+
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
+    if (!selectedTask?.id || !currentTenant?.id) return;
+    const list = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (list.length === 0) return;
+    setUploadingImage(true);
+    try {
+      const newOnes: TaskAttachment[] = [];
+      for (const file of list) {
+        if (file.size > 10 * 1024 * 1024) { errorLogger.warn('skip >10MB attachment', file.name); continue; }
+        const ext = file.name.split('.').pop() || 'jpg';
+        const id = crypto.randomUUID();
+        const path = `task-attachments/${currentTenant.id}/${selectedTask.id}/${id}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true, contentType: file.type });
+        if (upErr) { errorLogger.error('upload', upErr); continue; }
+        const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+        newOnes.push({
+          id, url: urlData.publicUrl, name: file.name,
+          size: file.size, mime: file.type, added_at: new Date().toISOString(),
+        });
+      }
+      if (newOnes.length > 0) await persistAttachments([...attachments, ...newOnes]);
+    } finally {
+      setUploadingImage(false);
+    }
+  }, [selectedTask?.id, currentTenant?.id, attachments, persistAttachments]);
+
+  const removeAttachment = async (id: string) => {
+    await persistAttachments(attachments.filter(a => a.id !== id));
+  };
+
+  // Paste-image handler — Notion vibe (Cmd+V on a copied image inserts it).
+  useEffect(() => {
+    if (!selectedTask) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const files: File[] = [];
+      for (const it of items) {
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (files.length > 0) { e.preventDefault(); uploadFiles(files); }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [selectedTask?.id, uploadFiles]);
+
   const handleCreateDoc = async () => {
     if (!selectedTask || creatingDoc) return;
     setCreatingDoc(true);
@@ -255,19 +323,25 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               </span>
             </div>
 
-            <input
-              type="text"
+            <textarea
               value={editingTask.title || ''}
-              onChange={e => setEditingTask({ ...editingTask, title: e.target.value })}
-              className={`w-full text-[22px] leading-tight font-semibold bg-transparent outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors -mx-1 px-1 rounded-md focus:bg-zinc-50 dark:focus:bg-zinc-800/40 ${
+              onChange={e => {
+                setEditingTask({ ...editingTask, title: e.target.value });
+                // Auto-grow the title textarea — Notion-style multi-line headlines.
+                const ta = e.target as HTMLTextAreaElement;
+                ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';
+              }}
+              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+              rows={1}
+              className={`w-full resize-none text-[34px] leading-[1.15] font-bold bg-transparent outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-colors -mx-1 px-1 rounded-md focus:bg-zinc-50/60 dark:focus:bg-zinc-800/30 tracking-tight ${
                 selectedTask.completed
                   ? 'line-through text-zinc-400 dark:text-zinc-500'
                   : 'text-zinc-900 dark:text-zinc-50'
               }`}
-              placeholder="Task title..."
+              placeholder="Untitled"
             />
 
-            <p className="mt-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
               Created {new Date(selectedTask.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
 
@@ -499,16 +573,89 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
           </div>
 
-          {/* ─── Notes (description) ─── */}
-          <SectionHeader icon={<Icons.Docs size={12} />} title="Notes" />
+          {/* ─── Description (Notion-style: no label, big readable text, autosize) ─── */}
           <div className="mb-6">
             <textarea
               value={editingTask.description || ''}
-              onChange={e => setEditingTask({ ...editingTask, description: e.target.value })}
-              placeholder="Add notes, context, or details…"
-              className="w-full px-3.5 py-3 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm leading-relaxed text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 resize-none transition-colors"
-              rows={3}
+              onChange={e => {
+                setEditingTask({ ...editingTask, description: e.target.value });
+                const ta = e.target as HTMLTextAreaElement;
+                ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 80) + 'px';
+              }}
+              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 80) + 'px'; } }}
+              placeholder="Empezá a escribir, o pegá una imagen…"
+              className="w-full px-1 py-2 -mx-1 bg-transparent border-0 outline-none text-[15px] leading-[1.6] text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 resize-none focus:bg-zinc-50/40 dark:focus:bg-zinc-800/20 rounded-md transition-colors"
             />
+          </div>
+
+          {/* ─── Images (attachments) ───
+              Drag-and-drop, paste-from-clipboard, or click to upload. Stored
+              in tasks.attachments jsonb + bucket tenant-assets/task-attachments. */}
+          <div className="mb-6">
+            <SectionHeader
+              icon={<Icons.Image size={12} />}
+              title={`Images${attachments.length > 0 ? ` · ${attachments.length}` : ''}`}
+              trailing={
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors flex items-center gap-1 disabled:opacity-50"
+                >
+                  {uploadingImage ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Plus size={11} />}
+                  {uploadingImage ? 'Subiendo' : 'Add'}
+                </button>
+              }
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.currentTarget.value = ''; }}
+            />
+            <div
+              ref={dropRef}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(false); }}
+              onDrop={(e) => {
+                e.preventDefault(); e.stopPropagation(); setDropActive(false);
+                if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
+              }}
+              className={`rounded-xl border transition-all ${
+                dropActive
+                  ? 'border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-500/10 border-dashed'
+                  : attachments.length > 0
+                    ? 'border-transparent'
+                    : 'border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600'
+              }`}
+            >
+              {attachments.length === 0 ? (
+                <div className="px-4 py-6 text-center text-[11.5px] text-zinc-400 dark:text-zinc-500">
+                  Arrastrá imágenes acá, pegá con <span className="font-mono px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px]">⌘V</span>, o usá <strong className="text-zinc-600 dark:text-zinc-300">+ Add</strong>.
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 p-1">
+                  {attachments.map(att => (
+                    <div key={att.id} className="relative group/img aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                      <img src={att.url} alt={att.name || ''}
+                        onClick={() => setLightboxUrl(att.url)}
+                        className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/img:scale-[1.02]" />
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeAttachment(att.id); }}
+                        title="Quitar"
+                        className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover/img:opacity-100 hover:bg-rose-600 transition-all"
+                      >
+                        <Icons.Close size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ─── Subtasks ─── */}
@@ -886,6 +1033,22 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
       )}
       {openDocId && (
         <DocumentEditor documentId={openDocId} onClose={() => setOpenDocId(null)} />
+      )}
+      {/* Image lightbox — covers the whole viewport so big images get
+          breathing room. Click anywhere or hit Esc to close. */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setLightboxUrl(null); }}
+          tabIndex={-1}
+          className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-8 cursor-zoom-out animate-in fade-in"
+        >
+          <img src={lightboxUrl} alt="" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+          <button onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white">
+            <Icons.Close size={16} />
+          </button>
+        </div>
       )}
     </SlidePanel>
   );
