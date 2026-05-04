@@ -20,6 +20,7 @@ import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
 import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
+import { TeamFilterBar } from '../components/calendar/TeamFilterBar';
 import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
 import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { DayAgendaView } from '../components/calendar/DayAgendaView';
@@ -1043,6 +1044,16 @@ export const Calendar: React.FC = () => {
 
     if (taskFilter === 'all') return allTasks;
     if (taskFilter === 'me') return allTasks.filter(t => t.assignee_id === user?.id || (!t.assignee_id && t.owner_id === user?.id));
+    // Project / client filters use prefixed format so the same string state
+    // can hold "all" | "me" | <userId> | "project:<id>" | "client:<id>".
+    if (taskFilter.startsWith('project:')) {
+      const id = taskFilter.slice(8);
+      return allTasks.filter(t => t.project_id === id);
+    }
+    if (taskFilter.startsWith('client:')) {
+      const id = taskFilter.slice(7);
+      return allTasks.filter(t => t.client_id === id);
+    }
     return allTasks.filter(t => t.assignee_id === taskFilter);
   };
 
@@ -1266,82 +1277,22 @@ export const Calendar: React.FC = () => {
         </div>
       )}
 
-      {/* Team member filter */}
-      {calendarMode === 'schedule' && teamMembers.length > 0 && (
-        <div className="flex items-center gap-0.5 mb-3 overflow-x-auto pb-0.5">
-          <button
-            onClick={() => {
-              const next = !groupTasksByPhase;
-              setGroupTasksByPhase(next);
-              localStorage.setItem('cal-group-phases', next ? '1' : '0');
-            }}
-            className={`flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded-md transition-colors shrink-0 ${
-              groupTasksByPhase
-                ? 'text-indigo-600 dark:text-indigo-400 font-medium'
-                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-            }`}
-            title="Group tasks by phase"
-          >
-            <Icons.Layers size={10} />
-            Phases
-          </button>
-          <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1" />
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'me', label: 'Me' },
-            ...teamMembers
-              .filter(m => m.status === 'active' && m.id !== user?.id)
-              .map(m => ({ id: m.id, label: m.name || m.email?.split('@')[0] || 'Member', avatar: m.avatar_url })),
-          ].map((item: any) => {
-            const active = taskFilter === item.id;
-            const isPerson = item.id !== 'all' && item.id !== 'me';
-            if (isPerson) {
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setTaskFilter(item.id)}
-                  title={item.label}
-                  className="shrink-0 p-0.5 rounded-full transition-all"
-                >
-                  {item.avatar ? (
-                    <img
-                      src={item.avatar}
-                      alt={item.label}
-                      className={`w-[18px] h-[18px] rounded-full transition-all ${
-                        active
-                          ? 'ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950'
-                          : 'opacity-60 hover:opacity-100'
-                      }`}
-                    />
-                  ) : (
-                    <div
-                      className={`w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-medium transition-all ${
-                        active
-                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 ring-2 ring-zinc-900 dark:ring-zinc-100 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950'
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                      }`}
-                    >
-                      {item.label?.[0]?.toUpperCase()}
-                    </div>
-                  )}
-                </button>
-              );
-            }
-            return (
-              <button
-                key={item.id}
-                onClick={() => setTaskFilter(item.id)}
-                className={`px-1.5 py-0.5 text-[11px] rounded-md transition-colors shrink-0 ${
-                  active
-                    ? 'text-zinc-900 dark:text-zinc-100 font-medium'
-                    : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+      {/* Team / Project / Client filter */}
+      {calendarMode === 'schedule' && (teamMembers.length > 0 || (projectOptions && projectOptions.length > 0) || clients.length > 0) && (
+        <TeamFilterBar
+          value={taskFilter}
+          onChange={setTaskFilter}
+          teamMembers={teamMembers}
+          projects={(projectOptions || []).map(p => ({ id: p.id, title: p.title, client_id: p.client_id }))}
+          clients={clients.map((c: any) => ({ id: c.id, name: c.name || c.company || c.email || 'Client' }))}
+          currentUserId={user?.id}
+          groupByPhase={groupTasksByPhase}
+          onTogglePhase={() => {
+            const next = !groupTasksByPhase;
+            setGroupTasksByPhase(next);
+            localStorage.setItem('cal-group-phases', next ? '1' : '0');
+          }}
+        />
       )}
 
       {/* Timezone bar */}
