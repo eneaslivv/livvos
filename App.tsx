@@ -22,7 +22,7 @@ import { SystemProvider } from './context/SystemContext';
 import { PresenceProvider } from './context/PresenceContext';
 import { LiveCursors } from './components/presence/LiveCursors';
 import { NotificationToaster } from './components/NotificationToaster';
-import { retryDynamicImport, isChunkLoadError } from './lib/lazyWithRetry';
+import { retryDynamicImport, isChunkLoadError, clearChunkReloadFlag } from './lib/lazyWithRetry';
 
 const loadHome = () => retryDynamicImport(() => import('./pages/Home').then(m => ({ default: m.Home })), 'Home');
 const loadProjects = () => retryDynamicImport(() => import('./pages/Projects').then(m => ({ default: m.Projects })), 'Projects');
@@ -495,14 +495,34 @@ class PageErrorBoundary extends React.Component<
     if (import.meta.env.DEV) {
       console.error(`[${this.props.page}] ErrorBoundary:`, error, info.componentStack);
     }
-    // Stale-chunk recovery: after a deploy, old dynamic chunks 404. Force one
-    // reload; sessionStorage flag (cleared on success) prevents loops.
+    // Stale-chunk recovery: after a deploy, old dynamic chunks 404. Force a
+    // hard cache-busting reload, but throttle it (one per 30s window) so
+    // consecutive failures don't loop AND a NEW deploy in the same tab
+    // still triggers a fresh recovery instead of giving up.
     if (isChunkLoadError(error) && typeof window !== 'undefined') {
       const key = `__chunk_reload__:page:${this.props.page}`;
-      if (!sessionStorage.getItem(key)) {
+      const last = Number(sessionStorage.getItem(key) || 0);
+      const tooRecent = last && Date.now() - last < 30_000;
+      if (!tooRecent) {
         sessionStorage.setItem(key, String(Date.now()));
-        window.location.reload();
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('_v', String(Date.now()));
+          window.location.replace(url.toString());
+        } catch {
+          window.location.reload();
+        }
       }
+    }
+  }
+  componentDidMount() {
+    // Clear our throttle on a clean mount — the page loaded successfully,
+    // so the NEXT deploy's first stale-chunk error should reload again.
+    clearChunkReloadFlag(this.props.page);
+  }
+  componentDidUpdate(_prev: Readonly<{ page: string; children: React.ReactNode }>, prevState: Readonly<{ hasError: boolean }>) {
+    if (prevState.hasError && !this.state.hasError) {
+      clearChunkReloadFlag(this.props.page);
     }
   }
   render() {
