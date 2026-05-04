@@ -6,6 +6,7 @@ import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
 import { CalendarTask } from '../../hooks/useCalendar';
 import type { TaskAttachment } from '../../context/CalendarContext';
 import { TaskCommentsSection } from './TaskCommentsSection';
+import { TaskRichEditor } from './TaskRichEditor';
 import { useDocuments } from '../../context/DocumentsContext';
 import { DocumentEditor } from '../docs/DocumentEditor';
 import { useTenant } from '../../context/TenantContext';
@@ -200,24 +201,60 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     await persistAttachments(attachments.filter(a => a.id !== id));
   };
 
-  // Paste-image handler — Notion vibe (Cmd+V on a copied image inserts it).
-  useEffect(() => {
-    if (!selectedTask) return;
-    const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      const files: File[] = [];
-      for (const it of items) {
-        if (it.kind === 'file' && it.type.startsWith('image/')) {
-          const f = it.getAsFile();
-          if (f) files.push(f);
-        }
-      }
-      if (files.length > 0) { e.preventDefault(); uploadFiles(files); }
-    };
-    window.addEventListener('paste', onPaste);
-    return () => window.removeEventListener('paste', onPaste);
-  }, [selectedTask?.id, uploadFiles]);
+  // Paste-image handler is now scoped to the rich editor (TaskRichEditor's
+  // handlePaste). Window-level paste used to swallow images intended for
+  // other UIs, so we let TipTap handle it.
+
+  // Cover image upload — separate from attachments. Lives at
+  // task-covers/{tenant}/{task}.jpg in the public bucket.
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const uploadCover = async (file: File) => {
+    if (!selectedTask?.id || !currentTenant?.id) return;
+    if (!file.type.startsWith('image/')) return;
+    setUploadingCover(true);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `task-covers/${currentTenant.id}/${selectedTask.id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { errorLogger.error('cover upload', upErr); return; }
+      const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+      const next = `${urlData.publicUrl}?v=${Date.now()}`; // bust the cache after re-upload
+      setEditingTask(prev => ({ ...prev, cover_url: next as any }));
+      if (onQuickUpdate) await onQuickUpdate(selectedTask.id, { cover_url: next } as any);
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+  const removeCover = async () => {
+    if (!selectedTask?.id) return;
+    setEditingTask(prev => ({ ...prev, cover_url: null as any }));
+    if (onQuickUpdate) await onQuickUpdate(selectedTask.id, { cover_url: null } as any);
+  };
+
+  // Promise-returning image upload for the rich editor — uploads as an
+  // attachment AND returns the URL so TipTap can insert <img>.
+  const uploadEditorImage = async (file: File): Promise<string | null> => {
+    if (!selectedTask?.id || !currentTenant?.id) return null;
+    const ext = file.name.split('.').pop() || 'jpg';
+    const id = crypto.randomUUID();
+    const path = `task-attachments/${currentTenant.id}/${selectedTask.id}/${id}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) { errorLogger.error('inline image upload', upErr); return null; }
+    const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+    return urlData.publicUrl;
+  };
+
+  // Reorder attachments by drag — uses the same dataTransfer index trick
+  // we use elsewhere. Persists the new order via persistAttachments.
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const moveAttachment = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...attachments];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    persistAttachments(next);
+  };
 
   const handleCreateDoc = async () => {
     if (!selectedTask || creatingDoc) return;
@@ -286,7 +323,59 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
       }
     >
       {selectedTask && (
-        <div className="px-6 py-5">
+        <div>
+
+          {/* ─── Cover image (Notion banner) ─── */}
+          {(() => {
+            const cover = (editingTask.cover_url as any) ?? selectedTask.cover_url;
+            return (
+              <div className={`relative w-full ${cover ? 'h-[180px]' : 'h-0'} bg-zinc-100 dark:bg-zinc-800/40 group/cover transition-all`}>
+                {cover && (
+                  <img src={cover} alt="" className="w-full h-full object-cover" />
+                )}
+                {/* Hover toolbar — Add / Change / Remove */}
+                <div className={`absolute right-4 ${cover ? 'bottom-3' : 'top-3'} flex items-center gap-1.5 opacity-0 group-hover/cover:opacity-100 transition-opacity`}>
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadingCover}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white/90 dark:bg-zinc-900/90 text-zinc-800 dark:text-zinc-100 hover:bg-white dark:hover:bg-zinc-900 backdrop-blur shadow-sm flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {uploadingCover ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Image size={11} />}
+                    {cover ? 'Cambiar' : 'Add cover'}
+                  </button>
+                  {cover && (
+                    <button
+                      type="button"
+                      onClick={removeCover}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white/90 dark:bg-zinc-900/90 text-zinc-600 hover:text-rose-600 hover:bg-white shadow-sm backdrop-blur"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                {/* Persistent "Add cover" affordance when there's no cover */}
+                {!cover && (
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    className="absolute top-3 right-4 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"
+                  >
+                    <Icons.Image size={11} /> Add cover
+                  </button>
+                )}
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.currentTarget.value = ''; }}
+                />
+              </div>
+            );
+          })()}
+
+          <div className="px-6 py-5">
 
           {/* ─── Header: Complete pill + Title + meta ─── */}
           <div className="mb-6">
@@ -573,18 +662,15 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </div>
           </div>
 
-          {/* ─── Description (Notion-style: no label, big readable text, autosize) ─── */}
-          <div className="mb-6">
-            <textarea
-              value={editingTask.description || ''}
-              onChange={e => {
-                setEditingTask({ ...editingTask, description: e.target.value });
-                const ta = e.target as HTMLTextAreaElement;
-                ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 80) + 'px';
+          {/* ─── Description (Notion-style rich editor) ─── */}
+          <div className="mb-6" key={`desc-${selectedTask.id}`}>
+            <TaskRichEditor
+              html={(editingTask.description_html as any) ?? selectedTask.description_html ?? editingTask.description ?? selectedTask.description ?? ''}
+              onChange={({ html, text }) => {
+                setEditingTask(prev => ({ ...prev, description_html: html as any, description: text }));
               }}
-              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, 80) + 'px'; } }}
               placeholder="Empezá a escribir, o pegá una imagen…"
-              className="w-full px-1 py-2 -mx-1 bg-transparent border-0 outline-none text-[15px] leading-[1.6] text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 resize-none focus:bg-zinc-50/40 dark:focus:bg-zinc-800/20 rounded-md transition-colors"
+              onUploadImage={uploadEditorImage}
             />
           </div>
 
@@ -638,11 +724,17 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2 p-1">
-                  {attachments.map(att => (
-                    <div key={att.id} className="relative group/img aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                  {attachments.map((att, idx) => (
+                    <div key={att.id}
+                      draggable
+                      onDragStart={(e) => { setDraggingIdx(idx); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)); }}
+                      onDragEnd={() => setDraggingIdx(null)}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                      onDrop={(e) => { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/plain') || draggingIdx); if (!Number.isNaN(from)) moveAttachment(from, idx); }}
+                      className={`relative group/img aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 cursor-grab active:cursor-grabbing ${draggingIdx === idx ? 'opacity-40' : ''}`}>
                       <img src={att.url} alt={att.name || ''}
                         onClick={() => setLightboxUrl(att.url)}
-                        className="w-full h-full object-cover cursor-zoom-in transition-transform group-hover/img:scale-[1.02]" />
+                        className="w-full h-full object-cover transition-transform group-hover/img:scale-[1.02]" />
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); removeAttachment(att.id); }}
@@ -1029,6 +1121,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             </AnimatePresence>
           </div>
 
+          </div>
         </div>
       )}
       {openDocId && (

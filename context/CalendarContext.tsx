@@ -53,6 +53,8 @@ export interface CalendarTask {
   document_id?: string
   group_name?: string
   attachments?: TaskAttachment[]
+  cover_url?: string | null
+  description_html?: string | null
   created_at: string
   updated_at: string
   completed_at?: string | null
