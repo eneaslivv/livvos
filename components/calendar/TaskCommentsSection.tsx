@@ -1,4 +1,7 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useTenant } from '../../context/TenantContext';
+import { errorLogger } from '../../lib/errorLogger';
 import { Icons } from '../ui/Icons';
 import { useTaskComments, TaskComment } from '../../hooks/useTaskComments';
 import { useAuth } from '../../hooks/useAuth';
@@ -38,12 +41,47 @@ const groupByDate = (comments: TaskComment[]): Map<string, TaskComment[]> => {
 
 export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId, taskTitle, taskOwnerId, taskAssigneeId }) => {
   const { user } = useAuth();
+  const { currentTenant } = useTenant();
   const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId } : undefined, [taskTitle, taskOwnerId, taskAssigneeId]);
   const { comments, loading, addComment } = useTaskComments(taskId, taskInfo);
   const [activeTab, setActiveTab] = useState<'internal' | 'client'>('internal');
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Paste/drop/click an image → upload to tenant-assets/comment-attachments
+  // and insert the public URL into the comment input as plain text. The
+  // comment renderer below detects image URLs and renders them inline.
+  const uploadAndInsert = useCallback(async (file: File) => {
+    if (!currentTenant?.id || !file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) { alert('Imagen muy grande (máx 10MB)'); return; }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const id = crypto.randomUUID();
+      const path = `comment-attachments/${currentTenant.id}/${taskId}/${id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { errorLogger.error('comment image upload', upErr); return; }
+      const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+      // Insert the URL on its own line so the renderer picks it up cleanly.
+      setInputText(prev => (prev.trim() ? prev.replace(/\s*$/, '\n') : '') + urlData.publicUrl + '\n');
+    } finally {
+      setUploadingImage(false);
+    }
+  }, [currentTenant?.id, taskId]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) { e.preventDefault(); uploadAndInsert(f); return; }
+      }
+    }
+  }, [uploadAndInsert]);
 
   const filteredComments = useMemo(
     () => comments.filter(c => activeTab === 'internal' ? c.is_internal : !c.is_internal),
@@ -167,11 +205,11 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
                           {formatTime(comment.created_at)}
                         </span>
                       </div>
-                      <p className={`text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 whitespace-pre-wrap break-words ${
+                      <div className={`text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 break-words ${
                         activeTab === 'client' ? 'bg-blue-50/50 dark:bg-blue-900/10 rounded px-1.5 py-1 -mx-1.5' : ''
                       }`}>
-                        {comment.comment}
-                      </p>
+                        <CommentBody text={comment.comment} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -181,24 +219,54 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
         )}
       </div>
 
-      {/* Input */}
-      <div className="flex items-center gap-1.5">
+      {/* Input — textarea so multi-line + image previews work; Enter sends,
+          Shift+Enter adds a newline. Paste/drop/click an image to attach. */}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0];
+          if (f) uploadAndInsert(f);
+        }}
+        className={`flex items-end gap-1.5 p-1.5 border rounded-lg transition-all ${
+          activeTab === 'client'
+            ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 focus-within:border-blue-400'
+            : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 focus-within:border-blue-400'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingImage}
+          title="Adjuntar imagen (o pegá con ⌘V)"
+          className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-50"
+        >
+          {uploadingImage ? <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" /> : <Icons.Image size={14} />}
+        </button>
         <input
-          type="text"
-          placeholder={activeTab === 'client' ? 'Write a client-visible comment...' : 'Write an internal comment...'}
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndInsert(f); e.currentTarget.value = ''; }}
+        />
+        <textarea
+          placeholder={activeTab === 'client' ? 'Comentario para cliente — pegá imágenes con ⌘V' : 'Comentario interno — pegá imágenes con ⌘V'}
           value={inputText}
           onChange={e => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          className={`flex-1 px-3 py-1.5 border rounded-lg outline-none text-xs transition-all ${
+          onPaste={handlePaste}
+          rows={1}
+          className={`flex-1 px-2 py-1 bg-transparent border-0 outline-none text-xs resize-none max-h-32 ${
             activeTab === 'client'
-              ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 focus:border-blue-400 placeholder:text-blue-300 dark:placeholder:text-blue-700'
-              : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 focus:border-blue-400 placeholder:text-zinc-400'
+              ? 'placeholder:text-blue-300 dark:placeholder:text-blue-700'
+              : 'placeholder:text-zinc-400'
           } text-zinc-700 dark:text-zinc-300`}
         />
         <button
           onClick={handleSend}
           disabled={!inputText.trim() || sending}
-          className="px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[10px] font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-30 transition-all"
+          className="px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[10px] font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-30 transition-all"
         >
           {sending ? (
             <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -209,4 +277,25 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
       </div>
     </div>
   );
+};
+
+// Renders a comment body and inlines image URLs as <img>. Splits the text by
+// whitespace, detects URLs ending in image extensions, and renders them as
+// thumbnails (click → open full size in a new tab).
+const IMAGE_URL_RE = /^(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|svg|avif)(?:\?[^\s]*)?)$/i
+const CommentBody: React.FC<{ text: string }> = ({ text }) => {
+  const parts = text.split(/(\s+)/);
+  const out: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (IMAGE_URL_RE.test(part)) {
+      out.push(
+        <a key={i} href={part} target="_blank" rel="noreferrer noopener" className="block my-1.5 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 max-w-[260px]">
+          <img src={part} alt="" className="w-full h-auto block" />
+        </a>
+      );
+    } else {
+      out.push(<span key={i} className="whitespace-pre-wrap">{part}</span>);
+    }
+  });
+  return <>{out}</>;
 };
