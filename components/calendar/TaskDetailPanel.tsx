@@ -86,6 +86,45 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </label>
 );
 
+/**
+ * SoftSelect — wraps a native <select> but hides the OS chevron and overlays
+ * a clean Lucide one. Gives the property rows that consistent Apple-ish
+ * "rounded chip" feel instead of the heavy default form chevrons.
+ */
+const SoftSelect: React.FC<{
+  value: string | number;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+  className?: string;
+  /** When true, the chip stays width-by-content instead of stretching. */
+  compact?: boolean;
+}> = ({ value, onChange, children, className, compact }) => (
+  <div className={`relative inline-flex items-center group ${compact ? '' : 'w-full'}`}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`appearance-none bg-transparent border-0 outline-none cursor-pointer rounded-full px-2.5 py-1 pr-6 text-[13px] text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100/70 dark:hover:bg-zinc-700/40 focus:bg-zinc-100/70 dark:focus:bg-zinc-700/40 transition-colors ${compact ? '' : 'w-full'} ${className || ''}`}
+    >
+      {children}
+    </select>
+    <Icons.ChevronDown
+      size={12}
+      className="absolute right-2 pointer-events-none text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors"
+    />
+  </div>
+);
+
+/**
+ * SoftInput — same vibe as SoftSelect for date/time inputs. Hides the
+ * default browser indicator and applies the rounded-pill hover background.
+ */
+const SoftInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className, ...rest }) => (
+  <input
+    {...rest}
+    className={`bg-transparent border-0 outline-none cursor-pointer rounded-full px-2.5 py-1 text-[13px] text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100/70 dark:hover:bg-zinc-700/40 focus:bg-zinc-100/70 dark:focus:bg-zinc-700/40 transition-colors tabular-nums [&::-webkit-calendar-picker-indicator]:opacity-30 [&::-webkit-calendar-picker-indicator]:hover:opacity-70 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${className || ''}`}
+  />
+);
+
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   selectedTask,
   editingTask,
@@ -233,7 +272,9 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   };
 
   // Promise-returning image upload for the rich editor — uploads as an
-  // attachment AND returns the URL so TipTap can insert <img>.
+  // attachment AND returns the URL so TipTap can insert <img>. Also persists
+  // the description right after the image is inserted, so the URL doesn't
+  // get lost if the user closes the panel before clicking Save.
   const uploadEditorImage = async (file: File): Promise<string | null> => {
     if (!selectedTask?.id || !currentTenant?.id) return null;
     const ext = file.name.split('.').pop() || 'jpg';
@@ -244,6 +285,48 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
     return urlData.publicUrl;
   };
+
+  // ─── Description auto-save ──────────────────────────────────────────
+  // The description block now persists on Cmd/Ctrl+Enter, on blur, OR
+  // automatically 1.5s after the user stops typing — independent from the
+  // footer Save button. This is what gives the "yes it's saved" feeling.
+  const [descSaveHint, setDescSaveHint] = useState<string | null>(null);
+  const descTimerRef = useRef<number | null>(null);
+  const descSavedAtRef = useRef<number | null>(null);
+  // Reset hint when switching tasks so it doesn't bleed across panels.
+  useEffect(() => { setDescSaveHint(null); descSavedAtRef.current = null; }, [selectedTask?.id]);
+  // Tick the "Saved Xs ago" hint so it stays accurate while the panel is open.
+  useEffect(() => {
+    if (!descSavedAtRef.current) return;
+    const interval = window.setInterval(() => {
+      if (!descSavedAtRef.current) return;
+      const sec = Math.round((Date.now() - descSavedAtRef.current) / 1000);
+      setDescSaveHint(sec < 5 ? 'Saved' : sec < 60 ? `Saved ${sec}s ago` : `Saved ${Math.round(sec/60)}m ago`);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [descSaveHint]);
+
+  const commitDescription = useCallback(async ({ html, text }: { html: string; text: string }) => {
+    if (!selectedTask?.id || !onQuickUpdate) return;
+    // Skip when nothing actually changed — avoids a roundtrip + flash on blur.
+    const currentHtml = (editingTask.description_html as any) ?? selectedTask.description_html ?? '';
+    if (currentHtml === html) return;
+    setDescSaveHint('Saving…');
+    try {
+      await onQuickUpdate(selectedTask.id, { description_html: html as any, description: text } as any);
+      descSavedAtRef.current = Date.now();
+      setDescSaveHint('Saved');
+    } catch (err) {
+      errorLogger.warn('description save failed', err);
+      setDescSaveHint('Save failed');
+    }
+  }, [selectedTask?.id, selectedTask?.description_html, editingTask.description_html, onQuickUpdate]);
+
+  const scheduleDescriptionSave = useCallback((next: { html: string; text: string }) => {
+    if (descTimerRef.current) window.clearTimeout(descTimerRef.current);
+    descTimerRef.current = window.setTimeout(() => commitDescription(next), 1500);
+  }, [commitDescription]);
+  useEffect(() => () => { if (descTimerRef.current) window.clearTimeout(descTimerRef.current); }, []);
 
   // Reorder attachments by drag — uses the same dataTransfer index trick
   // we use elsewhere. Persists the new order via persistAttachments.
@@ -305,14 +388,14 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={onClose}
-                className="px-3.5 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="px-4 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={onSave}
                 disabled={savingTask}
-                className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all flex items-center gap-2 shadow-sm"
+                className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-full text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all flex items-center gap-2 shadow-sm"
               >
                 {savingTask ? <div className="w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" /> : <Icons.Check size={13} />}
                 {savingTask ? 'Saving' : 'Save'}
@@ -456,13 +539,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               their headers into ~6 rows of metadata. Inputs are minimal
               (no chrome until hover) so the eye lands on the description
               and the body of the task instead of these meta fields. */}
-          <div className="mb-6 -mx-2">
+          <div className="mb-6 -mx-2 rounded-2xl bg-zinc-50/40 dark:bg-zinc-800/20 p-1.5">
             {(() => {
-              const rowCls = 'grid grid-cols-[120px_1fr] items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors';
-              const labelCls = 'flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500';
-              const valueCls = 'text-[13px] text-zinc-800 dark:text-zinc-200';
-              const selectCls = `${valueCls} w-full bg-transparent border-0 outline-none cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-700/40 rounded-md px-1.5 py-1 -mx-1.5 -my-1`;
-              const inputCls = `${valueCls} bg-transparent border-0 outline-none cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-700/40 rounded-md px-1.5 py-1 -mx-1.5 -my-1 tabular-nums`;
+              // Apple-ish properties grid: each row is a perfectly aligned
+              // [icon + label] [control] pair. Controls use SoftSelect/SoftInput
+              // so the native form chevrons disappear and we render our own.
+              const rowCls = 'grid grid-cols-[120px_1fr] items-center gap-2 px-2.5 py-1 rounded-xl hover:bg-white dark:hover:bg-zinc-800/60 transition-colors';
+              const labelCls = 'flex items-center gap-1.5 text-[12px] font-medium text-zinc-500 dark:text-zinc-400';
               const statusOpts = [
                 { value: 'todo', label: 'To do', color: 'bg-zinc-400' },
                 { value: 'in-progress', label: 'In progress', color: 'bg-blue-500' },
@@ -481,54 +564,54 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 {/* Status */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Circle size={12} /> Status</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${currentStatus?.color}`} />
-                    <select value={editingTask.status || 'todo'}
-                      onChange={e => {
-                        const v = e.target.value as any;
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`w-2 h-2 rounded-full ${currentStatus?.color} shadow-sm shrink-0`} />
+                    <SoftSelect
+                      value={editingTask.status || 'todo'}
+                      onChange={(v) => {
                         const prev = editingTask.status;
-                        setEditingTask({ ...editingTask, status: v });
-                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { status: v, completed: v === 'done' })
+                        setEditingTask({ ...editingTask, status: v as any });
+                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { status: v as any, completed: v === 'done' })
                           ?.catch?.(() => setEditingTask(p => ({ ...p, status: prev })));
                       }}
-                      className={selectCls}>
+                    >
                       {statusOpts.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
+                    </SoftSelect>
                   </div>
                 </div>
 
                 {/* Priority */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Flag size={12} /> Priority</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${currentPriority?.color}`} />
-                    <select value={editingTask.priority || 'medium'}
-                      onChange={e => {
-                        const v = e.target.value as any;
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`w-2 h-2 rounded-full ${currentPriority?.color} shadow-sm shrink-0`} />
+                    <SoftSelect
+                      value={editingTask.priority || 'medium'}
+                      onChange={(v) => {
                         const prev = editingTask.priority;
-                        setEditingTask({ ...editingTask, priority: v });
-                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { priority: v })
+                        setEditingTask({ ...editingTask, priority: v as any });
+                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { priority: v as any })
                           ?.catch?.(() => setEditingTask(p => ({ ...p, priority: prev })));
                       }}
-                      className={selectCls}>
+                    >
                       {priorityOpts.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
+                    </SoftSelect>
                   </div>
                 </div>
 
                 {/* Date + Time + Duration on one row */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Calendar size={12} /> Date</span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <input type="date" value={editingTask.start_date || ''}
-                      onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })}
-                      className={inputCls} />
-                    <input type="time" value={editingTask.start_time || ''}
-                      onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
-                      className={inputCls} />
-                    <select value={editingTask.duration || 60}
-                      onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
-                      className={selectCls + ' w-auto'}>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <SoftInput type="date" value={editingTask.start_date || ''}
+                      onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })} />
+                    <SoftInput type="time" value={editingTask.start_time || ''}
+                      onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })} />
+                    <SoftSelect
+                      compact
+                      value={editingTask.duration || 60}
+                      onChange={(v) => setEditingTask({ ...editingTask, duration: parseInt(v) })}
+                    >
                       <option value="15">15m</option>
                       <option value="30">30m</option>
                       <option value="45">45m</option>
@@ -537,34 +620,35 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                       <option value="120">2h</option>
                       <option value="180">3h</option>
                       <option value="240">4h</option>
-                    </select>
+                    </SoftSelect>
                   </div>
                 </div>
 
                 {/* Project */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Briefcase size={12} /> Project</span>
-                  <select value={editingTask.project_id || ''}
-                    onChange={e => {
-                      const pid = e.target.value;
+                  <SoftSelect
+                    value={editingTask.project_id || ''}
+                    onChange={(pid) => {
                       const proj = projectOptions.find(p => p.id === pid);
                       setEditingTask({ ...editingTask, project_id: pid, client_id: proj?.client_id || editingTask.client_id || '' });
                     }}
-                    className={selectCls}>
+                  >
                     <option value="">— No project</option>
                     {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                  </select>
+                  </SoftSelect>
                 </div>
 
                 {/* Client */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Users size={12} /> Client</span>
-                  <select value={editingTask.client_id || ''}
-                    onChange={e => setEditingTask({ ...editingTask, client_id: e.target.value })}
-                    className={selectCls}>
+                  <SoftSelect
+                    value={editingTask.client_id || ''}
+                    onChange={(v) => setEditingTask({ ...editingTask, client_id: v })}
+                  >
                     <option value="">— No client</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  </SoftSelect>
                 </div>
 
                 {/* Assignees */}
@@ -587,9 +671,14 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               html={(editingTask.description_html as any) ?? selectedTask.description_html ?? editingTask.description ?? selectedTask.description ?? ''}
               onChange={({ html, text }) => {
                 setEditingTask(prev => ({ ...prev, description_html: html as any, description: text }));
+                // Debounced auto-save while typing — gives the user the
+                // "Saved" feeling without needing to press anything.
+                scheduleDescriptionSave({ html, text });
               }}
-              placeholder="Empezá a escribir, o pegá una imagen…"
+              placeholder="Empezá a escribir, o pegá una imagen…  (⌘+Enter para guardar)"
               onUploadImage={uploadEditorImage}
+              onCommit={commitDescription}
+              saveHint={descSaveHint}
             />
           </div>
 
@@ -604,7 +693,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
               <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
-                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.subtasks ? 'rotate-90' : ''}`} />
+                <Icons.ChevronDown size={12} className={`transition-transform duration-200 ${collapsed.subtasks ? '-rotate-90 opacity-50' : 'opacity-80'}`} />
                 <Icons.SquareCheck size={12} className="opacity-70" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Subtasks</span>
               </div>
@@ -692,13 +781,13 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 value={newSubtaskTitle}
                 onChange={e => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') onAddSubtask(); }}
-                className="flex-1 px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-all"
+                className="flex-1 px-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-full outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 transition-all"
               />
               {newSubtaskTitle.trim() && (
                 <button
                   onClick={onAddSubtask}
                   disabled={addingSubtask}
-                  className="px-3 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all"
+                  className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-full text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-all"
                 >
                   {addingSubtask ? '...' : 'Add'}
                 </button>
@@ -718,7 +807,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
               <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
-                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.dependencies ? 'rotate-90' : ''}`} />
+                <Icons.ChevronDown size={12} className={`transition-transform duration-200 ${collapsed.dependencies ? '-rotate-90 opacity-50' : 'opacity-80'}`} />
                 <Icons.Link size={12} className="opacity-70" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Dependency</span>
               </div>
@@ -735,7 +824,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             <select
               value={editingTask.blocked_by || ''}
               onChange={e => setEditingTask({ ...editingTask, blocked_by: e.target.value || undefined })}
-              className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all mt-1.5"
+              className="w-full px-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-0 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-all mt-1.5 appearance-none bg-no-repeat bg-[right_0.75rem_center] bg-[length:14px] bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] pr-10"
             >
               <option value="">No dependency</option>
               {(() => {
@@ -886,7 +975,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
               <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
-                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.documents ? 'rotate-90' : ''}`} />
+                <Icons.ChevronDown size={12} className={`transition-transform duration-200 ${collapsed.documents ? '-rotate-90 opacity-50' : 'opacity-80'}`} />
                 <Icons.Docs size={12} className="opacity-70" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Documents</span>
               </div>
@@ -953,7 +1042,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               className="flex items-center justify-between w-full py-2 px-2 -mx-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 group transition-colors"
             >
               <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
-                <Icons.ChevronRight size={11} className={`transition-transform ${!collapsed.comments ? 'rotate-90' : ''}`} />
+                <Icons.ChevronDown size={12} className={`transition-transform duration-200 ${collapsed.comments ? '-rotate-90 opacity-50' : 'opacity-80'}`} />
                 <Icons.Message size={12} className="opacity-70" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer">Comments</span>
               </div>

@@ -21,9 +21,13 @@ interface Props {
   placeholder?: string;
   /** Called whenever an image is pasted/dropped — return its hosted URL. */
   onUploadImage?: (file: File) => Promise<string | null>;
+  /** Called on Cmd/Ctrl+Enter or after debounce on blur. Returns save status. */
+  onCommit?: (next: { html: string; text: string }) => Promise<void> | void;
+  /** Hint shown below toolbar — "Saved 2s ago" / "Saving…" */
+  saveHint?: string | null;
 }
 
-export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, onUploadImage }) => {
+export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, onUploadImage, onCommit, saveHint }) => {
   // Keep a ref to the latest html prop so we don't fight with the editor's
   // internal state on every render (TipTap is the source of truth while
   // focused; the prop only matters when switching tasks).
@@ -54,6 +58,20 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
     editorProps: {
       attributes: {
         class: 'prose-sm max-w-none outline-none px-1 py-2 -mx-1 text-[15px] leading-[1.65] text-zinc-800 dark:text-zinc-200 min-h-[80px]',
+      },
+      handleKeyDown: (_, event) => {
+        // Cmd/Ctrl+Enter — explicit "I'm done" gesture. Triggers onCommit so
+        // the user gets feedback that the description was persisted, instead
+        // of having to click Save in the footer (which they may not even
+        // realize applies to the description block too).
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          if (onCommit && editor) {
+            onCommit({ html: editor.getHTML(), text: editor.getText() });
+          }
+          return true;
+        }
+        return false;
       },
       handlePaste: (_, event) => {
         // Image-from-clipboard path. Defers to onUploadImage and inserts an
@@ -122,23 +140,44 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
   );
 
   return (
-    <div className="relative">
-      {/* Persistent micro-toolbar above the editor — keeps Notion-vibe but
-          gives a discoverable formatting surface. */}
-      <div className="flex items-center gap-0.5 mb-1.5 opacity-60 hover:opacity-100 transition-opacity">
-        {btn('B', () => editor.chain().focus().toggleBold().run(), isActive('bold'), 'Bold (⌘B)')}
-        {btn(<span className="italic">i</span>, () => editor.chain().focus().toggleItalic().run(), isActive('italic'), 'Italic (⌘I)')}
-        {btn(<span className="underline">U</span>, () => editor.chain().focus().toggleUnderline().run(), isActive('underline'), 'Underline (⌘U)')}
-        <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
-        {btn('H1', () => editor.chain().focus().toggleHeading({ level: 1 }).run(), isActive('heading', { level: 1 }), 'Heading 1')}
-        {btn('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), isActive('heading', { level: 2 }), 'Heading 2')}
-        <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
-        {btn(<Icons.List size={11} />, () => editor.chain().focus().toggleBulletList().run(), isActive('bulletList'), 'Bulleted list')}
-        {btn(<Icons.Hash size={11} />, () => editor.chain().focus().toggleOrderedList().run(), isActive('orderedList'), 'Numbered list')}
-        {btn(<Icons.SquareCheck size={11} />, () => editor.chain().focus().toggleTaskList().run(), isActive('taskList'), 'Checklist')}
-        <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
-        {btn(<Icons.Quote size={11} />, () => editor.chain().focus().toggleBlockquote().run(), isActive('blockquote'), 'Quote')}
-        {btn(<Icons.Code size={11} />, () => editor.chain().focus().toggleCodeBlock().run(), isActive('codeBlock'), 'Code block')}
+    <div
+      className="relative"
+      onBlur={(e) => {
+        // Auto-commit when the editor loses focus — but only if the focus
+        // isn't moving to one of the toolbar buttons. Without this, every
+        // bold/italic click would fire a save.
+        if (!onCommit) return;
+        const next = e.relatedTarget as HTMLElement | null;
+        if (next && (e.currentTarget as HTMLElement).contains(next)) return;
+        onCommit({ html: editor.getHTML(), text: editor.getText() });
+      }}
+    >
+      {/* Toolbar row — formatting on the left, save indicator on the right.
+          Same micro-toolbar as before, just paired with a tiny status hint
+          so the user knows when the editor wrote back to the DB. */}
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-0.5 opacity-60 hover:opacity-100 transition-opacity">
+          {btn('B', () => editor.chain().focus().toggleBold().run(), isActive('bold'), 'Bold (⌘B)')}
+          {btn(<span className="italic">i</span>, () => editor.chain().focus().toggleItalic().run(), isActive('italic'), 'Italic (⌘I)')}
+          {btn(<span className="underline">U</span>, () => editor.chain().focus().toggleUnderline().run(), isActive('underline'), 'Underline (⌘U)')}
+          <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+          {btn('H1', () => editor.chain().focus().toggleHeading({ level: 1 }).run(), isActive('heading', { level: 1 }), 'Heading 1')}
+          {btn('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), isActive('heading', { level: 2 }), 'Heading 2')}
+          <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+          {btn(<Icons.List size={11} />, () => editor.chain().focus().toggleBulletList().run(), isActive('bulletList'), 'Bulleted list')}
+          {btn(<Icons.Hash size={11} />, () => editor.chain().focus().toggleOrderedList().run(), isActive('orderedList'), 'Numbered list')}
+          {btn(<Icons.SquareCheck size={11} />, () => editor.chain().focus().toggleTaskList().run(), isActive('taskList'), 'Checklist')}
+          <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+          {btn(<Icons.Quote size={11} />, () => editor.chain().focus().toggleBlockquote().run(), isActive('blockquote'), 'Quote')}
+          {btn(<Icons.Code size={11} />, () => editor.chain().focus().toggleCodeBlock().run(), isActive('codeBlock'), 'Code block')}
+        </div>
+        {saveHint && (
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1 select-none">
+            {saveHint === 'Saving…' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
+            {saveHint.startsWith('Saved') && <Icons.Check size={10} className="text-emerald-500" />}
+            {saveHint}
+          </span>
+        )}
       </div>
       <EditorContent editor={editor} />
     </div>
