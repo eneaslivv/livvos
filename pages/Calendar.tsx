@@ -1029,6 +1029,24 @@ export const Calendar: React.FC = () => {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // Apply the active TeamFilterBar filter to ANY task list. Used by every
+  // view (Schedule, Board, List) so the filter actually affects all of
+  // them — until this was extracted, only Schedule respected the filter
+  // and Board/List showed every task in the tenant regardless.
+  const applyTaskFilter = React.useCallback((list: CalendarTask[]) => {
+    if (taskFilter === 'all') return list;
+    if (taskFilter === 'me') return list.filter(t => t.assignee_id === user?.id || (!t.assignee_id && t.owner_id === user?.id));
+    if (taskFilter.startsWith('project:')) {
+      const id = taskFilter.slice(8);
+      return list.filter(t => t.project_id === id);
+    }
+    if (taskFilter.startsWith('client:')) {
+      const id = taskFilter.slice(7);
+      return list.filter(t => t.client_id === id);
+    }
+    return list.filter(t => t.assignee_id === taskFilter);
+  }, [taskFilter, user?.id]);
+
   const getDayTasks = (date: string) => {
     if (calendarMode === 'content') return [];
     // Exclude subtasks from calendar views (they show under their parent)
@@ -1049,19 +1067,7 @@ export const Calendar: React.FC = () => {
       allTasks = [...allTasks, ...overdue.filter(t => !existingIds.has(t.id))];
     }
 
-    if (taskFilter === 'all') return allTasks;
-    if (taskFilter === 'me') return allTasks.filter(t => t.assignee_id === user?.id || (!t.assignee_id && t.owner_id === user?.id));
-    // Project / client filters use prefixed format so the same string state
-    // can hold "all" | "me" | <userId> | "project:<id>" | "client:<id>".
-    if (taskFilter.startsWith('project:')) {
-      const id = taskFilter.slice(8);
-      return allTasks.filter(t => t.project_id === id);
-    }
-    if (taskFilter.startsWith('client:')) {
-      const id = taskFilter.slice(7);
-      return allTasks.filter(t => t.client_id === id);
-    }
-    return allTasks.filter(t => t.assignee_id === taskFilter);
+    return applyTaskFilter(allTasks);
   };
 
   // Group tasks by phase for collapsed view
@@ -1497,30 +1503,50 @@ export const Calendar: React.FC = () => {
         />
       )}
 
-      {/* Board view — Notion/ClickUp-style kanban grouped by status. */}
+      {/* Board view — Notion/ClickUp-style kanban grouped by status.
+          Honors the TeamFilterBar selection (member / project / client)
+          AND skips subtasks (they're shown under their parent in the
+          schedule view but here would be redundant). */}
       {view === 'board' && calendarMode === 'schedule' && (
         <div className="h-[calc(100vh-260px)] min-h-[480px]">
           <TaskKanbanBoard
-            tasks={tasks}
+            tasks={applyTaskFilter(tasks.filter(t => !t.parent_task_id))}
             onTaskClick={handleOpenTaskDetail}
             onStatusChange={async (id, status) => { await updateTask(id, { status, completed: status === 'done' }); }}
             onAddTask={(status) => {
               setShowNewTaskForm(true);
               // Pre-set status on the form so the new task lands in the right column.
               setNewTaskData(prev => ({ ...prev, status: status as any }));
+              // Pre-fill the relevant filter into the new task too — if you're
+              // filtering by a project or assignee, you almost certainly want
+              // the task you're creating to inherit it.
+              if (taskFilter === 'me') {
+                setNewTaskData(prev => ({ ...prev, assignee_id: user?.id || '' as any }));
+              } else if (taskFilter.startsWith('project:')) {
+                setNewTaskData(prev => ({ ...prev, project_id: taskFilter.slice(8) as any }));
+              } else if (taskFilter.startsWith('client:')) {
+                setNewTaskData(prev => ({ ...prev, client_id: taskFilter.slice(7) as any }));
+              } else if (taskFilter !== 'all') {
+                setNewTaskData(prev => ({ ...prev, assignee_id: taskFilter as any }));
+              }
             }}
           />
         </div>
       )}
 
       {/* List view — flat list grouped by date. Reuses the SelectedDatePanel
-          which already renders today's items; here we render every task. */}
-      {view === 'list' && calendarMode === 'schedule' && (
+          which already renders today's items; here we render every task.
+          Honors the TeamFilterBar selection like the Board view. */}
+      {view === 'list' && calendarMode === 'schedule' && (() => {
+        const visible = applyTaskFilter(tasks.filter(t => !t.parent_task_id));
+        return (
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800/60">
-          {tasks.length === 0 ? (
-            <div className="p-8 text-center text-xs text-zinc-400">No hay tareas todavía.</div>
+          {visible.length === 0 ? (
+            <div className="p-8 text-center text-xs text-zinc-400">
+              {tasks.length === 0 ? 'No hay tareas todavía.' : 'Ninguna tarea coincide con el filtro actual.'}
+            </div>
           ) : (
-            [...tasks]
+            [...visible]
               .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
               .map(t => (
                 <button
@@ -1545,7 +1571,8 @@ export const Calendar: React.FC = () => {
               ))
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Selected Date Panel + Stats */}
       <SelectedDatePanel
