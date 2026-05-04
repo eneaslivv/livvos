@@ -351,7 +351,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   const { members } = useTeam();
   const { user: currentUser } = useAuth();
   const { currentTenant } = useTenant();
-  const { updateTask } = useCalendar();
+  const { updateTask, createTask } = useCalendar();
   const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense, deleteExpense, timeEntries, createTimeEntry, deleteTimeEntry } = useFinance();
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
@@ -1263,9 +1263,14 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
 
       <div className="flex flex-1 gap-4 overflow-hidden">
         {/* ════════════════════════════════════════ */}
-        {/*  SIDEBAR (hidden on mobile when project selected) */}
+        {/*  SIDEBAR — hidden whenever a project is selected (mobile AND
+             desktop). The main app sidebar (Home/Activity/Calendar/Clients
+             tree) handles cross-section nav, so a second project list here
+             is redundant and steals horizontal real estate from the
+             project detail. The back chip in the detail panel header
+             brings this view back when needed. */}
         {/* ════════════════════════════════════════ */}
-        {(!isMobile || !selectedId) && (
+        {!selectedId && (
         <div className={`${isMobile ? 'w-full' : 'w-[280px] shrink-0'} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden`}>
           {/* Sidebar header */}
           <div className="px-4 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
@@ -1451,7 +1456,7 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
         {/* ════════════════════════════════════════ */}
         {(!isMobile || selectedId) && (
         <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden">
-          {/* Mobile back button */}
+          {/* Mobile back button — chunkier on touch */}
           {isMobile && selectedId && (
             <button
               onClick={() => setSelectedId(null)}
@@ -1464,10 +1469,19 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
           {/* Header */}
           <div className="px-4 sm:px-5 md:px-6 py-3 sm:py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
             <div className="min-w-0">
-              {/* Breadcrumb: Clients / <Client> / <Project> */}
+              {/* Breadcrumb: ← Projects · <Client> · <Project>
+                  The "Projects" chip is now a click target on desktop too —
+                  brings back the project list view by clearing the selection. */}
               {selectedProject && (
                 <nav className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 mb-1" aria-label="Breadcrumb">
-                  <span>Clients</span>
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 -ml-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+                    title="Back to all projects"
+                  >
+                    <Icons.ChevronLeft size={10} />
+                    Projects
+                  </button>
                   <Icons.ChevronRight size={10} />
                   <span className="text-zinc-500 dark:text-zinc-400 truncate max-w-[140px]">
                     {selectedClient?.name || 'Internal · Livv'}
@@ -1757,33 +1771,66 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                 {/* ── Tasks Tab ── */}
                 {activeTab === 'tasks' && selectedProject && (
                   <>
-                    {/* View switcher — list (existing) or kanban board */}
-                    <div className="flex items-center justify-end mb-3">
-                      <div className="inline-flex items-center gap-0.5 p-0.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
-                        <button
-                          onClick={() => setTasksView('list')}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                            tasksView === 'list'
-                              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                          }`}>List</button>
-                        <button
-                          onClick={() => setTasksView('board')}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                            tasksView === 'board'
-                              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-                          }`}>Board</button>
-                      </div>
+                    {/* View switcher — minimal text toggle on the right.
+                        Sits in the same baseline as the page content so it
+                        doesn't add chrome; click flips between List (vertical
+                        groups by phase) and Board (status kanban). The
+                        dot beside the active option is the only "selected"
+                        treatment — no pill, no shadow. */}
+                    <div className="flex items-center justify-end gap-3 mb-3 -mt-1">
+                      <button
+                        onClick={() => setTasksView('list')}
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-medium transition-colors ${
+                          tasksView === 'list'
+                            ? 'text-zinc-900 dark:text-zinc-100'
+                            : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                        }`}
+                      >
+                        {tasksView === 'list' && <span className="w-1 h-1 rounded-full bg-zinc-900 dark:bg-zinc-100" />}
+                        <Icons.List size={11} />
+                        List
+                      </button>
+                      <span className="text-zinc-200 dark:text-zinc-700">·</span>
+                      <button
+                        onClick={() => setTasksView('board')}
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-medium transition-colors ${
+                          tasksView === 'board'
+                            ? 'text-zinc-900 dark:text-zinc-100'
+                            : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                        }`}
+                      >
+                        {tasksView === 'board' && <span className="w-1 h-1 rounded-full bg-zinc-900 dark:bg-zinc-100" />}
+                        <Icons.Layers size={11} />
+                        Board
+                      </button>
                     </div>
 
                     {tasksView === 'board' ? (
-                      <div className="h-[calc(100vh-320px)] min-h-[480px]">
+                      <div className="h-[calc(100vh-300px)] min-h-[520px]">
                         <TaskKanbanBoard
-                          tasks={projectTasks as any}
+                          tasks={projectTasks.filter(t => !t.parent_task_id) as any}
                           onTaskClick={(t) => setExpandedTaskId(t.id)}
                           onStatusChange={async (id, status) => {
                             await updateTask(id, { status, completed: status === 'done' } as any);
+                          }}
+                          onAddTask={(status) => {
+                            // Pre-fill: any task added via "+" inside a kanban
+                            // column lands in this project AND adopts the
+                            // column's status, so the user doesn't have to
+                            // re-pick either after the modal opens.
+                            setExpandedTaskId(null);
+                            setNewTaskTitle({ ...newTaskTitle, [-1]: '' });
+                            const title = window.prompt(`New ${status === 'done' ? 'completed' : status === 'in-progress' ? 'in-progress' : status === 'cancelled' ? 'cancelled' : 'pending'} task:`);
+                            if (!title?.trim()) return;
+                            createTask({
+                              title: title.trim(),
+                              owner_id: '',
+                              project_id: selectedProject.id,
+                              client_id: selectedProject.client_id || undefined,
+                              status: status as any,
+                              completed: status === 'done',
+                              priority: 'medium',
+                            } as any);
                           }}
                         />
                       </div>
