@@ -13,6 +13,7 @@ import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import { FinanceAssistant } from '../components/finance/FinanceAssistant';
 import { FinanceChat } from '../components/finance/FinanceChat';
 import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
+import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
 import {
   useFinance,
   type IncomeEntry,
@@ -1217,8 +1218,42 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════ INGRESOS ═══════════════ */}
+      {/* ═══════════════ INGRESOS (Livv editorial) ═══════════════ */}
       {activeTab === 'ingresos' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <LivvIncomeTab
+            incomes={incomes}
+            filteredIncomes={filteredIncomes}
+            totalPaidIncome={totalPaidIncome}
+            totalPendingIncome={totalPendingIncome}
+            totalOverdueIncome={totalOverdueIncome}
+            overdueInstallmentCount={overdueInstallmentCount}
+            incomeSearch={incomeSearch}
+            setIncomeSearch={setIncomeSearch}
+            incomeStatusFilter={incomeStatusFilter}
+            setIncomeStatusFilter={setIncomeStatusFilter}
+            incomeDateFrom={incomeDateFrom}
+            setIncomeDateFrom={setIncomeDateFrom}
+            incomeDateTo={incomeDateTo}
+            setIncomeDateTo={setIncomeDateTo}
+            expandedIncome={expandedIncome}
+            setExpandedIncome={setExpandedIncome}
+            incomesLoading={incomesLoading}
+            incomesTimedOut={incomesTimedOut}
+            projectTasksCache={projectTasksCache}
+            fetchProjectTasks={fetchProjectTasks}
+            openEditIncome={openEditIncome}
+            handleDeleteIncome={handleDeleteIncome}
+            handleMarkInstallmentPaid={handleMarkInstallmentPaid}
+            updateInstallment={updateInstallment}
+            openIncomeForm={openIncomeForm}
+            canCreate={hasPermission('finance', 'create')}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════ LEGACY INGRESOS ═══════════════ */}
+      {false && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1550,8 +1585,37 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════ GASTOS ═══════════════ */}
+      {/* ═══════════════ GASTOS (Livv editorial) ═══════════════ */}
       {activeTab === 'gastos' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <LivvExpenseTab
+            expenses={expenses}
+            filteredExpenses={filteredExpenses}
+            expenseSearch={expenseSearch}
+            setExpenseSearch={setExpenseSearch}
+            expenseCategoryFilter={expenseCategoryFilter}
+            setExpenseCategoryFilter={setExpenseCategoryFilter}
+            expenseViewMonth={expenseViewMonth}
+            setExpenseViewMonth={setExpenseViewMonth}
+            setExpenseDateFrom={setExpenseDateFrom}
+            setExpenseDateTo={setExpenseDateTo}
+            expenseCustomDateRange={expenseCustomDateRange}
+            setExpenseCustomDateRange={setExpenseCustomDateRange}
+            expensesLoading={expensesLoading}
+            expensesTimedOut={expensesTimedOut}
+            expenseCategories={EXPENSE_CATEGORIES}
+            monthNames={MONTH_NAMES}
+            getMonthBounds={getMonthBounds}
+            openExpenseForm={openExpenseForm}
+            openEditExpense={openEditExpense}
+            handleDeleteExpense={handleDeleteExpense}
+            canCreate={hasPermission('finance', 'create')}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════ LEGACY GASTOS ═══════════════ */}
+      {false && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip — reflects filtered data */}
           {(() => {
@@ -1736,8 +1800,34 @@ export const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════ BUDGETS ═══════════════ */}
+      {/* ═══════════════ BUDGETS (Livv editorial) ═══════════════ */}
       {activeTab === 'budgets' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <LivvBudgetsTab
+            budgets={budgets}
+            filteredBudgets={filteredBudgets}
+            budgetsLoading={budgetsLoading}
+            totalAllocated={totalAllocated}
+            totalBudgetSpent={totalBudgetSpent}
+            budgetSearch={budgetSearch}
+            setBudgetSearch={setBudgetSearch}
+            budgetCategoryFilter={budgetCategoryFilter}
+            setBudgetCategoryFilter={setBudgetCategoryFilter}
+            budgetCategories={budgetCategories}
+            expandedBudgetId={expandedBudgetId}
+            setExpandedBudgetId={setExpandedBudgetId}
+            budgetSpending={budgetSpending}
+            expenses={expenses}
+            openBudgetForm={openBudgetForm}
+            openEditBudget={openEditBudget}
+            handleDeleteBudget={handleDeleteBudget}
+            canCreate={hasPermission('finance', 'create')}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════ LEGACY BUDGETS ═══════════════ */}
+      {false && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
