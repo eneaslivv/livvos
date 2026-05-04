@@ -107,6 +107,26 @@ export const AiAdvisor: React.FC = () => {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
+
+  // Hide the floating AI pill when any other modal/slide-panel is open. We
+  // detect this by watching document.body's overflow style — every modal in
+  // the app locks scroll via `body { overflow: hidden }` when it opens.
+  // MutationObserver picks up the change without polling and reverts when
+  // the modal closes.
+  const [otherModalOpen, setOtherModalOpen] = useState(false);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const update = () => {
+      const overflow = document.body.style.overflow;
+      // While the AiAdvisor itself is open it also locks scroll; ignore that
+      // case so the panel's own animation doesn't trigger our hide.
+      setOtherModalOpen(overflow === 'hidden' && !isOpen);
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style', 'class'] });
+    return () => observer.disconnect();
+  }, [isOpen]);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -269,9 +289,14 @@ export const AiAdvisor: React.FC = () => {
 
   return (
     <>
-      {/* ─── Floating Pill Button ─── */}
+      {/* ─── Floating Pill Button ─── (hidden while other modals are open) */}
+      <AnimatePresence>
+      {!otherModalOpen && (
       <motion.button
         onClick={() => setIsOpen(true)}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
         whileHover={{ scale: 1.03, y: -1 }}
         whileTap={{ scale: 0.97 }}
         className="fixed bottom-5 right-5 z-[55] group flex items-center gap-2 pl-2.5 pr-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-full shadow-lg shadow-black/15 dark:shadow-black/30 hover:shadow-xl transition-shadow duration-300"
@@ -285,6 +310,8 @@ export const AiAdvisor: React.FC = () => {
         </div>
         <span className="text-[11px] font-semibold tracking-wide">AI</span>
       </motion.button>
+      )}
+      </AnimatePresence>
 
       {/* ─── Slide Panel ─── */}
       {createPortal(

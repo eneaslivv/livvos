@@ -324,56 +324,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     >
       {selectedTask && (
         <div>
-
-          {/* ─── Cover image (Notion banner) ─── */}
-          {(() => {
-            const cover = (editingTask.cover_url as any) ?? selectedTask.cover_url;
-            return (
-              <div className={`relative w-full ${cover ? 'h-[180px]' : 'h-0'} bg-zinc-100 dark:bg-zinc-800/40 group/cover transition-all`}>
-                {cover && (
-                  <img src={cover} alt="" className="w-full h-full object-cover" />
-                )}
-                {/* Hover toolbar — Add / Change / Remove */}
-                <div className={`absolute right-4 ${cover ? 'bottom-3' : 'top-3'} flex items-center gap-1.5 opacity-0 group-hover/cover:opacity-100 transition-opacity`}>
-                  <button
-                    type="button"
-                    onClick={() => coverInputRef.current?.click()}
-                    disabled={uploadingCover}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white/90 dark:bg-zinc-900/90 text-zinc-800 dark:text-zinc-100 hover:bg-white dark:hover:bg-zinc-900 backdrop-blur shadow-sm flex items-center gap-1 disabled:opacity-50"
-                  >
-                    {uploadingCover ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Image size={11} />}
-                    {cover ? 'Cambiar' : 'Add cover'}
-                  </button>
-                  {cover && (
-                    <button
-                      type="button"
-                      onClick={removeCover}
-                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white/90 dark:bg-zinc-900/90 text-zinc-600 hover:text-rose-600 hover:bg-white shadow-sm backdrop-blur"
-                    >
-                      Quitar
-                    </button>
-                  )}
-                </div>
-                {/* Persistent "Add cover" affordance when there's no cover */}
-                {!cover && (
-                  <button
-                    type="button"
-                    onClick={() => coverInputRef.current?.click()}
-                    className="absolute top-3 right-4 px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"
-                  >
-                    <Icons.Image size={11} /> Add cover
-                  </button>
-                )}
-                <input
-                  ref={coverInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.currentTarget.value = ''; }}
-                />
-              </div>
-            );
-          })()}
+          {/* Cover banner removed — images live inline in the description
+              now (paste or drop them right into the editor). */}
 
           <div className="px-6 py-5">
 
@@ -498,168 +450,135 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             );
           })()}
 
-          {/* ─── Track: Priority + Status ─── */}
-          <SectionHeader icon={<Icons.Flag size={12} />} title="Track" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 mb-6">
-            <div>
-              <FieldLabel>Priority</FieldLabel>
-              <div className="flex gap-1">
-                {([
-                  { value: 'low', label: 'Low', dot: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/10', activeText: 'text-emerald-700 dark:text-emerald-400', activeRing: 'ring-emerald-200 dark:ring-emerald-500/30' },
-                  { value: 'medium', label: 'Medium', dot: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/10', activeText: 'text-blue-700 dark:text-blue-400', activeRing: 'ring-blue-200 dark:ring-blue-500/30' },
-                  { value: 'high', label: 'High', dot: 'bg-amber-500', activeBg: 'bg-amber-50 dark:bg-amber-500/10', activeText: 'text-amber-700 dark:text-amber-400', activeRing: 'ring-amber-200 dark:ring-amber-500/30' },
-                  { value: 'urgent', label: 'Urgent', dot: 'bg-red-500', activeBg: 'bg-red-50 dark:bg-red-500/10', activeText: 'text-red-700 dark:text-red-400', activeRing: 'ring-red-200 dark:ring-red-500/30' },
-                ] as const).map(p => {
-                  const active = editingTask.priority === p.value;
-                  return (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => {
-                        const prevPriority = editingTask.priority;
-                        setEditingTask({ ...editingTask, priority: p.value });
-                        if (selectedTask && onQuickUpdate) {
-                          onQuickUpdate(selectedTask.id, { priority: p.value })
-                            ?.catch?.(() => setEditingTask(prev => ({ ...prev, priority: prevPriority })));
-                        }
+          {/* ─── Compact properties (Notion-style) ─── */}
+          {/* Single grid where each row = [icon + label] [control]. Tightens
+              what used to be 3 sections (Track / Schedule / Context) plus
+              their headers into ~6 rows of metadata. Inputs are minimal
+              (no chrome until hover) so the eye lands on the description
+              and the body of the task instead of these meta fields. */}
+          <div className="mb-6 -mx-2">
+            {(() => {
+              const rowCls = 'grid grid-cols-[120px_1fr] items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors';
+              const labelCls = 'flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500';
+              const valueCls = 'text-[13px] text-zinc-800 dark:text-zinc-200';
+              const selectCls = `${valueCls} w-full bg-transparent border-0 outline-none cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-700/40 rounded-md px-1.5 py-1 -mx-1.5 -my-1`;
+              const inputCls = `${valueCls} bg-transparent border-0 outline-none cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-700/40 rounded-md px-1.5 py-1 -mx-1.5 -my-1 tabular-nums`;
+              const statusOpts = [
+                { value: 'todo', label: 'To do', color: 'bg-zinc-400' },
+                { value: 'in-progress', label: 'In progress', color: 'bg-blue-500' },
+                { value: 'done', label: 'Done', color: 'bg-emerald-500' },
+                { value: 'cancelled', label: 'Cancelled', color: 'bg-red-400' },
+              ] as const;
+              const priorityOpts = [
+                { value: 'low', label: 'Low', color: 'bg-emerald-500' },
+                { value: 'medium', label: 'Medium', color: 'bg-blue-500' },
+                { value: 'high', label: 'High', color: 'bg-amber-500' },
+                { value: 'urgent', label: 'Urgent', color: 'bg-red-500' },
+              ] as const;
+              const currentStatus = statusOpts.find(s => s.value === (editingTask.status || 'todo'));
+              const currentPriority = priorityOpts.find(p => p.value === (editingTask.priority || 'medium'));
+              return <>
+                {/* Status */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.Circle size={12} /> Status</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${currentStatus?.color}`} />
+                    <select value={editingTask.status || 'todo'}
+                      onChange={e => {
+                        const v = e.target.value as any;
+                        const prev = editingTask.status;
+                        setEditingTask({ ...editingTask, status: v });
+                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { status: v, completed: v === 'done' })
+                          ?.catch?.(() => setEditingTask(p => ({ ...p, status: prev })));
                       }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ring-1 ${
-                        active
-                          ? `${p.activeBg} ${p.activeText} ${p.activeRing}`
-                          : 'ring-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                      className={selectCls}>
+                      {statusOpts.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            <div>
-              <FieldLabel>Status</FieldLabel>
-              <div className="flex gap-1">
-                {([
-                  { value: 'todo', label: 'To do', dot: 'bg-zinc-400', activeBg: 'bg-zinc-100 dark:bg-zinc-800', activeText: 'text-zinc-700 dark:text-zinc-200', activeRing: 'ring-zinc-300 dark:ring-zinc-600' },
-                  { value: 'in-progress', label: 'In progress', dot: 'bg-blue-500', activeBg: 'bg-blue-50 dark:bg-blue-500/10', activeText: 'text-blue-700 dark:text-blue-400', activeRing: 'ring-blue-200 dark:ring-blue-500/30' },
-                  { value: 'done', label: 'Done', dot: 'bg-emerald-500', activeBg: 'bg-emerald-50 dark:bg-emerald-500/10', activeText: 'text-emerald-700 dark:text-emerald-400', activeRing: 'ring-emerald-200 dark:ring-emerald-500/30' },
-                  { value: 'cancelled', label: 'Cancelled', dot: 'bg-red-400', activeBg: 'bg-red-50 dark:bg-red-500/10', activeText: 'text-red-600 dark:text-red-400', activeRing: 'ring-red-200 dark:ring-red-500/30' },
-                ] as const).map(s => {
-                  const active = editingTask.status === s.value;
-                  return (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => {
-                        const prevStatus = editingTask.status;
-                        setEditingTask({ ...editingTask, status: s.value });
-                        if (selectedTask && onQuickUpdate) {
-                          const completed = s.value === 'done';
-                          onQuickUpdate(selectedTask.id, { status: s.value, completed })
-                            ?.catch?.(() => setEditingTask(prev => ({ ...prev, status: prevStatus })));
-                        }
+                {/* Priority */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.Flag size={12} /> Priority</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${currentPriority?.color}`} />
+                    <select value={editingTask.priority || 'medium'}
+                      onChange={e => {
+                        const v = e.target.value as any;
+                        const prev = editingTask.priority;
+                        setEditingTask({ ...editingTask, priority: v });
+                        if (selectedTask && onQuickUpdate) onQuickUpdate(selectedTask.id, { priority: v })
+                          ?.catch?.(() => setEditingTask(p => ({ ...p, priority: prev })));
                       }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ring-1 ${
-                        active
-                          ? `${s.activeBg} ${s.activeText} ${s.activeRing}`
-                          : 'ring-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+                      className={selectCls}>
+                      {priorityOpts.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-          {/* ─── Schedule: Date + Time + Duration ─── */}
-          <SectionHeader icon={<Icons.Calendar size={12} />} title="Schedule" />
-          <div className="grid grid-cols-3 gap-2 mb-6">
-            <div>
-              <FieldLabel>Date</FieldLabel>
-              <input
-                type="date"
-                value={editingTask.start_date || ''}
-                onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors tabular-nums"
-              />
-            </div>
-            <div>
-              <FieldLabel>Time</FieldLabel>
-              <input
-                type="time"
-                value={editingTask.start_time || ''}
-                onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors tabular-nums"
-              />
-            </div>
-            <div>
-              <FieldLabel>Duration</FieldLabel>
-              <select
-                value={editingTask.duration || 60}
-                onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
-              >
-                <option value="15">15 min</option>
-                <option value="30">30 min</option>
-                <option value="45">45 min</option>
-                <option value="60">1 hour</option>
-                <option value="90">1.5 hours</option>
-                <option value="120">2 hours</option>
-                <option value="180">3 hours</option>
-                <option value="240">4 hours</option>
-              </select>
-            </div>
-          </div>
+                {/* Date + Time + Duration on one row */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.Calendar size={12} /> Date</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input type="date" value={editingTask.start_date || ''}
+                      onChange={e => setEditingTask({ ...editingTask, start_date: e.target.value })}
+                      className={inputCls} />
+                    <input type="time" value={editingTask.start_time || ''}
+                      onChange={e => setEditingTask({ ...editingTask, start_time: e.target.value })}
+                      className={inputCls} />
+                    <select value={editingTask.duration || 60}
+                      onChange={e => setEditingTask({ ...editingTask, duration: parseInt(e.target.value) })}
+                      className={selectCls + ' w-auto'}>
+                      <option value="15">15m</option>
+                      <option value="30">30m</option>
+                      <option value="45">45m</option>
+                      <option value="60">1h</option>
+                      <option value="90">1.5h</option>
+                      <option value="120">2h</option>
+                      <option value="180">3h</option>
+                      <option value="240">4h</option>
+                    </select>
+                  </div>
+                </div>
 
-          {/* ─── Context: Project + Client + Assignees ─── */}
-          <SectionHeader icon={<Icons.Briefcase size={12} />} title="Context" />
-          <div className="space-y-3 mb-6">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <FieldLabel>Project</FieldLabel>
-                <select
-                  value={editingTask.project_id || ''}
-                  onChange={e => {
-                    const pid = e.target.value;
-                    const proj = projectOptions.find(p => p.id === pid);
-                    setEditingTask({
-                      ...editingTask,
-                      project_id: pid,
-                      client_id: proj?.client_id || editingTask.client_id || '',
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
-                >
-                  <option value="">— No project</option>
-                  {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
-              </div>
-              <div>
-                <FieldLabel>Client</FieldLabel>
-                <select
-                  value={editingTask.client_id || ''}
-                  onChange={e => setEditingTask({ ...editingTask, client_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 border-0 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-sm text-zinc-900 dark:text-zinc-100 transition-colors"
-                >
-                  <option value="">— No client</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-            </div>
+                {/* Project */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.Briefcase size={12} /> Project</span>
+                  <select value={editingTask.project_id || ''}
+                    onChange={e => {
+                      const pid = e.target.value;
+                      const proj = projectOptions.find(p => p.id === pid);
+                      setEditingTask({ ...editingTask, project_id: pid, client_id: proj?.client_id || editingTask.client_id || '' });
+                    }}
+                    className={selectCls}>
+                    <option value="">— No project</option>
+                    {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
 
-            <div>
-              <FieldLabel>Assigned to</FieldLabel>
-              <MultiAssigneeSelect
-                value={editingTask.assignee_ids || (editingTask.assignee_id ? [editingTask.assignee_id] : [])}
-                onChange={ids => setEditingTask({ ...editingTask, assignee_ids: ids, assignee_id: ids[0] || undefined })}
-                teamMembers={teamMembers}
-                currentUserId={userId}
-              />
-            </div>
+                {/* Client */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.Users size={12} /> Client</span>
+                  <select value={editingTask.client_id || ''}
+                    onChange={e => setEditingTask({ ...editingTask, client_id: e.target.value })}
+                    className={selectCls}>
+                    <option value="">— No client</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Assignees */}
+                <div className={rowCls}>
+                  <span className={labelCls}><Icons.User size={12} /> Assigned</span>
+                  <MultiAssigneeSelect
+                    value={editingTask.assignee_ids || (editingTask.assignee_id ? [editingTask.assignee_id] : [])}
+                    onChange={ids => setEditingTask({ ...editingTask, assignee_ids: ids, assignee_id: ids[0] || undefined })}
+                    teamMembers={teamMembers}
+                    currentUserId={userId}
+                  />
+                </div>
+              </>;
+            })()}
           </div>
 
           {/* ─── Description (Notion-style rich editor) ─── */}
@@ -674,81 +593,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             />
           </div>
 
-          {/* ─── Images (attachments) ───
-              Drag-and-drop, paste-from-clipboard, or click to upload. Stored
-              in tasks.attachments jsonb + bucket tenant-assets/task-attachments. */}
-          <div className="mb-6">
-            <SectionHeader
-              icon={<Icons.Image size={12} />}
-              title={`Images${attachments.length > 0 ? ` · ${attachments.length}` : ''}`}
-              trailing={
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingImage}
-                  className="text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors flex items-center gap-1 disabled:opacity-50"
-                >
-                  {uploadingImage ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Plus size={11} />}
-                  {uploadingImage ? 'Subiendo' : 'Add'}
-                </button>
-              }
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.currentTarget.value = ''; }}
-            />
-            <div
-              ref={dropRef}
-              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(true); }}
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
-              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(false); }}
-              onDrop={(e) => {
-                e.preventDefault(); e.stopPropagation(); setDropActive(false);
-                if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
-              }}
-              className={`rounded-xl border transition-all ${
-                dropActive
-                  ? 'border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-500/10 border-dashed'
-                  : attachments.length > 0
-                    ? 'border-transparent'
-                    : 'border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600'
-              }`}
-            >
-              {attachments.length === 0 ? (
-                <div className="px-4 py-6 text-center text-[11.5px] text-zinc-400 dark:text-zinc-500">
-                  Arrastrá imágenes acá, pegá con <span className="font-mono px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px]">⌘V</span>, o usá <strong className="text-zinc-600 dark:text-zinc-300">+ Add</strong>.
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 p-1">
-                  {attachments.map((att, idx) => (
-                    <div key={att.id}
-                      draggable
-                      onDragStart={(e) => { setDraggingIdx(idx); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)); }}
-                      onDragEnd={() => setDraggingIdx(null)}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                      onDrop={(e) => { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/plain') || draggingIdx); if (!Number.isNaN(from)) moveAttachment(from, idx); }}
-                      className={`relative group/img aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 cursor-grab active:cursor-grabbing ${draggingIdx === idx ? 'opacity-40' : ''}`}>
-                      <img src={att.url} alt={att.name || ''}
-                        onClick={() => setLightboxUrl(att.url)}
-                        className="w-full h-full object-cover transition-transform group-hover/img:scale-[1.02]" />
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeAttachment(att.id); }}
-                        title="Quitar"
-                        className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover/img:opacity-100 hover:bg-rose-600 transition-all"
-                      >
-                        <Icons.Close size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Standalone Images section removed — images now go inline in the
+              description editor (paste, drop, or insert via toolbar). */}
 
           {/* ─── Subtasks ─── */}
           <div className="mb-2">
