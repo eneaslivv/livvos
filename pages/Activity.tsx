@@ -73,6 +73,8 @@ function getActivityBadge(type: string): ActivityBadge | null {
     case 'project_created': return { icon: Icons.Briefcase,   tone: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400' };
     case 'file_uploaded':   return { icon: Icons.Paperclip,   tone: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-500/10 dark:text-cyan-400' };
     case 'status_change':   return { icon: Icons.Flag,        tone: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400' };
+    case 'user_login':      return { icon: Icons.LogIn,       tone: 'text-teal-500 bg-teal-50 dark:bg-teal-500/10 dark:text-teal-400' };
+    case 'user_logout':     return { icon: Icons.LogOut,      tone: 'text-zinc-500 bg-zinc-50 dark:bg-zinc-500/10 dark:text-zinc-400' };
     default: return null;
   }
 }
@@ -151,7 +153,7 @@ export const Activity: React.FC = () => {
     return map;
   }, [members]);
 
-  // Weekly per-person stats from real tasks data
+  // Weekly per-person stats from real tasks data + login activity
   const weeklyStats = useMemo(() => {
     const now = new Date();
     const weekStart = new Date(now);
@@ -179,6 +181,25 @@ export const Activity: React.FC = () => {
       }
     });
 
+    // Logins this week (per person) — pulled from activity_logs entries
+    // with type='user_login'. We also track the most-recent login so the
+    // roster can show "last seen 2h ago".
+    const loginsByPerson: Record<string, number> = {};
+    const lastLoginByPerson: Record<string, string> = {};
+    let totalLoginsThisWeek = 0;
+    (rawActivities || []).forEach((a: any) => {
+      if (a.type !== 'user_login' || !a.user_id) return;
+      const created = new Date(a.created_at);
+      if (created >= weekStart) {
+        loginsByPerson[a.user_id] = (loginsByPerson[a.user_id] || 0) + 1;
+        totalLoginsThisWeek++;
+      }
+      // Track latest login regardless of week.
+      if (!lastLoginByPerson[a.user_id] || a.created_at > lastLoginByPerson[a.user_id]) {
+        lastLoginByPerson[a.user_id] = a.created_at;
+      }
+    });
+
     const velocity = lastWeekTotal > 0
       ? Math.round(((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100)
       : (thisWeekTotal > 0 ? 100 : 0);
@@ -194,7 +215,7 @@ export const Activity: React.FC = () => {
     });
     const topPerformerName = topPerformerId ? (memberMap[topPerformerId]?.name || 'Team Member') : null;
 
-    // Ranking sorted by this week completions
+    // Ranking sorted by this week completions, with logins tacked on.
     const ranking = Object.entries(thisWeekByPerson)
       .map(([personId, thisWeekCount]) => ({
         id: personId,
@@ -202,6 +223,8 @@ export const Activity: React.FC = () => {
         avatar_url: memberMap[personId]?.avatar_url || null,
         thisWeek: thisWeekCount,
         lastWeek: lastWeekByPerson[personId] || 0,
+        logins: loginsByPerson[personId] || 0,
+        lastLogin: lastLoginByPerson[personId] || null,
       }))
       .sort((a, b) => b.thisWeek - a.thisWeek);
 
@@ -215,12 +238,18 @@ export const Activity: React.FC = () => {
           avatar_url: m.avatar_url,
           thisWeek: 0,
           lastWeek: lastWeekByPerson[m.id] || 0,
+          logins: loginsByPerson[m.id] || 0,
+          lastLogin: lastLoginByPerson[m.id] || null,
         });
       }
     });
 
-    return { thisWeekTotal, lastWeekTotal, velocity, topPerformerName, topPerformerCount, ranking };
-  }, [allTasks, memberMap, members]);
+    return {
+      thisWeekTotal, lastWeekTotal, velocity,
+      topPerformerName, topPerformerCount, ranking,
+      totalLoginsThisWeek,
+    };
+  }, [allTasks, memberMap, members, rawActivities]);
 
   // Thread count from activity_logs (for DISCUSSIONS card)
   const threadCount = useMemo(() => {
@@ -255,6 +284,8 @@ export const Activity: React.FC = () => {
                         a.type === 'file_uploaded' ? 'uploaded' :
                         a.type === 'status_change' ? 'changed status of' :
                         a.type === 'project_created' ? 'created project' :
+                        a.type === 'user_login' ? 'signed in to' :
+                        a.type === 'user_logout' ? 'signed out of' :
                         (a.action || 'updated'),
           target: a.target || 'General',
           projectTitle: a.project_title,
@@ -610,6 +641,26 @@ export const Activity: React.FC = () => {
             </div>
           </div>
         </div>
+        {/* Sign-ins this week — total + how many distinct people came in.
+            New stat card so it's the same size/format as the others. */}
+        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
+          <div className="p-1 rounded-md bg-teal-50 dark:bg-teal-500/10">
+            <Icons.LogIn size={12} className="text-teal-500" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Sign-ins</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{weeklyStats.totalLoginsThisWeek}</span>
+              <span className="text-[10px] text-zinc-500">this week</span>
+              {(() => {
+                const distinct = weeklyStats.ranking.filter(r => r.logins > 0).length;
+                return distinct > 0
+                  ? <span className="text-[10px] text-zinc-400 truncate">· {distinct} {distinct === 1 ? 'person' : 'people'}</span>
+                  : null;
+              })()}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Team Performance — compact roster with click-to-drill-down */}
@@ -666,6 +717,18 @@ export const Activity: React.FC = () => {
                           {weekDelta > 0 ? '+' : ''}{weekDelta}
                         </span>
                       ) : <span className="w-7" />}
+                      {/* Logins this week + last seen — answers the
+                          "cuántas veces ingresa cada uno" question. */}
+                      <span
+                        className="hidden md:inline-flex items-center gap-1 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 w-14 justify-end"
+                        title={member.lastLogin ? `Last seen ${getRelativeTime(new Date(member.lastLogin))}` : 'Never logged in'}
+                      >
+                        <Icons.LogIn size={9} className="opacity-60" />
+                        {member.logins}
+                        {member.lastLogin && (
+                          <span className="opacity-50 normal-case ml-0.5">· {getRelativeTime(new Date(member.lastLogin)).replace(' ago', '')}</span>
+                        )}
+                      </span>
                       <Icons.ChevronDown size={11} className={`text-zinc-300 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                     </button>
 

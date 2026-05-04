@@ -12,6 +12,8 @@ export type ActivityType =
   | 'status_change'
   | 'file_uploaded'
   | 'comment'
+  | 'user_login'
+  | 'user_logout'
 
 interface NotifyTarget {
   userId: string
@@ -37,21 +39,37 @@ export async function logActivity(entry: {
   /** Users to notify (in-app + optional email). Self is auto-filtered. */
   notify?: NotifyTarget[]
 }) {
-  // Resolve user_id and tenant_id from current session if not provided
+  // Resolve user_id, tenant_id, AND user_name from the current session if
+  // they're not provided. Without this most call sites end up logging
+  // "System" because they only pass a tenant_id and the user_name default
+  // kicks in. Now: if user_name isn't provided, we also pull profile.name
+  // (and avatar_url) so the activity feed shows who actually did the thing.
   let userId = entry.user_id
   let tenantId = entry.tenant_id
-  if (!userId || !tenantId) {
+  let userName = entry.user_name
+  let userAvatar = entry.user_avatar
+  if (!userId || !tenantId || !userName) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user && !userId) userId = user.id
-    if (user && !tenantId) {
-      const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-      if (profile) tenantId = profile.tenant_id
+    if (user && (!tenantId || !userName)) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id, name, email, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profile) {
+        if (!tenantId) tenantId = profile.tenant_id
+        if (!userName) userName = profile.name || profile.email?.split('@')[0] || null
+        if (!userAvatar && profile.avatar_url) userAvatar = profile.avatar_url
+      }
+      // Last-resort fallback if profile lookup fails — use email from auth.
+      if (!userName && user.email) userName = user.email.split('@')[0]
     }
   }
 
   const payload: any = {
-    user_name: entry.user_name ?? 'System',
-    user_avatar: entry.user_avatar ?? 'SYS',
+    user_name: userName ?? 'System',
+    user_avatar: userAvatar ?? 'SYS',
     action: entry.action,
     target: entry.target,
     project_title: entry.project_title ?? null,
@@ -65,7 +83,7 @@ export async function logActivity(entry: {
 
   // Fan out notifications (fire-and-forget). Skip self-notifications.
   if (entry.notify && tenantId) {
-    const actor = entry.user_name || 'Someone'
+    const actor = userName || 'Someone'
     const projectSuffix = entry.project_title ? ` in ${entry.project_title}` : ''
     const defaultMessage = `${actor} ${entry.action} ${entry.target}${projectSuffix}`
     const isTask = entry.type.startsWith('task_')
@@ -84,4 +102,55 @@ export async function logActivity(entry: {
         }).catch(() => {})
       })
   }
+}
+
+/**
+ * Log a fresh user sign-in. Distinguishes a true sign-in (form submit / OTP)
+ * from a session restore (page reload, tab reopen) by comparing the
+ * session's `last_sign_in_at` to "now" — only logs if it's within 60 seconds.
+ *
+ * Also throttled per browser session via sessionStorage so a single sign-in
+ * doesn't get logged twice (Supabase fires SIGNED_IN multiple times during
+ * the initial handshake).
+ */
+export async function logUserSignIn(session: { user?: { id?: string; email?: string; last_sign_in_at?: string } | null } | null) {
+  if (!session?.user?.id) return
+  if (typeof window === 'undefined') return
+
+  const userId = session.user.id
+  const lastSignIn = session.user.last_sign_in_at ? new Date(session.user.last_sign_in_at).getTime() : 0
+  // Only log a true fresh sign-in (form/OTP completed in the last minute).
+  // Session restores from localStorage have older last_sign_in_at values.
+  if (!lastSignIn || Date.now() - lastSignIn > 60_000) return
+
+  // Throttle: don't log the same sign-in twice in this browser session.
+  const dedupeKey = `__livv_logged_signin:${userId}:${Math.floor(lastSignIn / 1000)}`
+  try {
+    if (sessionStorage.getItem(dedupeKey)) return
+    sessionStorage.setItem(dedupeKey, '1')
+  } catch {}
+
+  try {
+    await logActivity({
+      type: 'user_login',
+      action: 'signed in',
+      target: 'the workspace',
+      metadata: {
+        ua: navigator.userAgent.slice(0, 200),
+        last_sign_in_at: session.user.last_sign_in_at,
+      },
+    })
+  } catch {
+    // Best-effort; never block auth on logging.
+  }
+}
+
+export async function logUserSignOut() {
+  try {
+    await logActivity({
+      type: 'user_logout',
+      action: 'signed out',
+      target: 'the workspace',
+    })
+  } catch {}
 }

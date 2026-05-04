@@ -900,11 +900,19 @@ const App: React.FC = () => {
           } catch {}
         }
 
-        // Log auth state changes for security monitoring
+        // Log auth state changes for security monitoring + activity feed.
+        // logUserSignIn is idempotent — it only fires on true fresh sign-ins
+        // (last_sign_in_at within 60s) and dedupes via sessionStorage, so
+        // page reloads don't inflate the count.
         if (_event === 'SIGNED_IN') {
           if (import.meta.env.DEV) console.log('User signed in:', session?.user?.email);
+          // Defer a tick so the profile row is settled before the insert.
+          setTimeout(() => {
+            import('./lib/activity').then(m => m.logUserSignIn(session)).catch(() => {});
+          }, 250);
         } else if (_event === 'SIGNED_OUT') {
           if (import.meta.env.DEV) console.log('User signed out');
+          import('./lib/activity').then(m => m.logUserSignOut()).catch(() => {});
         }
       }
     );
