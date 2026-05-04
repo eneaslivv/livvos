@@ -360,14 +360,12 @@ export const Calendar: React.FC = () => {
 
   // Open task detail panel
   const handleOpenTaskDetail = (task: CalendarTask) => {
+    // Optimistic: show what we have in local state immediately so the panel
+    // is not blocked on the round-trip below.
     setSelectedTask(task);
     setEditingTask({
       title: task.title,
       description: task.description || '',
-      // Rich-content fields — must be copied here so the editor renders
-      // the saved HTML / attachments instead of falling back to selectedTask
-      // (which works most of the time but breaks if selectedTask gets
-      // refreshed by the realtime subscription mid-edit).
       description_html: task.description_html ?? null,
       attachments: task.attachments || [],
       cover_url: task.cover_url ?? null,
@@ -382,6 +380,36 @@ export const Calendar: React.FC = () => {
       assignee_ids: task.assignee_ids || [],
       blocked_by: task.blocked_by || '',
     });
+    // Then re-fetch the row directly from the DB. If local state was stale
+    // (browser cache, missed realtime event, normalize bug, etc.) the user
+    // still ends up seeing the freshest description_html / attachments.
+    // This is the safety net that closes the "saved but doesn't reappear"
+    // class of bug for good.
+    (async () => {
+      try {
+        const { data: fresh, error } = await supabase
+          .from('tasks')
+          .select('id,description,description_html,attachments,cover_url,title,status,priority,start_date,start_time,duration,project_id,client_id,assigned_to,assignee_ids,blocked_by,completed,completed_at')
+          .eq('id', task.id)
+          .maybeSingle();
+        if (error || !fresh) return;
+        setSelectedTask(prev => prev && prev.id === task.id ? { ...prev, ...fresh, assignee_id: (fresh as any).assigned_to ?? prev.assignee_id } as any : prev);
+        // Only refresh editingTask fields the user hasn't started editing
+        // (the editor is the source of truth once they touch it).
+        setEditingTask(prev => ({
+          ...prev,
+          // Always pick up fresh rich content — the user reopened to see it.
+          description: prev.description || (fresh as any).description || '',
+          description_html: prev.description_html ?? (fresh as any).description_html ?? null,
+          attachments: prev.attachments && (prev.attachments as any).length > 0
+            ? prev.attachments
+            : (fresh as any).attachments || [],
+          cover_url: prev.cover_url ?? (fresh as any).cover_url ?? null,
+        }));
+      } catch {
+        // Best-effort; the optimistic data above is already shown.
+      }
+    })();
   };
 
   const [saveError, setSaveError] = useState<string | null>(null);

@@ -75,8 +75,9 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
       },
       handlePaste: (_, event) => {
         // Image-from-clipboard path. Defers to onUploadImage and inserts an
-        // <img> at the caret on success. Returning true tells TipTap we
-        // handled it (so the binary blob doesn't get pasted as garbage).
+        // Image NODE (via setImage) at the caret on success. Using
+        // setImage instead of inserting raw HTML avoids edge cases where
+        // an unwrapped <img> tag wouldn't survive a DB round-trip + reload.
         const items = event.clipboardData?.items;
         if (!items || !onUploadImage) return false;
         for (const item of items) {
@@ -84,7 +85,7 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
             const file = item.getAsFile();
             if (file) {
               onUploadImage(file).then(url => {
-                if (url && editor) editor.chain().focus().insertContent(`<img src="${url}" alt="" />`).run();
+                if (url && editor) editor.chain().focus().setImage({ src: url }).run();
               });
               return true;
             }
@@ -100,7 +101,7 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
         event.preventDefault();
         Promise.all(imageFiles.map(f => onUploadImage(f))).then(urls => {
           urls.filter(Boolean).forEach(u => {
-            editor?.chain().focus().insertContent(`<img src="${u}" alt="" />`).run();
+            editor?.chain().focus().setImage({ src: u as string }).run();
           });
         });
         return true;
@@ -113,10 +114,22 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
     },
   }, [/* recreate per task by remounting parent with key */]);
 
-  // When the parent swaps to a different task, replace the editor content.
-  // We compare to lastSetRef so editor edits don't loop back into setContent.
+  // When the parent swaps to a different task OR the editor was just
+  // created, replace the editor content. We compare against lastSetRef
+  // so user typing doesn't loop back into setContent — but on the FIRST
+  // editor-ready cycle we always force-set, because TipTap's `content:`
+  // prop on useEditor is sometimes ignored when the React component
+  // re-mounts with the same key (which happens when the panel reopens
+  // the same task).
+  const firstSyncRef = useRef(true);
   useEffect(() => {
     if (!editor) return;
+    if (firstSyncRef.current) {
+      firstSyncRef.current = false;
+      lastSetRef.current = html;
+      editor.commands.setContent(html || '', false);
+      return;
+    }
     if (html === lastSetRef.current) return;
     lastSetRef.current = html;
     editor.commands.setContent(html || '', false);
