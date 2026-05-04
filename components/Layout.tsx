@@ -529,13 +529,23 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     }
   };
 
-  const osNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
-    { id: 'home', label: 'Home', icon: <Icons.Home /> },
-    // 'projects' and 'team_clients' entries removed — projects live inside the Clients tree; team mgmt moved to tenant settings.
-    { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
-    { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
-    { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
+  // OS sidebar grouped by purpose: dashboard items first, then content/work
+  // surfaces, then the clients tree (rendered separately). Reordered per the
+  // user's request — Home/Activity together, then Calendar/Docs.
+  type NavItemDef = { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] };
+  const osNavGroups: NavItemDef[][] = [
+    [
+      { id: 'home', label: 'Home', icon: <Icons.Home /> },
+      { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
+    ],
+    [
+      { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
+      { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
+    ],
   ];
+  // Flat list — kept around because some downstream code still reads it
+  // (filter for permissions). We'll regroup at render time.
+  const osNavItems: NavItemDef[] = osNavGroups.flat();
   const clientsActive = currentPage === 'clients' || currentPage === 'projects';
   const showProjectsModule = hasFeature('projects_module') && (!isInitialized || hasPermission('projects', 'view'));
 
@@ -623,7 +633,39 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               <div className={`h-7 rounded-md bg-zinc-100 dark:bg-zinc-800/60 mt-2 ${isSidebarExpanded ? 'w-full' : 'w-9 mx-auto'}`} />
             </div>
           )}
-          {isInitialized && currentNavItems.map(item => (
+          {/* OS mode: render in groups with thin dividers between them so the
+              eye reads home/activity → calendar/docs → clients as distinct
+              clusters. Sales mode keeps a single flat list. */}
+          {isInitialized && currentMode === 'os' && (() => {
+            const visibleGroups = osNavGroups
+              .map(group => group.filter(item => {
+                if (item.feature && !hasFeature(item.feature)) return false;
+                if (!item.permission) return true;
+                return hasPermission(item.permission.module, item.permission.action);
+              }))
+              .filter(group => group.length > 0);
+            return visibleGroups.map((group, gi) => (
+              <React.Fragment key={`group-${gi}`}>
+                {gi > 0 && (
+                  <div className={`shrink-0 ${isSidebarExpanded ? 'w-[calc(100%-24px)] mx-3' : 'w-8 mx-auto'} my-1.5 h-px bg-zinc-100 dark:bg-zinc-800/60`} />
+                )}
+                {group.map(item => (
+                  <NavItem
+                    key={item.id}
+                    id={item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    active={currentPage === item.id}
+                    expanded={isSidebarExpanded}
+                    onClick={() => onNavigate(item.id)}
+                  />
+                ))}
+              </React.Fragment>
+            ));
+          })()}
+
+          {/* Sales mode: flat nav (no grouping). */}
+          {isInitialized && currentMode !== 'os' && currentNavItems.map(item => (
             <NavItem
               key={item.id}
               id={item.id}
@@ -635,9 +677,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             />
           ))}
 
-          {/* Clients tree pinned at the bottom of the nav (Notion-style) */}
+          {/* Clients tree — sits in flow under the calendar/docs group with
+              its own divider above (no longer pushed to the bottom of the
+              sidebar). User found that more readable. */}
           {isInitialized && currentMode === 'os' && showProjectsModule && (
-            <div className="w-full mt-auto pt-3">
+            <div className="w-full pt-1">
+              <div className={`shrink-0 ${isSidebarExpanded ? 'w-[calc(100%-24px)] mx-3' : 'w-8 mx-auto'} mb-1.5 h-px bg-zinc-100 dark:bg-zinc-800/60`} />
               <ClientsSidebarTree
                 active={clientsActive}
                 expanded={isSidebarExpanded}

@@ -55,23 +55,26 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
     return (
         <>
             <div className="relative w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0" ref={dropdownRef}>
+                {/* Minimal trigger — no border by default. Logo is bigger and
+                    occupies the row; the recuadro shows up on hover so the
+                    sidebar feels less boxy at rest. */}
                 <button
                     onClick={() => setIsOpen(prev => !prev)}
                     className={`
-                        w-full flex items-center gap-1.5 rounded-lg
-                        bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-800
-                        border border-zinc-200 dark:border-zinc-800
+                        group/sw w-full flex items-center gap-2 rounded-lg
+                        border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800
+                        hover:bg-zinc-50 dark:hover:bg-zinc-800/40
                         transition-all
                         ${isInChildTenant ? 'ring-1 ring-amber-300 dark:ring-amber-700' : ''}
-                        ${expanded ? 'p-1.5 justify-start' : 'p-1 justify-center'}
+                        ${expanded ? 'p-1.5 justify-start' : 'p-0.5 justify-center'}
                     `}
                     title={expanded ? undefined : currentTenant.name}
                 >
-                    <div className={`relative flex items-center justify-center rounded-md shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ring-1 ring-zinc-200/80 dark:ring-zinc-700 ${expanded ? 'w-7 h-7' : 'w-8 h-8'}`}>
+                    <div className={`relative flex items-center justify-center rounded-lg shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ${expanded ? 'w-9 h-9' : 'w-10 h-10'}`}>
                         {logoSrc ? (
-                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain p-0.5" />
+                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain" />
                         ) : (
-                            <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 select-none">
+                            <span className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300 select-none">
                                 {currentTenant.name.slice(0, 2).toUpperCase()}
                             </span>
                         )}
@@ -79,14 +82,14 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                     {expanded && (
                         <>
                             <div className="flex-1 min-w-0 text-left">
-                                <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-tight">
+                                <div className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-tight">
                                     {currentTenant.name}
                                 </div>
-                                <div className="text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 truncate leading-tight mt-0.5">
+                                <div className="text-[9px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 truncate leading-tight mt-0.5 opacity-0 group-hover/sw:opacity-100 transition-opacity">
                                     {isSuperAgency ? 'Super agency' : isInChildTenant ? 'Connected agency' : 'Workspace'}
                                 </div>
                             </div>
-                            <Icons.ChevronDown size={12} className="text-zinc-400 shrink-0" />
+                            <Icons.ChevronDown size={12} className="text-zinc-400 shrink-0 opacity-0 group-hover/sw:opacity-100 transition-opacity" />
                         </>
                     )}
                 </button>
