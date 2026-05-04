@@ -21,6 +21,7 @@ import { MonthView } from '../components/calendar/MonthView';
 import { ContentPlannerBoard } from '../components/calendar/ContentPlannerBoard';
 import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
 import { TeamFilterBar } from '../components/calendar/TeamFilterBar';
+import { ContentStrategyPanel } from '../components/calendar/ContentStrategyPanel';
 import { SelectedDatePanel } from '../components/calendar/SelectedDatePanel';
 import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { DayAgendaView } from '../components/calendar/DayAgendaView';
@@ -1344,6 +1345,27 @@ export const Calendar: React.FC = () => {
           onSelectTimezone={setActiveTimezone}
         />
       )}
+
+      {/* Content Brain — pinned strategy/objectives/AI panel above the
+          content calendar grid. Lives only on Content mode and computes
+          the Monday of currentDate's week so objectives anchor to it. */}
+      {calendarMode === 'content' && (() => {
+        const d = new Date(currentDate);
+        const day = d.getDay(); // 0 = Sun
+        const diff = day === 0 ? -6 : 1 - day; // shift to Monday
+        const monday = new Date(d);
+        monday.setDate(d.getDate() + diff);
+        const weekStart = monday.toISOString().split('T')[0];
+        return (
+          <ContentStrategyPanel
+            weekStart={weekStart}
+            onPickSuggestedDate={(iso) => {
+              setSelectedDate(iso);
+              setCurrentDate(new Date(iso + 'T12:00:00'));
+            }}
+          />
+        );
+      })()}
 
       {/* Event/Task creation panel */}
       <EventTaskFormPanel

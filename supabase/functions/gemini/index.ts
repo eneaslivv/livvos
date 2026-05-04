@@ -652,12 +652,47 @@ Rules — CRITICAL:
 - concept: a short human label, NOT the full sentence. E.g. user says "pagué $50 a Figma de licencias", concept = "Figma licenses".
 - Respond strictly with the JSON object — no prose, no markdown fences.
 - Match the user's language for concept/vendor/notes/questions text.`
+        : type === 'content_strategy_suggest'
+        ? `You are a senior social-media strategist for a brand. The user gives you a JSON payload with their pinned strategy notes, weekly objectives, and reference documents. Use this context to propose concrete, ready-to-publish content ideas for the upcoming week.
+
+Input shape:
+{
+  "tenant_name": "the brand name",
+  "week_start": "YYYY-MM-DD (Monday of the week the user is planning)",
+  "summary": "previously-generated recap, may be empty",
+  "pinned_notes": "freeform strategy text the user wrote — pillars, tone, audience, do/don't",
+  "objectives": [{ "text": "...", "done": bool, "week": "YYYY-MM-DD" | null }],
+  "documents": [{ "name": "...", "url": "...", "kind": "upload"|"link"|"doc" }]
+}
+
+Return ONLY valid JSON with this shape:
+{
+  "summary": "1 sentence recap of the brand's current strategy + this week's focus, written in the user's language. If the input summary is good and still applies, return it unchanged or refined slightly.",
+  "items": [
+    {
+      "title": "short headline of the post idea — max 8 words",
+      "body": "2-4 sentence description: what the post says, who it's for, and why it ties to an objective or pillar",
+      "suggested_date": "YYYY-MM-DD inside the week_start..week_start+6 range, or null if undated",
+      "format": "reel | carousel | story | post | video | short | live | thread (lowercase)",
+      "hook": "the first line / opening hook the post should use to stop scroll — max 12 words"
+    }
+  ]
+}
+
+Rules:
+- Generate 4-6 items, varied across formats — don't propose 6 reels.
+- Each item MUST tie back to either a pillar from pinned_notes or a non-done objective. If you can't find a tie, skip it.
+- suggested_date should spread across the week (don't pile 5 posts on Monday). Prefer Tue/Wed/Thu for high-value content; Mon/Fri for lighter formats.
+- hook MUST be punchy and concrete — never "Tips for X" or "Did you know". Real openers like "Compré Figma por error 3 veces. Hoy te ahorro $89/mes."
+- If pinned_notes and documents are EMPTY, return items: [] and a summary like "Cargá la estrategia y referencias para que pueda proponer posts" (in user's language).
+- Match the user's language (Spanish if pinned_notes is in Spanish).
+- No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3

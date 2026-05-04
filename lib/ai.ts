@@ -23,6 +23,7 @@ const CACHE_TTL: Record<string, number> = {
   finance_entry: 0,                // no cache — every entry is unique
   finance_entries_batch: 0,        // no cache — file content is unique per upload
   finance_chat: 0,                 // no cache — each chat turn is unique
+  content_strategy_suggest: 30 * 60 * 1000, // 30 min — same brain produces same suggestions
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -727,6 +728,28 @@ export async function getMyAIFeedback(outputId: string): Promise<{ rating: AIFee
   if (error || !data) return null
   return data as { rating: AIFeedbackRating; correction: string | null }
 }
+
+// ─── Content strategy suggestions ─────────────────────────────────
+// Powers the ContentStrategyPanel "AI sugiere" column. Input is a JSON
+// string with the tenant's pinned strategy notes, weekly objectives, and
+// a list of reference docs (URLs only — the model can't fetch them, but
+// it can use the names + your strategy text for context).
+// Output: { summary?, items: [{ title, body, suggested_date?, format?, hook? }] }
+
+export interface ContentStrategySuggestionItem {
+  title: string
+  body: string
+  suggested_date?: string | null
+  format?: string | null
+  hook?: string | null
+}
+export interface ContentStrategySuggestionResult {
+  summary?: string
+  items: ContentStrategySuggestionItem[]
+}
+
+export const generateContentStrategySuggestions = (input: string, profile?: LiveAIProfile) =>
+  callGemini<ContentStrategySuggestionResult>('content_strategy_suggest', input, (r) => Array.isArray(r?.items), profile)
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {
