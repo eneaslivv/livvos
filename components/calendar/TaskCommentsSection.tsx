@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
 import { errorLogger } from '../../lib/errorLogger';
+import { LinkifiedText } from '../ui/LinkifiedText';
 import { Icons } from '../ui/Icons';
 import { useTaskComments, TaskComment } from '../../hooks/useTaskComments';
 import { useAuth } from '../../hooks/useAuth';
@@ -279,23 +280,40 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   );
 };
 
-// Renders a comment body and inlines image URLs as <img>. Splits the text by
-// whitespace, detects URLs ending in image extensions, and renders them as
-// thumbnails (click → open full size in a new tab).
+// Renders a comment body. Image URLs become inline thumbnails; other URLs
+// become clickable links (and a small preview card row beneath the text so
+// the user can jump straight to the destination instead of copy-pasting).
 const IMAGE_URL_RE = /^(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|svg|avif)(?:\?[^\s]*)?)$/i
+const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]}])/g
+
 const CommentBody: React.FC<{ text: string }> = ({ text }) => {
   const parts = text.split(/(\s+)/);
-  const out: React.ReactNode[] = [];
+  const inline: React.ReactNode[] = [];
+  const nonImageUrls: string[] = [];
   parts.forEach((part, i) => {
     if (IMAGE_URL_RE.test(part)) {
-      out.push(
+      inline.push(
         <a key={i} href={part} target="_blank" rel="noreferrer noopener" className="block my-1.5 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 max-w-[260px]">
           <img src={part} alt="" className="w-full h-auto block" />
         </a>
       );
+    } else if (URL_RE.test(part)) {
+      // Reset state for the next test() call (lastIndex sticks with /g).
+      URL_RE.lastIndex = 0;
+      nonImageUrls.push(part);
+      inline.push(
+        <a key={i} href={part} target="_blank" rel="noreferrer noopener" className="text-blue-600 dark:text-blue-400 underline decoration-blue-300/60 hover:decoration-blue-500 break-all">{part}</a>
+      );
     } else {
-      out.push(<span key={i} className="whitespace-pre-wrap">{part}</span>);
+      inline.push(<span key={i} className="whitespace-pre-wrap">{part}</span>);
     }
   });
-  return <>{out}</>;
+  return (
+    <>
+      <div>{inline}</div>
+      {nonImageUrls.length > 0 && (
+        <LinkifiedText text={nonImageUrls.join(' ')} cardsOnly className="mt-1.5" />
+      )}
+    </>
+  );
 };

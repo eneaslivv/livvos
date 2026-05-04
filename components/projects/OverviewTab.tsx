@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
+import { LinkifiedText } from '../ui/LinkifiedText';
 import { Project, ProjectStatus } from '../../context/ProjectsContext';
 import { Client } from '../../context/ClientsContext';
 import { TeamMember } from '../../context/TeamContext';
@@ -99,16 +100,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
       <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-        {/* Description (editable) */}
+        {/* Description (editable) — links auto-render as preview cards below
+            the textarea so the user can click straight through. */}
         <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
           <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
           <textarea
             rows={3}
             value={project.description}
             onChange={e => onUpdateProject({ description: e.target.value })}
-            placeholder="Add a project description..."
+            placeholder="Add a project description... pegá URLs y se vuelven clickeables abajo"
             className="w-full text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-zinc-200 dark:focus:ring-zinc-700 rounded-lg px-2 py-1 -mx-2 -my-1"
           />
+          {project.description && (
+            <LinkifiedText text={project.description} cardsOnly className="mt-3" />
+          )}
         </div>
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
