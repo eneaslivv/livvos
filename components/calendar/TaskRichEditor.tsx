@@ -12,6 +12,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Image from '@tiptap/extension-image';
 import { Icons } from '../ui/Icons';
 
 interface Props {
@@ -38,6 +39,13 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
         blockquote: { HTMLAttributes: { class: 'border-l-2 border-zinc-300 dark:border-zinc-600 pl-3 italic text-zinc-600 dark:text-zinc-300' } },
       }),
       Underline,
+      // Image node — required so the <img> tags inserted by paste/drop
+      // render as actual images instead of literal text.
+      Image.configure({
+        inline: false,
+        allowBase64: false,
+        HTMLAttributes: { class: 'rounded-lg max-w-full h-auto my-2 border border-zinc-200 dark:border-zinc-700' },
+      }),
       TaskList.configure({ HTMLAttributes: { class: 'list-none pl-0 space-y-0.5' } }),
       TaskItem.configure({ nested: true, HTMLAttributes: { class: 'flex gap-2 items-start' } }),
       Placeholder.configure({ placeholder: placeholder || 'Empezá a escribir, o pegá una imagen…' }),

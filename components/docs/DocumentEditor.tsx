@@ -18,6 +18,7 @@ import { SlashCommandMenu, type SlashItem, type SlashCommandMenuHandle } from '.
 import { TaskCreatePopover } from './TaskCreatePopover';
 import { supabase } from '../../lib/supabase';
 import { useDocuments } from '../../context/DocumentsContext';
+import { useTenant } from '../../context/TenantContext';
 import { useClients } from '../../context/ClientsContext';
 import { useProjects } from '../../context/ProjectsContext';
 import { useCalendar } from '../../context/CalendarContext';
@@ -110,6 +111,7 @@ const parseTabs = (content: Record<string, any> | null | undefined): DocTab[] =>
 
 export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onClose }) => {
   const { documents, updateDocument, deleteDocument } = useDocuments();
+  const { currentTenant } = useTenant();
   const { clients } = useClients();
   const { projects } = useProjects();
   const { tasks, createTask, updateTask } = useCalendar();
@@ -147,18 +149,23 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   // Tasks linked to this document
   const linkedTasks = useMemo(() => tasks.filter((t: any) => t.document_id === documentId), [tasks, documentId]);
 
-  // Upload an image file to Supabase Storage and return its public URL
+  // Upload an image file to Supabase Storage and return its public URL.
+  // Uses tenant-assets (the 'documents' bucket lacks INSERT policies, so
+  // uploads were silently failing and the editor showed the raw <img> tag
+  // instead of the image). Path is tenant-scoped so two tenants can have
+  // documents with the same id without collisions.
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
+    const tenantId = currentTenant?.id || 'shared';
     const ext = file.name.split('.').pop() || 'png';
-    const path = `doc-images/${documentId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true });
+    const path = `doc-images/${tenantId}/${documentId}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('tenant-assets').upload(path, file, { upsert: true, contentType: file.type });
     if (error) {
-      if (import.meta.env.DEV) console.error('Image upload failed:', error);
+      console.error('[DocumentEditor] Image upload failed:', error);
       return null;
     }
-    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+    const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
     return urlData.publicUrl;
-  }, [documentId]);
+  }, [documentId, currentTenant?.id]);
 
   const editor = useEditor({
     extensions: [
