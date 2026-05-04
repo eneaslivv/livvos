@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
 import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import { CalendarTask } from '../../hooks/useCalendar';
 import type { TaskAttachment } from '../../context/CalendarContext';
 import { TaskCommentsSection } from './TaskCommentsSection';
@@ -624,31 +625,62 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Project */}
+                {/* Project — searchable, grouped by client. */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Briefcase size={12} /> Project</span>
-                  <SoftSelect
+                  <SearchableSelect
                     value={editingTask.project_id || ''}
+                    emptyOption={{ value: '', label: 'No project' }}
+                    placeholder="Search projects…"
+                    options={(() => {
+                      // Group projects by their client so the popover shows
+                      // "Acme Co · Project A / Project B" sections instead of
+                      // a flat soup of titles.
+                      const byClient = new Map<string | null, typeof projectOptions>();
+                      projectOptions.forEach(p => {
+                        const k = p.client_id || null;
+                        if (!byClient.has(k)) byClient.set(k, []);
+                        byClient.get(k)!.push(p);
+                      });
+                      const out: Array<{ value: string; label: string; hint?: string; searchValue?: string; isHeader?: boolean }> = [];
+                      // Internal / no-client projects first.
+                      const internal = byClient.get(null) || [];
+                      if (internal.length > 0) {
+                        out.push({ value: '__h_internal', label: 'Internal · Livv', isHeader: true });
+                        internal.forEach(p => out.push({ value: p.id, label: p.title }));
+                      }
+                      // Then client-grouped.
+                      const clientList = clients
+                        .filter(c => byClient.has(c.id))
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                      clientList.forEach(c => {
+                        out.push({ value: `__h_${c.id}`, label: c.name, isHeader: true });
+                        (byClient.get(c.id) || []).forEach(p => {
+                          out.push({ value: p.id, label: p.title, searchValue: c.name, hint: c.name });
+                        });
+                      });
+                      return out;
+                    })()}
                     onChange={(pid) => {
                       const proj = projectOptions.find(p => p.id === pid);
                       setEditingTask({ ...editingTask, project_id: pid, client_id: proj?.client_id || editingTask.client_id || '' });
                     }}
-                  >
-                    <option value="">— No project</option>
-                    {projectOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                  </SoftSelect>
+                  />
                 </div>
 
-                {/* Client */}
+                {/* Client — searchable. */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.Users size={12} /> Client</span>
-                  <SoftSelect
+                  <SearchableSelect
                     value={editingTask.client_id || ''}
+                    emptyOption={{ value: '', label: 'No client' }}
+                    placeholder="Search clients…"
+                    options={clients
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(c => ({ value: c.id, label: c.name }))}
                     onChange={(v) => setEditingTask({ ...editingTask, client_id: v })}
-                  >
-                    <option value="">— No client</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </SoftSelect>
+                  />
                 </div>
 
                 {/* Assignees */}
