@@ -165,9 +165,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // Cache tenant_id so we never re-query it on every mutation
+  // Cache tenant_id so we never re-query it on every mutation. Stored as
+  // both a ref (for synchronous reads from createTask / updateTask) AND a
+  // state (so the realtime subscription useEffect re-runs when it
+  // resolves — without state, the subscription is set up once with a
+  // null filter and never re-subscribes after tenant arrives, which is
+  // why brand-new tasks from other users weren't appearing in real time).
   const cachedTenantIdRef = useRef<string | null>(null)
   const tenantIdResolvedRef = useRef(false)
+  const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null)
 
   // Resolve tenant_id once at startup (non-blocking for UI)
   const resolveTenantId = useCallback(async () => {
@@ -180,7 +186,9 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           .select('tenant_id')
           .eq('id', user.id)
           .single()
-        cachedTenantIdRef.current = profile?.tenant_id || null
+        const tid = profile?.tenant_id || null
+        cachedTenantIdRef.current = tid
+        setResolvedTenantId(tid)
       }
     } catch {
       // Continue without tenant_id
@@ -252,15 +260,25 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     resolveTenantId()
   }, [resolveTenantId])
 
+  // Initial load — separate from the realtime subscription so the latter
+  // can re-run on tenant change without re-fetching.
   useEffect(() => {
     loadCalendarData()
+  }, [loadCalendarData])
 
-    // ─── Realtime: targeted state updates instead of full reload ───
-    const tid = cachedTenantIdRef.current
-    const tenantFilter = tid ? { filter: `tenant_id=eq.${tid}` } : {}
+  // ─── Realtime ───
+  // Critical: this MUST depend on resolvedTenantId. When the context
+  // mounts cachedTenantIdRef.current is null and the subscription would
+  // be set up with no tenant filter — channel subscribed but it never
+  // re-subscribed after the tenant resolved, so brand-new tasks from
+  // other users in the same tenant never reached the client.
+  useEffect(() => {
+    if (!resolvedTenantId) return  // wait for tenant before subscribing
+    const tid = resolvedTenantId
+    const tenantFilter = { filter: `tenant_id=eq.${tid}` }
 
     const eventsChannel = supabase
-      .channel(`calendar-events-rt${tid ? `-${tid}` : ''}`)
+      .channel(`calendar-events-rt-${tid}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events', ...tenantFilter }, (payload) => {
         const newEvent = payload.new as CalendarEvent
         setEvents(prev => {
@@ -276,10 +294,12 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const deletedId = payload.old?.id
         if (deletedId) setEvents(prev => prev.filter(e => e.id !== deletedId))
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (import.meta.env.DEV) console.log('[realtime] calendar_events channel:', status)
+      })
 
     const tasksChannel = supabase
-      .channel(`tasks-rt${tid ? `-${tid}` : ''}`)
+      .channel(`tasks-rt-${tid}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks', ...tenantFilter }, (payload) => {
         const newTask = normalizeTask(payload.new)
         setTasks(prev => {
@@ -295,13 +315,15 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const deletedId = payload.old?.id
         if (deletedId) setTasks(prev => prev.filter(t => t.id !== deletedId))
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (import.meta.env.DEV) console.log('[realtime] tasks channel:', status)
+      })
 
     return () => {
       supabase.removeChannel(eventsChannel)
       supabase.removeChannel(tasksChannel)
     }
-  }, [loadCalendarData])
+  }, [resolvedTenantId])
 
   const getMissingColumn = (message: string) => {
     // Match "column X does not exist" errors
