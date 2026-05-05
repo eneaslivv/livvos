@@ -429,20 +429,33 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const normalized = normalizeTask(data)
           setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
 
-          // Notify all assignees (fire-and-forget) + log to activity feed
+          // Notify all assignees (fire-and-forget) + log to activity feed.
+          // Resolve actor name from auth so the notification reads
+          // "Eneas assigned you 'X'" instead of an anonymous "New task".
           const allAssignees: string[] = data.assignee_ids?.length ? data.assignee_ids : (data.assigned_to ? [data.assigned_to] : [])
           const tenantIdForNotify = data.tenant_id || currentPayload.tenant_id
           if (tenantIdForNotify) {
-            allAssignees.filter((aid: string) => aid !== taskData.owner_id).forEach((aid: string) => {
+            // Pull the actor's display name once for both notification + log.
+            const { data: { user: actor } } = await supabase.auth.getUser()
+            let actorName = 'Someone'
+            if (actor?.id) {
+              const { data: actorProfile } = await supabase
+                .from('profiles')
+                .select('name, email')
+                .eq('id', actor.id)
+                .maybeSingle()
+              actorName = actorProfile?.name || actorProfile?.email?.split('@')[0] || 'Someone'
+            }
+            allAssignees.filter((aid: string) => aid !== taskData.owner_id && aid !== actor?.id).forEach((aid: string) => {
               notifyWithEmail({
                 userId: aid,
                 tenantId: tenantIdForNotify,
                 type: 'task',
-                title: `New task assigned: ${data.title}`,
-                message: data.description || 'You have been assigned a new task.',
+                title: `${actorName} te asignó: ${data.title}`,
+                message: data.description || `${actorName} creó una nueva tarea para vos.`,
                 priority: data.priority || 'medium',
                 link: '/calendar',
-                actionText: 'View Task',
+                actionText: 'Ver tarea',
               }).catch(() => {})
             })
             logActivity({
