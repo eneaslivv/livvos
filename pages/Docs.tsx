@@ -229,6 +229,43 @@ export const Docs: React.FC = () => {
   const onCardDragEnd = () => {
     setDraggedItemId(null);
     setDropTargetFolderId(null);
+    setDropTargetCrumbId('__none__');
+  };
+
+  // Breadcrumb drop targets — lets the user drag a file/folder UP into a
+  // parent crumb (or "Home"). Without this, the only way to move OUT of
+  // a folder was via the action menu's "Move to…" submenu, which is buried.
+  // We use a separate state ('__none__' sentinel = nothing hovered, null
+  // = Home crumb hovered) so we can distinguish "no hover" from "Home hover".
+  const [dropTargetCrumbId, setDropTargetCrumbId] = useState<string | '__none__' | null>('__none__');
+  const onCrumbDropTarget = {
+    onDragEnter: (e: React.DragEvent, folderId: string | null) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetCrumbId(folderId);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-eneas-doc')) {
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('application/x-eneas-doc')) return;
+      e.stopPropagation();
+      setDropTargetCrumbId('__none__');
+    },
+    onDrop: (e: React.DragEvent, folderId: string | null) => {
+      e.preventDefault(); e.stopPropagation();
+      setDropTargetCrumbId('__none__');
+      setDraggedItemId(null);
+      const raw = e.dataTransfer.getData('application/x-eneas-doc');
+      if (!raw) return;
+      try {
+        const { kind, id } = JSON.parse(raw) as { kind: SelKind; id: string };
+        moveItem(kind, id, folderId);
+      } catch {}
+    },
   };
 
   const onFolderDropTarget = {
@@ -611,30 +648,58 @@ export const Docs: React.FC = () => {
             )}
             </AnimatePresence>
 
-            {/* Breadcrumbs (hidden while filtering — view is flat) */}
+            {/* Breadcrumbs — also drop targets. Drag a file/folder onto
+                "Home" or any parent crumb to move it out of the current
+                folder. Highlighted with a soft amber background while a
+                drag is hovering. */}
             {activeTab === 'documents' && !isFiltering && breadcrumbs.length > 0 && (
-              <div className="flex items-center gap-1.5 text-sm mt-2 ml-0.5">
+              <div className="flex items-center gap-1 text-sm mt-2 ml-0.5 flex-wrap">
                 <button
                   onClick={() => setCurrentFolderId(null)}
-                  className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium"
+                  onDragEnter={(e) => onCrumbDropTarget.onDragEnter(e, null)}
+                  onDragOver={onCrumbDropTarget.onDragOver}
+                  onDragLeave={onCrumbDropTarget.onDragLeave}
+                  onDrop={(e) => onCrumbDropTarget.onDrop(e, null)}
+                  className={`px-2 py-1 rounded-md transition-all font-medium ${
+                    dropTargetCrumbId === null && draggedItemId
+                      ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40'
+                      : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40'
+                  }`}
                 >
-                  Home
+                  <span className="inline-flex items-center gap-1">
+                    <Icons.Home size={12} />Home
+                  </span>
                 </button>
-                {breadcrumbs.map((folder, i) => (
-                  <React.Fragment key={folder.id}>
-                    <Icons.ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600" />
-                    <button
-                      onClick={() => setCurrentFolderId(folder.id)}
-                      className={`transition-colors ${
-                        i === breadcrumbs.length - 1
-                          ? 'text-zinc-900 dark:text-zinc-100 font-semibold'
-                          : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
-                      }`}
-                    >
-                      {folder.name}
-                    </button>
-                  </React.Fragment>
-                ))}
+                {breadcrumbs.map((folder, i) => {
+                  const isActive = i === breadcrumbs.length - 1;
+                  const isCrumbDropHover = dropTargetCrumbId === folder.id && draggedItemId !== null && !isActive;
+                  return (
+                    <React.Fragment key={folder.id}>
+                      <Icons.ChevronRight size={13} className="text-zinc-300 dark:text-zinc-600" />
+                      <button
+                        onClick={() => setCurrentFolderId(folder.id)}
+                        onDragEnter={(e) => !isActive && onCrumbDropTarget.onDragEnter(e, folder.id)}
+                        onDragOver={(e) => !isActive && onCrumbDropTarget.onDragOver(e)}
+                        onDragLeave={onCrumbDropTarget.onDragLeave}
+                        onDrop={(e) => !isActive && onCrumbDropTarget.onDrop(e, folder.id)}
+                        className={`px-2 py-1 rounded-md transition-all ${
+                          isCrumbDropHover
+                            ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40'
+                            : isActive
+                              ? 'text-zinc-900 dark:text-zinc-100 font-semibold'
+                              : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40'
+                        }`}
+                      >
+                        {folder.name}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+                {draggedItemId && (
+                  <span className="ml-2 text-[10px] text-amber-600 dark:text-amber-400 italic font-medium animate-pulse">
+                    ← arrastrá acá para mover
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -1021,19 +1086,22 @@ export const Docs: React.FC = () => {
                     onDragOver={onFolderDropTarget.onDragOver}
                     onDragLeave={(e) => onFolderDropTarget.onDragLeave(e, folder.id)}
                     onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
-                    className={`group cursor-pointer bg-white dark:bg-zinc-900 border rounded-xl p-4 transition-[border-color,background-color,box-shadow] duration-200 ${
+                    className={`group cursor-grab active:cursor-grabbing bg-white dark:bg-zinc-900 border rounded-xl p-4 transition-[border-color,background-color,box-shadow] duration-200 ${
                       isDropHover
-                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-300/60 dark:ring-blue-500/40 bg-blue-50 dark:bg-blue-950/40 shadow-lg shadow-blue-500/20'
+                        ? 'border-amber-500 dark:border-amber-400 ring-2 ring-amber-300/60 dark:ring-amber-500/40 bg-amber-50 dark:bg-amber-950/30 shadow-lg shadow-amber-500/20'
                         : sel
-                        ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900 bg-blue-50/40 dark:bg-blue-950/30'
-                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 hover:shadow-sm'
+                        ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 bg-zinc-50 dark:bg-zinc-800/40'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 hover:shadow-sm'
                     }`}
                     whileHover={isDropHover ? undefined : { y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                        <Icons.Folder size={24} className="text-blue-500" />
+                      <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-500/10 flex items-center justify-center shadow-sm">
+                        <Icons.Folder size={24} className="text-amber-600 dark:text-amber-400" />
+                        {isDropHover && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 animate-ping" />
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <button
@@ -1087,12 +1155,12 @@ export const Docs: React.FC = () => {
                     onDragOver={onFolderDropTarget.onDragOver}
                     onDragLeave={(e) => onFolderDropTarget.onDragLeave(e, folder.id)}
                     onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
-                    className={`group cursor-pointer flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color,background-color] duration-200 ${
+                    className={`group cursor-grab active:cursor-grabbing flex items-center gap-3 bg-white dark:bg-zinc-900 border rounded-lg px-4 py-3 transition-[border-color,background-color] duration-200 ${
                       isDropHover
-                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-300/60 dark:ring-blue-500/40 bg-blue-50 dark:bg-blue-950/40 shadow-md shadow-blue-500/10'
+                        ? 'border-amber-500 dark:border-amber-400 ring-2 ring-amber-300/60 dark:ring-amber-500/40 bg-amber-50 dark:bg-amber-950/30 shadow-md shadow-amber-500/10'
                         : sel
-                        ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
-                        : 'border-zinc-100 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
+                        ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/40'
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-amber-50/30 dark:hover:bg-amber-950/10'
                     }`}
                     whileTap={{ scale: 0.99 }}
                   >
@@ -1107,8 +1175,8 @@ export const Docs: React.FC = () => {
                     >
                       {sel && <Icons.Check size={12} />}
                     </button>
-                    <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
-                      <Icons.Folder size={18} className="text-blue-500" />
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-500/10 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <Icons.Folder size={18} className="text-amber-600 dark:text-amber-400" />
                     </div>
                     <span className="flex-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</span>
                     {folder.task_id && taskById.get(folder.task_id) && (
@@ -1186,9 +1254,9 @@ export const Docs: React.FC = () => {
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
                     onDragEnd={onCardDragEnd}
                     onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
-                    className={`group relative bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden hover:shadow-sm transition-[border-color,box-shadow] duration-200 ${
+                    className={`group relative cursor-grab active:cursor-grabbing bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden hover:shadow-sm transition-[border-color,box-shadow] duration-200 ${
                       fSel
-                        ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900'
+                        ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40'
                         : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
                     }`}
                     whileHover={{ y: -2 }}

@@ -47,15 +47,17 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
         onClick={onClick}
         draggable={!!onDragStart}
         onDragStart={onDragStart}
-        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors rounded-lg group border ${
+        className={`flex items-center gap-3 px-4 py-3 transition-colors rounded-lg group border ${
+          onDragStart ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+        } ${
           selected
-            ? 'border-blue-400 dark:border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+            ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/40'
             : 'border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
         }`}
       >
         <SelectBox />
-        <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
-          <Icons.Docs size={18} className="text-blue-500" />
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-50 to-zinc-50 dark:from-indigo-500/15 dark:to-zinc-800/40 flex items-center justify-center shrink-0 shadow-sm">
+          <Icons.Docs size={18} className="text-indigo-500 dark:text-indigo-400" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{document.title}</p>
@@ -84,15 +86,17 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
       onClick={onClick}
       draggable={!!onDragStart}
       onDragStart={onDragStart}
-      className={`group relative bg-white dark:bg-zinc-900 border rounded-xl p-4 hover:shadow-sm cursor-pointer transition-all ${
+      className={`group relative bg-white dark:bg-zinc-900 border rounded-xl p-4 hover:shadow-sm transition-all ${
+        onDragStart ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+      } ${
         selected
-          ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900 bg-blue-50/40 dark:bg-blue-950/30'
-          : 'border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700'
+          ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 bg-zinc-50 dark:bg-zinc-800/40'
+          : 'border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700'
       }`}
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
-          <Icons.Docs size={20} className="text-blue-500" />
+        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-50 to-zinc-50 dark:from-indigo-500/15 dark:to-zinc-800/40 flex items-center justify-center shadow-sm">
+          <Icons.Docs size={20} className="text-indigo-500 dark:text-indigo-400" />
         </div>
         <div className="flex items-center gap-1">
           <SelectBox floating />
