@@ -572,18 +572,48 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }).catch(() => {})
           }
 
-          // Notify all assignees when task status changes (completed/cancelled)
-          if (updates.status && updates.status !== backup?.status) {
-            const statusMsg = updates.status === 'done' ? 'completed' : updates.status === 'cancelled' ? 'cancelled' : null
-            if (statusMsg && tenantIdNotif) {
-              const watchers = (backup?.assignee_ids || []).filter((uid: string) => uid !== backup?.owner_id)
+          // Log every meaningful status transition so the activity feed
+          // is a full audit trail. Previously only done/cancelled fired,
+          // which meant reopening or moving to "in progress" disappeared
+          // from the trace. Now:
+          //   todo|in-progress|cancelled  →  done           = task_completed
+          //   done                        →  todo|in-prog   = task_reopened
+          //   any                         →  cancelled      = status_change (cancelled)
+          //   todo                        →  in-progress    = status_change (started)
+          //   in-progress                 →  todo           = status_change (paused)
+          if (updates.status && updates.status !== backup?.status && tenantIdNotif) {
+            const oldStatus = backup?.status || 'todo'
+            const newStatus = updates.status
+            const watchers = (backup?.assignee_ids || []).filter((uid: string) => uid !== backup?.owner_id)
+            const watcherNotify = watchers.map((uid: string) => ({ userId: uid, notifType: 'task' as const, priority: 'low' as const, link: '/calendar' }))
+
+            let action: string | null = null
+            let activityType: string = 'status_change'
+            if (newStatus === 'done') {
+              action = 'completed task'
+              activityType = 'task_completed'
+            } else if (oldStatus === 'done' && (newStatus === 'todo' || newStatus === 'in-progress')) {
+              action = 'reopened task'
+              activityType = 'task_reopened'
+            } else if (newStatus === 'cancelled') {
+              action = 'cancelled task'
+              activityType = 'status_change'
+            } else if (oldStatus === 'todo' && newStatus === 'in-progress') {
+              action = 'started task'
+              activityType = 'status_change'
+            } else if (oldStatus === 'in-progress' && newStatus === 'todo') {
+              action = 'paused task'
+              activityType = 'status_change'
+            }
+
+            if (action) {
               logActivity({
-                action: statusMsg === 'completed' ? 'completed task' : 'cancelled task',
+                action,
                 target: normalized.title,
-                type: statusMsg === 'completed' ? 'task_completed' : 'status_change',
+                type: activityType,
                 tenant_id: tenantIdNotif,
-                metadata: { task_id: id, status: updates.status },
-                notify: watchers.map((uid: string) => ({ userId: uid, notifType: 'task' as const, priority: 'low' as const, link: '/calendar' })),
+                metadata: { task_id: id, status: newStatus, prev_status: oldStatus },
+                notify: watcherNotify,
               }).catch(() => {})
             }
           }
