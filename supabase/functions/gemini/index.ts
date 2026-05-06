@@ -805,12 +805,56 @@ Rules — IMPORTANT:
 - Match the input's language for the period field — Spanish "Esta semana" means write the recap in Spanish.
 - Tone: factual, manager-to-self. Not cheerleader, not harsh.
 - No markdown fences. Plain JSON only.`
+        : type === 'comm_classify'
+        ? `You are a triage assistant for a creative agency's inbox (emails + Slack). The user gives you a JSON payload with one message + recent thread context. Your job is to classify it so the team can decide what to do without reading the whole message.
+
+Input shape:
+{
+  "platform": "gmail" | "slack",
+  "from_name": "...",
+  "from_email": "...",       // gmail only
+  "subject": "...",          // gmail only
+  "body": "the message text",
+  "thread_context": [
+    { "from": "...", "body": "...", "date": "ISO timestamp" }
+  ],
+  "agency_name": "the brand name — use this as 'we' in suggested_reply"
+}
+
+Return ONLY valid JSON with this shape:
+{
+  "intent": "new_request" | "follow_up" | "question" | "approval" | "feedback" | "info_only" | "urgent",
+  "priority": "high" | "medium" | "low",
+  "summary": "1-2 sentence plain-language recap of what the message is asking for / about",
+  "should_create_task": boolean,
+  "suggested_task": {
+    "title": "short imperative — 'Reply to X' or 'Send proposal Y'",
+    "description": "1-3 sentences with the concrete asks + context",
+    "due_date": "YYYY-MM-DD or null",
+    "project_hint": "free-text guess at which project this belongs to, or null"
+  } | null,
+  "suggested_reply": "ready-to-send draft from agency_name's perspective, first-person plural ('we', 'nosotros'), polite + concrete",
+  "reply_tone": "formal" | "friendly" | "concise",
+  "key_entities": ["names/dates/amounts/URLs the message references"],
+  "language": "es" | "en" | "other"
+}
+
+Rules — CRITICAL:
+- Intent = 'urgent' ONLY when the message uses time-pressure language ("ASAP", "today", "urgente"). Don't crank "high" priority for routine work.
+- 'follow_up' is for "bumping" / "any updates?" — the original ask was earlier in the thread.
+- 'info_only' = no answer needed (FYI, automated digests, status updates with nothing to action).
+- should_create_task = true ONLY for new_request, urgent, or feedback that requires real follow-through. Approvals and questions usually just need a reply, not a task.
+- suggested_task = null when should_create_task is false. When true, due_date must be a real date in the future inferred from the body — never invent. If the message says "next Friday", compute it from the message's received date if available; otherwise null.
+- suggested_reply: 2-5 sentences, polite, concrete. NEVER make up commitments ("entregamos el martes"). Acknowledge + propose next step. If the message is unclear, ask one clarifying question.
+- key_entities: extract names of people, companies, projects, dates, amounts, URLs literally as they appear. Max 8.
+- language: detect from body. Reply in that language.
+- No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : type === 'comm_classify' ? 1200 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : type === 'comm_classify' ? 0.2 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3

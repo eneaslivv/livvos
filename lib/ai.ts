@@ -26,6 +26,7 @@ const CACHE_TTL: Record<string, number> = {
   finance_chat: 0,                 // no cache — each chat turn is unique
   content_strategy_suggest: 30 * 60 * 1000, // 30 min — same brain produces same suggestions
   member_weekly_summary: 15 * 60 * 1000,    // 15 min — manager spam-clicking shouldn't burn tokens
+  comm_classify: 0,                         // no cache — every message is unique
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -930,6 +931,19 @@ export const generateMemberWeeklySummary = (input: string, profile?: LiveAIProfi
       typeof r.headline === 'string' ||
       Array.isArray(r.wins) || Array.isArray(r.blockers) || Array.isArray(r.next_focus)
     ), profile)
+
+// ─── Communications classifier ────────────────────────────────────
+// Used by lib/communications/classifier.ts (frontend) AND directly by
+// the gmail-sync / slack-events edge functions (server-side, via raw
+// fetch to gemini). Re-exporting the whole pipeline through callGemini
+// keeps the auth + retry + logging consistent with every other AI call.
+export const classifyCommMessage = <T = unknown>(input: string, profile?: LiveAIProfile) =>
+  callGemini<T>('comm_classify', input, (r) =>
+    !!r && typeof (r as any).intent === 'string'
+       && typeof (r as any).priority === 'string'
+       && typeof (r as any).summary === 'string',
+    profile,
+  )
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {
