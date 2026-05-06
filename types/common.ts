@@ -18,4 +18,6 @@ export type PageView = 'home' | 'projects' | 'clients' | 'team' | 'team_clients'
 export interface NavParams {
   projectId?: string;
   clientId?: string;
+  /** When set on a navigate to 'calendar', the task panel auto-opens. */
+  taskId?: string;
 }

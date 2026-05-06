@@ -20,6 +20,9 @@ interface TransformedActivity {
   action: string;
   displayAction: string;
   target: string;
+  /** When the activity references a task, this is the task UUID — lets
+      the feed deep-link the target string to /calendar?task=<id>. */
+  taskId: string | null;
   projectTitle: string | null;
   type: string;
   details: string | null;
@@ -94,7 +97,11 @@ function extractContent(details: any): string | null {
   return null;
 }
 
-export const Activity: React.FC = () => {
+interface ActivityProps {
+  onNavigate?: (page: 'calendar' | 'projects' | 'docs' | 'home', params?: { taskId?: string; projectId?: string; clientId?: string }) => void;
+}
+
+export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
   const { user: authUser } = useAuth();
   const { user: profileUser, isLoading: profileLoading } = useRBAC();
   const { currentTenant, isLoading: tenantLoading } = useTenant();
@@ -107,7 +114,11 @@ export const Activity: React.FC = () => {
   const { data: allTasks } = useSupabase<any>('tasks', {
     enabled: tenantReady,
     subscribe: true,
-    select: 'id,title,assignee_id,completed,completed_at,completed_by,priority',
+    // assignee_id is a legacy column that's never populated. The real
+    // source of truth is assignee_ids[] (current) + assigned_to (legacy
+    // single). Pulling all three so the per-person stats below resolve
+    // to a non-null id reliably regardless of when the task was created.
+    select: 'id,title,assignee_id,assignee_ids,assigned_to,owner_id,completed,completed_at,completed_by,priority,status,project_id,client_id,due_date,start_date',
   });
   const { members } = useTeam();
 
@@ -175,16 +186,29 @@ export const Activity: React.FC = () => {
     let thisWeekTotal = 0;
     let lastWeekTotal = 0;
 
+    // Helper: pick the best-available "who is responsible" for a task.
+    // Priority order: explicit completed_by (most accurate for completion
+    // attribution) → assignee_ids[0] (current schema) → assigned_to (legacy)
+    // → assignee_id (oldest column, almost always null nowadays).
+    const personFor = (t: any): string | null =>
+      t.completed_by
+      || (Array.isArray(t.assignee_ids) && t.assignee_ids.length > 0 ? t.assignee_ids[0] : null)
+      || t.assigned_to
+      || t.assignee_id
+      || null;
+
     (allTasks || []).forEach((task: any) => {
-      if (!task.completed || !task.completed_at || !task.assignee_id) return;
+      if (!task.completed || !task.completed_at) return;
+      const personId = personFor(task);
+      if (!personId) return;
       const completedDate = new Date(task.completed_at);
 
       if (completedDate >= weekStart) {
         thisWeekTotal++;
-        thisWeekByPerson[task.assignee_id] = (thisWeekByPerson[task.assignee_id] || 0) + 1;
+        thisWeekByPerson[personId] = (thisWeekByPerson[personId] || 0) + 1;
       } else if (completedDate >= lastWeekStart && completedDate < weekStart) {
         lastWeekTotal++;
-        lastWeekByPerson[task.assignee_id] = (lastWeekByPerson[task.assignee_id] || 0) + 1;
+        lastWeekByPerson[personId] = (lastWeekByPerson[personId] || 0) + 1;
       }
     });
 
@@ -295,6 +319,7 @@ export const Activity: React.FC = () => {
                         a.type === 'user_logout' ? 'signed out of' :
                         (a.action || 'updated'),
           target: a.target || 'General',
+          taskId: a.metadata?.task_id || null,
           projectTitle: a.project_title,
           type: a.type,
           details: extractContent(a.details),
@@ -693,8 +718,15 @@ export const Activity: React.FC = () => {
                 const weekDelta = member.thisWeek - member.lastWeek;
                 const isOpen = drillDownPersonId === member.id;
 
-                // Tasks for this person, split open vs completed
-                const personTasks = (allTasks || []).filter((t: any) => t.assignee_id === member.id);
+                // Tasks for this person — same multi-column resolver as
+                // weeklyStats so the drill-down mirrors the bar's count.
+                const personTasks = (allTasks || []).filter((t: any) => {
+                  if (t.completed_by === member.id) return true;
+                  if (Array.isArray(t.assignee_ids) && t.assignee_ids.includes(member.id)) return true;
+                  if (t.assigned_to === member.id) return true;
+                  if (t.assignee_id === member.id) return true;
+                  return false;
+                });
                 const openTasks = personTasks.filter((t: any) => !t.completed);
                 const completedTasks = personTasks
                   .filter((t: any) => t.completed)
@@ -968,7 +1000,34 @@ export const Activity: React.FC = () => {
                           <p className="text-[13px] text-zinc-900 dark:text-zinc-100 leading-snug min-w-0">
                             <span className="font-semibold">{act.userName}</span>{' '}
                             <span className="text-zinc-500 dark:text-zinc-400">{act.displayAction}</span>{' '}
-                            <span className="font-semibold">{act.target}</span>
+                            {act.taskId ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Prefer in-app SPA navigation — preserves
+                                  // local state and is faster than a full
+                                  // reload. Falls back to URL-based navigation
+                                  // if the parent didn't pass onNavigate.
+                                  if (onNavigate) {
+                                    onNavigate('calendar', { taskId: act.taskId! });
+                                  } else {
+                                    try {
+                                      const url = new URL(window.location.href);
+                                      url.searchParams.set('task', act.taskId!);
+                                      window.location.href = url.toString();
+                                    } catch {
+                                      window.location.href = `?task=${act.taskId}`;
+                                    }
+                                  }
+                                }}
+                                className="font-semibold text-zinc-900 dark:text-zinc-100 hover:text-amber-700 dark:hover:text-amber-400 hover:underline underline-offset-2 transition-colors"
+                                title="Abrir tarea en Calendar"
+                              >
+                                {act.target}
+                              </button>
+                            ) : (
+                              <span className="font-semibold">{act.target}</span>
+                            )}
                             {act.projectTitle && (
                               <span className="text-zinc-400 dark:text-zinc-500"> · {act.projectTitle}</span>
                             )}

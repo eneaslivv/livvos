@@ -721,11 +721,13 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
-          {/* Calendar */}
+          {/* Calendar — navTaskId opens the task panel automatically when
+              the user comes here from a deep-link (Activity feed click,
+              notification, etc). */}
           {visitedPages.has('calendar') && (
             <KeepAlivePage page="calendar" active={currentPage === 'calendar'}>
               <ProtectedRoute permission={{ module: 'calendar', action: 'view' }} feature="calendar_integration">
-                <Calendar />
+                <Calendar navTaskId={navParams?.taskId} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
@@ -743,7 +745,7 @@ const AppContent: React.FC<{
           {visitedPages.has('activity') && (
             <KeepAlivePage page="activity" active={currentPage === 'activity'}>
               <ProtectedRoute permission={{ module: 'activity', action: 'view' }}>
-                <Activity />
+                <Activity onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}
@@ -958,12 +960,17 @@ const App: React.FC = () => {
     }
   };
 
-  // Clear navParams after target page consumes them
+  // Clear navParams after target page consumes them. We give a longer
+  // window when navParams carries a taskId because the Calendar's task
+  // list is realtime-loaded — the prop must stay alive long enough for
+  // the matching task to hydrate from the subscription. 5s covers
+  // initial load on cold cache; 150ms is plenty for synchronous reads
+  // of projectId / clientId.
   useEffect(() => {
-    if (navParams) {
-      const timer = setTimeout(() => setNavParams(null), 150);
-      return () => clearTimeout(timer);
-    }
+    if (!navParams) return;
+    const delay = navParams.taskId ? 5000 : 150;
+    const timer = setTimeout(() => setNavParams(null), delay);
+    return () => clearTimeout(timer);
   }, [navParams]);
 
   if (isInvite) {

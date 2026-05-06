@@ -37,13 +37,27 @@ interface Task {
   completed_at?: string | null;
   completed_by?: string | null;
   assignee_id?: string | null;
+  assignee_ids?: string[] | null;
+  assigned_to?: string | null;
   owner_id?: string | null;
   priority?: string | null;
   status?: string | null;
   project_name?: string | null;
   client_name?: string | null;
   created_at?: string | null;
+  due_date?: string | null;
+  start_date?: string | null;
 }
+
+// Whether a task "belongs to" the given member — checks every column
+// variant (legacy single, current array, completion attribution).
+const isMemberTask = (t: Task, memberId: string): boolean => {
+  if (t.completed_by === memberId) return true;
+  if (Array.isArray(t.assignee_ids) && t.assignee_ids.includes(memberId)) return true;
+  if (t.assigned_to === memberId) return true;
+  if (t.assignee_id === memberId) return true;
+  return false;
+};
 
 interface Activity {
   id: string;
@@ -140,28 +154,31 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
     };
 
     const completedInPeriod = tasks
-      .filter(t =>
-        (t.assignee_id === member.id || t.completed_by === member.id) &&
-        t.completed &&
-        isInRange(t.completed_at)
-      )
+      .filter(t => isMemberTask(t, member.id) && t.completed && isInRange(t.completed_at))
       .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
 
     const openAssigned = tasks
-      .filter(t => t.assignee_id === member.id && !t.completed && t.status !== 'cancelled')
+      .filter(t => isMemberTask(t, member.id) && !t.completed && t.status !== 'cancelled')
       .sort((a, b) => (b.priority === 'urgent' ? 1 : 0) - (a.priority === 'urgent' ? 1 : 0));
 
-    const delegatedByThem = tasks
-      .filter(t => t.owner_id === member.id && t.assignee_id && t.assignee_id !== member.id);
+    // "Delegated by them" — tasks they own but are assigned to someone else.
+    const delegatedByThem = tasks.filter(t => {
+      if (t.owner_id !== member.id) return false;
+      const otherAssignee =
+        (Array.isArray(t.assignee_ids) && t.assignee_ids.find(id => id && id !== member.id))
+        || (t.assigned_to && t.assigned_to !== member.id ? t.assigned_to : null)
+        || (t.assignee_id && t.assignee_id !== member.id ? t.assignee_id : null);
+      return !!otherAssignee;
+    });
 
     const todayMs = new Date().setHours(0, 0, 0, 0);
     const overdue = openAssigned.filter(t => {
-      const due = (t as any).due_date || (t as any).start_date;
+      const due = t.due_date || t.start_date;
       return due && new Date(due).getTime() < todayMs;
     });
 
     const allCompletedHistorical = tasks
-      .filter(t => (t.assignee_id === member.id || t.completed_by === member.id) && t.completed)
+      .filter(t => isMemberTask(t, member.id) && t.completed)
       .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
 
     return { completedInPeriod, openAssigned, delegatedByThem, overdue, allCompletedHistorical };

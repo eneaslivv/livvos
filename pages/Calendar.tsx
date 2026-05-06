@@ -29,7 +29,13 @@ import { Icons } from '../components/ui/Icons';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 
-export const Calendar: React.FC = () => {
+interface CalendarProps {
+  /** When provided, the corresponding task panel auto-opens once tasks
+      are loaded. Used by the Activity feed deep-links. */
+  navTaskId?: string;
+}
+
+export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const {
@@ -358,6 +364,35 @@ export const Calendar: React.FC = () => {
     assignee_ids: [] as string[],
     share_with_tenant_ids: [] as string[],
   });
+
+  // Deep-link from /Activity feed (or notification): open the task whose
+  // id is passed via prop OR via ?task=<id> in the URL. Reading from the
+  // URL directly (instead of relying solely on the prop) makes the link
+  // robust against the App-level navParams 150ms auto-clear, since tasks
+  // can take seconds to hydrate from realtime.
+  const openedNavTaskRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    let targetId = navTaskId || null;
+    if (!targetId) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        targetId = params.get('task');
+      } catch {}
+    }
+    if (!targetId || openedNavTaskRef.current === targetId) return;
+    const t = tasks.find(x => x.id === targetId);
+    if (!t) return;
+    openedNavTaskRef.current = targetId;
+    handleOpenTaskDetail(t);
+    // Strip the ?task=... param so a refresh doesn't re-open it and the
+    // URL stays clean for sharing.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('task');
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navTaskId, tasks]);
 
   // Open task detail panel
   const handleOpenTaskDetail = (task: CalendarTask) => {
