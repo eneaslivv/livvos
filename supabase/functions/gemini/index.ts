@@ -1027,17 +1027,27 @@ Rules — IMPORTANT:
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-    } else if (type === 'finance_chat') {
+    } else if (type === 'finance_chat' || type === 'advisor_chat_actions') {
       // Same salvage logic as advisor_chat for the reply field; actions[] stays
       // as-is. We don't reject when actions is missing — many turns are
-      // pure-Q&A and shouldn't carry actions.
+      // pure-Q&A and shouldn't carry actions. Covers BOTH finance_chat and
+      // advisor_chat_actions because they share the {reply, actions[]?} shape.
       let chat = json as { reply?: string; actions?: unknown[] }
       if (json && (!chat?.reply || typeof chat.reply !== 'string')) {
         const obj = json as Record<string, unknown>
         const stringField = Object.values(obj).find((v) => typeof v === 'string') as string | undefined
         if (stringField) chat = { ...chat, reply: stringField }
+        else {
+          // Last resort: walk array values and synthesize a bullet list.
+          const arrayField = Object.values(obj).find((v) => Array.isArray(v)) as unknown[] | undefined
+          if (arrayField && arrayField.every((x) => typeof x === 'string' || (x && typeof x === 'object'))) {
+            const lines = arrayField.map((x) => typeof x === 'string' ? `• ${x}` : `• ${JSON.stringify(x)}`).join('\n')
+            chat = { ...chat, reply: lines }
+          }
+        }
       }
       if (!chat?.reply || typeof chat.reply !== 'string') {
+        console.error(`[gemini] ${type} validation failed. finishReason=${finishReason}, json keys: ${json ? Object.keys(json as object).join(',') : 'N/A'}, rawDebug: ${rawDebug?.slice(0, 500)}`)
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
