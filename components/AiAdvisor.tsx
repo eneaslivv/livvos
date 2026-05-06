@@ -20,6 +20,7 @@ import { useCalendar } from '../context/CalendarContext';
 import { useClients } from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
+import { LinkifiedText } from './ui/LinkifiedText';
 
 const AREA_CONFIG: Record<string, { gradient: string; iconBg: string; border: string }> = {
   projects: { gradient: 'from-blue-500/8 to-transparent', iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', border: 'border-blue-500/10' },
@@ -890,8 +891,8 @@ export const AiAdvisor: React.FC = () => {
                   if (msg.role === 'user') {
                     return (
                       <div key={idx} className="flex justify-end">
-                        <div className="max-w-[85%] px-3.5 py-2 rounded-2xl rounded-br-sm bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] leading-[1.55]">
-                          {msg.content}
+                        <div className="max-w-[85%] px-3.5 py-2 rounded-2xl rounded-br-sm bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] leading-[1.55] [&_a]:text-amber-300 dark:[&_a]:text-amber-700 [&_a]:underline">
+                          <LinkifiedText text={msg.content} />
                         </div>
                       </div>
                     );
@@ -910,7 +911,7 @@ export const AiAdvisor: React.FC = () => {
                           {isInsightsMsg ? (
                             <InsightsBlock greeting={(msg as any).greeting} insights={(msg as any).insights} />
                           ) : (
-                            (msg as any).content
+                            <LinkifiedText text={(msg as any).content} />
                           )}
                           {outputId && (
                             <AIFeedbackBar outputId={outputId} className="mt-2" compact />

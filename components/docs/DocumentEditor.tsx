@@ -11,6 +11,7 @@ import TableRow from '@tiptap/extension-table-row';
 import { TableCellCheckbox } from './extensions/TableCellCheckbox';
 import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
 import { Icons } from '../ui/Icons';
 import { DocumentToolbar } from './DocumentToolbar';
 import { SlashCommand, type SlashState } from './extensions/SlashCommand';
@@ -181,6 +182,20 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       TableCellCheckbox,
       TableHeader,
       Image.configure({ inline: false, allowBase64: true }),
+      // Auto-detects URLs as the user types/pastes and renders both
+      // fresh and historical URLs as clickable links opening in a new tab.
+      Link.configure({
+        openOnClick: true,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer nofollow',
+          class: 'text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-700 dark:hover:text-indigo-300 break-all',
+        },
+        protocols: ['http', 'https', 'mailto', 'tel'],
+        validate: (href) => /^(https?:\/\/|mailto:|tel:)/i.test(href),
+      }),
       SlashCommand.configure({
         onStateChange: (state) => setSlashState(state),
         onKeyDown: (event) => slashMenuRef.current?.onKeyDown(event) ?? false,

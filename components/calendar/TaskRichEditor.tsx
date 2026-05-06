@@ -13,6 +13,7 @@ import Underline from '@tiptap/extension-underline';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
 import { Icons } from '../ui/Icons';
 
 interface Props {
@@ -25,6 +26,26 @@ interface Props {
   onCommit?: (next: { html: string; text: string }) => Promise<void> | void;
   /** Hint shown below toolbar — "Saved 2s ago" / "Saving…" */
   saveHint?: string | null;
+}
+
+// TipTap's Link extension only auto-detects URLs while the user is
+// typing/pasting — content already saved with plain-text URLs (which is
+// most existing tasks) doesn't get linkified on setContent. This util
+// wraps unlinked URLs in <a> tags before we feed HTML to the editor, so
+// historical descriptions become clickable too.
+const URL_REGEX = /(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+)/g;
+function linkifyHtml(input: string): string {
+  if (!input) return input;
+  // Skip rows that already have anchors — assume the author intended what's
+  // there. We only touch HTML that has zero anchors (the common case for
+  // pasted Drive/Notion links typed into the editor before Link landed).
+  if (/<a\s/i.test(input)) return input;
+  return input.replace(URL_REGEX, (match) => {
+    // Trim trailing punctuation that's almost never part of a real URL.
+    const trail = match.match(/[.,;:!?)]+$/)?.[0] || '';
+    const url = trail ? match.slice(0, -trail.length) : match;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${url}</a>${trail}`;
+  });
 }
 
 export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, onUploadImage, onCommit, saveHint }) => {
@@ -50,11 +71,30 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
         allowBase64: false,
         HTMLAttributes: { class: 'rounded-lg max-w-full h-auto my-2 border border-zinc-200 dark:border-zinc-700' },
       }),
+      // Link — auto-detects URLs as the user types/pastes (autolink) and
+      // makes both fresh URLs AND ones already saved in description_html
+      // render as clickable anchors. We force target="_blank" + the
+      // proper rel attrs so they always open in a new tab without the
+      // referrer leak. linkOnPaste lets the user paste a URL while text
+      // is selected to wrap that selection in a link, the standard editor
+      // affordance.
+      Link.configure({
+        openOnClick: true,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer nofollow',
+          class: 'text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-700 dark:hover:text-indigo-300 break-all',
+        },
+        protocols: ['http', 'https', 'mailto', 'tel'],
+        validate: (href) => /^(https?:\/\/|mailto:|tel:)/i.test(href),
+      }),
       TaskList.configure({ HTMLAttributes: { class: 'list-none pl-0 space-y-0.5' } }),
       TaskItem.configure({ nested: true, HTMLAttributes: { class: 'flex gap-2 items-start' } }),
       Placeholder.configure({ placeholder: placeholder || 'Empezá a escribir, o pegá una imagen…' }),
     ],
-    content: html || '',
+    content: linkifyHtml(html || ''),
     editorProps: {
       attributes: {
         class: 'prose-sm max-w-none outline-none px-1 py-2 -mx-1 text-[15px] leading-[1.65] text-zinc-800 dark:text-zinc-200 min-h-[80px]',
@@ -127,7 +167,7 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
     if (firstSyncRef.current) {
       firstSyncRef.current = false;
       lastSetRef.current = html;
-      editor.commands.setContent(html || '', false);
+      editor.commands.setContent(linkifyHtml(html || ''), false);
       return;
     }
     if (html === lastSetRef.current) return;
