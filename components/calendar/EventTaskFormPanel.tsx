@@ -141,7 +141,24 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
     >
       <div className="p-5">
         {showNewEventForm ? (
-          <div className="space-y-2.5" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { const title = calendarMode === 'content' ? newContentData.title : newEventData.title; if (title.trim()) { e.preventDefault(); calendarMode === 'content' ? onCreateContent() : onCreateEvent(); } } }}>
+          <div className="space-y-2.5" onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            const title = calendarMode === 'content' ? newContentData.title : newEventData.title;
+            if (!title.trim()) return;
+            e.preventDefault();
+            // When editing an existing event, the Enter key MUST route to
+            // update — otherwise the form happily inserts a new row and
+            // we end up with two "Call with Christie" cards on
+            // consecutive days. Only the Save button used to do this
+            // check; the Enter handler was missing it.
+            if (calendarMode === 'content') {
+              onCreateContent();
+            } else if (editingEventId && onUpdateEvent) {
+              onUpdateEvent();
+            } else {
+              onCreateEvent();
+            }
+          }}>
             {/* Title */}
             <input
               type="text"
