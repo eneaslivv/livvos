@@ -24,6 +24,7 @@ const CACHE_TTL: Record<string, number> = {
   finance_entries_batch: 0,        // no cache — file content is unique per upload
   finance_chat: 0,                 // no cache — each chat turn is unique
   content_strategy_suggest: 30 * 60 * 1000, // 30 min — same brain produces same suggestions
+  member_weekly_summary: 15 * 60 * 1000,    // 15 min — manager spam-clicking shouldn't burn tokens
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -750,6 +751,26 @@ export interface ContentStrategySuggestionResult {
 
 export const generateContentStrategySuggestions = (input: string, profile?: LiveAIProfile) =>
   callGemini<ContentStrategySuggestionResult>('content_strategy_suggest', input, (r) => Array.isArray(r?.items), profile)
+
+// ─── Member weekly summary ───────────────────────────────────────
+// Powers MemberWeeklySummaryPanel. Input is a JSON snapshot of a single
+// teammate's week (completed/open/delegated counts + sample task titles
+// + activity counts). Output is a 3-section structured recap so the
+// manager can see at a glance what someone shipped + what's stuck.
+
+export interface MemberWeeklySummaryResult {
+  headline?: string
+  wins?: string[]
+  blockers?: string[]
+  next_focus?: string[]
+}
+
+export const generateMemberWeeklySummary = (input: string, profile?: LiveAIProfile) =>
+  callGemini<MemberWeeklySummaryResult>('member_weekly_summary', input, (r) =>
+    typeof r === 'object' && r !== null && (
+      typeof r.headline === 'string' ||
+      Array.isArray(r.wins) || Array.isArray(r.blockers) || Array.isArray(r.next_focus)
+    ), profile)
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {

@@ -8,6 +8,7 @@ import { useRBAC } from '../context/RBACContext';
 import { useTenant } from '../context/TenantContext';
 import { useTeam } from '../context/TeamContext';
 import { supabase } from '../lib/supabase';
+import { MemberWeeklySummaryPanel } from '../components/activity/MemberWeeklySummaryPanel';
 
 type TabType = 'All Activity' | 'My Updates' | 'Comments' | 'Files';
 
@@ -126,6 +127,12 @@ export const Activity: React.FC = () => {
   // Leaderboard toggle + drill-down
   const [showLeaderboard, setShowLeaderboard] = useState(true);
   const [drillDownPersonId, setDrillDownPersonId] = useState<string | null>(null);
+  // Panel state — when a member name/avatar in the roster is clicked,
+  // we open a full-width SlidePanel with their weekly recap + AI summary.
+  // Inline drill-down (the existing accordion below the row) stays for
+  // quick scanning; the panel is for "I want the full picture / generate
+  // a recap to copy-paste somewhere".
+  const [summaryMemberId, setSummaryMemberId] = useState<string | null>(null);
 
   // Likes in-flight tracking
   const [likingIds, setLikingIds] = useState<Set<string>>(new Set());
@@ -695,19 +702,26 @@ export const Activity: React.FC = () => {
 
                 return (
                   <div key={member.id}>
-                    <button
-                      onClick={() => setDrillDownPersonId(prev => prev === member.id ? null : member.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-1.5 transition ${isOpen ? 'bg-zinc-50/80 dark:bg-zinc-800/40' : 'hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20'}`}
+                    <div
+                      className={`group/row w-full flex items-center gap-2 px-3 py-1.5 transition ${isOpen ? 'bg-zinc-50/80 dark:bg-zinc-800/40' : 'hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20'}`}
                     >
                       <span className={`w-4 text-[10px] font-semibold text-center tabular-nums ${
                         idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-zinc-400' : idx === 2 ? 'text-amber-700' : 'text-zinc-300 dark:text-zinc-600'
                       }`}>{idx + 1}</span>
-                      <div className={`h-5 w-5 rounded-full ${getAvatarColor(member.name)} text-white flex items-center justify-center text-[9px] font-bold shrink-0`}>
+                      <button
+                        onClick={() => setSummaryMemberId(member.id)}
+                        title={`Ver resumen semanal de ${member.name}`}
+                        className={`h-5 w-5 rounded-full ${getAvatarColor(member.name)} text-white flex items-center justify-center text-[9px] font-bold shrink-0 hover:ring-2 hover:ring-amber-400 transition-all`}
+                      >
                         {member.avatar_url
                           ? <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
                           : getInitials(member.name)}
-                      </div>
-                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200 w-24 truncate text-left">{member.name}</span>
+                      </button>
+                      <button
+                        onClick={() => setSummaryMemberId(member.id)}
+                        title={`Ver resumen semanal de ${member.name}`}
+                        className="text-xs font-medium text-zinc-700 dark:text-zinc-200 w-24 truncate text-left hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+                      >{member.name}</button>
                       <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${barWidth}%` }} />
                       </div>
@@ -729,8 +743,14 @@ export const Activity: React.FC = () => {
                           <span className="opacity-50 normal-case ml-0.5">· {getRelativeTime(new Date(member.lastLogin)).replace(' ago', '')}</span>
                         )}
                       </span>
-                      <Icons.ChevronDown size={11} className={`text-zinc-300 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                    </button>
+                      <button
+                        onClick={() => setDrillDownPersonId(prev => prev === member.id ? null : member.id)}
+                        title={isOpen ? 'Colapsar' : 'Expandir lista de tareas'}
+                        className="p-1 text-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-all"
+                      >
+                        <Icons.ChevronDown size={11} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
 
                     {isOpen && (
                       <div className="px-3 pb-2 pt-1 bg-zinc-50/40 dark:bg-zinc-800/20 space-y-2">
@@ -1147,6 +1167,20 @@ export const Activity: React.FC = () => {
         </div>,
         document.body
       )}
+
+      {/* Per-member weekly summary panel — opened by clicking an avatar
+          or name in the Team roster. Reads from the same data the page
+          already has (allTasks, rawActivities) so no extra fetch. */}
+      <MemberWeeklySummaryPanel
+        isOpen={summaryMemberId !== null}
+        onClose={() => setSummaryMemberId(null)}
+        member={summaryMemberId ? (() => {
+          const m = members.find(x => x.id === summaryMemberId);
+          return m ? { id: m.id, name: m.name || m.email, email: m.email, avatar_url: m.avatar_url } : null;
+        })() : null}
+        tasks={(allTasks || []) as any}
+        activities={(rawActivities || []) as any}
+      />
     </div>
   );
 };

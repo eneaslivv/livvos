@@ -687,12 +687,47 @@ Rules:
 - If pinned_notes and documents are EMPTY, return items: [] and a summary like "Cargá la estrategia y referencias para que pueda proponer posts" (in user's language).
 - Match the user's language (Spanish if pinned_notes is in Spanish).
 - No markdown fences. Plain JSON only.`
+        : type === 'member_weekly_summary'
+        ? `You are an engineering manager writing a weekly recap of a single team member's work. The user gives you a JSON snapshot of one person's period (this week / last week / this month).
+
+Input shape:
+{
+  "member": { "name": "...", "id": "..." },
+  "period": "Esta semana" | "Semana pasada" | "Este mes",
+  "period_range": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" },
+  "completed_count": int,
+  "completed": [{ "title": "...", "project": "...", "client": "...", "completed_at": "ISO", "priority": "low|medium|high|urgent" }],
+  "open_count": int,
+  "open_high_priority": [{ "title": "...", "priority": "...", "project": "..." }],
+  "overdue_count": int,
+  "delegated_count": int,
+  "login_count": int,
+  "activity_count": int
+}
+
+Return ONLY valid JSON with this shape:
+{
+  "headline": "1 sentence summary of the week (e.g. 'Solid week — shipped 8 tasks across 3 projects with strong focus on Acme')",
+  "wins": ["3-5 bullet wins, each 1 line, names the project/client when relevant"],
+  "blockers": ["0-3 bullet blockers / risks — overdue tasks, high-priority pile-ups, low activity"],
+  "next_focus": ["2-3 bullets on what they should prioritize next, derived from open_high_priority + overdue"]
+}
+
+Rules — IMPORTANT:
+- Be SPECIFIC and concrete. Reference task titles, project names, numbers. Don't write fluff like "great work this week" — say WHAT was great and WHY.
+- If completed_count = 0, the headline should reflect that honestly (e.g. "Quiet week — no tasks completed; X open"), not invent wins.
+- If overdue_count > 0 OR open_high_priority is non-empty, blockers MUST surface them by name.
+- next_focus must be actionable. Pick the 2-3 most pressing items from open_high_priority/overdue. NEVER invent tasks not in the input.
+- If activity_count is very low (<5) AND completed_count is 0, mention as a possible disengagement signal in blockers — but tactfully ("low system activity this period").
+- Match the input's language for the period field — Spanish "Esta semana" means write the recap in Spanish.
+- Tone: factual, manager-to-self. Not cheerleader, not harsh.
+- No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
