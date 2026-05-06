@@ -511,6 +511,54 @@ Rules:
 - Respond in the SAME language as the user's question (Spanish if Spanish).
 - No markdown code fences; plain text only in the reply field.
 - If the context is missing data the user asked about, say so briefly and suggest what to check.`
+        : type === 'advisor_chat_actions'
+        ? `You are a senior business advisor continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (snapshot of projects, finances, team — every entity carries an "id" you can reference), "history" (prior turns), and "question" (the new user message).
+
+Reply in plain language AND, when the user explicitly asks you to DO something (create a task, plan a week, break down a project, suggest delegation), propose actions for the frontend to execute AFTER the user confirms. NEVER auto-execute. NEVER invent ids — only reference ids present in the context.
+
+Return ONLY valid JSON with this shape:
+{
+  "reply": "1-5 sentence answer in the user's language",
+  "actions": [
+    {
+      "kind": "create_task" | "create_project" | "create_tasks_batch" | "plan_week" | "suggest_delegate",
+      "summary": "human-readable description of what this action will do",
+      "params": {
+        // For create_task — minimum: title
+        "title": "short label",
+        "description": "optional details",
+        "project_id": "exact-id-from-context-or-null",
+        "client_id": "exact-id-from-context-or-null",
+        "assignee_id": "exact-id-from-context-or-null",
+        "due_date": "YYYY-MM-DD",
+        "priority": "low" | "medium" | "high" | "urgent",
+        "status": "todo" | "in-progress" | "done" | "cancelled",
+
+        // For create_project — minimum: title
+        // (uses title, client_id, deadline, description, color)
+
+        // For create_tasks_batch — minimum: tasks[]
+        // { project_id, client_id, tasks: [{ title, description, assignee_id, due_date, priority, status }] }
+
+        // For plan_week — minimum: week_start + goals
+        // { week_start: "YYYY-MM-DD (Monday)", goals: ["..."], suggested_tasks: [{ title, day_offset (0-6), assignee_id, project_id }] }
+
+        // For suggest_delegate — minimum: reason
+        // { task_id, project_id, to_user_id, reason }
+      }
+    }
+  ]
+}
+
+Rules — CRITICAL:
+- "actions" is OPTIONAL. Include it only when the user clearly asks to CHANGE or ADD something ("creá una tarea de…", "armame el plan de la semana", "delegá esto a Luis", "rompé este proyecto en tasks"). For pure questions ("¿cómo va el proyecto Acme?") return actions: [] or omit it.
+- Every id (project_id, client_id, assignee_id, task_id, to_user_id) MUST come from context. If the user mentions a name that isn't in context, set the id to null and explain in the reply that the entity wasn't found.
+- For plan_week.week_start: pick the upcoming Monday (or the one explicitly mentioned). suggested_tasks should be 3-7 items spread across the week (use day_offset 0-6).
+- For create_tasks_batch (e.g. breaking down a project), aim for 3-10 concrete tasks. Each MUST have a title; everything else is optional.
+- Keep "reply" concise (1-3 sentences) when proposing actions — the action card itself shows the details.
+- If the user's request is ambiguous (e.g. "creá una tarea" without saying what), include in "reply" a clarifying question and DO NOT propose actions.
+- Respond in the SAME language as the user's question.
+- No markdown code fences; plain text only in the reply field.`
         : type === 'finance_chat'
         ? `You are a finance assistant continuing a conversation with the user. The user's input is a JSON string with three fields: "context" (finance snapshot — recent expenses, incomes, budgets, totals, available expense_categories, available clients, available projects — each row carries an "id" you can reference), "history" (prior turns), and "question" (the new user message).
 
@@ -726,8 +774,8 @@ Rules — IMPORTANT:
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3

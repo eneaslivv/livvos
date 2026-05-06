@@ -13,6 +13,7 @@ type AICacheEntry = {
 const CACHE_TTL: Record<string, number> = {
   advisor: 2 * 60 * 60 * 1000,    // 2h — business context changes slowly
   advisor_chat: 0,                 // no cache — each chat turn is unique
+  advisor_chat_actions: 0,         // no cache — actions are state-dependent
   weekly_summary: 60 * 60 * 1000, // 1h — weekly data is stable
   proposal: 30 * 60 * 1000,       // 30 min — same brief = same proposal
   blog: 30 * 60 * 1000,           // 30 min
@@ -418,6 +419,98 @@ export const sendAdvisorChat = (
 ): Promise<AdvisorChatResult> => {
   const payload = JSON.stringify({ context, history, question })
   return callGemini<AdvisorChatResult>('advisor_chat', payload, (r) => typeof r?.reply === 'string', profile)
+}
+
+// ─── Advisor chat WITH executable actions ─────────────────────────
+// Same input as advisor_chat but the model may also return an actions[]
+// array. The frontend renders these as confirm-cards inside the chat
+// and only executes them on user approval. NEVER auto-executed.
+
+export type AdvisorAction =
+  | {
+      kind: 'create_task'
+      summary: string
+      params: {
+        title: string
+        description?: string
+        project_id?: string | null
+        client_id?: string | null
+        assignee_id?: string | null
+        due_date?: string | null
+        priority?: 'low' | 'medium' | 'high' | 'urgent'
+        status?: 'todo' | 'in-progress' | 'done' | 'cancelled'
+      }
+    }
+  | {
+      kind: 'create_project'
+      summary: string
+      params: {
+        title: string
+        client_id?: string | null
+        deadline?: string | null
+        description?: string
+        color?: string
+      }
+    }
+  | {
+      kind: 'create_tasks_batch'
+      summary: string
+      params: {
+        project_id?: string | null
+        client_id?: string | null
+        tasks: Array<{
+          title: string
+          description?: string
+          assignee_id?: string | null
+          due_date?: string | null
+          priority?: 'low' | 'medium' | 'high' | 'urgent'
+          status?: 'todo' | 'in-progress' | 'done' | 'cancelled'
+        }>
+      }
+    }
+  | {
+      kind: 'plan_week'
+      summary: string
+      params: {
+        week_start: string // YYYY-MM-DD (Monday)
+        goals: string[]
+        suggested_tasks?: Array<{
+          title: string
+          day_offset?: number // 0 = Monday … 6 = Sunday
+          assignee_id?: string | null
+          project_id?: string | null
+        }>
+      }
+    }
+  | {
+      kind: 'suggest_delegate'
+      summary: string
+      params: {
+        task_id?: string | null
+        project_id?: string | null
+        to_user_id?: string | null
+        reason: string
+      }
+    }
+
+export type AdvisorChatActionsResult = {
+  reply: string
+  actions?: AdvisorAction[]
+}
+
+export const sendAdvisorChatWithActions = (
+  context: string,
+  history: AdvisorChatMessage[],
+  question: string,
+  profile?: LiveAIProfile,
+): Promise<AdvisorChatActionsResult> => {
+  const payload = JSON.stringify({ context, history, question })
+  return callGemini<AdvisorChatActionsResult>(
+    'advisor_chat_actions',
+    payload,
+    (r) => typeof r?.reply === 'string',
+    profile,
+  )
 }
 
 // ─── Finance chat (with optional executable actions) ─────────────
