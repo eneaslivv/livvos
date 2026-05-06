@@ -537,6 +537,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     [
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
       { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
+      // Communications Hub — unified Gmail + Slack inbox. Lives under
+      // the same group as Activity (both are "what happened" feeds) so
+      // the sidebar grouping stays clean.
+      { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
     ],
     [
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },

@@ -31,6 +31,7 @@ const loadCalendar = () => retryDynamicImport(() => import('./pages/Calendar').t
 const loadClients = () => retryDynamicImport(() => import('./pages/Clients').then(m => ({ default: m.Clients })), 'Clients');
 const loadTeamClients = () => retryDynamicImport(() => import('./pages/TeamClients').then(m => ({ default: m.TeamClients })), 'TeamClients');
 const loadActivity = () => retryDynamicImport(() => import('./pages/Activity').then(m => ({ default: m.Activity })), 'Activity');
+const loadCommunications = () => retryDynamicImport(() => import('./pages/Communications').then(m => ({ default: m.Communications })), 'Communications');
 const loadSales = () => retryDynamicImport(() => import('./pages/Sales').then(m => ({ default: m.Sales })), 'Sales');
 const loadFinance = () => retryDynamicImport(() => import('./pages/Finance').then(m => ({ default: m.Finance })), 'Finance');
 const loadTeam = () => retryDynamicImport(() => import('./pages/Team').then(m => ({ default: m.Team })), 'Team');
@@ -54,6 +55,7 @@ const Docs = React.lazy(loadDocs);
 const Calendar = React.lazy(loadCalendar);
 const TeamClients = React.lazy(loadTeamClients);
 const Activity = React.lazy(loadActivity);
+const Communications = React.lazy(loadCommunications);
 const Sales = React.lazy(loadSales);
 const Finance = React.lazy(loadFinance);
 const Auth = React.lazy(loadAuth);
@@ -750,6 +752,13 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
+          {/* Communications Hub — Gmail + Slack inbox */}
+          {visitedPages.has('communications') && (
+            <KeepAlivePage page="communications" active={currentPage === 'communications'}>
+              <Communications />
+            </KeepAlivePage>
+          )}
+
           {/* Finance */}
           {visitedPages.has('finance') && (
             <KeepAlivePage page="finance" active={currentPage === 'finance'}>
@@ -805,7 +814,7 @@ const LAST_PAGE_KEY = 'eneas:lastPage';
 const LAST_MODE_KEY = 'eneas:lastMode';
 const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'home', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
-  'activity', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
+  'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
 ]);
 
