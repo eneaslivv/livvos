@@ -58,6 +58,7 @@ const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Ico
   { label: 'Salud financiera', prompt: 'Analizá mi salud financiera actual: ingresos cobrados vs pendientes, gastos y balance.', icon: 'TrendingUp', kind: 'chat' },
   { label: 'Riesgos en proyectos', prompt: '¿Qué proyectos están en riesgo o atrasados, y qué puedo hacer? Si hay que delegar algo, sugerimelo.', icon: 'Flag', kind: 'chat' },
   { label: 'Romper proyecto en tareas', prompt: 'Elegí mi proyecto más urgente y rompelo en 5-8 tareas concretas que pueda aprobar para crear de una.', icon: 'List', kind: 'chat' },
+  { label: 'Cargar gasto', prompt: 'Cargá un gasto de $X concept Y a la categoría Z. Si te falta info, preguntame antes de proponer la acción.', icon: 'DollarSign', kind: 'chat' },
 ];
 
 // Each chat message is either a user line, an assistant text reply, an
@@ -133,6 +134,12 @@ const ActionCard: React.FC<{
     create_tasks_batch: { icon: 'List', label: 'Crear varias tareas', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
     plan_week: { icon: 'Calendar', label: 'Planificar semana', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
     suggest_delegate: { icon: 'Users', label: 'Sugerencia de delegación', color: 'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20' },
+    create_expense: { icon: 'TrendingUp', label: 'Cargar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
+    create_income: { icon: 'TrendingUp', label: 'Cargar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    create_budget: { icon: 'DollarSign', label: 'Crear budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
+    update_budget: { icon: 'DollarSign', label: 'Modificar budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
+    mark_expense_paid: { icon: 'Check', label: 'Marcar gasto pagado', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    mark_installment_paid: { icon: 'Check', label: 'Marcar cuota cobrada', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
   };
   const meta = kindLabel[action.kind] || { icon: 'Sparkles' as const, label: action.kind, color: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20' };
   const Icon = (Icons as any)[meta.icon] || Icons.Sparkles;
@@ -199,6 +206,48 @@ const ActionCard: React.FC<{
           {p.reason}
         </div>
       );
+    }
+    if (action.kind === 'create_expense' || action.kind === 'create_income') {
+      const p = action.params as any;
+      const sign = action.kind === 'create_expense' ? '-' : '+';
+      const color = action.kind === 'create_expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400';
+      return (
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 space-y-0.5">
+          <div className="font-medium text-zinc-700 dark:text-zinc-200">{p.concept}</div>
+          <div className="flex gap-2 items-center">
+            <span className={`font-semibold tabular-nums ${color}`}>{sign}${Math.abs(p.amount || 0).toLocaleString()}</span>
+            {p.category && <span>· {p.category}</span>}
+            {p.date && <span>· {p.date}</span>}
+            {p.due_date && <span>· vence {p.due_date}</span>}
+            {p.status && <span>· {p.status}</span>}
+            {p.recurring && <span>· recurring</span>}
+          </div>
+        </div>
+      );
+    }
+    if (action.kind === 'create_budget') {
+      const p = action.params;
+      return (
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+          <div className="font-medium text-zinc-700 dark:text-zinc-200">{p.name}</div>
+          <div>· ${p.allocated_amount.toLocaleString()} {p.period || 'monthly'}{p.category ? ` · ${p.category}` : ''}</div>
+        </div>
+      );
+    }
+    if (action.kind === 'update_budget') {
+      const p = action.params;
+      const changes: string[] = [];
+      if (p.allocated_amount !== undefined) changes.push(`monto → $${p.allocated_amount.toLocaleString()}`);
+      if (p.name !== undefined) changes.push(`nombre → "${p.name}"`);
+      if (p.is_active !== undefined) changes.push(p.is_active ? 'activar' : 'desactivar');
+      if (p.end_date !== undefined) changes.push(`end_date → ${p.end_date || 'null'}`);
+      return (
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ')}</div>
+      );
+    }
+    if (action.kind === 'mark_expense_paid' || action.kind === 'mark_installment_paid') {
+      // Summary already says enough; no extra details needed.
+      return null;
     }
     return null;
   };
@@ -268,7 +317,7 @@ const ActionCard: React.FC<{
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
   const { projects, createProject } = useProjects();
-  const { incomes, expenses } = useFinance();
+  const { incomes, expenses, budgets, createIncome, createExpense, createBudget, updateBudget, updateExpense, updateInstallment } = useFinance();
   const { members } = useTeam();
   const { createTask } = useCalendar();
   const { clients } = useClients();
@@ -392,6 +441,42 @@ export const AiAdvisor: React.FC = () => {
     const totalExpenses = (expenses || []).reduce((s: number, e: any) => s + (e.amount || 0), 0);
     lines.push(`\nFINANZAS: Ingresos $${totalIncome.toLocaleString()} (cobrado $${paidIncome.toLocaleString()}) | Gastos $${totalExpenses.toLocaleString()} | Balance $${(paidIncome - totalExpenses).toLocaleString()}`);
 
+    // Budgets — required when AI proposes update_budget actions.
+    const activeBudgets = (budgets || []).filter((b: any) => b.is_active);
+    if (activeBudgets.length > 0) {
+      lines.push(`\nBUDGETS activos (${activeBudgets.length}):`);
+      activeBudgets.slice(0, 10).forEach((b: any) => {
+        lines.push(`- id=${b.id} | "${b.name}" | $${(b.allocated_amount || 0).toLocaleString()} ${b.period || 'monthly'} | category: ${b.category || 'n/a'}`);
+      });
+    }
+    lines.push(`\nEXPENSE_CATEGORIES: Software, Talent, Marketing, Operations, Legal`);
+
+    // Recent expenses — needed for mark_expense_paid references.
+    const recentExpenses = (expenses || []).slice(0, 8);
+    if (recentExpenses.length > 0) {
+      lines.push(`\nGASTOS RECIENTES (${recentExpenses.length} de ${expenses.length}):`);
+      recentExpenses.forEach((e: any) => {
+        lines.push(`- id=${e.id} | "${e.concept}" | $${(e.amount || 0).toLocaleString()} | ${e.category} | ${e.status} | ${e.date}`);
+      });
+    }
+
+    // Upcoming unpaid installments — needed for mark_installment_paid.
+    const upcomingInstallments: any[] = [];
+    (incomes || []).forEach((inc: any) => {
+      (inc.installments || [])
+        .filter((inst: any) => inst.status !== 'paid')
+        .slice(0, 2)
+        .forEach((inst: any) => {
+          upcomingInstallments.push({ ...inst, client_name: inc.client_name, project_name: inc.project_name });
+        });
+    });
+    if (upcomingInstallments.length > 0) {
+      lines.push(`\nCUOTAS PENDIENTES (${upcomingInstallments.length}):`);
+      upcomingInstallments.slice(0, 8).forEach((inst: any) => {
+        lines.push(`- id=${inst.id} | ${inst.client_name || 'n/a'} | $${(inst.amount || 0).toLocaleString()} | vence ${inst.due_date} | ${inst.status}`);
+      });
+    }
+
     const activeMembers = members.filter(m => m.status === 'active');
     const totalOpen = activeMembers.reduce((s, m) => s + (m.openTasks || 0), 0);
     lines.push(`\nEQUIPO (${activeMembers.length} activos, ${totalOpen} tareas abiertas):`);
@@ -406,9 +491,9 @@ export const AiAdvisor: React.FC = () => {
     lines.push(`\nFecha hoy: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('es-AR', { weekday: 'long' })}). Lunes de esta semana: ${monday.toISOString().split('T')[0]}`);
 
     let result = lines.join('\n');
-    if (result.length > 3000) result = result.slice(0, 3000);
+    if (result.length > 4000) result = result.slice(0, 4000);
     return result;
-  }, [projects, clients, incomes, expenses, members]);
+  }, [projects, clients, incomes, expenses, budgets, members]);
 
   // History formatted for the chat endpoint (only plain user/assistant text).
   const chatHistoryForApi = useMemo(() => {
@@ -536,13 +621,70 @@ export const AiAdvisor: React.FC = () => {
         }
       } else if (action.kind === 'suggest_delegate') {
         // Pure suggestion — no mutation. Just acknowledged.
+      } else if (action.kind === 'create_expense') {
+        const p = action.params;
+        await createExpense({
+          concept: p.concept,
+          amount: Math.abs(p.amount),
+          category: p.category || 'Operations',
+          vendor: p.vendor,
+          date: p.date || new Date().toISOString().split('T')[0],
+          status: p.status || 'pending',
+          recurring: !!p.recurring,
+          project_id: p.project_id || undefined,
+          client_id: p.client_id || undefined,
+          budget_id: p.budget_id || undefined,
+        } as any);
+      } else if (action.kind === 'create_income') {
+        const p = action.params;
+        await createIncome({
+          concept: p.concept,
+          total_amount: Math.abs(p.amount),
+          num_installments: p.num_installments || 1,
+          due_date: p.due_date || new Date().toISOString().split('T')[0],
+          client_id: p.client_id || undefined,
+          client_name: p.client_name,
+          project_id: p.project_id || undefined,
+        } as any);
+      } else if (action.kind === 'create_budget') {
+        const p = action.params;
+        await createBudget({
+          name: p.name,
+          allocated_amount: Math.abs(p.allocated_amount),
+          category: p.category || '',
+          color: p.color || '#3b82f6',
+          period: p.period || 'monthly',
+          start_date: p.start_date || new Date().toISOString().split('T')[0],
+          end_date: p.end_date || null,
+          description: p.description || '',
+        } as any);
+      } else if (action.kind === 'update_budget') {
+        const p = action.params;
+        if (!p.budget_id) throw new Error('Falta budget_id');
+        await updateBudget(p.budget_id, {
+          ...(p.allocated_amount !== undefined ? { allocated_amount: Math.abs(p.allocated_amount) } : {}),
+          ...(p.name !== undefined ? { name: p.name } : {}),
+          ...(p.is_active !== undefined ? { is_active: p.is_active } : {}),
+          ...(p.end_date !== undefined ? { end_date: p.end_date } : {}),
+        } as any);
+      } else if (action.kind === 'mark_expense_paid') {
+        const p = action.params;
+        if (!p.expense_id) throw new Error('Falta expense_id');
+        await updateExpense(p.expense_id, { status: 'paid' } as any);
+      } else if (action.kind === 'mark_installment_paid') {
+        const p = action.params;
+        if (!p.installment_id) throw new Error('Falta installment_id');
+        await updateInstallment(p.installment_id, {
+          status: 'paid',
+          paid_date: p.paid_date || new Date().toISOString().split('T')[0],
+        } as any);
       }
       updateActionStatus(msgIdx, action.id, { status: 'approved' });
     } catch (err: any) {
       errorLogger.error('advisor action failed', err);
       updateActionStatus(msgIdx, action.id, { status: 'failed', errorMsg: err?.message || 'No se pudo aplicar.' });
     }
-  }, [createTask, createProject, user?.id, updateActionStatus]);
+  }, [createTask, createProject, createExpense, createIncome, createBudget, updateBudget, updateExpense, updateInstallment, user?.id, updateActionStatus]);
 
   const handleRejectAction = useCallback((msgIdx: number, actionId: string) => {
     updateActionStatus(msgIdx, actionId, { status: 'rejected' });

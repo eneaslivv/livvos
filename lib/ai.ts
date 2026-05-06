@@ -492,6 +492,72 @@ export type AdvisorAction =
         reason: string
       }
     }
+  // ── Finance actions — same set FinanceChat uses, but routed through
+  // the global Advisor so the user can ask anything from one place.
+  | {
+      kind: 'create_expense'
+      summary: string
+      params: {
+        amount: number
+        concept: string
+        category?: string         // 'Software' | 'Talent' | 'Marketing' | 'Operations' | 'Legal'
+        vendor?: string
+        date?: string             // YYYY-MM-DD; defaults to today
+        project_id?: string | null
+        client_id?: string | null
+        budget_id?: string | null
+        status?: 'paid' | 'pending'
+        recurring?: boolean
+      }
+    }
+  | {
+      kind: 'create_income'
+      summary: string
+      params: {
+        amount: number
+        concept: string
+        client_id?: string | null
+        client_name?: string      // when client_id can't be resolved
+        project_id?: string | null
+        due_date?: string         // YYYY-MM-DD
+        num_installments?: number // default 1
+      }
+    }
+  | {
+      kind: 'create_budget'
+      summary: string
+      params: {
+        name: string
+        allocated_amount: number
+        category?: string
+        period?: 'monthly' | 'quarterly' | 'yearly' | 'one-time'
+        color?: string
+        start_date?: string
+        end_date?: string | null
+        description?: string
+      }
+    }
+  | {
+      kind: 'update_budget'
+      summary: string
+      params: {
+        budget_id: string
+        allocated_amount?: number
+        name?: string
+        is_active?: boolean
+        end_date?: string | null
+      }
+    }
+  | {
+      kind: 'mark_expense_paid'
+      summary: string
+      params: { expense_id: string }
+    }
+  | {
+      kind: 'mark_installment_paid'
+      summary: string
+      params: { installment_id: string; paid_date?: string }
+    }
 
 export type AdvisorChatActionsResult = {
   reply: string
