@@ -19,6 +19,7 @@ import { useTeam } from '../context/TeamContext';
 import { useCalendar } from '../context/CalendarContext';
 import { useClients } from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
+import { useRBAC } from '../context/RBACContext';
 import { errorLogger } from '../lib/errorLogger';
 import { LinkifiedText } from './ui/LinkifiedText';
 
@@ -317,10 +318,11 @@ const ActionCard: React.FC<{
 
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
+  const { user: profile } = useRBAC();
   const { projects, createProject } = useProjects();
   const { incomes, expenses, budgets, createIncome, createExpense, createBudget, updateBudget, updateExpense, updateInstallment } = useFinance();
   const { members } = useTeam();
-  const { createTask } = useCalendar();
+  const { createTask, tasks: allTasks } = useCalendar();
   const { clients } = useClients();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -412,6 +414,73 @@ export const AiAdvisor: React.FC = () => {
   const buildContextSummary = useCallback(() => {
     const lines: string[] = [];
     const now = new Date();
+    const currentUserId = user?.id || null;
+    const currentUserName = profile?.name || user?.email?.split('@')[0] || 'Usuario';
+
+    // ─── ME — current user identity + scoped data ─────────────────────
+    // The AI was answering "no tasks assigned to you" because the context
+    // never told it WHICH user is asking. Now we pin a TÚ block with the
+    // current user's id + their assigned tasks + their owned projects so
+    // questions like "qué me recomendás que haga" route to a person-
+    // specific answer instead of a tenant-wide one.
+    if (currentUserId) {
+      lines.push(`TÚ (current user): "${currentUserName}" id=${currentUserId}`);
+
+      // Tasks assigned to me (open) — sorted urgent → high → medium → low,
+      // then by due date asc.
+      const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+      const myOpenTasks = (allTasks || [])
+        .filter((t: any) => {
+          if (t.completed || t.status === 'cancelled' || t.parent_task_id) return false;
+          if (t.completed_by === currentUserId) return false;
+          return (Array.isArray(t.assignee_ids) && t.assignee_ids.includes(currentUserId))
+              || t.assigned_to === currentUserId
+              || t.assignee_id === currentUserId;
+        })
+        .sort((a: any, b: any) => {
+          const pa = priorityRank[a.priority || 'medium'] ?? 2;
+          const pb = priorityRank[b.priority || 'medium'] ?? 2;
+          if (pa !== pb) return pa - pb;
+          return (a.start_date || a.due_date || '9999-12-31').localeCompare(b.start_date || b.due_date || '9999-12-31');
+        });
+
+      const myOverdue = myOpenTasks.filter((t: any) => {
+        const d = t.start_date || t.due_date;
+        return d && new Date(d).getTime() < now.setHours(0, 0, 0, 0);
+      });
+      // Reset `now` since setHours mutated it above.
+      const today = new Date();
+
+      const myCompletedThisWeek = (allTasks || []).filter((t: any) => {
+        if (!t.completed || !t.completed_at) return false;
+        const isMine = t.completed_by === currentUserId
+          || (Array.isArray(t.assignee_ids) && t.assignee_ids.includes(currentUserId))
+          || t.assigned_to === currentUserId
+          || t.assignee_id === currentUserId;
+        if (!isMine) return false;
+        const completed = new Date(t.completed_at);
+        const weekStart = new Date(today);
+        weekStart.setHours(0, 0, 0, 0);
+        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+        return completed >= weekStart;
+      });
+
+      lines.push(`MIS TAREAS ABIERTAS (${myOpenTasks.length} total, ${myOverdue.length} vencidas):`);
+      myOpenTasks.slice(0, 12).forEach((t: any) => {
+        const due = t.start_date || t.due_date;
+        const overdueFlag = due && new Date(due).getTime() < new Date(today.toDateString()).getTime() ? ' [VENCIDA]' : '';
+        lines.push(`- id=${t.id} | "${t.title}" | ${t.priority || 'medium'} | ${t.status || 'todo'} | due: ${due || 'n/a'}${overdueFlag}${t.project_name ? ` | ${t.project_name}` : ''}`);
+      });
+      if (myOpenTasks.length > 12) lines.push(`  …+${myOpenTasks.length - 12} más`);
+
+      lines.push(`MIS TAREAS COMPLETADAS ESTA SEMANA: ${myCompletedThisWeek.length}`);
+
+      const myOwnedProjects = projects.filter((p: any) => p.owner_id === currentUserId);
+      if (myOwnedProjects.length > 0) {
+        lines.push(`MIS PROYECTOS (owner): ${myOwnedProjects.length} (${myOwnedProjects.map((p: any) => `"${p.title}"`).join(', ')})`);
+      }
+      lines.push('');
+    }
 
     const activeProjects = projects
       .filter(p => p.status === 'Active' || p.status === 'Pending')
@@ -421,7 +490,7 @@ export const AiAdvisor: React.FC = () => {
         return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
       })
       .slice(0, 8);
-    const overdueCount = projects.filter(p => p.deadline && new Date(p.deadline) < now && p.status !== 'Completed').length;
+    const overdueCount = projects.filter(p => p.deadline && new Date(p.deadline) < new Date() && p.status !== 'Completed').length;
     lines.push(`PROYECTOS (${projects.length} total, ${activeProjects.length} activos, ${overdueCount} atrasados):`);
     activeProjects.forEach(p => {
       lines.push(`- id=${p.id} | "${p.title}" | ${p.clientName} | ${p.progress}% | deadline: ${p.deadline || 'n/a'}`);
@@ -492,9 +561,9 @@ export const AiAdvisor: React.FC = () => {
     lines.push(`\nFecha hoy: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('es-AR', { weekday: 'long' })}). Lunes de esta semana: ${monday.toISOString().split('T')[0]}`);
 
     let result = lines.join('\n');
-    if (result.length > 4000) result = result.slice(0, 4000);
+    if (result.length > 5000) result = result.slice(0, 5000);
     return result;
-  }, [projects, clients, incomes, expenses, budgets, members]);
+  }, [projects, clients, incomes, expenses, budgets, members, allTasks, user?.id, user?.email, profile?.name]);
 
   // History formatted for the chat endpoint (only plain user/assistant text).
   const chatHistoryForApi = useMemo(() => {
