@@ -92,7 +92,7 @@ export const AcceptConnection: React.FC = () => {
             <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
                 <div className="flex items-center gap-3 text-zinc-500">
                     <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-                    <span className="text-sm">Verificando invitación…</span>
+                    <span className="text-sm">Verifying invitation…</span>
                 </div>
             </div>
         );
@@ -106,10 +106,10 @@ export const AcceptConnection: React.FC = () => {
                         <Icons.CheckCircle size={24} className="text-emerald-600" />
                     </div>
                     <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 text-center mb-2">
-                        ¡Bienvenido{info?.invited_agency_name ? `, ${info.invited_agency_name}` : ''}!
+                        Welcome{info?.invited_agency_name ? `, ${info.invited_agency_name}` : ''}!
                     </h2>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6">
-                        Tu agencia está conectada con <strong>{info?.parent_tenant_name}</strong>.
+                        Your agency is now connected with <strong>{info?.parent_tenant_name}</strong>.
                     </p>
 
                     {/* Explain exactly what the user can/can't see. The previous version
@@ -119,27 +119,27 @@ export const AcceptConnection: React.FC = () => {
                         <div className="flex items-start gap-2">
                             <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                             <div>
-                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Tu workspace empieza vacío</div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Your workspace starts empty</div>
                                 <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                    Vas a tener tus propios clientes, proyectos, finanzas y equipo. Nada se mezcla con {info?.parent_tenant_name}.
+                                    You'll have your own clients, projects, finance and team. Nothing mixes with {info?.parent_tenant_name}.
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-start gap-2">
                             <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                             <div>
-                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">{info?.parent_tenant_name} puede entrar a tu workspace</div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">{info?.parent_tenant_name} can enter your workspace</div>
                                 <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                    Como agencia padre puede ver y gestionar lo que vos hagas acá. Vos NO ves lo de ellos.
+                                    As the parent agency they can see and manage what you do here. You do NOT see their data.
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-start gap-2">
                             <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                             <div>
-                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Próximo paso: invitá a tu equipo</div>
+                                <div className="font-semibold text-zinc-900 dark:text-zinc-100">Next step: invite your team</div>
                                 <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                    Desde Settings → Team podés sumar a las personas que trabajan con vos.
+                                    From Settings → Team you can add the people who work with you.
                                 </div>
                             </div>
                         </div>
@@ -149,7 +149,7 @@ export const AcceptConnection: React.FC = () => {
                         onClick={() => { window.location.href = '/'; }}
                         className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
                     >
-                        Entrar a mi workspace
+                        Enter my workspace
                         <Icons.ChevronRight size={14} />
                     </button>
                 </div>
@@ -164,10 +164,10 @@ export const AcceptConnection: React.FC = () => {
                     <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icons.AlertCircle size={24} className="text-red-500" />
                     </div>
-                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Error en la invitación</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Invitation error</h2>
                     <p className="text-sm text-zinc-500 mb-6">{error}</p>
                     <a href="/" className="text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline">
-                        Volver al inicio
+                        Back to home
                     </a>
                 </div>
             </div>
@@ -201,10 +201,10 @@ export const AcceptConnection: React.FC = () => {
                 </div>
 
                 <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 text-center mb-2">
-                    {info.parent_tenant_name} te invita a conectarte
+                    {info.parent_tenant_name} invites you to connect
                 </h1>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-6">
-                    Te invitaron como agencia <strong>{info.invited_agency_name}</strong> ({info.invited_email}) para que tu workspace quede vinculado al de ellos.
+                    You've been invited as agency <strong>{info.invited_agency_name}</strong> ({info.invited_email}) to link your workspace with theirs.
                 </p>
 
                 {/* Permissions — be explicit about who sees what so the new agency
@@ -213,19 +213,19 @@ export const AcceptConnection: React.FC = () => {
                     <div className="flex items-start gap-2.5">
                         <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            Tu workspace empieza <strong>vacío</strong> — vas a tener tus propios clientes, proyectos y finanzas.
+                            Your workspace starts <strong>empty</strong> — you'll have your own clients, projects and finance.
                         </span>
                     </div>
                     <div className="flex items-start gap-2.5">
                         <Icons.Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            <strong>{info.parent_tenant_name}</strong> puede entrar a tu workspace como admin (es la agencia padre).
+                            <strong>{info.parent_tenant_name}</strong> can enter your workspace as admin (they're the parent agency).
                         </span>
                     </div>
                     <div className="flex items-start gap-2.5">
                         <Icons.Close size={14} className="text-zinc-400 mt-0.5 shrink-0" />
                         <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                            Vos NO ves los datos de {info.parent_tenant_name}, ni de otras agencias conectadas.
+                            You do NOT see {info.parent_tenant_name}'s data, nor any other connected agencies.
                         </span>
                     </div>
                 </div>
@@ -239,31 +239,31 @@ export const AcceptConnection: React.FC = () => {
 
                 {isAlreadyResolved ? (
                     <div className="text-center text-sm text-zinc-500">
-                        Estado: <span className="font-semibold uppercase tracking-wider">{info.status}</span>
+                        Status: <span className="font-semibold uppercase tracking-wider">{info.status}</span>
                     </div>
                 ) : !isSignedIn ? (
                     <div className="space-y-3">
                         <p className="text-xs text-zinc-500 text-center">
-                            Iniciá sesión como <strong>{info.invited_email}</strong> para continuar. Si no tenés cuenta, primero creala con ese email.
+                            Sign in as <strong>{info.invited_email}</strong> to continue. If you don't have an account, create one with that email.
                         </p>
                         <button
                             onClick={handleSignIn}
                             className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
                         >
-                            Iniciar sesión y aceptar
+                            Sign in and accept
                             <Icons.ChevronRight size={14} />
                         </button>
                     </div>
                 ) : wrongEmail ? (
                     <div className="space-y-3">
                         <div className="p-3 rounded-xl text-xs bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
-                            Estás logueado como <strong>{signedInEmail}</strong> pero esta invitación es para <strong>{info.invited_email}</strong>.
+                            You're logged in as <strong>{signedInEmail}</strong> but this invitation is for <strong>{info.invited_email}</strong>.
                         </div>
                         <button
                             onClick={async () => { await supabase.auth.signOut(); handleSignIn(); }}
                             className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90"
                         >
-                            Cerrar sesión y cambiar de cuenta
+                            Sign out and switch account
                         </button>
                     </div>
                 ) : (
@@ -272,7 +272,7 @@ export const AcceptConnection: React.FC = () => {
                             onClick={() => { window.location.href = '/'; }}
                             className="flex-1 py-3 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700"
                         >
-                            Rechazar
+                            Decline
                         </button>
                         <button
                             onClick={handleAccept}
@@ -282,11 +282,11 @@ export const AcceptConnection: React.FC = () => {
                             {isAccepting ? (
                                 <>
                                     <Icons.Loader size={14} className="animate-spin" />
-                                    Aceptando…
+                                    Accepting…
                                 </>
                             ) : (
                                 <>
-                                    Aceptar conexión
+                                    Accept connection
                                     <Icons.Check size={14} />
                                 </>
                             )}
