@@ -77,7 +77,7 @@ interface DocumentsContextType {
   deleteFolder: (id: string) => Promise<void>
   deleteFile: (id: string, url: string) => Promise<void>
   createDocument: (title?: string, options?: { clientId?: string | null; projectId?: string | null; taskId?: string | null }) => Promise<Document>
-  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'task_id' | 'is_favorite' | 'share_enabled'>>) => Promise<void>
+  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'content_text' | 'status' | 'client_id' | 'project_id' | 'task_id' | 'is_favorite' | 'share_enabled' | 'folder_id'>>) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
   getDocumentsByTask: (taskId: string) => Document[]
   refresh: () => Promise<void>
@@ -137,11 +137,19 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         filesQuery = filesQuery.is('folder_id', null)
       }
 
-      // Load rich-text documents (already flat) — apply filter when active
+      // Load rich-text documents — scoped by folder OR client/project
+      // filter, mirroring the same rules used by `files`. When no filter
+      // and no folder, only root-level docs (folder_id IS NULL) show up
+      // so opening a folder feels like a real navigation, not a "this
+      // folder shows the same as the root" mess.
       let docsQuery = supabase.from('documents').select('*').order('updated_at', { ascending: false })
       if (filtering) {
         if (filterClient) docsQuery = docsQuery.eq('client_id', filterClient)
         if (filterProject) docsQuery = docsQuery.eq('project_id', filterProject)
+      } else if (currentFolderId) {
+        docsQuery = docsQuery.eq('folder_id', currentFolderId)
+      } else {
+        docsQuery = docsQuery.is('folder_id', null)
       }
 
       const [foldersRes, filesRes, docsRes] = await withTimeout(
@@ -379,6 +387,8 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const { clientId = null, projectId = null, taskId = null } = options || {}
 
+    // New docs inherit the current folder so "+ New Doc" inside a folder
+    // creates the doc in that folder instead of dumping it at the root.
     const { data, error: err } = await supabase.from('documents').insert({
       title,
       owner_id: user.id,
@@ -386,6 +396,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       client_id: clientId,
       project_id: projectId,
       task_id: taskId,
+      folder_id: currentFolderId,
     }).select().single()
 
     if (err) throw new Error(`Error creating document: ${err.message}`)

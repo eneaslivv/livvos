@@ -154,11 +154,12 @@ export const Docs: React.FC = () => {
         try {
           if (item.kind === 'file') {
             await updateFile(item.id, { folder_id: targetFolderId });
+          } else if (item.kind === 'doc') {
+            await updateDocument(item.id, { folder_id: targetFolderId });
           } else if (item.kind === 'folder') {
             if (item.id === targetFolderId) continue; // can't move into itself
             await updateFolder(item.id, { parent_id: targetFolderId });
           }
-          // Rich-text documents are flat (no folder_id) — skip silently
         } catch (err: any) {
           console.error('Bulk move error on', item, err);
         }
@@ -208,15 +209,15 @@ export const Docs: React.FC = () => {
   const moveItem = useCallback(async (kind: SelKind, id: string, targetFolderId: string | null) => {
     try {
       if (kind === 'file') await updateFile(id, { folder_id: targetFolderId });
+      else if (kind === 'doc') await updateDocument(id, { folder_id: targetFolderId });
       else if (kind === 'folder') {
         if (id === targetFolderId) return;
         await updateFolder(id, { parent_id: targetFolderId });
       }
-      // documents skip
     } catch (err: any) {
       alert(`Error moving: ${err.message}`);
     }
-  }, [updateFile, updateFolder]);
+  }, [updateFile, updateDocument, updateFolder]);
 
   const onCardDragStart = (e: React.DragEvent, kind: SelKind, id: string) => {
     e.dataTransfer.effectAllowed = 'move';

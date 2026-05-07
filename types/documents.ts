@@ -5,6 +5,8 @@ export interface Document {
   client_id: string | null;
   project_id: string | null;
   task_id: string | null;
+  /** Optional parent folder. When null, the document lives at the root. */
+  folder_id: string | null;
   title: string;
   content: Record<string, any>;
   content_text: string;
