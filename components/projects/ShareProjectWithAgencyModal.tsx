@@ -37,12 +37,16 @@ interface Props {
   open: boolean;
   projectId: string;
   projectTitle: string;
+  /** Optional — the project's CRM client name. When the modal has no
+   *  connected agencies yet, we use this to make the next step obvious:
+   *  "Invite <client name>'s agency to collaborate on this project". */
+  projectClientName?: string | null;
   onClose: () => void;
   /** Called after each toggle so the parent can refresh badges. */
   onChanged?: () => void;
 }
 
-export const ShareProjectWithAgencyModal: React.FC<Props> = ({ open, projectId, projectTitle, onClose, onChanged }) => {
+export const ShareProjectWithAgencyModal: React.FC<Props> = ({ open, projectId, projectTitle, projectClientName, onClose, onChanged }) => {
   const [agencies, setAgencies] = useState<ShareableAgency[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,11 +148,27 @@ export const ShareProjectWithAgencyModal: React.FC<Props> = ({ open, projectId, 
                 <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
                   <Icons.Briefcase size={16} className="text-zinc-400" />
                 </div>
-                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">No connected agencies</p>
-                <p className="text-[11px] text-zinc-400 mt-1 max-w-[280px] mx-auto">
-                  Connect a partner agency from the workspace switcher first. Once
-                  the connection is accepted, you'll be able to share specific
-                  projects with them here.
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                  {projectClientName
+                    ? `${projectClientName} doesn't have a connected agency yet`
+                    : 'No connected agencies'}
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-[300px] mx-auto leading-snug">
+                  {projectClientName ? (
+                    <>
+                      To collaborate on <span className="font-medium text-zinc-600 dark:text-zinc-300">{projectTitle}</span>{' '}
+                      with <span className="font-medium text-zinc-600 dark:text-zinc-300">{projectClientName}</span>,
+                      first invite their agency to LivvOS via{' '}
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-200">Workspace switcher → Connect a client agency</span>.
+                      Once they accept, come back here to flip this single project on for them.
+                    </>
+                  ) : (
+                    <>
+                      Invite a partner agency from the workspace switcher first. Once
+                      the connection is accepted, you'll be able to share specific
+                      projects with them here.
+                    </>
+                  )}
                 </p>
               </div>
             ) : (

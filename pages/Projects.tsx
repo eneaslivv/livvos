@@ -1975,6 +1975,7 @@ export const Projects: React.FC<{
           open={isAgencyShareModalOpen}
           projectId={selectedProject.id}
           projectTitle={selectedProject.title}
+          projectClientName={selectedProject.clientName || selectedProject.client || null}
           onClose={() => setIsAgencyShareModalOpen(false)}
           onChanged={() => { void refreshAgencyShareCount(); }}
         />
