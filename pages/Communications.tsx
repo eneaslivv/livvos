@@ -1198,11 +1198,41 @@ const SlackWorkspaceRow: React.FC<{
         </div>
       </div>
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
-          {loading && <div className="text-[11px] text-zinc-400 italic">Cargando canales…</div>}
+        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 space-y-2">
+          {/* Header: count + refresh + invite hint */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] text-zinc-500">
+              {loading ? (
+                'Cargando canales…'
+              ) : available ? (
+                <>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{available.length}</span>
+                  {' '}canales disponibles · <span className="font-medium text-violet-600 dark:text-violet-400">{channels.length}</span> monitoreados
+                </>
+              ) : '—'}
+            </div>
+            <button
+              onClick={() => loadAvailable()}
+              disabled={loading}
+              title="Refrescar lista desde Slack"
+              className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-0.5 rounded disabled:opacity-50"
+            >
+              <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refrescar
+            </button>
+          </div>
+
+          {/* Invite hint — only when bot is in fewer channels than typical */}
+          {!loading && available && (
+            <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-2.5 py-1.5">
+              <span className="font-semibold text-amber-700 dark:text-amber-400">¿No ves un canal?</span>{' '}
+              En Slack, escribí <code className="font-mono px-1 rounded bg-amber-100/70 dark:bg-amber-500/10">/invite @{token.slack_team_name?.toLowerCase().replace(/\s+/g, '-') || 'tu-bot'}</code> dentro
+              del canal y volvé acá → <span className="font-semibold">Refrescar</span>. Para canales privados es obligatorio invitar al bot manualmente.
+            </div>
+          )}
+
           {!loading && available && available.length === 0 && (
             <div className="text-[11px] text-zinc-400 italic">
-              El bot no tiene acceso a ningún canal todavía. Invitalo a los canales en Slack y refrescá.
+              El bot no tiene acceso a ningún canal todavía. Invitalo a los canales en Slack y tocá Refrescar.
             </div>
           )}
           {!loading && available && available.length > 0 && (
@@ -1218,13 +1248,19 @@ const SlackWorkspaceRow: React.FC<{
                         ? 'bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300'
                         : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300'
                     }`}
+                    title={ch.is_member === false ? 'El bot todavía no es miembro de este canal' : undefined}
                   >
                     <span className={`w-3 h-3 rounded-sm flex items-center justify-center border ${
                       checked ? 'bg-violet-500 border-violet-500' : 'border-zinc-300 dark:border-zinc-600'
                     }`}>
                       {checked && <Icons.Check size={9} className="text-white" />}
                     </span>
-                    <span className="truncate flex-1">{ch.is_private ? '🔒' : '#'}{ch.name}</span>
+                    <span className="truncate flex-1">
+                      {ch.is_private ? '🔒' : '#'}{ch.name}
+                      {ch.is_member === false && !checked && (
+                        <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400">· invitar</span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
