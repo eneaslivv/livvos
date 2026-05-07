@@ -273,12 +273,11 @@ const App: React.FC<ClientPortalAppProps> = ({
                 <LiveRoadmap milestones={data.milestones} tasks={data.tasks} onTaskClick={setSelectedTask} />
               </div>
 
-              {/* Row 2: Tasks by Stage */}
-              {data.tasks && data.tasks.length > 0 && (
-                <div className="md:col-span-12">
-                  <ProjectTasks tasks={data.tasks} onTaskClick={setSelectedTask} />
-                </div>
-              )}
+              {/* Row 2: Tasks (List ⇄ Board toggle) — always render so the
+                  client sees the module structure even when empty. */}
+              <div className="md:col-span-12">
+                <ProjectTasks tasks={data.tasks || []} onTaskClick={setSelectedTask} />
+              </div>
 
               {/* Row 3: Combined Resources (Finance + Access + Docs) */}
               {!(hiddenResourceTabs && hiddenResourceTabs.length >= 3) && (
