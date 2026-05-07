@@ -468,6 +468,20 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     });
   }, []);
 
+  // Safety net: if we end up in a mode whose feature is disabled (most
+  // commonly: switching to a connected agency that has sales_module=false
+  // while persisted appMode='sales'), auto-flip back to OS so the user
+  // doesn't lose access to the rest of the sidebar nav. Without this,
+  // the only visible item would be "Financial Center" (the lone
+  // sales-mode item gated by finance_module instead of sales_module),
+  // and since the mode switch itself was previously hidden when
+  // sales_module=false, the user got stranded.
+  useEffect(() => {
+    if (currentMode === 'sales' && !hasFeature('sales_module')) {
+      onSwitchMode('os');
+    }
+  }, [currentMode, hasFeature, onSwitchMode]);
+
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -613,19 +627,25 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         {/* Tenant Switcher (replaces tenant logo — opens dropdown of workspaces + connected agencies) */}
         <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} onNavigate={onNavigate} />
 
-        {/* Workspace Switcher — segmented control. The Master segment only
-            appears for platform admins; otherwise the switch stays binary
-            (OS / Sales). The icons row is always visible; the textual
-            label sits to its right (only when the sidebar is expanded)
-            in the same flex flow — no absolute positioning, so the
-            buttons can never be hidden behind the label.
+        {/* Workspace Switcher — segmented control. The OS segment is
+            ALWAYS available so users never get stranded inside a mode
+            whose feature flag is disabled (e.g. switching to a tenant
+            with sales_module=false while in Sales mode). Sales segment
+            shows only when sales_module is on; Master only for platform
+            admins.
+            The icons row is always visible; the textual label sits to
+            its right (only when the sidebar is expanded) in the same
+            flex flow — no absolute positioning, so the buttons can
+            never be hidden behind the label.
         */}
-        {hasFeature('sales_module') && <div className="w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
+        <div className="w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
           {(() => {
             const segments: Array<{ key: AppMode; icon: React.ReactNode; label: string; shortcut: string }> = [
               { key: 'os',     icon: <Icons.Home size={13} />,  label: 'System', shortcut: '1' },
-              { key: 'sales',  icon: <Icons.Chart size={13} />, label: 'Sales',  shortcut: '2' },
             ];
+            if (hasFeature('sales_module')) {
+              segments.push({ key: 'sales', icon: <Icons.Chart size={13} />, label: 'Sales', shortcut: '2' });
+            }
             if (isPlatformAdmin) {
               segments.push({ key: 'master', icon: <Icons.Shield size={13} />, label: 'Master', shortcut: '3' });
             }
@@ -682,7 +702,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               </div>
             );
           })()}
-        </div>}
+        </div>
 
         {/* Navigation Items */}
         <nav className="flex-1 w-full flex flex-col gap-1 overflow-y-auto overscroll-contain sidebar-thin-scroll mt-2 items-center">
