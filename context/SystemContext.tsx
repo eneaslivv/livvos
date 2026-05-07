@@ -328,9 +328,19 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     }
   }, [user, canViewSystem]);
 
+  // Defer the initial system-data load until the browser is idle so it
+  // doesn't compete with first paint or the more-critical contexts
+  // (Tenant / RBAC / Notifications). Most users never open the System
+  // page in a session, so paying 3 health-check round-trips on every
+  // boot was pure waste. requestIdleCallback falls back to setTimeout
+  // for Safari and old WebKit.
   useEffect(() => {
-    loadSystemData();
-  }, [loadSystemData]);
+    if (!user || !canViewSystem) return;
+    const ric: any = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 1500));
+    const cancel: any = (window as any).cancelIdleCallback || clearTimeout;
+    const handle = ric(() => { loadSystemData(); }, { timeout: 4000 });
+    return () => { try { cancel(handle); } catch { /* noop */ } };
+  }, [loadSystemData, user, canViewSystem]);
 
   // Check system health (declared before useEffects that depend on it)
   const checkSystemHealth = useCallback(async (): Promise<SystemHealth> => {
@@ -377,24 +387,12 @@ export const SystemProvider: React.FC<SystemProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Health monitoring
-  useEffect(() => {
-    if (canManageSystem && !healthMonitoringInterval) {
-      const interval = setInterval(async () => {
-        const health = await checkSystemHealth();
-        setSystemHealth(health);
-      }, 30000); // Check every 30 seconds
-
-      setHealthMonitoringInterval(interval);
-    }
-
-    return () => {
-      if (healthMonitoringInterval) {
-        clearInterval(healthMonitoringInterval);
-        setHealthMonitoringInterval(null);
-      }
-    };
-  }, [canManageSystem, healthMonitoringInterval, checkSystemHealth]);
+  // Health monitoring is OPT-IN — the System page can call
+  // setupHealthMonitoring() if it wants live updates while open. Running
+  // a 30s polling interval for every admin user as soon as the app boots
+  // (regardless of whether they ever look at System health) was burning
+  // 2 RPCs + a Storage list every 30s in the background. Now it only
+  // runs when explicitly enabled, and stops when the page unmounts.
 
   const getHealthStatus = useCallback((): 'healthy' | 'warning' | 'critical' => {
     if (!systemHealth) return 'critical';

@@ -10,10 +10,10 @@ export interface SlidePanelProps {
   title?: string;
   subtitle?: string;
   description?: string;
-  /** 'sm' ~384px | 'md' ~448px | 'lg' ~512px | 'xl' ~640px | '2xl' ~672px | 'full' ~100% */
-  width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  /** 'sm' ~384px | 'md' ~448px | 'lg' ~512px | 'xl' ~640px | '2xl' ~672px | '3xl' ~768px | '4xl' ~896px | 'full' ~100% */
+  width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full';
   /** Alias for width */
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full';
   /** Optional footer (action buttons, etc.) */
   footer?: React.ReactNode;
   /** Optional header-right element (extra buttons, badges) */
@@ -27,6 +27,8 @@ const widthClasses: Record<string, string> = {
   lg: 'max-w-lg',
   xl: 'max-w-xl',
   '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
+  '4xl': 'max-w-4xl',
   full: 'max-w-full',
 };
 

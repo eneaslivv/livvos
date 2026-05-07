@@ -5,7 +5,15 @@ import {
   FileSpreadsheet, Upload, ChevronDown, ChevronRight, UserPlus, Plus,
   Flag, RefreshCw, AlertTriangle,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// xlsx is ~850KB minified — we lazy-import it inside `handleFile` so it
+// only ships to the browser the first time the user actually uploads a
+// spreadsheet. The FinanceAssistant panel renders fine without it.
+type XLSXModule = typeof import('xlsx');
+let xlsxPromise: Promise<XLSXModule> | null = null;
+const loadXLSX = (): Promise<XLSXModule> => {
+  if (!xlsxPromise) xlsxPromise = import('xlsx');
+  return xlsxPromise;
+};
 import { SlidePanel } from '../ui/SlidePanel';
 import {
   parseFinanceEntryFromAI,
@@ -545,6 +553,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     }
     try {
       const buf = await file.arrayBuffer();
+      const XLSX = await loadXLSX();
       const wb = XLSX.read(buf, { type: 'array', cellDates: true, cellNF: false, cellText: true });
       if (wb.SheetNames.length === 0) {
         setError('El archivo no tiene hojas.');
