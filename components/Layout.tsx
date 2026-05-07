@@ -468,16 +468,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     });
   }, []);
 
-  // Safety net: if we end up in a mode whose feature is disabled (most
-  // commonly: switching to a connected agency that has sales_module=false
-  // while persisted appMode='sales'), auto-flip back to OS so the user
-  // doesn't lose access to the rest of the sidebar nav. Without this,
-  // the only visible item would be "Financial Center" (the lone
-  // sales-mode item gated by finance_module instead of sales_module),
-  // and since the mode switch itself was previously hidden when
-  // sales_module=false, the user got stranded.
+  // Safety net: only kick the user out of Sales mode if the tenant has
+  // BOTH sales_module AND finance_module disabled. Sales mode is now
+  // valid when either is on (the segment hides the sales-only items
+  // and just shows Financial Center).
   useEffect(() => {
-    if (currentMode === 'sales' && !hasFeature('sales_module')) {
+    if (currentMode === 'sales' && !hasFeature('sales_module') && !hasFeature('finance_module')) {
       onSwitchMode('os');
     }
   }, [currentMode, hasFeature, onSwitchMode]);
@@ -554,16 +550,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     [
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
       { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
-      // Communications Hub — unified Gmail + Slack inbox. Lives under
-      // the same group as Activity (both are "what happened" feeds) so
-      // the sidebar grouping stays clean.
-      { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
     ],
     [
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
       { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
     ],
   ];
+  // Inbox (Communications Hub — unified Gmail + Slack + leads inbox) was
+  // previously in OS mode. Moved into Sales mode so it lives next to
+  // Leads Inbox + Finance, which is where the user actually does
+  // pipeline work. Frees up the OS sidebar for "doing the work" items.
   // Flat list — kept around because some downstream code still reads it
   // (filter for permissions). We'll regroup at render time.
   const osNavItems: NavItemDef[] = osNavGroups.flat();
@@ -573,6 +569,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
     { id: 'sales_leads', label: 'Leads Inbox', icon: <Icons.Mail />, permission: { module: 'sales', action: 'view_leads' }, feature: 'sales_module' },
+    // Inbox (Communications Hub) — moved here from OS mode. Sits next to
+    // Leads Inbox so all incoming-message surfaces live together.
+    { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
     { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
     { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
   ];
@@ -643,7 +642,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             const segments: Array<{ key: AppMode; icon: React.ReactNode; label: string; shortcut: string }> = [
               { key: 'os',     icon: <Icons.Home size={13} />,  label: 'System', shortcut: '1' },
             ];
-            if (hasFeature('sales_module')) {
+            // Show the Sales segment when EITHER sales_module is on (full
+            // sales pipeline) OR finance_module is on (just Financial
+            // Center). Partner agencies usually have finance only — they
+            // still need to reach the Sales toggle to access it.
+            if (hasFeature('sales_module') || hasFeature('finance_module')) {
               segments.push({ key: 'sales', icon: <Icons.Chart size={13} />, label: 'Sales', shortcut: '2' });
             }
             if (isPlatformAdmin) {

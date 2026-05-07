@@ -6,7 +6,8 @@ import {
   ChevronLeft, ChevronRight, Wallet, BarChart3, Receipt,
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
-  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles, MessageSquare
+  Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles, MessageSquare,
+  MoreHorizontal,
 } from 'lucide-react';
 import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
@@ -952,32 +953,60 @@ export const Finance: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── Tabs ──────────────────────────────────────────────── */}
-      <div className="flex overflow-x-auto no-scrollbar gap-0.5 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg w-fit">
-        {([
-          { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-          { id: 'livv', label: 'LIVV', icon: Layers },
-          { id: 'ingresos', label: 'Income', icon: ArrowDownLeft },
-          { id: 'gastos', label: 'Expenses', icon: Receipt },
-          { id: 'budgets', label: 'Budgets', icon: Wallet },
-          { id: 'propuestas', label: 'Proposals', icon: FileText },
-          { id: 'proyectos', label: 'Projects P&L', icon: Target },
-          { id: 'config', label: 'Settings', icon: Settings },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all duration-200 font-medium text-xs whitespace-nowrap
-              ${activeTab === tab.id
-                ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-              }`}
-          >
-            <tab.icon size={13} strokeWidth={activeTab === tab.id ? 2 : 1.5} />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* ─── Tabs (simplified) ──────────────────────────────────
+           Surfacing only the 4 daily-driver tabs by default. The rest
+           (Proposals, Projects P&L, LIVV super-agency view, Settings)
+           hide behind a "More" dropdown — they get used periodically,
+           not every session. The user explicitly asked for the
+           Finance UI to feel less complex; collapsing 8 tabs into
+           4 + 1 menu is the cheapest big win. */}
+      {(() => {
+        const PRIMARY = [
+          { id: 'dashboard', label: 'Dashboard',    icon: BarChart3 },
+          { id: 'ingresos',  label: 'Income',       icon: ArrowDownLeft },
+          { id: 'gastos',    label: 'Expenses',     icon: Receipt },
+          { id: 'budgets',   label: 'Budgets',      icon: Wallet },
+        ] as const;
+        const ADVANCED = [
+          { id: 'propuestas', label: 'Proposals',     icon: FileText },
+          { id: 'proyectos',  label: 'Projects P&L',  icon: Target },
+          { id: 'livv',       label: 'LIVV view',     icon: Layers },
+          { id: 'config',     label: 'Settings',      icon: Settings },
+        ] as const;
+        // If the user lands on an advanced tab (deep link, refresh),
+        // show that tab's chip in the primary row so they don't see
+        // a confusing "no active tab" state.
+        const advActive = ADVANCED.find(t => t.id === activeTab);
+        const visiblePrimary = advActive ? [...PRIMARY, advActive] : PRIMARY;
+
+        return (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex overflow-x-auto no-scrollbar gap-0.5 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg w-fit">
+              {visiblePrimary.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all duration-200 font-medium text-xs whitespace-nowrap
+                    ${activeTab === tab.id
+                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+                    }`}
+                >
+                  <tab.icon size={13} strokeWidth={activeTab === tab.id ? 2 : 1.5} />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* "More" menu — collapses the less-frequent tabs */}
+            <FinanceMoreMenu
+              advanced={ADVANCED}
+              activeTab={activeTab}
+              onPick={(id) => setActiveTab(id as any)}
+            />
+          </div>
+        );
+      })()}
 
       {/* ═══════════════ DASHBOARD (Livv editorial) ═══════════════ */}
       {activeTab === 'dashboard' && (
@@ -2706,3 +2735,67 @@ export const Finance: React.FC = () => {
 };
 
 export default Finance;
+
+// ─── FinanceMoreMenu ──────────────────────────────────────────────────────
+// Tiny dropdown that hosts the "advanced" Finance tabs (Proposals,
+// Projects P&L, LIVV super-agency view, Settings). Pulls clutter off
+// the primary tab row while keeping every page reachable in one click.
+const FinanceMoreMenu: React.FC<{
+  advanced: ReadonlyArray<{ id: string; label: string; icon: any }>;
+  activeTab: string;
+  onPick: (id: string) => void;
+}> = ({ advanced, activeTab, onPick }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="More finance tools"
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+          open
+            ? 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+            : 'bg-zinc-100/60 dark:bg-zinc-900/60 border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+        }`}
+      >
+        <MoreHorizontal size={13} />
+        <span>More</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg overflow-hidden z-30 animate-in fade-in slide-in-from-top-1 duration-150">
+          <ul>
+            {advanced.map(t => {
+              const isActive = activeTab === t.id;
+              const Icon = t.icon;
+              return (
+                <li key={t.id}>
+                  <button
+                    onClick={() => { onPick(t.id); setOpen(false); }}
+                    className={`w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs transition-colors ${
+                      isActive
+                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium'
+                        : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+                    }`}
+                  >
+                    <Icon size={13} className="text-zinc-400" />
+                    {t.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
