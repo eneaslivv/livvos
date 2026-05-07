@@ -611,12 +611,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       `}>
 
         {/* Tenant Switcher (replaces tenant logo — opens dropdown of workspaces + connected agencies) */}
-        <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} />
+        <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} onNavigate={onNavigate} />
 
         {/* Workspace Switcher — segmented control. The Master segment only
             appears for platform admins; otherwise the switch stays binary
-            (OS / Sales) so the 99% of users see no change. */}
-        {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
+            (OS / Sales). The icons row is always visible; the textual
+            label sits to its right (only when the sidebar is expanded)
+            in the same flex flow — no absolute positioning, so the
+            buttons can never be hidden behind the label.
+        */}
+        {hasFeature('sales_module') && <div className="w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
           {(() => {
             const segments: Array<{ key: AppMode; icon: React.ReactNode; label: string; shortcut: string }> = [
               { key: 'os',     icon: <Icons.Home size={13} />,  label: 'System', shortcut: '1' },
@@ -627,50 +631,54 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             }
             const activeIdx = Math.max(0, segments.findIndex(s => s.key === currentMode));
             const segCount = segments.length;
-            const indicatorWidth = `${100 / segCount}%`;
-            const indicatorLeft = `${(100 / segCount) * activeIdx}%`;
             const activeLabel = segments[activeIdx]?.label || 'System';
             const titleText = segments
               .filter(s => s.key !== currentMode)
               .map(s => `Switch to ${s.label} (${s.shortcut})`)
               .join(' · ');
             return (
-              <div
-                className={`w-full flex items-center p-1 rounded-full bg-zinc-100 dark:bg-zinc-950 transition-all border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
-                title={titleText}
-              >
-                {/* Sliding indicator background */}
+              <div className={`w-full flex items-center gap-2 ${isSidebarExpanded ? '' : 'justify-center'}`}>
+                {/* Segmented buttons — fixed width (one icon per segment),
+                    sit on their own without absolute overlap so they can
+                    never be hidden behind the label. */}
                 <div
-                  className="absolute top-0 bottom-0 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-all duration-300"
-                  style={{ width: indicatorWidth, left: indicatorLeft }}
-                />
-                {segments.map(s => {
-                  const isActive = s.key === currentMode;
-                  return (
-                    <button
-                      key={s.key}
-                      onClick={() => onSwitchMode(s.key)}
-                      className={`relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer ${
-                        isActive
-                          ? 'text-zinc-900 dark:text-zinc-100'
-                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-                      }`}
-                      title={`Switch to ${s.label} (${s.shortcut})`}
-                      aria-label={`Switch to ${s.label}`}
-                    >
-                      {s.icon}
-                      <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">
-                        {s.shortcut}
-                      </span>
-                    </button>
-                  );
-                })}
-                <div className={`transition-opacity duration-300 absolute ${isPlatformAdmin ? 'left-24' : 'left-16'} whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-                  <div className={`font-semibold text-xs leading-tight ${currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                    {activeLabel}
-                  </div>
-                  <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
+                  className="relative flex items-center p-0.5 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 group/switch"
+                  style={{ width: `${segCount * 26 + 4}px` }}
+                  title={titleText}
+                >
+                  <div
+                    className="absolute top-0.5 bottom-0.5 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-[left,width] duration-300 pointer-events-none"
+                    style={{ width: `${100 / segCount}%`, left: `${(100 / segCount) * activeIdx}%` }}
+                  />
+                  {segments.map(s => {
+                    const isActive = s.key === currentMode;
+                    return (
+                      <button
+                        key={s.key}
+                        onClick={() => onSwitchMode(s.key)}
+                        className={`relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
+                          isActive
+                            ? (s.key === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100')
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                        }`}
+                        title={`Switch to ${s.label} (${s.shortcut})`}
+                        aria-label={`Switch to ${s.label}`}
+                      >
+                        {s.icon}
+                      </button>
+                    );
+                  })}
                 </div>
+                {/* Label — inline with the toggle, not absolute. Only when
+                    expanded so it never collides with collapsed sidebar. */}
+                {isSidebarExpanded && (
+                  <div className="flex-1 min-w-0 flex flex-col items-start">
+                    <div className={`font-semibold text-xs leading-tight truncate w-full ${currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                      {activeLabel}
+                    </div>
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
+                  </div>
+                )}
               </div>
             );
           })()}
