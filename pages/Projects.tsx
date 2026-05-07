@@ -346,12 +346,25 @@ interface SidebarGroup {
 /*  MAIN COMPONENT                                             */
 /* ════════════════════════════════════════════════════════════ */
 export const Projects: React.FC<{
-  navProjectId?: string;
+  /** Latest navigation payload from App.handleNavigate. We watch the whole
+   *  object (not just projectId) so re-clicking the same project, or
+   *  rapidly switching projects via the sidebar, always triggers the
+   *  selection effect — the dep change is the object identity, which
+   *  is fresh on every navigate call.
+   *
+   *  IMPORTANT: do NOT collapse to `navProjectId={navParams?.projectId}`.
+   *  When App auto-clears navParams (the 150ms timer), the projectId
+   *  string can equal a previous value across two clicks, causing the
+   *  effect to skip and the wrong project to stay selected. The bug we
+   *  saw in the wild: click "Sunnyside", then click "Frenetic Sports" →
+   *  Sunnyside stayed open. */
+  navParams?: import('../types').NavParams | null;
   /** App-level navigate. Used by the kanban board to open the full task
    *  drawer in Calendar (`?task=<id>`) since Projects doesn't host its
    *  own TaskDetailPanel. */
   onNavigate?: (page: import('../types').PageView, params?: import('../types').NavParams) => void;
-}> = ({ navProjectId, onNavigate }) => {
+}> = ({ navParams, onNavigate }) => {
+  const navProjectId = navParams?.projectId;
   const isMobile = useIsMobile();
   const { projects, loading, error, createProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
@@ -387,10 +400,15 @@ export const Projects: React.FC<{
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Navigate to a specific project when coming from another page (e.g. Clients)
+  // Navigate to a specific project when coming from another page (e.g.
+  // Clients) OR from the sidebar tree. Watching the whole `navParams`
+  // object means each call to handleNavigate triggers this effect, even
+  // when the projectId equals what was passed before (which used to make
+  // the dep array think nothing changed and skip the selection).
   useEffect(() => {
-    if (navProjectId) setSelectedId(navProjectId);
-  }, [navProjectId]);
+    const id = navParams?.projectId;
+    if (id) setSelectedId(id);
+  }, [navParams]);
   const [activeTab, setActiveTab] = useState('overview');
   // View mode for the Tasks tab inside a project — list (existing TasksTab)
   // or board (new TaskKanbanBoard). Persisted per session via localStorage.
