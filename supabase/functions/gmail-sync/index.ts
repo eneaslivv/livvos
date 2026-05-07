@@ -92,11 +92,11 @@ async function gmailFetch(accessToken: string, path: string): Promise<any> {
 }
 
 // Background: classify a freshly-inserted message and write the result back.
-async function classifyAndUpdate(admin: any, messageId: string, classifyInput: any) {
+// Also extracts matched_client_id / matched_project_id from the AI's
+// response and stores them as proper FK columns on the message row, so
+// the inbox UI can filter/group without parsing the jsonb every time.
+async function classifyAndUpdate(admin: any, messageId: string, classifyInput: any, tenantId: string) {
   try {
-    // Call the gemini edge function directly (server-to-server). We use the
-    // anon key — the function accepts authenticated requests but the comm_classify
-    // prompt doesn't need RLS, just rate-limit protection.
     const supaUrl = Deno.env.get('SUPABASE_URL')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const res = await fetch(`${supaUrl}/functions/v1/gemini`, {
@@ -110,10 +110,25 @@ async function classifyAndUpdate(admin: any, messageId: string, classifyInput: a
     }
     const { result } = await res.json()
     if (!result) return
-    await admin.from('communication_messages').update({
+
+    // Validate matched ids belong to this tenant before writing them as
+    // FK refs. The prompt rule says "never invent ids" but we double-check.
+    const updates: any = {
       ai_processed: true,
       ai_classification: result,
-    }).eq('id', messageId)
+    }
+    if (result.matched_client_id) {
+      const { data: c } = await admin
+        .from('clients').select('id').eq('id', result.matched_client_id).eq('tenant_id', tenantId).maybeSingle()
+      if (c) updates.matched_client_id = result.matched_client_id
+    }
+    if (result.matched_project_id) {
+      const { data: p } = await admin
+        .from('projects').select('id').eq('id', result.matched_project_id).eq('tenant_id', tenantId).maybeSingle()
+      if (p) updates.matched_project_id = result.matched_project_id
+    }
+
+    await admin.from('communication_messages').update(updates).eq('id', messageId)
   } catch (err) {
     console.error('[gmail-sync] classify error:', err)
   }
@@ -146,6 +161,28 @@ Deno.serve(async (req) => {
     const { data: tenantRow } = await admin
       .from('tenants').select('name').eq('id', ctx.tenant_id).maybeSingle()
     const agencyName = tenantRow?.name || 'this agency'
+
+    // Pull CRM context — clients + projects — so the AI can match emails
+    // back to the right entity. Cap at 200 each so the prompt doesn't
+    // blow up on huge agencies; the AI prompt explicitly handles the
+    // case where the right client isn't in the list (returns null).
+    const { data: clientsList } = await admin
+      .from('clients')
+      .select('id, name, email, company')
+      .eq('tenant_id', ctx.tenant_id)
+      .limit(200)
+    const { data: projectsList } = await admin
+      .from('projects')
+      .select('id, title, client_id, clients(name)')
+      .eq('tenant_id', ctx.tenant_id)
+      .limit(200)
+    const clients = (clientsList || []).map((c: any) => ({
+      id: c.id, name: c.name || '', email: c.email || '', company: c.company || ''
+    }))
+    const projects = (projectsList || []).map((p: any) => ({
+      id: p.id, title: p.title || '', client_id: p.client_id || null,
+      client_name: p.clients?.name || null,
+    }))
 
     let totalSynced = 0
     const errors: string[] = []
@@ -237,7 +274,9 @@ Deno.serve(async (req) => {
               body: text || '',
               thread_context: threadContext,
               agency_name: agencyName,
-            })
+              clients,
+              projects,
+            }, ctx.tenant_id)
           } catch (msgErr) {
             errors.push(`msg ${msgId}: ${(msgErr as Error).message}`)
           }

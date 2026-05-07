@@ -17,6 +17,7 @@ import { Icons } from '../components/ui/Icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useSupabase } from '../hooks/useSupabase';
+import { useClients } from '../hooks/useClients';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
 import {
@@ -42,6 +43,7 @@ type Filter = 'all' | 'pending' | 'high' | 'gmail' | 'slack';
 export const Communications: React.FC = () => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
+  const { clients } = useClients();
   const tenantReady = !!currentTenant?.id;
 
   // Connect-flow status banner — read on mount from ?connect=… (set by the
@@ -141,6 +143,7 @@ export const Communications: React.FC = () => {
           messages={messages || []}
           loading={msgsLoading}
           tokens={tokens || []}
+          clients={clients || []}
           onMessageUpdate={refreshMessages}
         />
       ) : (
@@ -164,12 +167,28 @@ interface InboxViewProps {
   messages: CommunicationMessage[];
   loading: boolean;
   tokens: IntegrationToken[];
+  clients: Array<{ id: string; name?: string | null; company?: string | null }>;
   onMessageUpdate: () => void;
 }
 
-const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, onMessageUpdate }) => {
+const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, onMessageUpdate }) => {
   const [filter, setFilter] = useState<Filter>('pending');
+  const [clientFilter, setClientFilter] = useState<string>('all'); // client_id or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Build a map of clients that have at least one message — only show those
+  // in the per-client picker, no point listing 50 clients with 0 messages.
+  const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+  const clientsWithMessages = useMemo(() => {
+    const counts = new Map<string, number>();
+    messages.forEach(m => {
+      if (m.matched_client_id) counts.set(m.matched_client_id, (counts.get(m.matched_client_id) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([id, count]) => ({ id, name: clientMap.get(id)?.name || clientMap.get(id)?.company || 'Cliente', count }))
+      .sort((a, b) => b.count - a.count);
+  }, [messages, clientMap]);
+  const unmatchedCount = useMemo(() => messages.filter(m => m.ai_processed && !m.matched_client_id).length, [messages]);
 
   const filtered = useMemo(() => {
     let list = messages.slice();
@@ -177,8 +196,10 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, onMess
     else if (filter === 'high') list = list.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent');
     else if (filter === 'gmail') list = list.filter(m => m.platform === 'gmail');
     else if (filter === 'slack') list = list.filter(m => m.platform === 'slack');
+    if (clientFilter === '__unmatched__') list = list.filter(m => m.ai_processed && !m.matched_client_id);
+    else if (clientFilter !== 'all') list = list.filter(m => m.matched_client_id === clientFilter);
     return list.sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
-  }, [messages, filter]);
+  }, [messages, filter, clientFilter]);
 
   const selected = selectedId ? messages.find(m => m.id === selectedId) || null : null;
 
@@ -201,27 +222,73 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, onMess
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 min-h-[600px]">
       {/* ── Left: filter pills + message list ── */}
       <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
-        <div className="p-3 border-b border-zinc-100 dark:border-zinc-800/60 flex flex-wrap gap-1.5">
-          {([
-            { id: 'pending' as const, label: 'Pendientes', count: messages.filter(m => m.status === 'pending').length },
-            { id: 'all' as const, label: 'Todo', count: messages.length },
-            { id: 'high' as const, label: 'Urgente', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
-            { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
-            { id: 'slack' as const, label: 'Slack', count: messages.filter(m => m.platform === 'slack').length },
-          ]).map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1.5 ${
-                filter === f.id
-                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-              }`}
-            >
-              {f.label}
-              <span className={`text-[9px] tabular-nums font-mono ${filter === f.id ? 'opacity-60' : 'opacity-50'}`}>{f.count}</span>
-            </button>
-          ))}
+        <div className="border-b border-zinc-100 dark:border-zinc-800/60">
+          {/* Status / platform filter pills */}
+          <div className="p-3 flex flex-wrap gap-1.5">
+            {([
+              { id: 'pending' as const, label: 'Pendientes', count: messages.filter(m => m.status === 'pending').length },
+              { id: 'all' as const, label: 'Todo', count: messages.length },
+              { id: 'high' as const, label: 'Urgente', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
+              { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
+              { id: 'slack' as const, label: 'Slack', count: messages.filter(m => m.platform === 'slack').length },
+            ]).map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1.5 ${
+                  filter === f.id
+                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                }`}
+              >
+                {f.label}
+                <span className={`text-[9px] tabular-nums font-mono ${filter === f.id ? 'opacity-60' : 'opacity-50'}`}>{f.count}</span>
+              </button>
+            ))}
+          </div>
+          {/* Per-client filter — only shown when AI has matched at least one. */}
+          {clientsWithMessages.length > 0 && (
+            <div className="px-3 pb-3 flex flex-wrap gap-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 self-center mr-1">Cliente:</span>
+              <button
+                onClick={() => setClientFilter('all')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                  clientFilter === 'all'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                }`}
+              >
+                Todos
+              </button>
+              {clientsWithMessages.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setClientFilter(c.id)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 max-w-[180px] ${
+                    clientFilter === c.id
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <span className="truncate">{c.name}</span>
+                  <span className="text-[8.5px] tabular-nums font-mono opacity-60">{c.count}</span>
+                </button>
+              ))}
+              {unmatchedCount > 0 && (
+                <button
+                  onClick={() => setClientFilter('__unmatched__')}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 ${
+                    clientFilter === '__unmatched__'
+                      ? 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300'
+                      : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 italic'
+                  }`}
+                >
+                  Sin matchear
+                  <span className="text-[8.5px] tabular-nums font-mono opacity-60">{unmatchedCount}</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-zinc-50 dark:divide-zinc-800/40">
           {loading && messages.length === 0 && (
@@ -233,7 +300,13 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, onMess
             </div>
           )}
           {filtered.map(msg => (
-            <MessageCard key={msg.id} msg={msg} active={msg.id === selectedId} onClick={() => setSelectedId(msg.id)} />
+            <MessageCard
+              key={msg.id}
+              msg={msg}
+              active={msg.id === selectedId}
+              clientName={msg.matched_client_id ? clientMap.get(msg.matched_client_id)?.name || clientMap.get(msg.matched_client_id)?.company || null : null}
+              onClick={() => setSelectedId(msg.id)}
+            />
           ))}
         </div>
       </div>
@@ -258,7 +331,12 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, onMess
 // ────────────────────────────────────────────────────────────────────────
 //  MESSAGE CARD (left list row)
 // ────────────────────────────────────────────────────────────────────────
-const MessageCard: React.FC<{ msg: CommunicationMessage; active: boolean; onClick: () => void }> = ({ msg, active, onClick }) => {
+const MessageCard: React.FC<{
+  msg: CommunicationMessage;
+  active: boolean;
+  clientName: string | null | undefined;
+  onClick: () => void;
+}> = ({ msg, active, clientName, onClick }) => {
   const intent = msg.ai_classification?.intent;
   const intentMeta = intent ? INTENT_LABELS[intent] : null;
   const priority = msg.ai_classification?.priority;
@@ -309,6 +387,14 @@ const MessageCard: React.FC<{ msg: CommunicationMessage; active: boolean; onClic
         )}
         <div className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-0.5">{preview}</div>
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          {/* Client match — most prominent chip when present, since this
+              is what answers "which client/project does this belong to?" */}
+          {clientName && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 inline-flex items-center gap-1 max-w-[140px]">
+              <Icons.Users size={9} />
+              <span className="truncate">{clientName}</span>
+            </span>
+          )}
           {intentMeta && (
             <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${intentMeta.color}`}>
               {intentMeta.label}

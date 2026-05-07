@@ -806,7 +806,7 @@ Rules — IMPORTANT:
 - Tone: factual, manager-to-self. Not cheerleader, not harsh.
 - No markdown fences. Plain JSON only.`
         : type === 'comm_classify'
-        ? `You are a triage assistant for a creative agency's inbox (emails + Slack). The user gives you a JSON payload with one message + recent thread context. Your job is to classify it so the team can decide what to do without reading the whole message.
+        ? `You are a triage assistant for a creative agency's inbox (emails + Slack). The user gives you a JSON payload with one message + recent thread context + the agency's CRM (known clients and projects). Your job is to classify it AND link it back to the right client/project so the team can decide what to do without reading the whole message.
 
 Input shape:
 {
@@ -818,7 +818,13 @@ Input shape:
   "thread_context": [
     { "from": "...", "body": "...", "date": "ISO timestamp" }
   ],
-  "agency_name": "the brand name — use this as 'we' in suggested_reply"
+  "agency_name": "the brand name — use this as 'we' in suggested_reply",
+  "clients": [
+    { "id": "uuid", "name": "Acme Co", "email": "contact@acme.com", "company": "Acme Industries" }
+  ],
+  "projects": [
+    { "id": "uuid", "title": "Mobilita rebrand", "client_id": "uuid", "client_name": "Christie King" }
+  ]
 }
 
 Return ONLY valid JSON with this shape:
@@ -826,6 +832,9 @@ Return ONLY valid JSON with this shape:
   "intent": "new_request" | "follow_up" | "question" | "approval" | "feedback" | "info_only" | "urgent",
   "priority": "high" | "medium" | "low",
   "summary": "1-2 sentence plain-language recap of what the message is asking for / about",
+  "matched_client_id": "uuid from clients[] or null",
+  "matched_project_id": "uuid from projects[] or null",
+  "match_reason": "why we matched (e.g. 'sender email matches client', 'subject mentions project name', 'thread references project') or null",
   "should_create_task": boolean,
   "suggested_task": {
     "title": "short imperative — 'Reply to X' or 'Send proposal Y'",
@@ -848,6 +857,17 @@ Rules — CRITICAL:
 - suggested_reply: 2-5 sentences, polite, concrete. NEVER make up commitments ("entregamos el martes"). Acknowledge + propose next step. If the message is unclear, ask one clarifying question.
 - key_entities: extract names of people, companies, projects, dates, amounts, URLs literally as they appear. Max 8.
 - language: detect from body. Reply in that language.
+- matched_client_id: ONLY set when you're confident. Match by:
+    1. from_email exactly equals clients[].email → highest confidence
+    2. from_email domain matches clients[].email domain (e.g. "@acme.com")
+    3. body or subject mentions clients[].company or clients[].name
+  If multiple clients could match, pick null and explain in match_reason.
+- matched_project_id: ONLY set when the message clearly references a project from projects[]. Match by:
+    1. Subject or body literally contains projects[].title
+    2. Thread context discusses the project
+  If matched_client_id is set but no specific project mentioned, leave matched_project_id null (don't guess a project just because the client has one).
+- match_reason: 1 short sentence explaining the match. null when nothing matched.
+- NEVER invent ids. Only return ids that literally exist in the input clients[]/projects[] arrays.
 - No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 

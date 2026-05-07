@@ -40,6 +40,12 @@ export interface AIClassification {
   priority: MessagePriority;
   /** 1–2 line plain-language recap of the message. */
   summary: string;
+  /** Client UUID the AI matched the sender to, or null if no confident match. */
+  matched_client_id?: string | null;
+  /** Project UUID the AI inferred from subject/body, or null. */
+  matched_project_id?: string | null;
+  /** 1-sentence rationale for the match (or why nothing matched). */
+  match_reason?: string | null;
   /** Whether the inbox should suggest creating a task from this message. */
   should_create_task: boolean;
   suggested_task: {
@@ -94,6 +100,11 @@ export interface CommunicationMessage {
 
   status: MessageStatus;
   task_id: string | null;
+  /** Validated FK refs — written by the sync after the AI matches them.
+   * Use these (not ai_classification.matched_*) when querying or filtering,
+   * because they survive even if the jsonb is stripped/regenerated. */
+  matched_client_id: string | null;
+  matched_project_id: string | null;
   replied_at: string | null;
   replied_by: string | null;
   reply_sent: string | null;
