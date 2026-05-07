@@ -294,12 +294,62 @@ serve(async (req) => {
     //   2. A warm welcome reply to the prospect using the "welcome" template
     //      (3-step onboarding, founder signature). Auto-disabled if
     //      LEAD_AUTO_REPLY=false to keep room for hand-written follow-ups.
-    let notifyStatus: any = { internal: { attempted: false }, welcome: { attempted: false } }
+    let notifyStatus: any = { internal: { attempted: false }, welcome: { attempted: false }, in_app: { attempted: false } }
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     // Comma-separated list supported: "a@x.com,b@y.com,c@z.com". Trim each
     // entry and skip empties so a stray comma doesn't break the send.
     const notifyToRaw = Deno.env.get('LEAD_NOTIFY_EMAIL') || 'hola@livv.systems'
     const notifyTo = notifyToRaw.split(',').map(s => s.trim()).filter(Boolean)
+
+    // ── In-app notifications ──────────────────────────────────────
+    // Mirror the email recipient list to the bell icon — so people get
+    // both an email AND a real-time in-app notification when a lead
+    // arrives. NotificationsContext is subscribed to postgres_changes
+    // on the notifications table, so this insert appears INSTANTLY in
+    // the recipient's bell without any refresh. Best-effort — never
+    // block the lead insert if this fails.
+    try {
+      notifyStatus.in_app.attempted = true
+      // Look up user_ids whose profile email matches the notify list.
+      const { data: matchedUsers } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('email', notifyTo)
+      const userIds = (matchedUsers || []).map((u: any) => u.id)
+      notifyStatus.in_app.matched_users = userIds.length
+
+      if (userIds.length > 0) {
+        const fitLine = company ? `${company} · ${email}` : email
+        const subjLine = project_type
+          ? `Looking for ${project_type}${temperature === 'hot' ? ' · HOT 🔥' : ''}`
+          : `${message.slice(0, 100)}${message.length > 100 ? '…' : ''}`
+        const rows = userIds.map((uid: string) => ({
+          user_id: uid,
+          tenant_id: tenant.id,
+          type: 'lead',
+          title: temperature === 'hot' ? `🔥 HOT lead · ${name}` : `🔥 New lead · ${name}`,
+          message: `${fitLine}\n${subjLine}`,
+          link: `/sales_leads?lead=${lead.id}`,
+          priority: temperature === 'hot' ? 'urgent' : 'high',
+          category: 'lead',
+          read: false,
+          metadata: { lead_id: lead.id, source: origin || source || 'web', email },
+          action_required: true,
+          action_url: `/sales_leads?lead=${lead.id}`,
+          action_text: 'View lead',
+        }))
+        const { error: notifErr } = await supabase.from('notifications').insert(rows)
+        if (notifErr) {
+          notifyStatus.in_app.error = notifErr.message
+          console.error('lead-ingest in-app notify failed', notifErr)
+        } else {
+          notifyStatus.in_app.inserted = rows.length
+        }
+      }
+    } catch (e) {
+      notifyStatus.in_app.error = String(e)
+      console.error('lead-ingest in-app notify throw', e)
+    }
     const fromName = Deno.env.get('LEAD_FROM_NAME') || 'Eneas Aldabe'
     // Default to a livv.space sender because that's the domain verified in
     // Resend right now. To send from eneas@livv.systems instead (more personal),
