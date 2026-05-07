@@ -47,30 +47,29 @@ export default defineConfig(() => {
         chunkSizeWarningLimit: 800,
         rollupOptions: {
           output: {
-            // Split heavy 3rd-party libs into their own long-lived chunks.
-            // Why this helps:
-            //   • Smaller initial JS — only the libs we use on the auth/home
-            //     paint ship before paint. Recharts/TipTap/xlsx don't ship
-            //     until the page that needs them is opened.
-            //   • Better long-term caching — when we update app code, the
-            //     vendor chunks (which change rarely) stay cached in the
-            //     browser, so reloads after a deploy fetch tens of KB
-            //     instead of hundreds.
-            // Order matters: more specific tests first. Anything not matched
-            // falls through to the default route-chunk grouping.
+            // Conservative chunk strategy: only split out libraries that
+            // are genuinely large AND only used in a single page (so most
+            // users never download them). Everything else — React, React
+            // DOM, Recharts, Framer Motion, Supabase — stays inside the
+            // default chunks Vite generates, because those packages ship
+            // CommonJS shims (e.g. use-sync-external-store/shim) that
+            // expect to be in the SAME chunk as react. Splitting them
+            // apart causes cross-chunk init order bugs:
+            //   "Cannot read properties of undefined (reading
+            //    'useSyncExternalStore')"
+            // which is what we hit with the previous aggressive split.
+            //
+            // Lessons:
+            //   • xlsx (~430KB) — only loads on Excel upload. Big win.
+            //   • tiptap+prosemirror (~350KB) — only loads on Docs/Calendar
+            //     editor. Big win.
+            //   • Anything else: leave it to Vite. The marginal caching
+            //     benefit isn't worth the SSR / chunk-load fragility.
             manualChunks: (id: string) => {
               if (!id.includes('node_modules')) return undefined;
               if (id.includes('xlsx')) return 'vendor-xlsx';
               if (id.includes('@tiptap') || id.includes('prosemirror')) return 'vendor-tiptap';
-              if (id.includes('recharts') || id.includes('d3-')) return 'vendor-recharts';
-              if (id.includes('framer-motion')) return 'vendor-motion';
-              if (id.includes('@hello-pangea/dnd')) return 'vendor-dnd';
-              if (id.includes('@supabase/')) return 'vendor-supabase';
-              if (id.includes('lucide-react')) return 'vendor-icons';
-              if (id.includes('crypto-js')) return 'vendor-crypto';
-              if (id.includes('react-dom')) return 'vendor-react-dom';
-              if (id.includes('/react/') || id.endsWith('/react')) return 'vendor-react';
-              return 'vendor';
+              return undefined;
             },
           },
         },
