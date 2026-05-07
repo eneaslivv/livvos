@@ -715,7 +715,7 @@ const AppContent: React.FC<{
           {visitedPages.has('projects') && (
             <KeepAlivePage page="projects" active={currentPage === 'projects'}>
               <ProtectedRoute permission={{ module: 'projects', action: 'view' }} feature="projects_module">
-                <Projects navProjectId={navParams?.projectId} />
+                <Projects navProjectId={navParams?.projectId} onNavigate={handleNavigate} />
               </ProtectedRoute>
             </KeepAlivePage>
           )}

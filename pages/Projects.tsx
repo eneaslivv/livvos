@@ -344,7 +344,13 @@ interface SidebarGroup {
 /* ════════════════════════════════════════════════════════════ */
 /*  MAIN COMPONENT                                             */
 /* ════════════════════════════════════════════════════════════ */
-export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) => {
+export const Projects: React.FC<{
+  navProjectId?: string;
+  /** App-level navigate. Used by the kanban board to open the full task
+   *  drawer in Calendar (`?task=<id>`) since Projects doesn't host its
+   *  own TaskDetailPanel. */
+  onNavigate?: (page: import('../types').PageView, params?: import('../types').NavParams) => void;
+}> = ({ navProjectId, onNavigate }) => {
   const isMobile = useIsMobile();
   const { projects, loading, error, createProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
@@ -650,11 +656,15 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
   };
 
   // Persist last-opened project so returning to the page keeps your context.
+  // CRITICAL: skip the restore when an explicit `navProjectId` is in flight —
+  // otherwise this effect races with the navProjectId effect above and the
+  // user clicks "Mobilita" but sees the previously-opened project. The
+  // navProjectId path always wins.
   useEffect(() => {
-    if (selectedId || !projects.length) return;
+    if (selectedId || !projects.length || navProjectId) return;
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('projects:lastSelectedId') : null;
     if (stored && projects.some(p => p.id === stored)) setSelectedId(stored);
-  }, [projects, selectedId]);
+  }, [projects, selectedId, navProjectId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1809,7 +1819,16 @@ export const Projects: React.FC<{ navProjectId?: string }> = ({ navProjectId }) 
                       <div className="h-[calc(100vh-300px)] min-h-[520px]">
                         <TaskKanbanBoard
                           tasks={projectTasks.filter(t => !t.parent_task_id) as any}
-                          onTaskClick={(t) => setExpandedTaskId(t.id)}
+                          onTaskClick={(t) => {
+                            // Open the full task drawer in Calendar (same UX
+                            // as anywhere else in the app). Calendar's
+                            // existing `?task=` reader auto-opens the panel.
+                            if (onNavigate) {
+                              onNavigate('calendar', { taskId: t.id });
+                            } else {
+                              setExpandedTaskId(t.id);
+                            }
+                          }}
                           onStatusChange={async (id, status) => {
                             await updateTask(id, { status, completed: status === 'done' } as any);
                           }}
