@@ -80,10 +80,14 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
     return arr;
   }, [tasks, currentTenant?.id]);
 
-  // Hide when single-workspace user and there's nothing cross-tenant.
-  // Memberships is the canonical "where do you have access" list.
+  // Hide when the user is in a single workspace. The whole point of this
+  // widget is to surface tasks from OTHER agencies — if there's only one
+  // tenant in `memberships`, the regular Today's Focus / Today's Agenda
+  // sections below already cover the same data, so the widget would just
+  // duplicate them and add noise (the partner agencies in particular
+  // were complaining about the redundancy).
   const otherWorkspaces = memberships.filter(m => m.tenant_id !== currentTenant?.id);
-  if (!loading && tasks.length === 0 && otherWorkspaces.length === 0) {
+  if (otherWorkspaces.length === 0) {
     return null;
   }
 

@@ -914,58 +914,20 @@ export const Finance: React.FC = () => {
     <div className="max-w-[1600px] mx-auto space-y-5 animate-in fade-in duration-500 pt-4 pb-16">
 
       {/* ─── Header ──────────────────────────────────────────────
-          On the Dashboard tab the Livv editorial hero owns the title + action
-          toolbar, so we collapse this header to a tiny bar (just the tabs +
-          export). On every other tab we keep the original h1 + action set. */}
-      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 ${activeTab === 'dashboard' ? '' : 'border-b border-zinc-100 dark:border-zinc-800/60'}`}>
-        {activeTab !== 'dashboard' && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-2">
-              <div className="w-1 h-1 rounded-full bg-emerald-500" />
-              Finance Module
-            </div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Finance</h1>
-            <p className="text-zinc-400 text-xs max-w-md">Track income, expenses, margins, and team liquidity.</p>
-          </div>
-        )}
-        <div className="flex gap-2 flex-wrap">
-          {hasPermission('finance', 'create') && activeTab !== 'dashboard' && (
-            <>
-              <button onClick={() => setIsAssistantOpen(true)}
-                className="group flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200 text-white"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}
-                title="Add an entry by describing it in natural language">
-                <Sparkles size={14} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
-                <span>Add with AI</span>
-              </button>
-              <button onClick={() => setIsChatOpen(true)}
-                className="group flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200 border border-fuchsia-300 dark:border-fuchsia-500/40 text-fuchsia-700 dark:text-fuchsia-300 bg-white dark:bg-zinc-900 hover:bg-fuchsia-50/60 dark:hover:bg-fuchsia-500/10"
-                title="Preguntale sobre tus finanzas">
-                <MessageSquare size={14} strokeWidth={2.5} />
-                <span>Preguntale</span>
-              </button>
-              <button onClick={openIncomeForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
-                <ArrowDownLeft size={14} strokeWidth={2.5} />
-                <span>Income</span>
-              </button>
-              <button onClick={openExpenseForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-xs font-medium shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200">
-                <ArrowUpFromLine size={14} strokeWidth={2.5} />
-                <span>Expense</span>
-              </button>
-              <button onClick={openBudgetForm} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium shadow-sm active:scale-[0.98] transition-all duration-200">
-                <Wallet size={14} strokeWidth={2.5} />
-                <span>Budget</span>
-              </button>
-            </>
-          )}
-          {activeTab !== 'dashboard' && (
-            <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200">
-              <Download size={14} />
-              <span>Export</span>
-            </button>
-          )}
-        </div>
-      </div>
+          Same shell on every tab: the editorial layout starts directly
+          at the tab strip. Each tab content renders its OWN hero
+          (Dashboard's "Money, in motion.", Income's "What's coming in.",
+          Expenses' "Where it goes.", etc.) so we don't need to render a
+          duplicate page-level "Finance" title + action row above them.
+          The action buttons (New income / Expense / Budget) live inside
+          each tab's own hero where they're contextually relevant; AI
+          and quick-ask are surfaced via the slim bar below the tabs and
+          via the editorial hero on the Dashboard.
+
+          Removing this top header is what the user asked for — the old
+          "Finance" h1 + toolbar made non-Dashboard tabs feel like a
+          different page than the Dashboard, breaking the rhythm when
+          the user clicked between Income / Expenses / Budgets. */}
 
       {/* ─── Forecast banner ───────────────────────────────────
            Cross-tab "where am I headed" strip. Shows current balance,

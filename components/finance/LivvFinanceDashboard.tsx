@@ -19,6 +19,7 @@ import {
 import type {
   IncomeEntry, Installment, ExpenseEntry, Budget,
 } from '../../context/FinanceContext';
+import { useIsDarkMode } from '../../hooks/useIsDarkMode';
 
 // ──────────────────────────────────────────────────────────────────────
 //  Types from the parent page
@@ -91,6 +92,29 @@ const C = {
   pink:     '#F1ADD8',
 };
 
+// Dark counterpart — see LivvFinanceTabs for the rationale. Kept in sync
+// with the same hue family so switching themes feels consistent across
+// the Dashboard / Income / Expenses surfaces.
+const C_DARK: typeof C = {
+  cream:      '#0A0A0B',
+  oat:        '#141416',
+  bone:       'rgba(255,255,255,0.08)',
+  sand:       'rgba(255,255,255,0.12)',
+  ink:        '#F4F4F5',
+  body:       'rgba(244,244,245,0.72)',
+  meta:       'rgba(244,244,245,0.50)',
+  dashed:     'rgba(255,255,255,0.18)',
+  dashedSoft: 'rgba(255,255,255,0.10)',
+  gold:       '#D4B574',
+  goldHi:     '#F0CC73',
+  income:     '#7FA876',
+  expense:    '#D8635C',
+  wine:       '#A35A52',
+  pink:       '#F1ADD8',
+};
+
+const useFinancePalette = (): typeof C => (useIsDarkMode() ? C_DARK : C);
+
 // ──────────────────────────────────────────────────────────────────────
 //  Format helpers
 // ──────────────────────────────────────────────────────────────────────
@@ -108,42 +132,50 @@ const fmtDate = (s?: string | null) => {
 //  Primitives
 // ──────────────────────────────────────────────────────────────────────
 
-const Eyebrow: React.FC<{ children: React.ReactNode; gold?: boolean; style?: React.CSSProperties }> = ({ children, gold, style }) => (
-  <span style={{
-    fontFamily: 'Inter', fontSize: 10, fontWeight: 500,
-    letterSpacing: '0.22em', textTransform: 'uppercase',
-    color: gold ? C.gold : C.meta, ...style,
-  }}>{children}</span>
-);
+const Eyebrow: React.FC<{ children: React.ReactNode; gold?: boolean; style?: React.CSSProperties }> = ({ children, gold, style }) => {
+  const C = useFinancePalette();
+  return (
+    <span style={{
+      fontFamily: 'Inter', fontSize: 10, fontWeight: 500,
+      letterSpacing: '0.22em', textTransform: 'uppercase',
+      color: gold ? C.gold : C.meta, ...style,
+    }}>{children}</span>
+  );
+};
 
-const Dashed: React.FC<{ vertical?: boolean; style?: React.CSSProperties }> = ({ vertical, style }) =>
-  vertical
+const Dashed: React.FC<{ vertical?: boolean; style?: React.CSSProperties }> = ({ vertical, style }) => {
+  const C = useFinancePalette();
+  return vertical
     ? <div style={{ width: 1, alignSelf: 'stretch', borderLeft: `1px dashed ${C.dashed}`, ...style }} />
     : <div style={{ height: 1, width: '100%', borderTop: `1px dashed ${C.dashed}`, ...style }} />;
+};
 
-const Metric: React.FC<{ label: string; value: string; delta?: number; hint?: string; big?: boolean }> = ({ label, value, delta, hint, big }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <Eyebrow>{label}</Eyebrow>
-    <div style={{
-      fontFamily: 'Inter', fontWeight: 300,
-      fontSize: big ? 56 : 40, lineHeight: 1, letterSpacing: '-0.04em',
-      color: C.ink, fontVariantNumeric: 'tabular-nums',
-      display: 'flex', alignItems: 'baseline', gap: 10,
-    }}>
-      {value}
-      {delta !== undefined && (
-        <span style={{ fontSize: 12, fontWeight: 500, color: delta > 0 ? C.income : C.wine }}>
-          {delta > 0 ? '+' : ''}{delta}%
-        </span>
+const Metric: React.FC<{ label: string; value: string; delta?: number; hint?: string; big?: boolean }> = ({ label, value, delta, hint, big }) => {
+  const C = useFinancePalette();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Eyebrow>{label}</Eyebrow>
+      <div style={{
+        fontFamily: 'Inter', fontWeight: 300,
+        fontSize: big ? 56 : 40, lineHeight: 1, letterSpacing: '-0.04em',
+        color: C.ink, fontVariantNumeric: 'tabular-nums',
+        display: 'flex', alignItems: 'baseline', gap: 10,
+      }}>
+        {value}
+        {delta !== undefined && (
+          <span style={{ fontSize: 12, fontWeight: 500, color: delta > 0 ? C.income : C.wine }}>
+            {delta > 0 ? '+' : ''}{delta}%
+          </span>
+        )}
+      </div>
+      {hint && (
+        <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.meta }}>
+          {hint}
+        </div>
       )}
     </div>
-    {hint && (
-      <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.meta }}>
-        {hint}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 // ──────────────────────────────────────────────────────────────────────
 //  AI bar
@@ -156,12 +188,14 @@ const AIBar: React.FC<{
   onOpenChat: () => void;
   suggestions: string[];
 }> = ({ value, setValue, onSubmit, onOpenAssistant, onOpenChat, suggestions }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        background: '#FFFFFF', border: `1px solid ${C.bone}`,
+        background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
         borderRadius: 9999, padding: '8px 8px 8px 22px',
         boxShadow: focused
           ? '0 12px 32px rgba(0,0,0,0.08), 0 0 0 4px rgba(232,188,89,0.15)'
@@ -248,13 +282,16 @@ const ActionButton: React.FC<{
   onClick?: () => void;
   variant?: 'ghost' | 'income' | 'expense' | 'primary' | 'gold';
 }> = ({ icon, label, onClick, variant = 'ghost' }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [hover, setHover] = useState(false);
+  const surface = isDark ? C.oat : '#FFFFFF';
   const styles: Record<string, React.CSSProperties> = {
-    ghost:   { background: '#FFFFFF', color: C.ink,     border: `1px solid ${C.bone}` },
-    income:  { background: '#FFFFFF', color: C.income,  border: '1px solid rgba(118,146,104,0.35)' },
-    expense: { background: '#FFFFFF', color: C.expense, border: '1px solid rgba(196,80,74,0.35)' },
-    primary: { background: C.ink,     color: C.cream,   border: `1px solid ${C.ink}` },
-    gold:    { background: C.goldHi,  color: C.ink,     border: `1px solid ${C.goldHi}` },
+    ghost:   { background: surface, color: C.ink,     border: `1px solid ${C.bone}` },
+    income:  { background: surface, color: C.income,  border: `1px solid ${C.income}55` },
+    expense: { background: surface, color: C.expense, border: `1px solid ${C.expense}55` },
+    primary: { background: C.ink,   color: C.cream,   border: `1px solid ${C.ink}` },
+    gold:    { background: C.goldHi, color: '#09090B', border: `1px solid ${C.goldHi}` },
   };
   return (
     <button
@@ -282,30 +319,39 @@ const ActionButton: React.FC<{
 
 type ChartVariant = 'bars' | 'lines' | 'area';
 
-const ChartToggle: React.FC<{ variant: ChartVariant; setVariant: (v: ChartVariant) => void }> = ({ variant, setVariant }) => (
-  <div style={{ display: 'inline-flex', padding: 3, background: 'rgba(90,62,62,0.06)', borderRadius: 9999 }}>
-    {(['bars', 'lines', 'area'] as ChartVariant[]).map(v => (
-      <button
-        key={v}
-        onClick={() => setVariant(v)}
-        style={{
-          padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer',
-          background: variant === v ? C.ink : 'transparent',
-          color: variant === v ? C.cream : 'rgba(90,62,62,0.6)',
-          fontFamily: 'Inter', fontSize: 11, fontWeight: 500,
-          letterSpacing: '0.04em', textTransform: 'capitalize',
-          transition: 'all .25s cubic-bezier(.16,1,.3,1)',
-        }}
-      >{v}</button>
-    ))}
-  </div>
-);
+const ChartToggle: React.FC<{ variant: ChartVariant; setVariant: (v: ChartVariant) => void }> = ({ variant, setVariant }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
+  return (
+    <div style={{
+      display: 'inline-flex', padding: 3, borderRadius: 9999,
+      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(90,62,62,0.06)',
+    }}>
+      {(['bars', 'lines', 'area'] as ChartVariant[]).map(v => (
+        <button
+          key={v}
+          onClick={() => setVariant(v)}
+          style={{
+            padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer',
+            background: variant === v ? C.ink : 'transparent',
+            color: variant === v ? C.cream : C.meta,
+            fontFamily: 'Inter', fontSize: 11, fontWeight: 500,
+            letterSpacing: '0.04em', textTransform: 'capitalize',
+            transition: 'all .25s cubic-bezier(.16,1,.3,1)',
+          }}
+        >{v}</button>
+      ))}
+    </div>
+  );
+};
 
 // ──────────────────────────────────────────────────────────────────────
 //  Liquidity chart (rich SVG with hover tooltip)
 // ──────────────────────────────────────────────────────────────────────
 
 const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; height?: number }> = ({ data, variant, height = 280 }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const W = 720, H = height, padX = 48, padY = 32, padBottom = 52;
   const innerW = W - padX * 2;
@@ -500,6 +546,8 @@ const ActivityRow: React.FC<{
   compact?: boolean;
   onTogglePaid?: (item: ActivityItem) => void;
 }> = ({ item, compact, onTogglePaid }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const isPaid = item.status === 'paid';
   const isOverdue = item.status === 'overdue';
   const pos = item.amount > 0;
@@ -572,6 +620,8 @@ const ActivityRow: React.FC<{
 // ──────────────────────────────────────────────────────────────────────
 
 const ProjectCard: React.FC<{ p: ProjectPnLEntry }> = ({ p }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const margin = p.income > 0 ? Math.round(((p.income - p.expenses) / p.income) * 100) : 0;
   const isAtRisk = p.health === 'loss' && p.income > 0;
   const isClosed = p.health === 'break-even' && p.income === 0 && p.expenses === 0;
@@ -579,7 +629,7 @@ const ProjectCard: React.FC<{ p: ProjectPnLEntry }> = ({ p }) => {
   const accentColor = p.health === 'profitable' ? C.income : p.health === 'loss' ? C.expense : C.gold;
   return (
     <div style={{
-      textAlign: 'left', background: '#FFFFFF', border: `1px solid ${C.bone}`,
+      textAlign: 'left', background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
       borderRadius: 18, padding: 18, display: 'flex', flexDirection: 'column', gap: 14,
       transition: 'all .25s cubic-bezier(.16,1,.3,1)',
       position: 'relative', overflow: 'hidden',
@@ -648,6 +698,7 @@ const ProjectCard: React.FC<{ p: ProjectPnLEntry }> = ({ p }) => {
 // ──────────────────────────────────────────────────────────────────────
 
 const Toast: React.FC<{ msg: string; onDone: () => void }> = ({ msg, onDone }) => {
+  const C = useFinancePalette();
   React.useEffect(() => {
     if (!msg) return;
     const t = window.setTimeout(onDone, 2400);
@@ -692,6 +743,8 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
   onAddIncome, onAddExpense, onOpenAIAssistant, onOpenAIChat, onMarkInstallmentPaid,
   onMarkExpensePaid, onJumpToTab, canCreate,
 }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [aiValue, setAiValue] = useState('');
   const [tab, setTab] = useState<SubTab>('Overview');
   const [chartVariant, setChartVariant] = useState<ChartVariant>('bars');
@@ -869,7 +922,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
       {tab === 'Overview' && (
         <>
           <div style={{
-            marginTop: 28, background: '#FFFFFF', border: `1px solid ${C.bone}`,
+            marginTop: 28, background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
             borderRadius: 24, padding: 28,
             boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
           }}>
@@ -928,7 +981,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
 
           {/* Activity preview + Top projects */}
           <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
-            <div style={{ background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
+            <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                 <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
                   Upcoming &amp; recent
@@ -950,7 +1003,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
                 </p>
               )}
             </div>
-            <div style={{ background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
+            <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                 <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
                   Top projects
@@ -1017,7 +1070,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
       {/* ─── Activity ─── */}
       {tab === 'Activity' && (
         <div style={{
-          marginTop: 28, background: '#FFFFFF', border: `1px solid ${C.bone}`,
+          marginTop: 28, background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
           borderRadius: 24, padding: 28,
         }}>
           <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 18, letterSpacing: '-0.02em', margin: 0 }}>
@@ -1058,7 +1111,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
             </div>
           ) : (
             <div style={{
-              background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24,
+              background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24,
               padding: 40, textAlign: 'center', color: C.meta, fontSize: 13,
             }}>
               Assign income or expenses to a project to see its P&amp;L here.

@@ -24,11 +24,15 @@ import {
 import type {
   IncomeEntry, Installment, ExpenseEntry, Budget,
 } from '../../context/FinanceContext';
+import { useIsDarkMode } from '../../hooks/useIsDarkMode';
 
 // ──────────────────────────────────────────────────────────────────────
 //  Palette (Livv design tokens)
 // ──────────────────────────────────────────────────────────────────────
 
+// Default (light) Livv editorial palette. Used by primitives that don't
+// re-derive their palette per-render. Components that DO want dark-mode
+// support pull `useFinancePalette()` and shadow this `C` locally.
 const C = {
   cream:    '#FDFBF7',
   oat:      '#F5F2EB',
@@ -46,6 +50,32 @@ const C = {
   wine:     '#7a4038',
 };
 
+// Dark palette for the same editorial layer. We don't try to invert the
+// light cream into something neon — the goal is a calm, sophisticated dark
+// (zinc-950 base, slightly warmer accent) that keeps the income/expense
+// hues recognizable. Hand-tuned, not algorithmic, so the gold accent
+// keeps its character against a near-black background.
+const C_DARK: typeof C = {
+  cream:      '#0A0A0B',           // page surface (was the cream paper)
+  oat:        '#141416',           // hover surfaces
+  bone:       'rgba(255,255,255,0.08)', // borders / dashed dividers
+  ink:        '#F4F4F5',           // primary text (zinc-100)
+  body:       'rgba(244,244,245,0.72)',
+  meta:       'rgba(244,244,245,0.50)',
+  dashed:     'rgba(255,255,255,0.18)',
+  dashedSoft: 'rgba(255,255,255,0.10)',
+  gold:       '#D4B574',           // gold reads slightly brighter on dark
+  goldHi:     '#F0CC73',
+  income:     '#7FA876',           // income green, lifted for contrast
+  expense:    '#D8635C',           // expense red, lifted for contrast
+  amber:      '#D4B574',
+  wine:       '#A35A52',
+};
+
+/** Returns the active Livv editorial palette. Reactive to the .dark
+ *  class on <html> so dropdowns / toggles flip the colors live. */
+const useFinancePalette = (): typeof C => (useIsDarkMode() ? C_DARK : C);
+
 // ──────────────────────────────────────────────────────────────────────
 //  Format helpers
 // ──────────────────────────────────────────────────────────────────────
@@ -61,17 +91,22 @@ const fmtDate = (s?: string | null) => {
 //  Editorial primitives
 // ──────────────────────────────────────────────────────────────────────
 
-const Eyebrow: React.FC<{ children: React.ReactNode; gold?: boolean; style?: React.CSSProperties }> = ({ children, gold, style }) => (
-  <span style={{
-    fontFamily: 'Inter', fontSize: 10, fontWeight: 500, letterSpacing: '0.22em',
-    textTransform: 'uppercase', color: gold ? C.gold : C.meta, ...style,
-  }}>{children}</span>
-);
+const Eyebrow: React.FC<{ children: React.ReactNode; gold?: boolean; style?: React.CSSProperties }> = ({ children, gold, style }) => {
+  const C = useFinancePalette();
+  return (
+    <span style={{
+      fontFamily: 'Inter', fontSize: 10, fontWeight: 500, letterSpacing: '0.22em',
+      textTransform: 'uppercase', color: gold ? C.gold : C.meta, ...style,
+    }}>{children}</span>
+  );
+};
 
-const Dashed: React.FC<{ vertical?: boolean; style?: React.CSSProperties }> = ({ vertical, style }) =>
-  vertical
+const Dashed: React.FC<{ vertical?: boolean; style?: React.CSSProperties }> = ({ vertical, style }) => {
+  const C = useFinancePalette();
+  return vertical
     ? <div style={{ width: 1, alignSelf: 'stretch', borderLeft: `1px dashed ${C.dashed}`, ...style }} />
     : <div style={{ height: 1, width: '100%', borderTop: `1px dashed ${C.dashed}`, ...style }} />;
+};
 
 /** Hero — eyebrow + h2 + subtitle + optional trailing actions */
 const Hero: React.FC<{
@@ -79,62 +114,68 @@ const Hero: React.FC<{
   title: string;
   subtitle?: string;
   trailing?: React.ReactNode;
-}> = ({ eyebrow, title, subtitle, trailing }) => (
-  <div style={{
-    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-    marginBottom: 24, flexWrap: 'wrap', gap: 16,
-  }}>
-    <div>
-      <Eyebrow style={{ marginBottom: 8, display: 'block' }}>{eyebrow}</Eyebrow>
-      <h2 style={{
-        fontFamily: 'Inter', fontWeight: 300, fontSize: 40, lineHeight: 1,
-        letterSpacing: '-0.04em', margin: 0, color: C.ink,
-      }}>{title}</h2>
-      {subtitle && (
-        <p style={{
-          fontFamily: 'Inter', fontSize: 13, color: C.body, margin: '10px 0 0',
-          maxWidth: 480, letterSpacing: '-0.005em',
-        }}>{subtitle}</p>
-      )}
+}> = ({ eyebrow, title, subtitle, trailing }) => {
+  const C = useFinancePalette();
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+      marginBottom: 24, flexWrap: 'wrap', gap: 16,
+    }}>
+      <div>
+        <Eyebrow style={{ marginBottom: 8, display: 'block' }}>{eyebrow}</Eyebrow>
+        <h2 style={{
+          fontFamily: 'Inter', fontWeight: 300, fontSize: 40, lineHeight: 1,
+          letterSpacing: '-0.04em', margin: 0, color: C.ink,
+        }}>{title}</h2>
+        {subtitle && (
+          <p style={{
+            fontFamily: 'Inter', fontSize: 13, color: C.body, margin: '10px 0 0',
+            maxWidth: 480, letterSpacing: '-0.005em',
+          }}>{subtitle}</p>
+        )}
+      </div>
+      {trailing && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{trailing}</div>}
     </div>
-    {trailing && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{trailing}</div>}
-  </div>
-);
+  );
+};
 
 /** Metric strip — 3 numbers separated by vertical dashed dividers */
-const MetricStrip: React.FC<{ items: { label: string; value: string; color?: string; hint?: string }[] }> = ({ items }) => (
-  <div style={{
-    display: 'grid',
-    gridTemplateColumns: items.length === 3
-      ? '1fr auto 1fr auto 1fr'
-      : items.length === 4
-        ? '1fr auto 1fr auto 1fr auto 1fr'
-        : `repeat(${items.length}, 1fr)`,
-    borderTop: `1px dashed ${C.dashed}`, borderBottom: `1px dashed ${C.dashed}`,
-    padding: '24px 0', marginBottom: 24,
-  }}>
-    {items.map((it, i) => (
-      <React.Fragment key={i}>
-        <div style={{ paddingLeft: i === 0 ? 0 : 24, paddingRight: i === items.length - 1 ? 0 : 24 }}>
-          <Eyebrow>{it.label}</Eyebrow>
-          <div style={{
-            fontFamily: 'Inter', fontWeight: 300, fontSize: 36, lineHeight: 1,
-            letterSpacing: '-0.04em', color: it.color || C.ink,
-            fontVariantNumeric: 'tabular-nums', marginTop: 8,
-          }}>{it.value}</div>
-          {it.hint && (
+const MetricStrip: React.FC<{ items: { label: string; value: string; color?: string; hint?: string }[] }> = ({ items }) => {
+  const C = useFinancePalette();
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: items.length === 3
+        ? '1fr auto 1fr auto 1fr'
+        : items.length === 4
+          ? '1fr auto 1fr auto 1fr auto 1fr'
+          : `repeat(${items.length}, 1fr)`,
+      borderTop: `1px dashed ${C.dashed}`, borderBottom: `1px dashed ${C.dashed}`,
+      padding: '24px 0', marginBottom: 24,
+    }}>
+      {items.map((it, i) => (
+        <React.Fragment key={i}>
+          <div style={{ paddingLeft: i === 0 ? 0 : 24, paddingRight: i === items.length - 1 ? 0 : 24 }}>
+            <Eyebrow>{it.label}</Eyebrow>
             <div style={{
-              fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-              color: C.meta, marginTop: 6,
-            }}>{it.hint}</div>
-          )}
-        </div>
-        {i < items.length - 1 && <Dashed vertical />}
-      </React.Fragment>
-    ))}
-  </div>
-);
+              fontFamily: 'Inter', fontWeight: 300, fontSize: 36, lineHeight: 1,
+              letterSpacing: '-0.04em', color: it.color || C.ink,
+              fontVariantNumeric: 'tabular-nums', marginTop: 8,
+            }}>{it.value}</div>
+            {it.hint && (
+              <div style={{
+                fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: C.meta, marginTop: 6,
+              }}>{it.hint}</div>
+            )}
+          </div>
+          {i < items.length - 1 && <Dashed vertical />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
 
 /** Pill filter chip — rounded-full, ink when active */
 const FilterPill: React.FC<{
@@ -142,28 +183,31 @@ const FilterPill: React.FC<{
   onClick: () => void;
   children: React.ReactNode;
   count?: number;
-}> = ({ active, onClick, children, count }) => (
-  <button
-    onClick={onClick}
-    style={{
-      padding: '6px 14px', borderRadius: 9999, cursor: 'pointer',
-      border: active ? `1px solid ${C.ink}` : '1px solid rgba(90,62,62,0.18)',
-      background: active ? C.ink : 'transparent',
-      color: active ? C.cream : 'rgba(42,24,24,0.75)',
-      fontFamily: 'Inter', fontSize: 12, fontWeight: 500, letterSpacing: '-0.005em',
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      transition: 'all .2s cubic-bezier(.16,1,.3,1)',
-    }}
-  >
-    {children}
-    {count !== undefined && count > 0 && (
-      <span style={{
-        fontSize: 10, fontWeight: 500, opacity: active ? 0.7 : 0.5,
-        fontFamily: '"JetBrains Mono", monospace',
-      }}>{count}</span>
-    )}
-  </button>
-);
+}> = ({ active, onClick, children, count }) => {
+  const C = useFinancePalette();
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 14px', borderRadius: 9999, cursor: 'pointer',
+        border: active ? `1px solid ${C.ink}` : `1px solid ${C.bone}`,
+        background: active ? C.ink : 'transparent',
+        color: active ? C.cream : C.body,
+        fontFamily: 'Inter', fontSize: 12, fontWeight: 500, letterSpacing: '-0.005em',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        transition: 'all .2s cubic-bezier(.16,1,.3,1)',
+      }}
+    >
+      {children}
+      {count !== undefined && count > 0 && (
+        <span style={{
+          fontSize: 10, fontWeight: 500, opacity: active ? 0.7 : 0.5,
+          fontFamily: '"JetBrains Mono", monospace',
+        }}>{count}</span>
+      )}
+    </button>
+  );
+};
 
 /** Search input pill — rounded-full with leading icon */
 const SearchPill: React.FC<{
@@ -172,12 +216,14 @@ const SearchPill: React.FC<{
   placeholder?: string;
   width?: number | string;
 }> = ({ value, onChange, placeholder, width }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [focused, setFocused] = useState(false);
   return (
     <div style={{
       position: 'relative', display: 'inline-flex', alignItems: 'center',
       width: width || 280, maxWidth: '100%',
-      background: '#FFFFFF', borderRadius: 9999,
+      background: isDark ? C.oat : '#FFFFFF', borderRadius: 9999,
       border: `1px solid ${focused ? C.ink : C.bone}`,
       padding: '6px 14px 6px 12px',
       transition: 'border-color .2s',
@@ -206,13 +252,18 @@ const ActionButton: React.FC<{
   variant?: 'ghost' | 'primary' | 'income' | 'expense' | 'gold';
   size?: 'md' | 'sm';
 }> = ({ icon, label, onClick, variant = 'ghost', size = 'md' }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const [hover, setHover] = useState(false);
+  // In dark mode the "ghost" / "income" / "expense" variants get a panel-toned
+  // background instead of pure white so they don't punch a hole in the layout.
+  const surface = isDark ? C.oat : '#FFFFFF';
   const styles: Record<string, React.CSSProperties> = {
-    ghost:   { background: '#FFFFFF', color: C.ink,     border: `1px solid ${C.bone}` },
-    income:  { background: '#FFFFFF', color: C.income,  border: '1px solid rgba(118,146,104,0.35)' },
-    expense: { background: '#FFFFFF', color: C.expense, border: '1px solid rgba(196,80,74,0.35)' },
-    primary: { background: C.ink,     color: C.cream,   border: `1px solid ${C.ink}` },
-    gold:    { background: C.goldHi,  color: C.ink,     border: `1px solid ${C.goldHi}` },
+    ghost:   { background: surface, color: C.ink,     border: `1px solid ${C.bone}` },
+    income:  { background: surface, color: C.income,  border: `1px solid ${C.income}55` },
+    expense: { background: surface, color: C.expense, border: `1px solid ${C.expense}55` },
+    primary: { background: C.ink,   color: C.cream,   border: `1px solid ${C.ink}` },
+    gold:    { background: C.goldHi, color: '#09090B', border: `1px solid ${C.goldHi}` },
   };
   const pad = size === 'sm' ? '6px 12px' : '9px 16px';
   const fz = size === 'sm' ? 11 : 12.5;
@@ -225,7 +276,9 @@ const ActionButton: React.FC<{
         display: 'inline-flex', alignItems: 'center', gap: 7,
         fontFamily: 'Inter', fontSize: fz, fontWeight: 500, letterSpacing: '-0.005em',
         transform: hover ? 'translateY(-1px)' : 'translateY(0)',
-        boxShadow: hover ? '0 6px 14px rgba(0,0,0,0.08)' : '0 2px 4px rgba(0,0,0,0.02)',
+        boxShadow: hover
+          ? (isDark ? '0 6px 14px rgba(0,0,0,0.4)' : '0 6px 14px rgba(0,0,0,0.08)')
+          : (isDark ? '0 1px 2px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.02)'),
         transition: 'all .25s cubic-bezier(.16,1,.3,1)',
       }}
     >
@@ -236,11 +289,12 @@ const ActionButton: React.FC<{
 
 /** Status badge — small uppercase mono pill */
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const C = useFinancePalette();
   const map: Record<string, { bg: string; fg: string; label: string }> = {
-    paid:    { bg: 'rgba(118,146,104,0.15)', fg: C.income,  label: 'Paid' },
-    partial: { bg: 'rgba(196,163,90,0.18)',  fg: C.gold,    label: 'Partial' },
-    pending: { bg: 'rgba(196,163,90,0.15)',  fg: C.amber,   label: 'Pending' },
-    overdue: { bg: 'rgba(196,80,74,0.15)',   fg: C.expense, label: 'Overdue' },
+    paid:    { bg: `${C.income}26`,  fg: C.income,  label: 'Paid' },
+    partial: { bg: `${C.gold}30`,    fg: C.gold,    label: 'Partial' },
+    pending: { bg: `${C.amber}26`,   fg: C.amber,   label: 'Pending' },
+    overdue: { bg: `${C.expense}26`, fg: C.expense, label: 'Overdue' },
   };
   const s = map[status] || map.pending;
   return (
@@ -253,44 +307,62 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-/** Cream card surface */
-const Card: React.FC<{ children: React.ReactNode; padding?: number; style?: React.CSSProperties }> = ({ children, padding = 28, style }) => (
-  <div style={{
-    background: '#FFFFFF', border: `1px solid ${C.bone}`,
-    borderRadius: 24, padding,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
-    ...style,
-  }}>{children}</div>
-);
+/** Card surface — flips to a dark zinc panel in dark mode so the
+ *  white-on-black inversion bug we used to have is gone. */
+const Card: React.FC<{ children: React.ReactNode; padding?: number; style?: React.CSSProperties }> = ({ children, padding = 28, style }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
+  return (
+    <div style={{
+      background: isDark ? C.oat : '#FFFFFF',
+      border: `1px solid ${C.bone}`,
+      borderRadius: 24, padding,
+      boxShadow: isDark
+        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
+        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
+      ...style,
+    }}>{children}</div>
+  );
+};
 
 /** Empty / loading state */
-const StateBlock: React.FC<{ icon: LucideIcon; title: string; subtitle?: string; cta?: React.ReactNode }> = ({ icon: Icon, title, subtitle, cta }) => (
-  <div style={{
-    background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24,
-    padding: '48px 32px', textAlign: 'center',
-  }}>
-    <Icon size={28} color={C.bone} style={{ marginBottom: 8 }} />
-    <p style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: 500, color: C.ink, margin: 0 }}>{title}</p>
-    {subtitle && <p style={{ fontFamily: 'Inter', fontSize: 12, color: C.meta, margin: '4px 0 0' }}>{subtitle}</p>}
-    {cta && <div style={{ marginTop: 16 }}>{cta}</div>}
-  </div>
-);
-
-const Loading: React.FC<{ label: string }> = ({ label }) => (
-  <div style={{
-    background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24,
-    padding: '48px 32px', textAlign: 'center',
-  }}>
+const StateBlock: React.FC<{ icon: LucideIcon; title: string; subtitle?: string; cta?: React.ReactNode }> = ({ icon: Icon, title, subtitle, cta }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
+  return (
     <div style={{
-      width: 24, height: 24,
-      border: `2px solid ${C.bone}`, borderTopColor: C.ink,
-      borderRadius: 9999, margin: '0 auto 12px',
-      animation: 'livv-spin .9s linear infinite',
-    }} />
-    <style>{`@keyframes livv-spin { to { transform: rotate(360deg); } }`}</style>
-    <Eyebrow>{label}</Eyebrow>
-  </div>
-);
+      background: isDark ? C.oat : '#FFFFFF',
+      border: `1px solid ${C.bone}`, borderRadius: 24,
+      padding: '48px 32px', textAlign: 'center',
+    }}>
+      <Icon size={28} color={C.dashed} style={{ marginBottom: 8 }} />
+      <p style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: 500, color: C.ink, margin: 0 }}>{title}</p>
+      {subtitle && <p style={{ fontFamily: 'Inter', fontSize: 12, color: C.meta, margin: '4px 0 0' }}>{subtitle}</p>}
+      {cta && <div style={{ marginTop: 16 }}>{cta}</div>}
+    </div>
+  );
+};
+
+const Loading: React.FC<{ label: string }> = ({ label }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
+  return (
+    <div style={{
+      background: isDark ? C.oat : '#FFFFFF',
+      border: `1px solid ${C.bone}`, borderRadius: 24,
+      padding: '48px 32px', textAlign: 'center',
+    }}>
+      <div style={{
+        width: 24, height: 24,
+        border: `2px solid ${C.bone}`, borderTopColor: C.ink,
+        borderRadius: 9999, margin: '0 auto 12px',
+        animation: 'livv-spin .9s linear infinite',
+      }} />
+      <style>{`@keyframes livv-spin { to { transform: rotate(360deg); } }`}</style>
+      <Eyebrow>{label}</Eyebrow>
+    </div>
+  );
+};
 
 // ══════════════════════════════════════════════════════════════════════
 //  INCOME TAB
@@ -342,6 +414,8 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   openIncomeForm, canCreate,
   onOpenAIAssistant, onOpenAIChat,
 }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const filterCounts = {
     all: incomes.length,
     pending: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length,
@@ -354,7 +428,9 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
       background: C.cream, color: C.ink, fontFamily: 'Inter',
       borderRadius: 24, border: `1px solid ${C.bone}`,
       padding: '36px 32px 40px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
+      boxShadow: isDark
+        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
+        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
     }}>
       <Hero
         eyebrow="© Income & Receivables"
@@ -382,14 +458,14 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         <input type="date" value={incomeDateFrom} onChange={e => setIncomeDateFrom(e.target.value)}
           style={{
             padding: '7px 12px', borderRadius: 9999, border: `1px solid ${C.bone}`,
-            background: '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
+            background: isDark ? C.oat : '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
             outline: 'none', cursor: 'pointer',
           }} />
         <span style={{ fontSize: 10, color: C.meta }}>→</span>
         <input type="date" value={incomeDateTo} onChange={e => setIncomeDateTo(e.target.value)}
           style={{
             padding: '7px 12px', borderRadius: 9999, border: `1px solid ${C.bone}`,
-            background: '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
+            background: isDark ? C.oat : '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
             outline: 'none', cursor: 'pointer',
           }} />
         {(incomeDateFrom || incomeDateTo) && (
@@ -530,7 +606,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
                             display: 'grid',
                             gridTemplateColumns: 'auto 60px 110px 1fr auto auto',
                             gap: 14, padding: '10px 14px', alignItems: 'center',
-                            background: '#FFFFFF', borderRadius: 12,
+                            background: isDark ? C.oat : '#FFFFFF', borderRadius: 12,
                             border: `1px solid ${C.bone}`,
                           }}>
                             <Icon size={14} color={iconColor} />
@@ -633,6 +709,8 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
   openExpenseForm, openEditExpense, handleDeleteExpense, canCreate,
   onOpenAIAssistant, onOpenAIChat,
 }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const filtPaid = filteredExpenses.filter(e => e.status === 'paid').reduce((s, e) => s + e.amount, 0);
   const filtPending = filteredExpenses.filter(e => e.status === 'pending').reduce((s, e) => s + e.amount, 0);
   const filtRecurring = filteredExpenses.filter(e => e.recurring).reduce((s, e) => s + e.amount, 0);
@@ -645,7 +723,9 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
       background: C.cream, color: C.ink, fontFamily: 'Inter',
       borderRadius: 24, border: `1px solid ${C.bone}`,
       padding: '36px 32px 40px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
+      boxShadow: isDark
+        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
+        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
     }}>
       <Hero
         eyebrow="© Expenses & Bills"
@@ -675,11 +755,11 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
               const b = getMonthBounds(m.year, m.month);
               setExpenseDateFrom(b.from); setExpenseDateTo(b.to);
             }} style={{
-              padding: 7, borderRadius: 9999, background: '#FFFFFF',
+              padding: 7, borderRadius: 9999, background: isDark ? C.oat : '#FFFFFF',
               border: `1px solid ${C.bone}`, cursor: 'pointer', display: 'flex',
             }}><ChevronLeft size={13} color={C.meta} /></button>
             <span style={{
-              padding: '7px 14px', background: '#FFFFFF', borderRadius: 9999,
+              padding: '7px 14px', background: isDark ? C.oat : '#FFFFFF', borderRadius: 9999,
               border: `1px solid ${C.bone}`, fontFamily: 'Inter', fontSize: 12,
               fontWeight: 500, color: C.ink, minWidth: 130, textAlign: 'center',
             }}>{monthNames[expenseViewMonth.month]} {expenseViewMonth.year}</span>
@@ -690,7 +770,7 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
               const b = getMonthBounds(m.year, m.month);
               setExpenseDateFrom(b.from); setExpenseDateTo(b.to);
             }} style={{
-              padding: 7, borderRadius: 9999, background: '#FFFFFF',
+              padding: 7, borderRadius: 9999, background: isDark ? C.oat : '#FFFFFF',
               border: `1px solid ${C.bone}`, cursor: 'pointer', display: 'flex',
             }}><ChevronRight size={13} color={C.meta} /></button>
             <button onClick={() => setExpenseCustomDateRange(true)} style={{
@@ -875,13 +955,17 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
   canCreate,
   onOpenAIChat,
 }) => {
+  const C = useFinancePalette();
+  const isDark = useIsDarkMode();
   const remaining = totalAllocated - totalBudgetSpent;
   return (
     <div style={{
       background: C.cream, color: C.ink, fontFamily: 'Inter',
       borderRadius: 24, border: `1px solid ${C.bone}`,
       padding: '36px 32px 40px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
+      boxShadow: isDark
+        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
+        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
     }}>
       <Hero
         eyebrow="© Budgets & Caps"
@@ -949,7 +1033,7 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
             const linkedExpenses = isExpanded ? expenses.filter(e => e.budget_id === budget.id) : [];
             return (
               <div key={budget.id} className="livv-card-hover" style={{
-                background: '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 18,
+                background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 18,
                 overflow: 'hidden', position: 'relative',
                 transition: 'all .25s cubic-bezier(.16,1,.3,1)',
                 boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
