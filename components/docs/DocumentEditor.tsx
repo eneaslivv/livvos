@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useDocumentComments } from '../../hooks/useDocumentComments';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -125,6 +126,8 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const [projectId, setProjectId] = useState(doc?.project_id || '');
   const [shareEnabled, setShareEnabled] = useState(doc?.share_enabled || false);
   const [copied, setCopied] = useState(false);
+  const [showSharePopover, setShowSharePopover] = useState(false);
+  const sharePopoverRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showPagesSidebar, setShowPagesSidebar] = useState(true);
@@ -579,13 +582,39 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
     await updateDocument(documentId, { share_enabled: next });
   };
 
+  const shareUrl = useMemo(() => (
+    doc?.share_token ? `${window.location.origin}/#shared-doc/${doc.share_token}` : ''
+  ), [doc?.share_token]);
+
   const handleCopyLink = () => {
-    if (!doc?.share_token) return;
-    const url = `${window.location.origin}/#shared-doc/${doc.share_token}`;
-    navigator.clipboard.writeText(url);
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Live count of comments left by external viewers — surfaced in the
+  // share popover so the owner sees engagement at a glance.
+  const { comments: externalComments } = useDocumentComments(
+    shareEnabled && doc?.share_token ? doc.share_token : null,
+  );
+
+  // Close the share popover on outside click / Esc
+  useEffect(() => {
+    if (!showSharePopover) return;
+    const handleClick = (e: MouseEvent) => {
+      if (sharePopoverRef.current && !sharePopoverRef.current.contains(e.target as Node)) {
+        setShowSharePopover(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowSharePopover(false); };
+    document.addEventListener('mousedown', handleClick);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [showSharePopover]);
 
   const handleDelete = async () => {
     if (!confirm('Delete this document?')) return;
@@ -719,6 +748,125 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
             {!saving && initializedRef.current && (
               <span className="text-[10px] text-zinc-300 dark:text-zinc-600">Saved</span>
             )}
+
+            {/* ─── Share popover ─── Surfaces public-link sharing + comments
+                count in a focused popover so the user doesn't have to open
+                the full Settings sidebar to share a doc. */}
+            <div className="relative" ref={sharePopoverRef}>
+              <button
+                onClick={() => setShowSharePopover(v => !v)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                  shareEnabled
+                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/20'
+                    : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90'
+                }`}
+                title={shareEnabled ? 'Public link active — manage' : 'Share this document'}
+              >
+                {shareEnabled ? <Icons.Globe size={13} /> : <Icons.Lock size={13} />}
+                <span>Share</span>
+                {shareEnabled && externalComments.length > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                    {externalComments.length}
+                  </span>
+                )}
+              </button>
+
+              {showSharePopover && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">Share</div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mt-0.5 truncate">
+                      {title || 'Untitled document'}
+                    </h3>
+                  </div>
+
+                  {/* Visibility toggle */}
+                  <div className="px-4 py-3 space-y-3">
+                    <button
+                      onClick={handleToggleShare}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                        shareEnabled
+                          ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-700 dark:text-blue-300'
+                          : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {shareEnabled ? <Icons.Globe size={14} /> : <Icons.Lock size={14} />}
+                        <div className="text-left min-w-0">
+                          <div className="font-semibold">{shareEnabled ? 'Public link' : 'Private'}</div>
+                          <div className="text-[10px] opacity-70 truncate">
+                            {shareEnabled ? 'Anyone with the link can view + comment' : 'Only your team can see this'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors ${shareEnabled ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${shareEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                      </span>
+                    </button>
+
+                    {shareEnabled && doc?.share_token && (
+                      <>
+                        {/* Link row */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Public link</label>
+                          <div className="flex items-stretch gap-1.5">
+                            <input
+                              readOnly
+                              value={shareUrl}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] font-mono bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-md text-zinc-700 dark:text-zinc-300 outline-none focus:border-blue-400"
+                            />
+                            <button
+                              onClick={handleCopyLink}
+                              className="px-2.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 inline-flex items-center gap-1 text-[11px] font-semibold"
+                            >
+                              {copied ? <Icons.Check size={11} /> : <Icons.Copy size={11} />}
+                              {copied ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quick actions */}
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <a
+                            href={shareUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+                          >
+                            <Icons.LogIn size={11} /> Open as guest
+                          </a>
+                        </div>
+
+                        {/* Comments preview */}
+                        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">Comments from viewers</span>
+                            <span className="text-[10px] font-semibold text-zinc-500">{externalComments.length}</span>
+                          </div>
+                          {externalComments.length === 0 ? (
+                            <p className="text-[11px] text-zinc-400 italic">
+                              No comments yet. When someone leaves one, you'll be notified.
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5 max-h-32 overflow-y-auto">
+                              {externalComments.slice(-3).reverse().map(c => (
+                                <li key={c.id} className="text-[11px] bg-zinc-50 dark:bg-zinc-800/40 rounded-md px-2 py-1.5">
+                                  <div className="font-semibold text-zinc-700 dark:text-zinc-200">{c.author_name}</div>
+                                  <div className="text-zinc-500 dark:text-zinc-400 line-clamp-2">{c.comment}</div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className={`p-1.5 rounded-lg transition-colors ${showSidebar ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}
