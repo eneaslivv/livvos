@@ -296,7 +296,10 @@ serve(async (req) => {
     //      LEAD_AUTO_REPLY=false to keep room for hand-written follow-ups.
     let notifyStatus: any = { internal: { attempted: false }, welcome: { attempted: false } }
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
-    const notifyTo = Deno.env.get('LEAD_NOTIFY_EMAIL') || 'hola@livv.systems'
+    // Comma-separated list supported: "a@x.com,b@y.com,c@z.com". Trim each
+    // entry and skip empties so a stray comma doesn't break the send.
+    const notifyToRaw = Deno.env.get('LEAD_NOTIFY_EMAIL') || 'hola@livv.systems'
+    const notifyTo = notifyToRaw.split(',').map(s => s.trim()).filter(Boolean)
     const fromName = Deno.env.get('LEAD_FROM_NAME') || 'Eneas Aldabe'
     // Default to a livv.space sender because that's the domain verified in
     // Resend right now. To send from eneas@livv.systems instead (more personal),
@@ -342,10 +345,17 @@ serve(async (req) => {
           method: 'POST',
           headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: `${branding.name} <noreply@livv.space>`,
-            to: [notifyTo],
+            // Distinctive sender name so the alert doesn't look like a
+            // generic transactional email — it stands out in the inbox
+            // alongside other branded emails. The "🔥" prefix in the
+            // subject is the strongest visual cue once it's in the list.
+            from: `🔥 Lead Alert · ${branding.name} <noreply@livv.space>`,
+            // Supports multi-recipient via comma-separated env var. Each
+            // recipient gets the full email (not BCC) so they can reply-all
+            // and Resend's API delivers properly to all addresses.
+            to: notifyTo,
             reply_to: email,
-            subject: `New lead · ${name}${company ? ' · ' + company : ''}`,
+            subject: `🔥 NEW LEAD · ${name}${company ? ' · ' + company : ''}${temperature === 'hot' ? ' · HOT' : ''}`,
             html: internalHtml,
           }),
         })
