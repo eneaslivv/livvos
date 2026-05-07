@@ -21,12 +21,41 @@ interface SharedDoc {
   updated_at: string;
 }
 
+// Documents are stored with a `{ tabs: [{ id, title, content: <tiptap-doc> }] }`
+// wrapper because the editor supports multiple pages per doc. The public
+// viewer must unwrap this shape — passing the raw wrapper into TipTap
+// renders blank (TipTap expects a `{ type: 'doc', content: [...] }` node).
+//
+// Mirror of `parseTabs` from DocumentEditor.tsx — kept in-sync manually
+// since the public viewer is its own bundle and shouldn't import from
+// the editor module.
+interface DocTab { id: string; title: string; content: Record<string, any> }
+const EMPTY_DOC = { type: 'doc', content: [{ type: 'paragraph' }] } as const;
+
+function parseTabs(content: Record<string, any> | null | undefined): DocTab[] {
+  if (content && Array.isArray((content as any).tabs) && (content as any).tabs.length > 0) {
+    return (content as any).tabs as DocTab[];
+  }
+  // Legacy single-doc shape: just wrap it as one tab so the rest of the
+  // viewer treats it the same way.
+  if (content && Object.keys(content).length > 0 && (content as any).type) {
+    return [{ id: 'tab-1', title: 'Page 1', content: content as Record<string, any> }];
+  }
+  return [{ id: 'tab-1', title: 'Page 1', content: EMPTY_DOC }];
+}
+
 export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
   const [doc, setDoc] = useState<SharedDoc | null>(null);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(false);
   const { comments, loading: commentsLoading, addComment } = useDocumentComments(token);
+
+  // Resolve the page list each render — stable reference because content
+  // only changes when the doc reloads.
+  const tabs = doc ? parseTabs(doc.content) : [];
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
 
   // Comment form state
   const [commentName, setCommentName] = useState('');
@@ -87,12 +116,23 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
     load();
   }, [token]);
 
-  // Set content and attach checklist click handler
+  // Set the editor content from the ACTIVE TAB. Critical: docs are saved
+  // as `{ tabs: [...] }` not as a raw TipTap doc, so the viewer must unwrap
+  // before handing to `setContent`. Otherwise the editor stays empty.
   useEffect(() => {
-    if (doc?.content && editor && Object.keys(doc.content).length > 0) {
-      editor.commands.setContent(doc.content);
+    if (!editor || !activeTab) return;
+    const c = activeTab.content;
+    if (c && typeof c === 'object' && Object.keys(c).length > 0) {
+      editor.commands.setContent(c as any);
+    } else {
+      editor.commands.setContent(EMPTY_DOC as any);
     }
-  }, [doc, editor]);
+  }, [editor, activeTab]);
+
+  // First-render: pin the active tab to the first one if not selected yet.
+  useEffect(() => {
+    if (!activeTabId && tabs.length > 0) setActiveTabId(tabs[0].id);
+  }, [activeTabId, tabs]);
 
   // Handle checklist checkbox clicks
   useEffect(() => {
@@ -116,15 +156,25 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
         (target as HTMLInputElement).checked = newChecked;
         taskItemEl.setAttribute('data-checked', String(newChecked));
 
-        // Get updated JSON from the editor DOM and persist
-        // We need to walk the editor's internal state
-        const json = editor.getJSON();
-        toggleTaskItemInJson(json, taskItemEl, newChecked);
+        // Get updated JSON for the ACTIVE TAB, then re-wrap into the
+        // `{ tabs: [...] }` envelope so we don't clobber the doc's
+        // multi-page structure when persisting.
+        const tabJson = editor.getJSON();
+        toggleTaskItemInJson(tabJson, taskItemEl, newChecked);
+
+        const wrappedContent = doc?.content && Array.isArray((doc.content as any).tabs)
+          ? {
+              ...(doc.content as any),
+              tabs: (doc.content as any).tabs.map((t: any) =>
+                t.id === activeTab?.id ? { ...t, content: tabJson } : t,
+              ),
+            }
+          : tabJson; // legacy single-doc shape — pass through as-is
 
         // Save to DB via RPC
         supabase.rpc('toggle_shared_document_checklist', {
           p_token: token,
-          p_content: json,
+          p_content: wrappedContent,
         }).then(({ error: rpcErr }) => {
           if (rpcErr && import.meta.env.DEV) {
             console.warn('[SharedDocument] checklist toggle error:', rpcErr.message);
@@ -136,7 +186,10 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
     const editorEl = editor.view.dom;
     editorEl.addEventListener('click', handleClick, true);
     return () => editorEl.removeEventListener('click', handleClick, true);
-  }, [editor, token]);
+    // doc + activeTab in deps so the closure always re-wraps with the
+    // current active page when persisting checkbox toggles. Without this
+    // we'd close over a stale tab reference.
+  }, [editor, token, doc, activeTab]);
 
   // Make checkboxes clickable even though editor is read-only
   useEffect(() => {
@@ -240,6 +293,32 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
           </button>
         </div>
       </div>
+
+      {/* Pages picker — shown only when the doc has more than one page.
+          Mirrors the editor's pages sidebar but as a horizontal pill row so
+          external viewers don't get a sidebar. */}
+      {tabs.length > 1 && (
+        <div className="border-b border-zinc-100 dark:border-zinc-800/60">
+          <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-1.5 overflow-x-auto">
+            {tabs.map(t => {
+              const isActive = t.id === activeTab?.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTabId(t.id)}
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
+                    isActive
+                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                      : 'text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {t.title || 'Untitled'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex">
         {/* Content */}
