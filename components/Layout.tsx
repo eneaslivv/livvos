@@ -503,7 +503,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         setShowCommandPalette(false);
       }
 
-      // Quick mode switch: 1 = OS, 2 = Sales (only when not typing)
+      // Quick mode switch: 1 = OS, 2 = Sales, 3 = Master (only when not typing)
       const tag = (e.target as HTMLElement)?.tagName;
       const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable;
       if (!isEditable && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -513,6 +513,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         } else if (e.key === '2' && currentMode !== 'sales' && hasFeature('sales_module')) {
           e.preventDefault();
           onSwitchMode('sales');
+        } else if (e.key === '3' && currentMode !== 'master' && isPlatformAdmin) {
+          e.preventDefault();
+          onSwitchMode('master');
         }
       }
     };
@@ -560,14 +563,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
   ];
 
-  const currentNavItems = (currentMode === 'os' ? osNavItems : salesNavItems).filter(item => {
+  // Master mode (platform admin) sidebar. No permission gates — the entire
+  // mode is gated at the switch level by `isPlatformAdmin`. Each page also
+  // re-checks via `is_platform_admin` RPC server-side.
+  const masterNavItems: NavItemDef[] = [
+    { id: 'platform_admin',     label: 'Dashboard',  icon: <Icons.Home /> },
+    { id: 'platform_customers', label: 'Customers',  icon: <Icons.Users /> },
+    { id: 'platform_features',  label: 'Features',   icon: <Icons.Settings /> },
+    { id: 'platform_audit',     label: 'Audit log',  icon: <Icons.Activity /> },
+  ];
+
+  const currentNavItems = (
+    currentMode === 'os' ? osNavItems
+    : currentMode === 'master' ? masterNavItems
+    : salesNavItems
+  ).filter(item => {
     if (item.feature && !hasFeature(item.feature)) return false;
     if (!item.permission) return true;
     if (!isInitialized) return true;
     return hasPermission(item.permission.module, item.permission.action);
   });
 
-  const navSkeletonCount = currentMode === 'os' ? 6 : 4;
+  const navSkeletonCount = currentMode === 'os' ? 6 : currentMode === 'master' ? 4 : 4;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans selection:bg-stone-200 selection:text-stone-900 flex overflow-hidden relative transition-colors duration-300">
@@ -596,32 +613,67 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         {/* Tenant Switcher (replaces tenant logo — opens dropdown of workspaces + connected agencies) */}
         <TenantSwitcher expanded={isSidebarExpanded} isDarkMode={isDarkMode} />
 
-        {/* Workspace Switcher */}
+        {/* Workspace Switcher — segmented control. The Master segment only
+            appears for platform admins; otherwise the switch stays binary
+            (OS / Sales) so the 99% of users see no change. */}
         {hasFeature('sales_module') && <div className="relative w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
-          <button
-            onClick={() => onSwitchMode(currentMode === 'os' ? 'sales' : 'os')}
-            className={`w-full flex items-center p-1 rounded-full bg-zinc-100 dark:bg-zinc-950 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
-            title={currentMode === 'os' ? "Switch to Sales (2)" : "Switch to OS (1)"}
-          >
-            {/* Visual Indicator Background */}
-            <div className={`absolute top-0 bottom-0 w-1/2 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-all duration-300 ${currentMode === 'os' ? 'left-0' : 'left-1/2'}`}></div>
-
-            <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Home size={13} className={currentMode === 'os' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
-              <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">1</span>
-            </div>
-            <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors text-zinc-500 dark:text-zinc-400">
-              <Icons.Chart size={13} className={currentMode === 'sales' ? 'text-zinc-900 dark:text-zinc-100' : ''} />
-              <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">2</span>
-            </div>
-
-            <div className={`transition-opacity duration-300 absolute left-16 whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 leading-tight">
-                {currentMode === 'os' ? 'System' : 'Sales'}
+          {(() => {
+            const segments: Array<{ key: AppMode; icon: React.ReactNode; label: string; shortcut: string }> = [
+              { key: 'os',     icon: <Icons.Home size={13} />,  label: 'System', shortcut: '1' },
+              { key: 'sales',  icon: <Icons.Chart size={13} />, label: 'Sales',  shortcut: '2' },
+            ];
+            if (isPlatformAdmin) {
+              segments.push({ key: 'master', icon: <Icons.Shield size={13} />, label: 'Master', shortcut: '3' });
+            }
+            const activeIdx = Math.max(0, segments.findIndex(s => s.key === currentMode));
+            const segCount = segments.length;
+            const indicatorWidth = `${100 / segCount}%`;
+            const indicatorLeft = `${(100 / segCount) * activeIdx}%`;
+            const activeLabel = segments[activeIdx]?.label || 'System';
+            const titleText = segments
+              .filter(s => s.key !== currentMode)
+              .map(s => `Switch to ${s.label} (${s.shortcut})`)
+              .join(' · ');
+            return (
+              <div
+                className={`w-full flex items-center p-1 rounded-full bg-zinc-100 dark:bg-zinc-950 transition-all border border-zinc-200 dark:border-zinc-800 relative overflow-hidden group/switch ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
+                title={titleText}
+              >
+                {/* Sliding indicator background */}
+                <div
+                  className="absolute top-0 bottom-0 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-all duration-300"
+                  style={{ width: indicatorWidth, left: indicatorLeft }}
+                />
+                {segments.map(s => {
+                  const isActive = s.key === currentMode;
+                  return (
+                    <button
+                      key={s.key}
+                      onClick={() => onSwitchMode(s.key)}
+                      className={`relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer ${
+                        isActive
+                          ? 'text-zinc-900 dark:text-zinc-100'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                      }`}
+                      title={`Switch to ${s.label} (${s.shortcut})`}
+                      aria-label={`Switch to ${s.label}`}
+                    >
+                      {s.icon}
+                      <span className="absolute -bottom-0.5 text-[7px] font-bold text-zinc-400 dark:text-zinc-500 opacity-0 group-hover/switch:opacity-100 transition-opacity">
+                        {s.shortcut}
+                      </span>
+                    </button>
+                  );
+                })}
+                <div className={`transition-opacity duration-300 absolute ${isPlatformAdmin ? 'left-24' : 'left-16'} whitespace-nowrap pl-2 flex flex-col items-start ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
+                  <div className={`font-semibold text-xs leading-tight ${currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                    {activeLabel}
+                  </div>
+                  <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
+                </div>
               </div>
-              <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
-            </div>
-          </button>
+            );
+          })()}
         </div>}
 
         {/* Navigation Items */}
@@ -668,7 +720,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             ));
           })()}
 
-          {/* Sales mode: flat nav (no grouping). */}
+          {/* Sales / Master modes: flat nav. masterNavItems carries the
+              platform pages (Dashboard / Customers / Features / Audit). */}
           {isInitialized && currentMode !== 'os' && currentNavItems.map(item => (
             <NavItem
               key={item.id}
@@ -701,17 +754,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
         {/* Bottom Actions */}
         <div className="w-full flex flex-col gap-1 shrink-0 mt-2 items-center">
-          {isPlatformAdmin && (
+          {/* Platform admin fallback button — only when NOT already in master
+              mode, so admins can jump in even from OS or Sales context. */}
+          {isPlatformAdmin && currentMode !== 'master' && (
             <NavItem
               id="platform_admin"
               icon={<Icons.Shield />}
               label="Platform"
-              active={currentPage === 'platform_admin'}
+              active={false}
               expanded={isSidebarExpanded}
-              onClick={() => {
-                onNavigate('platform_admin');
-
-              }}
+              onClick={() => onSwitchMode('master')}
             />
           )}
           <button
@@ -751,6 +803,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           <TopNavbar
             pageTitle={currentPage}
             currentPage={currentPage}
+            currentMode={currentMode}
             navParams={navParams}
             onOpenSearch={() => setShowCommandPalette(true)}
             onNavigate={onNavigate}

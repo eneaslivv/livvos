@@ -48,6 +48,9 @@ const loadPublicPortalView = () => retryDynamicImport(() => import('./pages/Publ
 const loadSharedDocument = () => retryDynamicImport(() => import('./pages/SharedDocument').then(m => ({ default: m.SharedDocument })), 'SharedDocument');
 const loadContentCms = () => retryDynamicImport(() => import('./pages/ContentCms').then(m => ({ default: m.ContentCms })), 'ContentCms');
 const loadPlatformAdmin = () => retryDynamicImport(() => import('./pages/PlatformAdmin').then(m => ({ default: m.PlatformAdmin })), 'PlatformAdmin');
+const loadPlatformCustomers = () => retryDynamicImport(() => import('./pages/PlatformCustomers').then(m => ({ default: m.PlatformCustomers })), 'PlatformCustomers');
+const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/PlatformFeatures').then(m => ({ default: m.PlatformFeatures })), 'PlatformFeatures');
+const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
 
 const Home = React.lazy(loadHome);
 const Projects = React.lazy(loadProjects);
@@ -71,6 +74,9 @@ const PublicPortalView = React.lazy(loadPublicPortalView);
 const SharedDocument = React.lazy(loadSharedDocument);
 const ContentCms = React.lazy(loadContentCms);
 const PlatformAdmin = React.lazy(loadPlatformAdmin);
+const PlatformCustomers = React.lazy(loadPlatformCustomers);
+const PlatformFeatures = React.lazy(loadPlatformFeatures);
+const PlatformAudit = React.lazy(loadPlatformAudit);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -795,10 +801,31 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
-          {/* Platform Admin */}
+          {/* Platform Admin (master mode) — Dashboard */}
           {visitedPages.has('platform_admin') && (
             <KeepAlivePage page="platform_admin" active={currentPage === 'platform_admin'}>
               <PlatformAdmin />
+            </KeepAlivePage>
+          )}
+
+          {/* Platform Customers — SaaS tenants + master CRM clients */}
+          {visitedPages.has('platform_customers') && (
+            <KeepAlivePage page="platform_customers" active={currentPage === 'platform_customers'}>
+              <PlatformCustomers />
+            </KeepAlivePage>
+          )}
+
+          {/* Platform Features — read-only catalog */}
+          {visitedPages.has('platform_features') && (
+            <KeepAlivePage page="platform_features" active={currentPage === 'platform_features'}>
+              <PlatformFeatures />
+            </KeepAlivePage>
+          )}
+
+          {/* Platform Audit — cross-tenant activity feed */}
+          {visitedPages.has('platform_audit') && (
+            <KeepAlivePage page="platform_audit" active={currentPage === 'platform_audit'}>
+              <PlatformAudit />
             </KeepAlivePage>
           )}
         </>
@@ -816,6 +843,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'home', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
+  'platform_customers', 'platform_features', 'platform_audit',
 ]);
 
 const readLastPage = (): PageView => {
@@ -829,7 +857,7 @@ const readLastPage = (): PageView => {
 const readLastMode = (): AppMode => {
   try {
     const stored = window.localStorage.getItem(LAST_MODE_KEY);
-    if (stored === 'os' || stored === 'sales') return stored;
+    if (stored === 'os' || stored === 'sales' || stored === 'master') return stored;
   } catch {}
   return 'os';
 };
@@ -947,11 +975,16 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Handle Mode Switch (Reset page to default for that mode)
+  // Handle Mode Switch (Reset page to default for that mode). The 'master'
+  // mode is gated at the Layout level (the switch UI only renders the 3rd
+  // segment when `isPlatformAdmin` is true), AND at the page level (every
+  // platform_* page guards on `is_platform_admin` RPC). Belt-and-suspenders.
   const handleSwitchMode = (mode: AppMode) => {
     if (import.meta.env.DEV) console.log('Switching mode:', mode);
     setAppMode(mode);
-    if (mode === 'sales') {
+    if (mode === 'master') {
+      setCurrentPage('platform_admin');
+    } else if (mode === 'sales') {
       setCurrentPage('sales_dashboard');
     } else {
       setCurrentPage('home');

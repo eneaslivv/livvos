@@ -7,18 +7,19 @@ import { ConfigurationModal } from './config/ConfigurationModal';
 import { NotificationBell } from './NotificationBell';
 import { UnifiedNewPopover } from './layout/UnifiedNewPopover';
 import { PresenceAvatars } from './presence/PresenceAvatars';
-import type { PageView, NavParams } from '../types';
+import type { PageView, NavParams, AppMode } from '../types';
 
 interface TopNavbarProps {
     pageTitle: string;
     currentPage: PageView;
+    currentMode?: AppMode;
     navParams?: NavParams;
     onOpenSearch: () => void;
     onNavigate: (page: PageView, params?: NavParams) => void;
     onOpenNewTask: () => void;
 }
 
-export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, navParams, onOpenSearch, onNavigate, onOpenNewTask }) => {
+export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, currentMode, navParams, onOpenSearch, onNavigate, onOpenNewTask }) => {
     const { user } = useRBAC();
     const { currentTenant } = useTenant();
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -49,6 +50,16 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, na
                     <span className="hidden lg:block text-[10px] font-medium text-zinc-400/70 dark:text-zinc-500/70 uppercase tracking-[0.12em] select-none">
                         {pageTitle === 'home' ? 'Dashboard' : pageTitle.replace('_', ' ')}
                     </span>
+                    {/* Master mode badge — high-visibility reminder you're
+                        operating cross-tenant. Only renders when in master mode. */}
+                    {currentMode === 'master' && (
+                        <span
+                            className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-1 ring-rose-300/40"
+                            title="Master mode — actions affect every tenant"
+                        >
+                            <Icons.Shield size={10} /> Master
+                        </span>
+                    )}
                 </div>
 
                 {/* Right: Actions */}
