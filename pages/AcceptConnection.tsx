@@ -31,7 +31,8 @@ export const AcceptConnection: React.FC = () => {
         const verify = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
-                setSignedInEmail(session?.user?.email ?? null);
+                const sessionEmail = session?.user?.email ?? null;
+                setSignedInEmail(sessionEmail);
 
                 const { data, error: rpcError } = await supabase.rpc('verify_connection_token', { p_token: token });
                 if (rpcError) throw rpcError;
@@ -47,12 +48,43 @@ export const AcceptConnection: React.FC = () => {
                     setInfo(row as ConnectionInfo);
                 } else {
                     setInfo(row as ConnectionInfo);
+                    // Auto-accept when the visitor is ALREADY signed in with
+                    // the invited email. This is the path that was leaving
+                    // tons of invitations stuck pending — users would click
+                    // the link, sign up, get back to this page, but never
+                    // click the explicit "Accept" button. From their POV
+                    // they'd "already entered the workspace" so the dropdown
+                    // saying "pending" was a lie. Now landing on the link
+                    // with a matching session is the acceptance event itself.
+                    const inviteEmail = (row as ConnectionInfo).invited_email?.toLowerCase().trim();
+                    const visitorEmail = sessionEmail?.toLowerCase().trim();
+                    if (inviteEmail && visitorEmail && inviteEmail === visitorEmail) {
+                        // Don't await here — the verify() returns first so
+                        // the loading spinner ends, then handleAccept fires
+                        // the RPC and surfaces the success screen.
+                        setTimeout(() => { void autoAccept(); }, 50);
+                    }
                 }
             } catch (err: any) {
                 errorLogger.error('verify_connection_token failed:', err);
                 setError(err?.message || 'No pude verificar la invitación.');
             } finally {
                 setIsLoading(false);
+            }
+        };
+
+        // autoAccept calls accept_connection without flipping the explicit
+        // "I'm clicking the button" state — the user already proved consent
+        // by signing up with the invited email.
+        const autoAccept = async () => {
+            try {
+                const { data, error: rpcError } = await supabase.rpc('accept_connection', { p_token: token });
+                if (rpcError) throw rpcError;
+                if ((data as any)?.ok) setAccepted(true);
+            } catch (err: any) {
+                errorLogger.error('auto accept_connection failed:', err);
+                // Don't surface the error — the manual Accept button is
+                // still in the UI, the user can retry.
             }
         };
 
