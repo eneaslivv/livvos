@@ -68,6 +68,14 @@ export interface Project {
   icon?: string | null
   budget: number
   currency: string
+  /** When this project lives in another tenant and was shared with the
+   *  current tenant via project_agency_shares, these surface the source
+   *  for the "🔗 Shared from X" badge in the UI. Null for native
+   *  projects. */
+  sharedFromTenantId?: string | null
+  sharedFromName?: string | null
+  sharedFromLogoUrl?: string | null
+  sharedAccessLevel?: string | null
 }
 
 interface ProjectsContextType {
@@ -132,6 +140,13 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     icon: p.icon ?? null,
     budget: typeof p.budget === 'number' ? p.budget : 0,
     currency: p.currency ?? 'USD',
+    // Cross-tenant share metadata. When non-null, this project is owned
+    // by another agency that shared it with the current tenant. UI uses
+    // these to render a "🔗 Shared from X" badge.
+    sharedFromTenantId: p._shared_from_tenant_id ?? null,
+    sharedFromName: p._shared_from_name ?? null,
+    sharedFromLogoUrl: p._shared_from_logo_url ?? null,
+    sharedAccessLevel: p._shared_access_level ?? null,
   });
 
   // Inverse function to save to DB
@@ -190,11 +205,26 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       errorLogger.log('Fetching projects from Supabase...')
-      const { data, error: err } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
+      // Two parallel queries:
+      //   (a) projects natively in this tenant
+      //   (b) projects shared INTO this tenant from a connected partner
+      //       agency (via project_agency_shares). The "shared in" list
+      //       is small (per-project opt-in) so this is cheap.
+      // Server-side RLS policies allow the receiving tenant to SELECT
+      // those projects; we still query them explicitly so they have
+      // metadata we need (the source agency name) for the UI badge.
+      const [ownedRes, sharedToMeRes] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false }),
+        supabase.rpc('list_projects_shared_to_me'),
+      ])
+      const { data, error: err } = ownedRes
+      const sharedMeta = (!sharedToMeRes.error && Array.isArray(sharedToMeRes.data))
+        ? sharedToMeRes.data as Array<{ project_id: string; owner_tenant_id: string; owner_tenant_name: string; owner_tenant_logo_url: string | null; access_level: string }>
+        : []
 
       if (err) {
         if (err.code === 'PGRST116') {
@@ -203,7 +233,30 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           throw err
         }
       } else {
-        const dbProjects = (data || []).map(normalizeProject)
+        // Fetch the actual rows for projects shared INTO this tenant so
+        // they appear in the same list with full project data. Each gets
+        // tagged with `shared_from_*` fields used by the badge in the
+        // sidebar list. The receiving RLS policy allows this SELECT.
+        const sharedProjectIds = sharedMeta.map(s => s.project_id)
+        let sharedProjectRows: any[] = []
+        if (sharedProjectIds.length > 0) {
+          const { data: sharedData } = await supabase
+            .from('projects')
+            .select('*')
+            .in('id', sharedProjectIds)
+          sharedProjectRows = sharedData || []
+        }
+        const sharedById = new Map(sharedMeta.map(s => [s.project_id, s]))
+        const decoratedShared = sharedProjectRows.map(p => ({
+          ...p,
+          // Marker fields for the UI — survive normalizeProject by being
+          // attached after the merge, see below.
+          _shared_from_tenant_id: sharedById.get(p.id)?.owner_tenant_id || null,
+          _shared_from_name: sharedById.get(p.id)?.owner_tenant_name || null,
+          _shared_from_logo_url: sharedById.get(p.id)?.owner_tenant_logo_url || null,
+          _shared_access_level: sharedById.get(p.id)?.access_level || 'view',
+        }))
+        const dbProjects = ([...(data || []), ...decoratedShared]).map(normalizeProject)
 
         // If DB is empty but we have local projects, persist them to DB
         if (dbProjects.length === 0 && projects.length > 0) {

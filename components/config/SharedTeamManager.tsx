@@ -67,13 +67,31 @@ export const SharedTeamManager: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <Icons.Users size={18} className="text-zinc-500" />
-            Shared team access
+            Full-workspace team access
           </h2>
           <p className="text-[13px] text-zinc-500 mt-1 max-w-2xl">
-            Pick which of your team members can access each connected agency. Sharing
-            grants them read+write inside that workspace and shows the workspace in
-            their tenant switcher.
+            Adds your team members as members of an entire connected agency
+            workspace. Use this only when you fully manage that agency.
           </p>
+        </div>
+      </div>
+
+      {/* Hard warning — the user explicitly clarified they DON'T want
+          their team to see "everything" inside another agency. The
+          per-project sharing flow on the Project page is the right tool
+          for collaborative work; this section is now the "full handover"
+          escape hatch. */}
+      <div className="mt-4 mb-2 p-3 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10">
+        <div className="flex items-start gap-2">
+          <Icons.Shield size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-[12px] text-amber-800 dark:text-amber-300 leading-snug">
+            <strong>Heads up — this grants full access.</strong>{' '}
+            Anyone you toggle on will see <em>every</em> project, task, client,
+            file and finance entry in that agency. For collaborating on a
+            single project (the usual case), use{' '}
+            <span className="font-semibold">"Connect with agency"</span> on
+            the project itself instead — only that project is shared.
+          </div>
         </div>
       </div>
 

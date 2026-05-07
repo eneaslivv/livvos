@@ -19,6 +19,7 @@ import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
+import { ShareProjectWithAgencyModal } from '../components/projects/ShareProjectWithAgencyModal';
 import { IconPicker } from '../components/ui/IconPicker';
 
 /* ─── AI Preview types ─── */
@@ -399,7 +400,12 @@ export const Projects: React.FC<{
   });
   React.useEffect(() => { try { localStorage.setItem('eneas-os:project-tasks-view', tasksView); } catch {} }, [tasksView]);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isAgencyShareModalOpen, setIsAgencyShareModalOpen] = useState(false);
   const [isClientPreviewMode, setIsClientPreviewMode] = useState(false);
+  // Per-project agency share count — surfaces a "🔗 N agencies" badge in
+  // the project header so the user always knows the project's
+  // collaboration scope. Refetched after every share/unshare.
+  const [agencyShareCount, setAgencyShareCount] = useState(0);
   const [newGroupName, setNewGroupName] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState<Record<number, string>>({});
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -439,6 +445,18 @@ export const Projects: React.FC<{
   const [timeFormData, setTimeFormData] = useState({ description: '', hours: '', date: new Date().toISOString().split('T')[0], hourlyRate: '' });
 
   const selectedProject = projects.find(p => p.id === selectedId) || null;
+
+  // Load the per-project agency-share count whenever a project is opened.
+  // Used to show "🔗 N agencies" pill in the header. Cheap query (RPC,
+  // server-side filtered).
+  const refreshAgencyShareCount = React.useCallback(async () => {
+    if (!selectedId) { setAgencyShareCount(0); return; }
+    try {
+      const { data } = await supabase.rpc('list_project_agency_shares', { p_project_id: selectedId });
+      setAgencyShareCount(Array.isArray(data) ? data.length : 0);
+    } catch { /* RLS may filter to 0 — fine */ }
+  }, [selectedId]);
+  React.useEffect(() => { void refreshAgencyShareCount(); }, [refreshAgencyShareCount]);
   const allProjectTasks = selectedProject
     ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
     : [];
@@ -1445,6 +1463,11 @@ export const Projects: React.FC<{
                           }`}>
                             {p.title}
                           </div>
+                          {p.sharedFromName && (
+                            <div className="text-[9px] text-violet-600 dark:text-violet-400 truncate inline-flex items-center gap-0.5 leading-tight">
+                              <Icons.Briefcase size={8} /> Shared from {p.sharedFromName}
+                            </div>
+                          )}
                         </div>
                         <span className={`text-[10px] tabular-nums shrink-0 ${
                           isSelected ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-300 dark:text-zinc-600'
@@ -1537,6 +1560,23 @@ export const Projects: React.FC<{
             </div>
             {selectedProject && (
               <div className="flex gap-1 shrink-0 items-center">
+                {/* Per-project agency share — only this project gets shared
+                    with the connected partner agency. Replaces the
+                    over-broad "Shared team access" approach. Pill shows
+                    a count when at least one agency is connected so the
+                    user always sees collaboration scope at a glance. */}
+                <button
+                  onClick={() => setIsAgencyShareModalOpen(true)}
+                  title="Connect this project with another agency"
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors inline-flex items-center gap-1.5 ${
+                    agencyShareCount > 0
+                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20'
+                      : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <Icons.Briefcase size={11} />
+                  {agencyShareCount > 0 ? `Connected · ${agencyShareCount}` : 'Connect agency'}
+                </button>
                 <button onClick={() => setIsShareModalOpen(true)}
                   className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
                   Share
@@ -1926,6 +1966,19 @@ export const Projects: React.FC<{
         </div>
         )}
       </div>
+
+      {/* Per-project agency share modal — toggleable list of connected
+          partner agencies. Lives outside the main column so it always
+          renders on top regardless of which tab is open. */}
+      {selectedProject && (
+        <ShareProjectWithAgencyModal
+          open={isAgencyShareModalOpen}
+          projectId={selectedProject.id}
+          projectTitle={selectedProject.title}
+          onClose={() => setIsAgencyShareModalOpen(false)}
+          onChanged={() => { void refreshAgencyShareCount(); }}
+        />
+      )}
     </div>
   );
 };
