@@ -10,6 +10,12 @@ interface ConnectAgencyModalProps {
     isOpen: boolean;
     onClose: () => void;
     onConnectionCreated?: () => void;
+    /** Optional pre-fills for the form. Used by the "Promote client to
+     *  partner agency" shortcut on the Client detail page so the user
+     *  doesn't have to retype the email/agency name they already
+     *  have on the client record. */
+    prefillEmail?: string;
+    prefillAgencyName?: string;
 }
 
 type Step = 'form' | 'sharing';
@@ -18,6 +24,8 @@ export const ConnectAgencyModal: React.FC<ConnectAgencyModalProps> = ({
     isOpen,
     onClose,
     onConnectionCreated,
+    prefillEmail,
+    prefillAgencyName,
 }) => {
     const { currentTenant } = useTenant();
     const [step, setStep] = useState<Step>('form');
@@ -32,14 +40,17 @@ export const ConnectAgencyModal: React.FC<ConnectAgencyModalProps> = ({
     useEffect(() => {
         if (isOpen) {
             setStep('form');
-            setAgencyName('');
-            setOwnerEmail('');
+            // Pre-fill from props when promoting a client → partner agency.
+            // Empty strings (or undefined) keep the form fresh for the
+            // normal "Connect a client agency" path.
+            setAgencyName(prefillAgencyName?.trim() || '');
+            setOwnerEmail(prefillEmail?.trim().toLowerCase() || '');
             setError(null);
             setInviteToken(null);
             setEmailSent(false);
             setCopied(false);
         }
-    }, [isOpen]);
+    }, [isOpen, prefillEmail, prefillAgencyName]);
 
     const inviteLink = inviteToken
         ? `${window.location.origin}/accept-connection?token=${inviteToken}`

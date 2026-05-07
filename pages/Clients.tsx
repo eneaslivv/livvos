@@ -16,6 +16,7 @@ import { PageView, NavParams } from '../types';
 
 import { ClientListSidebar } from '../components/clients/ClientListSidebar';
 import { NewClientPanel } from '../components/clients/NewClientPanel';
+import { ConnectAgencyModal } from '../components/layout/ConnectAgencyModal';
 import { IconPicker } from '../components/ui/IconPicker';
 
 /* ─── Helpers ─── */
@@ -239,6 +240,12 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
 
   /* ─── State ─── */
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  // "Promote client to partner agency" — opens ConnectAgencyModal pre-filled
+  // with the client's email + company. Tracks whether the client's email
+  // already has an accepted/pending tenant_connections row so the CTA
+  // can adapt ("Invite as partner agency" vs "Already connected").
+  const [agencyModalOpen, setAgencyModalOpen] = useState(false);
+  const [partnerStatus, setPartnerStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [history, setHistory] = useState<ClientHistory[]>([]);
@@ -372,6 +379,31 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       setEditingField(null);
     }
   }, [selectedClient?.id]);
+
+  // Check whether the client's email is already a connected partner agency
+  // (or has a pending invite). Drives the "Promote to partner agency" CTA.
+  useEffect(() => {
+    if (!selectedClient?.email || !currentTenant?.id) {
+      setPartnerStatus('none');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('tenant_connections')
+        .select('status')
+        .eq('parent_tenant_id', currentTenant.id)
+        .eq('invited_email', selectedClient.email!.toLowerCase())
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const row = (data || [])[0] as { status?: string } | undefined;
+      if (row?.status === 'accepted') setPartnerStatus('accepted');
+      else if (row?.status === 'pending') setPartnerStatus('pending');
+      else setPartnerStatus('none');
+    })();
+    return () => { cancelled = true; };
+  }, [selectedClient?.id, selectedClient?.email, currentTenant?.id]);
 
   // Listen for global "+ New" popover requesting a new client.
   useEffect(() => {
@@ -1259,6 +1291,67 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                 />
               </div>
 
+              {/* ── Promote to partner agency CTA ──
+                   Shows when the client has an email AND no accepted
+                   connection yet. Once accepted, becomes a small
+                   informational chip showing "Connected as partner
+                   agency" so the user knows sharing projects with
+                   them is unlocked. */}
+              {selectedClient.email && (
+                <div className="px-5 pt-5">
+                  {partnerStatus === 'accepted' ? (
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
+                      <Icons.CheckCircle size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
+                          Connected as partner agency
+                        </div>
+                        <div className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                          Their email already has a workspace. Use{' '}
+                          <span className="font-semibold">"Connect agency"</span> on a project to share it with them.
+                        </div>
+                      </div>
+                    </div>
+                  ) : partnerStatus === 'pending' ? (
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                      <Icons.Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                          Partner-agency invite pending
+                        </div>
+                        <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                          We sent an invite to {selectedClient.email}. They need to accept to start sharing projects.
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setAgencyModalOpen(true)}
+                        className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline-offset-2 hover:underline"
+                      >
+                        Resend
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAgencyModalOpen(true)}
+                      className="w-full flex items-center gap-2.5 p-3 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-100 dark:hover:bg-violet-500/15 transition-colors text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-md bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+                        <Icons.Briefcase size={14} className="text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-violet-800 dark:text-violet-300">
+                          Invite as partner agency
+                        </div>
+                        <div className="text-[11px] text-violet-700/80 dark:text-violet-400/80 mt-0.5">
+                          Give {selectedClient.name} their own workspace so you can sync projects, tasks and updates both ways.
+                        </div>
+                      </div>
+                      <Icons.ChevronRight size={14} className="text-violet-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* ── Projects list ── */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -1334,6 +1427,34 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         onClose={() => setShowNewClientPanel(false)}
         onDataChange={setNewClientData}
         onCreate={handleCreateClient}
+      />
+
+      {/* "Promote client to partner agency" — opens the existing
+          ConnectAgencyModal pre-filled with the selected client's email
+          and company. After acceptance, the client also exists as a
+          connected agency tenant and can collaborate on shared projects. */}
+      <ConnectAgencyModal
+        isOpen={agencyModalOpen}
+        onClose={() => {
+          setAgencyModalOpen(false);
+          // Refresh status so the CTA flips to "pending" right after invite.
+          if (selectedClient?.email && currentTenant?.id) {
+            supabase
+              .from('tenant_connections')
+              .select('status')
+              .eq('parent_tenant_id', currentTenant.id)
+              .eq('invited_email', selectedClient.email.toLowerCase())
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .then(({ data }) => {
+                const row = (data || [])[0] as { status?: string } | undefined;
+                if (row?.status === 'accepted') setPartnerStatus('accepted');
+                else if (row?.status === 'pending') setPartnerStatus('pending');
+              });
+          }
+        }}
+        prefillEmail={selectedClient?.email || undefined}
+        prefillAgencyName={selectedClient?.company || selectedClient?.name || undefined}
       />
     </div>
   );
