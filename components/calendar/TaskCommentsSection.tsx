@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
+import { useTeam } from '../../context/TeamContext';
 import { errorLogger } from '../../lib/errorLogger';
 import { LinkifiedText } from '../ui/LinkifiedText';
 import { Icons } from '../ui/Icons';
 import { useTaskComments, TaskComment } from '../../hooks/useTaskComments';
 import { useAuth } from '../../hooks/useAuth';
+import {
+  MentionPicker, detectMention, applyMention, renderMentionParts,
+  type MentionState,
+} from './MentionPicker';
 
 interface TaskCommentsSectionProps {
   taskId: string;
@@ -43,14 +48,24 @@ const groupByDate = (comments: TaskComment[]): Map<string, TaskComment[]> => {
 export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId, taskTitle, taskOwnerId, taskAssigneeId }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
+  const { members } = useTeam();
   const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId } : undefined, [taskTitle, taskOwnerId, taskAssigneeId]);
   const { comments, loading, addComment } = useTaskComments(taskId, taskInfo);
   const [activeTab, setActiveTab] = useState<'internal' | 'client'>('internal');
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [mention, setMention] = useState<MentionState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Re-evaluate mention state any time the input or selection moves.
+  const refreshMentionState = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    setMention(detectMention(ta));
+  }, []);
 
   // Paste/drop/click an image → upload to tenant-assets/comment-attachments
   // and insert the public URL into the comment input as plain text. The
@@ -111,12 +126,23 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // When the mention picker is open, let it consume Enter / Tab / arrows.
+    if (mention && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape')) {
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  const handlePickMention = useCallback((member: { id: string; name: string | null; email: string }) => {
+    const ta = textareaRef.current;
+    if (!ta || !mention) return;
+    applyMention(ta, mention, { id: member.id, name: member.name || member.email }, setInputText);
+    setMention(null);
+  }, [mention]);
 
   const dateGroups = groupByDate(filteredComments);
 
@@ -209,7 +235,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
                       <div className={`text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 break-words ${
                         activeTab === 'client' ? 'bg-blue-50/50 dark:bg-blue-900/10 rounded px-1.5 py-1 -mx-1.5' : ''
                       }`}>
-                        <CommentBody text={comment.comment} />
+                        <CommentBody text={comment.comment} currentUserId={user?.id} />
                       </div>
                     </div>
                   </div>
@@ -229,12 +255,21 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
           const f = e.dataTransfer.files?.[0];
           if (f) uploadAndInsert(f);
         }}
-        className={`flex items-end gap-1.5 p-1.5 border rounded-lg transition-all ${
+        className={`relative flex items-end gap-1.5 p-1.5 border rounded-lg transition-all ${
           activeTab === 'client'
             ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 focus-within:border-blue-400'
             : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 focus-within:border-blue-400'
         }`}
       >
+        <MentionPicker
+          query={mention?.query || ''}
+          members={members}
+          excludeId={user?.id}
+          open={!!mention}
+          anchor={textareaRef.current}
+          onPick={handlePickMention}
+          onClose={() => setMention(null)}
+        />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -252,10 +287,15 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
           onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndInsert(f); e.currentTarget.value = ''; }}
         />
         <textarea
-          placeholder={activeTab === 'client' ? 'Comentario para cliente — pegá imágenes con ⌘V' : 'Comentario interno — pegá imágenes con ⌘V'}
+          ref={textareaRef}
+          placeholder={activeTab === 'client' ? 'Comment for client — type @ to mention, ⌘V to paste images' : 'Internal comment — type @ to mention, ⌘V to paste images'}
           value={inputText}
-          onChange={e => setInputText(e.target.value)}
+          onChange={e => { setInputText(e.target.value); requestAnimationFrame(refreshMentionState); }}
           onKeyDown={handleKeyDown}
+          onKeyUp={refreshMentionState}
+          onClick={refreshMentionState}
+          onSelect={refreshMentionState}
+          onBlur={() => setTimeout(() => setMention(null), 150)}
           onPaste={handlePaste}
           rows={1}
           className={`flex-1 px-2 py-1 bg-transparent border-0 outline-none text-xs resize-none max-h-32 ${
@@ -280,16 +320,35 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   );
 };
 
-// Renders a comment body. Image URLs become inline thumbnails; other URLs
-// become clickable links (and a small preview card row beneath the text so
-// the user can jump straight to the destination instead of copy-pasting).
+// Renders a comment body. Pipeline:
+//   1. Split by whitespace so URLs/words stay intact
+//   2. Image URLs → inline thumbnail
+//   3. Other URLs → clickable link
+//   4. Plain words → run through `renderMentionParts` so `@[Name](uuid)`
+//      tokens render as styled chips. Chips that match the current user
+//      get a stronger amber treatment so it's obvious you've been pinged.
 const IMAGE_URL_RE = /^(https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|svg|avif)(?:\?[^\s]*)?)$/i
 const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]}])/g
 
-const CommentBody: React.FC<{ text: string }> = ({ text }) => {
+const CommentBody: React.FC<{ text: string; currentUserId?: string | null }> = ({ text, currentUserId }) => {
   const parts = text.split(/(\s+)/);
   const inline: React.ReactNode[] = [];
   const nonImageUrls: string[] = [];
+
+  const renderChip = (name: string, userId: string, key: string) => (
+    <span
+      key={key}
+      className={`inline-flex items-center px-1 rounded text-[11px] font-semibold ${
+        userId === currentUserId
+          ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-300/60'
+          : 'bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300'
+      }`}
+      title={`@${name}`}
+    >
+      @{name}
+    </span>
+  );
+
   parts.forEach((part, i) => {
     if (IMAGE_URL_RE.test(part)) {
       inline.push(
@@ -298,12 +357,20 @@ const CommentBody: React.FC<{ text: string }> = ({ text }) => {
         </a>
       );
     } else if (URL_RE.test(part)) {
-      // Reset state for the next test() call (lastIndex sticks with /g).
       URL_RE.lastIndex = 0;
       nonImageUrls.push(part);
       inline.push(
         <a key={i} href={part} target="_blank" rel="noreferrer noopener" className="text-blue-600 dark:text-blue-400 underline decoration-blue-300/60 hover:decoration-blue-500 break-all">{part}</a>
       );
+    } else if (part.includes('@[')) {
+      // Token may contain one or more mentions. Hand off to the helper so
+      // chips render in-place with the surrounding text preserved.
+      const rendered = renderMentionParts(part, renderChip);
+      rendered.forEach((node, idx) => inline.push(
+        typeof node === 'string'
+          ? <span key={`${i}-${idx}`} className="whitespace-pre-wrap">{node}</span>
+          : <React.Fragment key={`${i}-${idx}`}>{node}</React.Fragment>
+      ));
     } else {
       inline.push(<span key={i} className="whitespace-pre-wrap">{part}</span>);
     }

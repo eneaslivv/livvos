@@ -141,30 +141,12 @@ export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo
       // Remove optimistic on failure
       setComments(prev => prev.filter(c => c.id !== tempId));
       if (import.meta.env.DEV) console.warn('[useTaskComments] insert error:', error.message);
-    } else if (taskInfo && currentTenant?.id) {
-      // Notify task owner + assignee (skip self)
-      const recipients = new Set<string>();
-      if (taskInfo.owner_id && taskInfo.owner_id !== user.id) recipients.add(taskInfo.owner_id);
-      if (taskInfo.assignee_id && taskInfo.assignee_id !== user.id) recipients.add(taskInfo.assignee_id);
-
-      if (recipients.size > 0) {
-        const rows = [...recipients].map(uid => ({
-          user_id: uid,
-          tenant_id: currentTenant.id,
-          type: 'task',
-          title: `New comment on: ${taskInfo.title}`,
-          message: `${userName}: ${trimmed.length > 80 ? trimmed.slice(0, 80) + '…' : trimmed}`,
-          priority: 'low' as const,
-          read: false,
-          action_required: false,
-          category: 'task',
-          metadata: { task_id: taskId },
-        }));
-        supabase.from('notifications').insert(rows).then(({ error: nErr }) => {
-          if (nErr && import.meta.env.DEV) console.warn('[useTaskComments] notification error:', nErr.message);
-        });
-      }
     }
+    // Notifications (owner, assignee, @mentions) are handled by the
+    // notify_on_task_comment DB trigger — see migration
+    // 2026-05-06_task_mentions_and_updates.sql. Doing it server-side keeps
+    // the link/priority/mention-parsing rules in one place and prevents the
+    // double-notification bug (one from frontend + one from trigger).
   }, [taskId, user?.id, currentTenant?.id, userName, userAvatar, taskInfo]);
 
   const deleteComment = useCallback(async (commentId: string) => {
