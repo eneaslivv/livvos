@@ -36,6 +36,47 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
       })
   }, [])
 
+  // Read the optional ?return_to=… so OAuth (and any future SSO) can land
+  // the user back on the exact page they came from. AcceptConnection.tsx's
+  // "Sign in" button URL-encodes the path it wants to return to.
+  const returnTo = (() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get('return_to');
+      if (!raw) return null;
+      // Restrict to internal paths to prevent open-redirect.
+      const decoded = decodeURIComponent(raw);
+      return decoded.startsWith('/') ? decoded : null;
+    } catch { return null; }
+  })();
+
+  const oauthRedirect = `${window.location.origin}${returnTo || (isClientPortal ? '/?portal=client' : '/')}`;
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setMessage(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: oauthRedirect,
+          // Always show the account chooser so the wrong-account scenario
+          // (which happens a lot on shared computers / multi-Google users)
+          // is just one click away from being fixed.
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (error) throw error;
+      // The browser will redirect to Google now — no further state change
+      // needed here. If it errors out, surface as a normal message.
+    } catch (err: any) {
+      setMessage({
+        text: err?.message || 'Google sign-in unavailable — make sure the provider is enabled in Supabase Auth → Providers.',
+        type: 'error',
+      });
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setLoading(true)
     setMessage(null)
@@ -180,6 +221,25 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
                 </button>
               ))}
             </div>
+
+            {mode !== 'forgot' && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={loading}
+                  className="w-full mb-4 py-3 bg-white border border-zinc-200 rounded-xl text-zinc-800 font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <GoogleLogo />
+                  Continue with Google
+                </button>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="flex-1 h-px bg-zinc-200" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">or with email</span>
+                  <span className="flex-1 h-px bg-zinc-200" />
+                </div>
+              </>
+            )}
 
             <div className="space-y-5">
               <div>
@@ -360,6 +420,25 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
             ))}
           </div>
 
+          {mode !== 'forgot' && (
+            <>
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full mb-4 py-3 bg-white border border-zinc-200 rounded-xl text-zinc-800 font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <GoogleLogo />
+                Continue with Google
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <span className="flex-1 h-px bg-zinc-200" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">or with email</span>
+                <span className="flex-1 h-px bg-zinc-200" />
+              </div>
+            </>
+          )}
+
           <div className="space-y-5">
             <div>
               <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Email</label>
@@ -461,3 +540,14 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
     </div>
   )
 }
+
+// Inline SVG of the official Google "G" mark — avoids pulling a logo
+// asset and keeps the colours intact in dark mode without inversion.
+const GoogleLogo: React.FC = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" />
+    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+    <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" />
+    <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" />
+  </svg>
+);
