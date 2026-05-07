@@ -29,9 +29,16 @@ const SUGGESTIONS = [
 interface FinanceChatProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Optional pre-filled prompt. When provided (e.g. user typed something
+   * into the slim AI bar at the top of any Finance tab and pressed Enter),
+   * the chat opens with that text already in the input box, ready to send.
+   * The pre-fill is applied once per open cycle.
+   */
+  initialInput?: string;
 }
 
-export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => {
+export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initialInput }) => {
   const {
     expenses, incomes, budgets,
     createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome,
@@ -52,11 +59,18 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose }) => 
   useEffect(() => {
     if (isOpen) {
       setMessages([]);
-      setInput('');
+      setInput(initialInput ?? '');
       setError(null);
-      setTimeout(() => inputRef.current?.focus(), 80);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        // Move caret to the end so the user can keep typing if they want
+        // to refine the question before sending.
+        if (inputRef.current && initialInput) {
+          inputRef.current.setSelectionRange(initialInput.length, initialInput.length);
+        }
+      }, 80);
     }
-  }, [isOpen]);
+  }, [isOpen, initialInput]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

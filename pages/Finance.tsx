@@ -26,6 +26,7 @@ import {
   type CreateBudgetData,
 } from '../context/FinanceContext';
 import { useProjects } from '../context/ProjectsContext';
+import { useTenant } from '../context/TenantContext';
 import { supabase } from '../lib/supabase';
 import { useClients } from '../context/ClientsContext';
 import type { Proposal, ProposalStatus } from '../types/crm';
@@ -131,6 +132,12 @@ export const Finance: React.FC = () => {
   const { projects } = useProjects();
   const { clients } = useClients();
   const { hasPermission } = useRBAC();
+  const { currentTenant } = useTenant();
+  // The "LIVV view" tab only makes sense for super-agency tenants —
+  // it's a partner/affiliate split-share dashboard. Hide it for
+  // anyone else (partner agencies, single-agency users) so they
+  // don't get confused by a tab they can't use.
+  const isSuperAgency = currentTenant?.is_super_agency === true;
 
   // Loading timeouts
   const [incomesTimedOut, setIncomesTimedOut] = useState(false);
@@ -198,6 +205,13 @@ export const Finance: React.FC = () => {
   // AI assistant state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Carries the seed text from the slim "Ask anything…" bar (rendered below
+  // the tab strip on every non-Dashboard tab). When the user hits Enter, we
+  // pop the FinanceChat panel pre-filled with their phrase. Reset to '' on close.
+  const [chatSeedInput, setChatSeedInput] = useState('');
+  // Local state for the slim AI bar input itself, lifted to the page so the
+  // text survives tab switches (annoying to lose mid-thought).
+  const [aiBarInput, setAiBarInput] = useState('');
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -953,6 +967,29 @@ export const Finance: React.FC = () => {
         </div>
       </div>
 
+      {/* ─── Forecast banner ───────────────────────────────────
+           Cross-tab "where am I headed" strip. Shows current balance,
+           90-day projection, and operating margin — with a trend arrow
+           that points up/down based on the projection vs current balance.
+           Visible on every tab except Dashboard (which has its own hero
+           with these same numbers in editorial form). The point: even
+           when a user is deep in a single Income or Expense tab, they
+           can glance up and know "am I trending healthy this quarter?"
+           without jumping back to the dashboard.
+
+           Hidden when there's literally no data yet — showing $0 / $0
+           on a fresh empty workspace would only add noise. Once they
+           log even one income or expense, the banner kicks in. */}
+      {activeTab !== 'dashboard' && (incomes.length > 0 || expenses.length > 0) && (
+        <FinanceForecastBanner
+          currentBalance={currentBalance}
+          projection90d={projection90d}
+          margin={margin}
+          totalPendingIncome={totalPendingIncome}
+          totalExpensesPending={totalExpensesPending}
+        />
+      )}
+
       {/* ─── Tabs (simplified) ──────────────────────────────────
            Surfacing only the 4 daily-driver tabs by default. The rest
            (Proposals, Projects P&L, LIVV super-agency view, Settings)
@@ -967,12 +1004,14 @@ export const Finance: React.FC = () => {
           { id: 'gastos',    label: 'Expenses',     icon: Receipt },
           { id: 'budgets',   label: 'Budgets',      icon: Wallet },
         ] as const;
-        const ADVANCED = [
+        const ADVANCED = ([
           { id: 'propuestas', label: 'Proposals',     icon: FileText },
           { id: 'proyectos',  label: 'Projects P&L',  icon: Target },
-          { id: 'livv',       label: 'LIVV view',     icon: Layers },
+          // LIVV view is super-agency only — hidden for partner agencies
+          // and single-agency tenants so the menu stays focused.
+          ...(isSuperAgency ? [{ id: 'livv', label: 'LIVV view', icon: Layers }] : []),
           { id: 'config',     label: 'Settings',      icon: Settings },
-        ] as const;
+        ] as const);
         // If the user lands on an advanced tab (deep link, refresh),
         // show that tab's chip in the primary row so they don't see
         // a confusing "no active tab" state.
@@ -1007,6 +1046,30 @@ export const Finance: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* ─── AI Quick-Ask bar ───────────────────────────────────
+           Slim "Ask anything, or log a transaction…" input pinned
+           below the tab row on every non-Dashboard tab. The Dashboard
+           already has its own (bigger) AI hero, so we don't duplicate
+           it there. Pressing Enter opens FinanceChat seeded with the
+           typed text — paperclip → file/Excel upload via FinanceAssistant.
+           Hidden when the user lacks `finance:create` (read-only viewers
+           can't trigger AI mutations). */}
+      {activeTab !== 'dashboard' && hasPermission('finance', 'create') && (
+        <FinanceAIQuickBar
+          value={aiBarInput}
+          onChange={setAiBarInput}
+          onSubmit={(text) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            setChatSeedInput(trimmed);
+            setIsChatOpen(true);
+            setAiBarInput('');
+          }}
+          onOpenAssistant={() => setIsAssistantOpen(true)}
+          activeTab={activeTab}
+        />
+      )}
 
       {/* ═══════════════ DASHBOARD (Livv editorial) ═══════════════ */}
       {activeTab === 'dashboard' && (
@@ -1277,6 +1340,8 @@ export const Finance: React.FC = () => {
             updateInstallment={updateInstallment}
             openIncomeForm={openIncomeForm}
             canCreate={hasPermission('finance', 'create')}
+            onOpenAIAssistant={() => setIsAssistantOpen(true)}
+            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
           />
         </div>
       )}
@@ -1639,6 +1704,8 @@ export const Finance: React.FC = () => {
             openEditExpense={openEditExpense}
             handleDeleteExpense={handleDeleteExpense}
             canCreate={hasPermission('finance', 'create')}
+            onOpenAIAssistant={() => setIsAssistantOpen(true)}
+            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
           />
         </div>
       )}
@@ -1851,6 +1918,7 @@ export const Finance: React.FC = () => {
             openEditBudget={openEditBudget}
             handleDeleteBudget={handleDeleteBudget}
             canCreate={hasPermission('finance', 'create')}
+            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
           />
         </div>
       )}
@@ -2729,12 +2797,215 @@ export const Finance: React.FC = () => {
 
       {/* ═══════════════ AI ASSISTANT ═══════════════ */}
       <FinanceAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
-      <FinanceChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <FinanceChat
+        isOpen={isChatOpen}
+        onClose={() => { setIsChatOpen(false); setChatSeedInput(''); }}
+        initialInput={chatSeedInput}
+      />
     </div>
   );
 };
 
 export default Finance;
+
+// ─── FinanceForecastBanner ────────────────────────────────────────────────
+// Compact strip that lives above the tab row on every non-Dashboard Finance
+// tab. Three numbers + a trend arrow = "am I trending healthy this quarter?"
+// answered in one glance, without forcing the user to flip back to the
+// Dashboard. The trend arrow compares projection90d to currentBalance: if
+// the next 90 days look better than today, we point up; worse, down.
+const FinanceForecastBanner: React.FC<{
+  currentBalance: number;
+  projection90d: number;
+  margin: number;
+  totalPendingIncome: number;
+  totalExpensesPending: number;
+}> = ({ currentBalance, projection90d, margin, totalPendingIncome, totalExpensesPending }) => {
+  const isImproving = projection90d > 0;
+  const isDeclining = projection90d < 0;
+  // Direction badge — green up if next 90d nets positive, rose down if negative,
+  // neutral grey if exactly zero (rare but possible on a freshly opened account).
+  const TrendIcon = isImproving ? TrendingUp : isDeclining ? TrendingDown : ArrowRight;
+  const trendColor = isImproving
+    ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10 border-emerald-200/50 dark:border-emerald-500/20'
+    : isDeclining
+      ? 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10 border-rose-200/50 dark:border-rose-500/20'
+      : 'text-zinc-500 bg-zinc-50 dark:text-zinc-400 dark:bg-zinc-800/40 border-zinc-200/50 dark:border-zinc-700/40';
+  const trendCopy = isImproving
+    ? `Net +${fmtCurrency(projection90d)} expected`
+    : isDeclining
+      ? `Net ${fmtCurrency(projection90d)} expected`
+      : 'Flat 90d outlook';
+
+  return (
+    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 px-4 py-3 bg-gradient-to-r from-emerald-50/50 via-white to-violet-50/40 dark:from-emerald-500/5 dark:via-zinc-900/40 dark:to-violet-500/5 border border-zinc-200/70 dark:border-zinc-800/60 rounded-xl">
+      {/* Direction pill */}
+      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${trendColor}`}>
+        <TrendIcon size={11} strokeWidth={2.5} />
+        <span>{trendCopy}</span>
+      </div>
+
+      {/* Three quick stats — separator dots between */}
+      <div className="flex items-center gap-4 sm:gap-6 text-xs">
+        <div>
+          <div className="text-[9px] uppercase tracking-wider text-zinc-400 mb-0.5">Today's balance</div>
+          <div className={`font-semibold tabular-nums ${currentBalance >= 0 ? 'text-zinc-900 dark:text-zinc-100' : 'text-rose-600 dark:text-rose-400'}`}>
+            {fmtCurrency(currentBalance)}
+          </div>
+        </div>
+        <div className="w-px h-7 bg-zinc-200 dark:bg-zinc-800" />
+        <div>
+          <div className="text-[9px] uppercase tracking-wider text-zinc-400 mb-0.5">90-day forecast</div>
+          <div className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            {fmtCurrency(currentBalance + projection90d)}
+          </div>
+        </div>
+        <div className="hidden sm:block w-px h-7 bg-zinc-200 dark:bg-zinc-800" />
+        <div className="hidden sm:block">
+          <div className="text-[9px] uppercase tracking-wider text-zinc-400 mb-0.5">Margin</div>
+          <div className={`font-semibold tabular-nums ${margin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+            {margin.toFixed(1)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Right-side context — what's driving the projection */}
+      <div className="ml-auto hidden lg:flex items-center gap-3 text-[10px] text-zinc-500 dark:text-zinc-400">
+        {totalPendingIncome > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <ArrowDownLeft size={11} className="text-emerald-500" />
+            <span className="tabular-nums">{fmtCurrency(totalPendingIncome)}</span>
+            <span>incoming</span>
+          </span>
+        )}
+        {totalExpensesPending > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <ArrowUpFromLine size={11} className="text-rose-500" />
+            <span className="tabular-nums">{fmtCurrency(totalExpensesPending)}</span>
+            <span>due</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── FinanceAIQuickBar ────────────────────────────────────────────────────
+// Slim "Ask anything, or log a transaction…" pill rendered below the tab row
+// on every non-Dashboard Finance tab. It's the single fastest way to add an
+// expense/income/budget OR to ask a question, without leaving the page or
+// hunting for a button. Submitting opens FinanceChat with the text already
+// queued; the paperclip opens FinanceAssistant for file/Excel uploads.
+//
+// Design notes:
+//   • Tab-aware suggestions — different chips on Income vs Expenses vs Budgets
+//     so the prompts feel relevant to where the user is.
+//   • Compact — single row, doesn't push content down too much.
+//   • Subtle gradient ring on focus to echo the "AI" feel without screaming.
+const FinanceAIQuickBar: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: (text: string) => void;
+  onOpenAssistant: () => void;
+  activeTab: string;
+}> = ({ value, onChange, onSubmit, onOpenAssistant, activeTab }) => {
+  const [focused, setFocused] = useState(false);
+
+  // Quick prompts tailored to whichever tab the user is on. We keep the list
+  // short (3 chips) so the row never wraps awkwardly and every chip is a
+  // genuinely useful starting point — not generic fluff.
+  const suggestions = useMemo<string[]>(() => {
+    switch (activeTab) {
+      case 'ingresos':
+        return [
+          'Crea una factura de $5,000 a Acme con vencimiento en 15 días',
+          '¿Qué facturas tengo pendientes de cobro?',
+          'Marca como pagada la última factura de Globex',
+        ];
+      case 'gastos':
+        return [
+          'Anota un gasto de $120 en Software por Figma',
+          '¿Cuánto gasté en marketing este mes?',
+          'Mostrame mis 5 mayores gastos del mes',
+        ];
+      case 'budgets':
+        return [
+          'Crea un budget de Marketing de $2,000/mes',
+          '¿Estoy cerca del límite de algún budget?',
+          'Aumenta el budget de Software en 20%',
+        ];
+      case 'propuestas':
+        return [
+          '¿Qué propuestas están pendientes de aprobar?',
+          'Resumime los montos de mis propuestas activas',
+        ];
+      case 'proyectos':
+        return [
+          '¿Qué proyecto tiene mejor margen?',
+          'Mostrame los proyectos que están perdiendo plata',
+        ];
+      default:
+        return [
+          'Anotame un gasto de $80 en transporte hoy',
+          '¿Cuál es mi runway si mantengo este nivel de gastos?',
+          '¿Cómo voy con los cobros este mes?',
+        ];
+    }
+  }, [activeTab]);
+
+  return (
+    <div className="space-y-2">
+      <div
+        className={`flex items-center gap-2 bg-white dark:bg-zinc-900 border rounded-full pl-4 pr-1 py-1 transition-all duration-200 ${
+          focused
+            ? 'border-fuchsia-300 dark:border-fuchsia-500/40 shadow-[0_0_0_4px_rgba(236,72,153,0.08)]'
+            : 'border-zinc-200 dark:border-zinc-800'
+        }`}
+      >
+        <Sparkles size={14} className="text-fuchsia-500 shrink-0" strokeWidth={2} />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && value.trim()) onSubmit(value); }}
+          placeholder="Ask anything, or log a transaction…"
+          className="flex-1 bg-transparent outline-none border-none text-xs text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 py-1.5"
+        />
+        <button
+          type="button"
+          onClick={onOpenAssistant}
+          title="Adjuntar Excel / archivo"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        >
+          <Plus size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => { if (value.trim()) onSubmit(value); }}
+          disabled={!value.trim()}
+          className="h-7 px-3 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+        >
+          <Send size={11} />
+          <span className="hidden sm:inline">Send</span>
+        </button>
+      </div>
+      {!value && (
+        <div className="flex items-center gap-1.5 flex-wrap pl-1">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => onChange(s)}
+              className="text-[10px] px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-fuchsia-300 dark:hover:border-fuchsia-500/40 hover:text-fuchsia-600 dark:hover:text-fuchsia-300 transition-colors"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ─── FinanceMoreMenu ──────────────────────────────────────────────────────
 // Tiny dropdown that hosts the "advanced" Finance tabs (Proposals,

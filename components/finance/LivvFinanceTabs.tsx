@@ -18,6 +18,7 @@ import React, { useState } from 'react';
 import {
   Search, ChevronLeft, ChevronRight, Pencil, Trash2, Plus, Wallet,
   Receipt, ArrowDownLeft, Link2, Check, Clock, AlertTriangle, ChevronDown,
+  Sparkles, Upload,
   type LucideIcon,
 } from 'lucide-react';
 import type {
@@ -322,6 +323,10 @@ export interface LivvIncomeTabProps {
   updateInstallment: (id: string, updates: any) => Promise<unknown>;
   openIncomeForm: () => void;
   canCreate: boolean;
+  /** Optional: open the AI assistant (file upload / Excel import). */
+  onOpenAIAssistant?: () => void;
+  /** Optional: open the AI chat. The empty state CTA passes a seed phrase. */
+  onOpenAIChat?: (seed?: string) => void;
 }
 
 export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
@@ -335,6 +340,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   projectTasksCache, fetchProjectTasks,
   openEditIncome, handleDeleteIncome, handleMarkInstallmentPaid, updateInstallment,
   openIncomeForm, canCreate,
+  onOpenAIAssistant, onOpenAIChat,
 }) => {
   const filterCounts = {
     all: incomes.length,
@@ -402,9 +408,26 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         <StateBlock
           icon={ArrowDownLeft}
           title={incomeSearch ? 'No matches.' : 'No income recorded yet.'}
-          subtitle={incomeSearch ? 'Try clearing filters.' : 'Click "New income" to log your first one.'}
+          subtitle={
+            incomeSearch
+              ? 'Try clearing filters.'
+              : 'Add your first invoice manually, ask the AI to log it for you, or drop a CSV to bulk-import.'
+          }
           cta={!incomeSearch && canCreate && (
-            <ActionButton icon={<Plus size={13} />} label="New income" variant="primary" onClick={openIncomeForm} />
+            <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <ActionButton icon={<Plus size={13} />} label="Add first invoice" variant="primary" onClick={openIncomeForm} />
+              {onOpenAIChat && (
+                <ActionButton
+                  icon={<Sparkles size={13} />}
+                  label="Add with AI"
+                  variant="gold"
+                  onClick={() => onOpenAIChat('Crea una factura de $5,000 a Acme con vencimiento en 15 días')}
+                />
+              )}
+              {onOpenAIAssistant && (
+                <ActionButton icon={<Upload size={13} />} label="Import CSV / Excel" variant="ghost" onClick={onOpenAIAssistant} />
+              )}
+            </div>
           )}
         />
       ) : (
@@ -595,6 +618,10 @@ export interface LivvExpenseTabProps {
   openEditExpense: (exp: ExpenseEntry) => void;
   handleDeleteExpense: (id: string) => void;
   canCreate: boolean;
+  /** Optional: open the AI assistant (file upload / Excel import). */
+  onOpenAIAssistant?: () => void;
+  /** Optional: open the AI chat with a seed phrase. */
+  onOpenAIChat?: (seed?: string) => void;
 }
 
 export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
@@ -604,6 +631,7 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
   expenseCustomDateRange, setExpenseCustomDateRange,
   expensesLoading, expensesTimedOut, expenseCategories, monthNames, getMonthBounds,
   openExpenseForm, openEditExpense, handleDeleteExpense, canCreate,
+  onOpenAIAssistant, onOpenAIChat,
 }) => {
   const filtPaid = filteredExpenses.filter(e => e.status === 'paid').reduce((s, e) => s + e.amount, 0);
   const filtPending = filteredExpenses.filter(e => e.status === 'pending').reduce((s, e) => s + e.amount, 0);
@@ -704,9 +732,26 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
         <StateBlock
           icon={Receipt}
           title={expenseSearch || expenseCategoryFilter !== 'all' ? 'No matches.' : 'No expenses yet.'}
-          subtitle={expenseSearch || expenseCategoryFilter !== 'all' ? 'Try clearing filters.' : 'Click "New expense" to log your first one.'}
+          subtitle={
+            expenseSearch || expenseCategoryFilter !== 'all'
+              ? 'Try clearing filters.'
+              : 'Add your first expense manually, ask the AI to log it for you, or upload a receipt to extract amounts automatically.'
+          }
           cta={!expenseSearch && expenseCategoryFilter === 'all' && canCreate && (
-            <ActionButton icon={<Plus size={13} />} label="New expense" variant="primary" onClick={openExpenseForm} />
+            <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <ActionButton icon={<Plus size={13} />} label="Add expense" variant="primary" onClick={openExpenseForm} />
+              {onOpenAIChat && (
+                <ActionButton
+                  icon={<Sparkles size={13} />}
+                  label="Add with AI"
+                  variant="gold"
+                  onClick={() => onOpenAIChat('Anota un gasto de $120 en Software por Figma')}
+                />
+              )}
+              {onOpenAIAssistant && (
+                <ActionButton icon={<Upload size={13} />} label="Upload receipt" variant="ghost" onClick={onOpenAIAssistant} />
+              )}
+            </div>
           )}
         />
       ) : (
@@ -815,6 +860,8 @@ export interface LivvBudgetsTabProps {
   openEditBudget: (b: Budget) => void;
   handleDeleteBudget: (id: string) => void;
   canCreate: boolean;
+  /** Optional: open the AI chat with a seed phrase for budget creation. */
+  onOpenAIChat?: (seed?: string) => void;
 }
 
 export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
@@ -826,6 +873,7 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
   budgetSpending, expenses,
   openBudgetForm, openEditBudget, handleDeleteBudget,
   canCreate,
+  onOpenAIChat,
 }) => {
   const remaining = totalAllocated - totalBudgetSpent;
   return (
@@ -869,9 +917,23 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
         <StateBlock
           icon={Wallet}
           title={budgets.length === 0 ? 'No budgets yet.' : 'No budgets match this filter.'}
-          subtitle="Set caps per category to track spending against allocated funds."
+          subtitle={
+            budgets.length === 0
+              ? 'Set caps per category and we\'ll warn you before you hit the limit. Start with the categories you spend most on.'
+              : 'Try clearing the filter or pick another category.'
+          }
           cta={budgets.length === 0 && canCreate && (
-            <ActionButton icon={<Plus size={13} />} label="Create budget" variant="primary" onClick={openBudgetForm} />
+            <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <ActionButton icon={<Plus size={13} />} label="Create first budget" variant="primary" onClick={openBudgetForm} />
+              {onOpenAIChat && (
+                <ActionButton
+                  icon={<Sparkles size={13} />}
+                  label="Suggest budgets"
+                  variant="gold"
+                  onClick={() => onOpenAIChat('Sugerí budgets razonables basados en mi historial de gastos de los últimos 3 meses')}
+                />
+              )}
+            </div>
           )}
         />
       ) : (
