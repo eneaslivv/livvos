@@ -130,7 +130,12 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const sharePopoverRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showPagesSidebar, setShowPagesSidebar] = useState(true);
+  // Pages sidebar defaults open on desktop only — on mobile a 224px pane
+  // would crowd the editor. The user can still toggle it via the menu
+  // button in the top bar.
+  const [showPagesSidebar, setShowPagesSidebar] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+  );
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [tabs, setTabs] = useState<DocTab[]>(() => parseTabs(doc?.content));
@@ -882,10 +887,21 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       <DocumentToolbar editor={editor} onImageUpload={uploadImage} />
 
       {/* Content area */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Pages sidebar (left) */}
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {/* Mobile backdrop — clicking it closes the pages sidebar so it
+            doesn't trap focus on small screens. Desktop ignores this
+            (md:hidden). */}
         {showPagesSidebar && (
-          <div className="w-56 border-r border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-y-auto shrink-0 flex flex-col">
+          <button
+            type="button"
+            aria-label="Close pages panel"
+            onClick={() => setShowPagesSidebar(false)}
+            className="md:hidden absolute inset-0 z-10 bg-black/30"
+          />
+        )}
+        {/* Pages sidebar (left) — overlays on mobile, pushes on desktop. */}
+        {showPagesSidebar && (
+          <div className="w-56 border-r border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900 md:bg-zinc-50/50 md:dark:bg-zinc-900/50 overflow-y-auto shrink-0 flex flex-col absolute md:relative inset-y-0 left-0 z-20 md:z-auto shadow-xl md:shadow-none">
             <div className="px-3 py-2.5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/60">
               <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Pages</span>
               <button

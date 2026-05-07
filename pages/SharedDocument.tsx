@@ -49,6 +49,11 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
   const [doc, setDoc] = useState<SharedDoc | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // True once the editor has actually mounted the document content. We
+  // delay revealing the body until this flips so the user doesn't see a
+  // brief blank-editor flash between RPC-resolved (loading=false) and
+  // TipTap actually applying the content.
+  const [contentReady, setContentReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(false);
   const { comments, loading: commentsLoading, addComment } = useDocumentComments(token);
@@ -117,7 +122,10 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
     content: null,
     editorProps: {
       attributes: {
-        class: 'prose prose-zinc dark:prose-invert max-w-none outline-none px-8 py-6',
+        // Tighter horizontal padding on mobile so long lines and code
+        // blocks don't get cropped. Prose-base on small screens reads
+        // more naturally when the column is narrow.
+        class: 'prose prose-sm sm:prose-base prose-zinc dark:prose-invert max-w-none outline-none px-3 sm:px-8 py-4 sm:py-6',
       },
     },
   });
@@ -144,13 +152,21 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
   // Set the editor content from the ACTIVE TAB. Critical: docs are saved
   // as `{ tabs: [...] }` not as a raw TipTap doc, so the viewer must unwrap
   // before handing to `setContent`. Otherwise the editor stays empty.
+  // Flip `contentReady` true after the first successful setContent so the
+  // skeleton swaps for the real body without a flash.
   useEffect(() => {
     if (!editor || !activeTab) return;
     const c = activeTab.content;
-    if (c && typeof c === 'object' && Object.keys(c).length > 0) {
-      editor.commands.setContent(c as any);
-    } else {
-      editor.commands.setContent(EMPTY_DOC as any);
+    try {
+      if (c && typeof c === 'object' && Object.keys(c).length > 0) {
+        editor.commands.setContent(c as any);
+      } else {
+        editor.commands.setContent(EMPTY_DOC as any);
+      }
+    } finally {
+      // Defer one frame so React paints the editor's new state before
+      // we swap from skeleton to real content — no FOUC, no jump.
+      requestAnimationFrame(() => setContentReady(true));
     }
   }, [editor, activeTab]);
 
@@ -294,27 +310,31 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
       `}</style>
 
       {/* Header */}
-      <div className="border-b border-zinc-100 dark:border-zinc-800/60 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-start justify-between">
-          <div>
+      <div className="border-b border-zinc-100 dark:border-zinc-800/60 px-3 sm:px-6 py-3 sm:py-4">
+        <div className="max-w-3xl mx-auto flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
                 Shared document
               </span>
             </div>
-            <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{doc.title}</h1>
-            <p className="text-xs text-zinc-400 mt-1">
+            <h1 className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100 break-words">{doc.title}</h1>
+            <p className="text-[11px] sm:text-xs text-zinc-400 mt-1">
               Last updated {new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
           <button
             onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors mt-1"
+            className="shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors mt-1"
+            aria-label="Toggle comments"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            {comments.length > 0 ? `${comments.length}` : 'Comments'}
+            <span className="hidden sm:inline">
+              {comments.length > 0 ? `${comments.length}` : 'Comments'}
+            </span>
+            {comments.length > 0 && <span className="sm:hidden">{comments.length}</span>}
           </button>
         </div>
       </div>
@@ -345,17 +365,33 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
         </div>
       )}
 
-      <div className="flex">
-        {/* Content */}
-        <div className={`flex-1 transition-all duration-200 ${showComments ? 'max-w-3xl' : 'max-w-3xl mx-auto'}`} style={showComments ? { marginLeft: 'auto', marginRight: '0' } : {}}>
-          <div className="py-8 px-4">
+      <div className="flex flex-col md:flex-row">
+        {/* Content — keep mounted (editor needs the DOM ref) but hide
+            visually until contentReady so we never flash an empty body.
+            Skeleton sits absolute over it and fades out on ready. */}
+        <div className={`flex-1 transition-all duration-200 relative ${showComments ? 'md:max-w-3xl' : 'max-w-3xl mx-auto'}`} style={showComments && typeof window !== 'undefined' && window.innerWidth >= 768 ? { marginLeft: 'auto', marginRight: '0' } : {}}>
+          <div className={`py-6 sm:py-8 px-4 sm:px-6 transition-opacity duration-200 ${contentReady ? 'opacity-100' : 'opacity-0'}`}>
             <EditorContent editor={editor} />
           </div>
+          {!contentReady && (
+            <div className="absolute inset-0 px-4 sm:px-6 py-6 sm:py-8 pointer-events-none animate-pulse">
+              <div className="max-w-none space-y-3">
+                <div className="h-7 w-2/3 rounded bg-zinc-200/70 dark:bg-zinc-800/70" />
+                <div className="h-3 w-full rounded bg-zinc-200/60 dark:bg-zinc-800/60" />
+                <div className="h-3 w-11/12 rounded bg-zinc-200/60 dark:bg-zinc-800/60" />
+                <div className="h-3 w-3/4 rounded bg-zinc-200/60 dark:bg-zinc-800/60" />
+                <div className="h-5 w-1/3 rounded bg-zinc-200/70 dark:bg-zinc-800/70 mt-6" />
+                <div className="h-3 w-full rounded bg-zinc-200/60 dark:bg-zinc-800/60" />
+                <div className="h-3 w-5/6 rounded bg-zinc-200/60 dark:bg-zinc-800/60" />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Comments sidebar */}
+        {/* Comments sidebar — full-width bottom sheet on mobile, fixed
+            sidebar on md+. */}
         {showComments && (
-          <div className="w-80 border-l border-zinc-100 dark:border-zinc-800/60 flex flex-col h-[calc(100vh-73px)] sticky top-[73px]">
+          <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-zinc-100 dark:border-zinc-800/60 flex flex-col md:h-[calc(100vh-73px)] md:sticky md:top-[73px]">
             <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
