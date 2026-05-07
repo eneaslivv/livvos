@@ -3,6 +3,7 @@ import { Icons } from '../components/ui/Icons';
 import { supabase } from '../lib/supabase';
 import { defaultBranding, TenantBranding, mergeBranding } from '../config/whitelabel';
 import { useTenant } from '../context/TenantContext';
+import { SharedTeamManager } from '../components/config/SharedTeamManager';
 
 interface TenantConfig {
     id: string;
@@ -281,6 +282,10 @@ export const TenantSettings: React.FC = () => {
                     </div>
                 </div>
             </section>
+
+            {/* Shared team across connected agencies. Only renders content
+                when the current tenant has accepted child connections. */}
+            <SharedTeamManager />
 
             {/* Website URL Section */}
             <section className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">

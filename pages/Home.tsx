@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
 import { TaskDetailPanel } from '../components/calendar/TaskDetailPanel';
-import { Status, PageView } from '../types';
+import { MyWorkAcrossAgencies } from '../components/home/MyWorkAcrossAgencies';
+import { Status, PageView, NavParams } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
 import { supabase } from '../lib/supabase';
 import { useRBAC } from '../context/RBACContext';
@@ -39,7 +40,9 @@ const FOCUS_MODES = [
 ];
 
 interface HomeProps {
-    onNavigate: (page: PageView) => void;
+    /** Accepts optional NavParams so widgets can deep-link (e.g. open a
+     *  specific task on Calendar without reloading). */
+    onNavigate: (page: PageView, params?: NavParams) => void;
 }
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
@@ -795,6 +798,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
                 {/* Left Column */}
                 <div className="xl:col-span-8 space-y-6">
+
+                    {/* Cross-tenant tasks — only renders when the user has
+                        memberships in more than one workspace OR has tasks
+                        across them. Self-hides otherwise. */}
+                    <MyWorkAcrossAgencies onNavigate={onNavigate} />
 
                     {/* Today's Focus */}
                     {(() => {
