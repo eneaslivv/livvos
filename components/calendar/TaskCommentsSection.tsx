@@ -17,6 +17,23 @@ interface TaskCommentsSectionProps {
   taskTitle?: string;
   taskOwnerId?: string;
   taskAssigneeId?: string;
+  /** When provided, the component checks `project_agency_shares` to
+   *  detect cross-tenant collaboration and renders explicit privacy
+   *  hints — e.g. "Internal is private to your team, the partner
+   *  agency can't see it." */
+  taskProjectId?: string | null;
+  /** The task's owning tenant — used to figure out whether the current
+   *  user is on the OWNER side or the partner-agency side of a shared
+   *  project. Defaults to currentTenant.id when omitted. */
+  taskTenantId?: string | null;
+}
+
+interface ProjectShareInfo {
+  isShared: boolean;
+  /** If we're viewing from the partner side, the owner's tenant name. */
+  ownerName: string | null;
+  /** If we're viewing from the owner side, the names of partner agencies. */
+  partnerNames: string[];
 }
 
 const formatTime = (dateStr: string): string => {
@@ -45,7 +62,7 @@ const groupByDate = (comments: TaskComment[]): Map<string, TaskComment[]> => {
   return groups;
 };
 
-export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId, taskTitle, taskOwnerId, taskAssigneeId }) => {
+export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId, taskTitle, taskOwnerId, taskAssigneeId, taskProjectId, taskTenantId }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const { members } = useTeam();
@@ -59,6 +76,54 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Detect cross-tenant project share so we can render the right privacy
+  // hint. We resolve from the partner side ("you're seeing this from
+  // <agency> — Internal comments by <owner> are hidden") AND from the
+  // owner side ("Internal stays private; Client is visible to <agency>").
+  const [shareInfo, setShareInfo] = useState<ProjectShareInfo>({ isShared: false, ownerName: null, partnerNames: [] });
+  useEffect(() => {
+    if (!taskProjectId || !currentTenant?.id) {
+      setShareInfo({ isShared: false, ownerName: null, partnerNames: [] });
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('project_agency_shares')
+        .select('owner_tenant_id, shared_with_tenant_id, owner:tenants!project_agency_shares_owner_tenant_id_fkey(name), partner:tenants!project_agency_shares_shared_with_tenant_id_fkey(name)')
+        .eq('project_id', taskProjectId);
+      if (cancelled) return;
+      const rows = (data as any[]) || [];
+      if (rows.length === 0) {
+        setShareInfo({ isShared: false, ownerName: null, partnerNames: [] });
+        return;
+      }
+      const viewingAsOwner = !!rows.find(r => r.owner_tenant_id === currentTenant.id);
+      if (viewingAsOwner) {
+        setShareInfo({
+          isShared: true,
+          ownerName: null,
+          partnerNames: rows.map(r => r.partner?.name).filter(Boolean) as string[],
+        });
+      } else {
+        const ownerRow = rows.find(r => r.shared_with_tenant_id === currentTenant.id);
+        setShareInfo({
+          isShared: true,
+          ownerName: (ownerRow?.owner?.name as string) || null,
+          partnerNames: [],
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [taskProjectId, currentTenant?.id]);
+
+  // The partner-agency side can't post Internal comments (RLS blocks
+  // it), so collapse the Internal tab and force them onto Client.
+  const isPartnerView = shareInfo.isShared && !!shareInfo.ownerName;
+  useEffect(() => {
+    if (isPartnerView && activeTab === 'internal') setActiveTab('client');
+  }, [isPartnerView, activeTab]);
 
   // Re-evaluate mention state any time the input or selection moves.
   const refreshMentionState = useCallback(() => {
@@ -155,16 +220,23 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
           <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide">Comments</span>
         </div>
         <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-0.5">
-          <button
-            onClick={() => setActiveTab('internal')}
-            className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
-              activeTab === 'internal'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-            }`}
-          >
-            Internal{internalCount > 0 ? ` (${internalCount})` : ''}
-          </button>
+          {/* Internal tab — hidden for partner-agency viewers (RLS blocks
+              their access to is_internal=true rows anyway). */}
+          {!isPartnerView && (
+            <button
+              onClick={() => setActiveTab('internal')}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                activeTab === 'internal'
+                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+              }`}
+              title={shareInfo.isShared && shareInfo.partnerNames.length > 0
+                ? `Internal: only your team. ${shareInfo.partnerNames.join(', ')} won't see these.`
+                : 'Internal-only comments. Not visible to clients in the portal.'}
+            >
+              Internal{internalCount > 0 ? ` (${internalCount})` : ''}
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('client')}
             className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
@@ -172,11 +244,44 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
                 ? 'bg-blue-500 text-white shadow-sm'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
+            title={shareInfo.isShared && shareInfo.partnerNames.length > 0
+              ? `Visible to clients in the portal AND to ${shareInfo.partnerNames.join(', ')}.`
+              : 'Visible to clients in the portal.'}
           >
             Client{clientCount > 0 ? ` (${clientCount})` : ''}
           </button>
         </div>
       </div>
+
+      {/* Privacy hint banner — only on shared projects so the user knows
+          who's reading what. Differentiates owner-side (Internal stays
+          private) from partner-side (Internal is hidden by the owner). */}
+      {shareInfo.isShared && (
+        <div className={`mb-2.5 px-2.5 py-1.5 rounded-md text-[11px] leading-snug ${
+          activeTab === 'internal'
+            ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30'
+            : 'bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 border border-blue-200/70 dark:border-blue-500/30'
+        }`}>
+          {isPartnerView ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Icons.Briefcase size={11} />
+              You're viewing this from the partner side. Internal-only comments by{' '}
+              <span className="font-semibold">{shareInfo.ownerName}</span> are kept private to their team.
+            </span>
+          ) : activeTab === 'internal' ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Icons.Lock size={11} />
+              Private to your team — <span className="font-semibold">{shareInfo.partnerNames.join(', ')}</span> can't see these.
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <Icons.Globe size={11} />
+              Visible to clients in the portal AND to{' '}
+              <span className="font-semibold">{shareInfo.partnerNames.join(', ')}</span> — write internal notes in the Internal tab.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Comments list */}
       <div

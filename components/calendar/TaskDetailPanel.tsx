@@ -1082,7 +1082,14 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
             <AnimatePresence initial={false}>
             {!collapsed.comments && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-                <TaskCommentsSection taskId={selectedTask.id} taskTitle={selectedTask.title} taskOwnerId={selectedTask.owner_id} taskAssigneeId={selectedTask.assignee_id} />
+                <TaskCommentsSection
+                  taskId={selectedTask.id}
+                  taskTitle={selectedTask.title}
+                  taskOwnerId={selectedTask.owner_id}
+                  taskAssigneeId={selectedTask.assignee_id}
+                  taskProjectId={(selectedTask as any).project_id || null}
+                  taskTenantId={(selectedTask as any).tenant_id || null}
+                />
               </motion.div>
             )}
             </AnimatePresence>
