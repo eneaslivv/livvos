@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -9,6 +9,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
 import { supabase } from '../lib/supabase';
 import { useDocumentComments, type DocumentComment } from '../hooks/useDocumentComments';
 
@@ -52,10 +53,17 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
   const [showComments, setShowComments] = useState(false);
   const { comments, loading: commentsLoading, addComment } = useDocumentComments(token);
 
-  // Resolve the page list each render — stable reference because content
-  // only changes when the doc reloads.
-  const tabs = doc ? parseTabs(doc.content) : [];
-  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
+  // Resolve the page list with a stable reference — recomputing only when
+  // the doc itself changes, not on every render. Without this, every
+  // render produced a fresh `tabs` array and a fresh `activeTab` object,
+  // which made the content-set effect run on every render and could
+  // race with the editor's own state updates → blank viewer in some
+  // browsers.
+  const tabs = useMemo(() => (doc ? parseTabs(doc.content) : []), [doc]);
+  const activeTab = useMemo(
+    () => tabs.find(t => t.id === activeTabId) || tabs[0] || null,
+    [tabs, activeTabId],
+  );
 
   // Comment form state
   const [commentName, setCommentName] = useState('');
@@ -77,6 +85,11 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
   }, []);
 
   const editor = useEditor({
+    // Keep this list in sync with the editor's extensions in
+    // components/docs/DocumentEditor.tsx — TipTap silently fails to
+    // render content nodes/marks for missing extensions, so a doc
+    // saved with Links would show blank in this viewer if Link
+    // wasn't loaded.
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       TaskList,
@@ -87,6 +100,18 @@ export const SharedDocument: React.FC<{ token: string }> = ({ token }) => {
       TableCell,
       TableHeader,
       Image.configure({ inline: false, allowBase64: true }),
+      Link.configure({
+        openOnClick: true,
+        autolink: true,
+        linkOnPaste: false,
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer nofollow',
+          class: 'text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-700 dark:hover:text-indigo-300 break-all',
+        },
+        protocols: ['http', 'https', 'mailto', 'tel'],
+        validate: (href) => /^(https?:\/\/|mailto:|tel:)/i.test(href),
+      }),
     ],
     editable: false,
     content: null,
