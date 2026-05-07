@@ -869,12 +869,67 @@ Rules — CRITICAL:
 - match_reason: 1 short sentence explaining the match. null when nothing matched.
 - NEVER invent ids. Only return ids that literally exist in the input clients[]/projects[] arrays.
 - No markdown fences. Plain JSON only.`
+        : type === 'comm_reply_compose'
+        ? `You are an assistant helping a creative agency reply to a client/lead message in their inbox. The user can ask you to: improve the writing of their draft, translate it, rewrite in a different tone, or generate a fresh draft from scratch — all grounded in the inbound message + optional client/project context.
+
+Input shape:
+{
+  "action": "improve" | "translate" | "rewrite_tone" | "generate",
+  "draft": "current text the user typed (may be empty for 'generate')",
+  "inbound_message": {
+    "platform": "gmail" | "slack" | "whatsapp",
+    "sender_name": "...",
+    "sender_email": "...",      // optional
+    "subject": "...",           // gmail only
+    "body": "the message we're replying to",
+    "received_at": "ISO date"
+  } | null,
+  "client_context": {            // optional, present when message has matched_client
+    "name": "Acme Co",
+    "email": "person@acme.com",
+    "notes": "free-form CRM notes about this client",
+    "recent_messages": [          // up to 3 prior messages from this sender
+      { "from": "name", "body": "snippet", "sent_at": "ISO" }
+    ]
+  } | null,
+  "project_context": {           // optional, when user explicitly attaches a project
+    "title": "Mobilita rebrand",
+    "description": "Full brand redesign for Q3 launch",
+    "status": "Active",
+    "deadline": "YYYY-MM-DD",
+    "open_tasks": [{ "title": "...", "status": "...", "due_date": "..." }]
+  } | null,
+  "params": {                    // action-specific knobs
+    "target_language": "en" | "es" | "pt" | "fr" | ...   // for action=translate
+    "tone": "formal" | "friendly" | "concise" | "apologetic" | "enthusiastic" | "firm",  // for rewrite_tone or generate
+    "custom_instructions": "..." // optional free-form
+  }
+}
+
+Return ONLY valid JSON with this shape:
+{
+  "reply": "the new draft text — ONLY the reply body, no greeting/sign-off unless they were in the original draft, no subject line",
+  "explanation": "1 sentence telling the user what you changed (e.g. 'Fixed two typos and tightened the second paragraph' or 'Translated to English with formal tone')",
+  "language": "es" | "en" | "pt" | "fr" | "other"   // detected language of the OUTPUT
+}
+
+Rules — CRITICAL:
+- For "improve": fix grammar, typos, clarity, awkward phrasing. PRESERVE the user's voice and intent. Don't rewrite from scratch — just polish. If the draft is already good, return it nearly unchanged and explain "minor polish".
+- For "translate": translate the draft to params.target_language. Preserve formatting (line breaks, bullet points). Keep proper nouns (people, companies, products) untranslated. Match the formality of the original.
+- For "rewrite_tone": same content, different voice. formal=respectful + structured. friendly=warm + casual but professional. concise=cut to the essentials, no filler. apologetic=acknowledge + own + propose fix. enthusiastic=warm + energetic, never over-the-top. firm=clear boundaries, polite but non-negotiable.
+- For "generate": write a fresh reply from scratch based on inbound_message + client/project context. 2-5 sentences. Use first-person plural ("we"/"nosotros"). Polite + concrete. NEVER invent commitments ("we ship Tuesday") — propose a next step or ask a clarifying question instead.
+- Use client_context.notes + recent_messages to maintain consistency with prior conversation tone if present. Reference the client's name only if natural.
+- Use project_context to make replies SPECIFIC (mention the project name when relevant; reference deadline only if it's actually pressing).
+- Match the language of the inbound_message (or params.target_language if action=translate). If no inbound_message, match the draft's language.
+- The reply MUST be ONLY the body. No "Hi X," and no "Best, Y" unless the user's draft already had them.
+- Never reproduce sensitive info verbatim from client notes (no API keys, passwords, internal-only details). Summarize when relevant.
+- No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : type === 'comm_classify' ? 1200 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : type === 'comm_classify' ? 0.2 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : type === 'comm_classify' ? 1200 : type === 'comm_reply_compose' ? 1500 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : type === 'comm_classify' ? 0.2 : type === 'comm_reply_compose' ? 0.4 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
@@ -1101,7 +1156,7 @@ Rules — CRITICAL:
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-    } else if (type === 'finance_chat' || type === 'advisor_chat_actions') {
+    } else if (type === 'finance_chat' || type === 'advisor_chat_actions' || type === 'comm_reply_compose') {
       // Same salvage logic as advisor_chat for the reply field; actions[] stays
       // as-is. We don't reject when actions is missing — many turns are
       // pure-Q&A and shouldn't carry actions. Covers BOTH finance_chat and

@@ -27,6 +27,7 @@ const CACHE_TTL: Record<string, number> = {
   content_strategy_suggest: 30 * 60 * 1000, // 30 min — same brain produces same suggestions
   member_weekly_summary: 15 * 60 * 1000,    // 15 min — manager spam-clicking shouldn't burn tokens
   comm_classify: 0,                         // no cache — every message is unique
+  comm_reply_compose: 0,                    // no cache — every compose request is unique
 }
 
 const CACHE_VERSION = 'ai_v2'
@@ -944,6 +945,68 @@ export const classifyCommMessage = <T = unknown>(input: string, profile?: LiveAI
        && typeof (r as any).summary === 'string',
     profile,
   )
+
+// ─── Communications reply composer ────────────────────────────────
+// Powers the AI toolbar in the Communications Hub reply box. The same
+// endpoint serves four actions:
+//   - improve       → fix grammar/clarity, keep meaning + language
+//   - translate     → translate the draft to params.target_language
+//   - rewrite_tone  → rewrite using params.tone (formal|friendly|concise|...)
+//   - generate      → write a fresh reply from scratch using context
+// Input is a JSON string with the action, the current draft, the inbound
+// message, and optional client/project context. Output: { reply, explanation, language }
+
+export type ComposeCommReplyAction = 'improve' | 'translate' | 'rewrite_tone' | 'generate'
+
+export interface ComposeCommReplyInput {
+  action: ComposeCommReplyAction
+  draft?: string
+  inbound_message?: {
+    platform?: 'gmail' | 'slack' | 'whatsapp' | string
+    sender_name?: string
+    sender_email?: string
+    subject?: string
+    body?: string
+    received_at?: string
+  } | null
+  client_context?: {
+    name?: string
+    email?: string
+    notes?: string
+    recent_messages?: { from: string; body: string; sent_at?: string }[]
+  } | null
+  project_context?: {
+    title?: string
+    description?: string
+    status?: string
+    deadline?: string
+    open_tasks?: { title: string; status?: string; due_date?: string | null }[]
+  } | null
+  params?: {
+    target_language?: string  // ISO code or human name (e.g. 'en', 'español')
+    tone?: string             // 'formal' | 'friendly' | 'concise' | 'apologetic' | ...
+    custom_instructions?: string
+  }
+}
+
+export interface ComposeCommReplyResult {
+  reply: string
+  explanation: string
+  language: 'es' | 'en' | 'pt' | 'fr' | 'other' | string
+}
+
+export const composeCommReply = (
+  input: ComposeCommReplyInput,
+  profile?: LiveAIProfile,
+): Promise<ComposeCommReplyResult> => {
+  const payload = JSON.stringify(input)
+  return callGemini<ComposeCommReplyResult>(
+    'comm_reply_compose',
+    payload,
+    (r) => !!r && typeof (r as any).reply === 'string',
+    profile,
+  )
+}
 
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {

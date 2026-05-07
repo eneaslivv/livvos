@@ -18,14 +18,18 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useSupabase } from '../hooks/useSupabase';
 import { useClients } from '../hooks/useClients';
+import { useProjects } from '../context/ProjectsContext';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
+import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
 import {
   INTENT_LABELS, STATUS_LABELS,
   type CommunicationMessage, type IntegrationToken,
   type SlackMonitoredChannel, type AIClassification,
   type MessageStatus,
 } from '../types/communications';
+import type { Client } from '../context/ClientsContext';
+import type { Project } from '../context/ProjectsContext';
 import {
   getGmailConnectUrl, syncGmail, htmlToText, previewFromBody,
 } from '../lib/communications/gmail';
@@ -44,6 +48,7 @@ export const Communications: React.FC = () => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const { clients } = useClients();
+  const { projects } = useProjects();
   const tenantReady = !!currentTenant?.id;
 
   // Connect-flow status banner — read on mount from ?connect=… (set by the
@@ -144,6 +149,8 @@ export const Communications: React.FC = () => {
           loading={msgsLoading}
           tokens={tokens || []}
           clients={clients || []}
+          allClients={(clients as Client[]) || []}
+          projects={projects || []}
           onMessageUpdate={refreshMessages}
         />
       ) : (
@@ -168,10 +175,12 @@ interface InboxViewProps {
   loading: boolean;
   tokens: IntegrationToken[];
   clients: Array<{ id: string; name?: string | null; company?: string | null }>;
+  allClients: Client[];
+  projects: Project[];
   onMessageUpdate: () => void;
 }
 
-const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, onMessageUpdate }) => {
+const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, allClients, projects, onMessageUpdate }) => {
   const [filter, setFilter] = useState<Filter>('pending');
   const [clientFilter, setClientFilter] = useState<string>('all'); // client_id or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -321,7 +330,14 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
             </div>
           </div>
         ) : (
-          <MessageDetail key={selected.id} msg={selected} onAction={onMessageUpdate} />
+          <MessageDetail
+            key={selected.id}
+            msg={selected}
+            allClients={allClients}
+            projects={projects}
+            allMessages={messages}
+            onAction={onMessageUpdate}
+          />
         )}
       </div>
     </div>
@@ -420,13 +436,28 @@ const MessageCard: React.FC<{
 // ────────────────────────────────────────────────────────────────────────
 //  MESSAGE DETAIL (right panel)
 // ────────────────────────────────────────────────────────────────────────
-const MessageDetail: React.FC<{ msg: CommunicationMessage; onAction: () => void }> = ({ msg, onAction }) => {
+interface MessageDetailProps {
+  msg: CommunicationMessage;
+  allClients: Client[];
+  projects: Project[];
+  allMessages: CommunicationMessage[];
+  onAction: () => void;
+}
+
+const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects, allMessages, onAction }) => {
   const cls: AIClassification | null = msg.ai_classification;
   const [reply, setReply] = useState(cls?.suggested_reply || '');
   const [editedFromDraft, setEditedFromDraft] = useState(false);
   const [sending, setSending] = useState(false);
   const [showAi, setShowAi] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ── AI compose toolbar state ────────────────────────────────────
+  const [aiBusy, setAiBusy] = useState<ComposeCommReplyAction | null>(null);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<null | 'translate' | 'tone' | 'project'>(null);
+  const [pinnedProjectId, setPinnedProjectId] = useState<string | null>(msg.matched_project_id);
+  const [projectQuery, setProjectQuery] = useState('');
 
   // When the user picks a different message, reset the composer.
   const lastMsgRef = useRef<string>(msg.id);
@@ -436,7 +467,98 @@ const MessageDetail: React.FC<{ msg: CommunicationMessage; onAction: () => void 
     setReply(cls?.suggested_reply || '');
     setEditedFromDraft(false);
     setError(null);
-  }, [msg.id, cls?.suggested_reply]);
+    setAiNote(null);
+    setOpenMenu(null);
+    setPinnedProjectId(msg.matched_project_id);
+    setProjectQuery('');
+  }, [msg.id, cls?.suggested_reply, msg.matched_project_id]);
+
+  // ── Resolve client & project context for the AI ─────────────────
+  // Compact, fast: client basics + last 3 messages from same client/sender
+  // + selected project basics. Cap text fields so the prompt stays small.
+  const matchedClient: Client | null = useMemo(() => {
+    if (msg.matched_client_id) {
+      return allClients.find(c => c.id === msg.matched_client_id) || null;
+    }
+    if (msg.from_email) {
+      const lower = msg.from_email.toLowerCase();
+      return allClients.find(c => c.email?.toLowerCase() === lower) || null;
+    }
+    return null;
+  }, [msg.matched_client_id, msg.from_email, allClients]);
+
+  const recentSenderMessages = useMemo(() => {
+    const sameSender = allMessages
+      .filter(m => m.id !== msg.id && (
+        (msg.matched_client_id && m.matched_client_id === msg.matched_client_id) ||
+        (msg.from_email && m.from_email && m.from_email.toLowerCase() === msg.from_email.toLowerCase())
+      ))
+      .sort((a, b) => +new Date(b.received_at) - +new Date(a.received_at))
+      .slice(0, 3);
+    return sameSender.map(m => ({
+      from: m.from_name || m.from_email || 'unknown',
+      body: (m.body_text || '').slice(0, 280),
+      sent_at: m.received_at,
+    }));
+  }, [allMessages, msg.id, msg.matched_client_id, msg.from_email]);
+
+  const pinnedProject: Project | null = useMemo(
+    () => (pinnedProjectId ? projects.find(p => p.id === pinnedProjectId) || null : null),
+    [pinnedProjectId, projects],
+  );
+
+  const projectMatches = useMemo(() => {
+    const q = projectQuery.trim().toLowerCase();
+    const list = q
+      ? projects.filter(p => p.title.toLowerCase().includes(q) || (p.clientName || '').toLowerCase().includes(q))
+      : projects.slice(0, 8);
+    return list.slice(0, 8);
+  }, [projects, projectQuery]);
+
+  // ── AI compose dispatcher ───────────────────────────────────────
+  const runAI = useCallback(async (
+    action: ComposeCommReplyAction,
+    extra?: { target_language?: string; tone?: string },
+  ) => {
+    setAiBusy(action);
+    setAiNote(null);
+    setError(null);
+    try {
+      const result = await composeCommReply({
+        action,
+        draft: reply,
+        inbound_message: {
+          platform: msg.platform,
+          sender_name: msg.from_name || undefined,
+          sender_email: msg.from_email || undefined,
+          subject: msg.subject || undefined,
+          body: (msg.body_text || '').slice(0, 4000),
+          received_at: msg.received_at,
+        },
+        client_context: matchedClient ? {
+          name: matchedClient.name,
+          email: matchedClient.email,
+          notes: (matchedClient.notes || '').slice(0, 600),
+          recent_messages: recentSenderMessages,
+        } : null,
+        project_context: pinnedProject ? {
+          title: pinnedProject.title,
+          description: (pinnedProject.description || '').slice(0, 600),
+          status: pinnedProject.status,
+          deadline: pinnedProject.deadline,
+        } : null,
+        params: extra,
+      });
+      setReply(result.reply);
+      setEditedFromDraft(true);
+      setAiNote(result.explanation || 'Done.');
+      setOpenMenu(null);
+    } catch (err) {
+      setError((err as Error).message || 'AI request failed');
+    } finally {
+      setAiBusy(null);
+    }
+  }, [reply, msg, matchedClient, recentSenderMessages, pinnedProject]);
 
   const handleSend = async () => {
     if (!reply.trim()) return;
@@ -623,38 +745,197 @@ const MessageDetail: React.FC<{ msg: CommunicationMessage; onAction: () => void 
 
         {/* Reply composer */}
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">Tu respuesta</span>
-            {cls?.suggested_reply && reply !== cls.suggested_reply && (
-              <button
-                onClick={() => { setReply(cls.suggested_reply); setEditedFromDraft(false); }}
-                className="text-[10px] text-zinc-400 hover:text-amber-600"
-              >
-                Restaurar sugerencia AI
-              </button>
-            )}
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">Your reply</span>
+            <div className="flex items-center gap-2">
+              {/* Context chips */}
+              {matchedClient && (
+                <span
+                  title={matchedClient.notes ? `Notes: ${matchedClient.notes.slice(0, 120)}` : 'Client context loaded'}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 inline-flex items-center gap-1"
+                >
+                  <Icons.Users size={9} /> {matchedClient.name}
+                  {recentSenderMessages.length > 0 && (
+                    <span className="opacity-60">· {recentSenderMessages.length} prev</span>
+                  )}
+                </span>
+              )}
+              {pinnedProject && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-200/50 inline-flex items-center gap-1">
+                  <Icons.Briefcase size={9} /> {pinnedProject.title}
+                  <button
+                    onClick={() => setPinnedProjectId(null)}
+                    className="ml-0.5 -mr-0.5 hover:text-rose-500"
+                    title="Unpin project"
+                  >
+                    <Icons.X size={9} />
+                  </button>
+                </span>
+              )}
+              {cls?.suggested_reply && reply !== cls.suggested_reply && (
+                <button
+                  onClick={() => { setReply(cls.suggested_reply); setEditedFromDraft(false); }}
+                  className="text-[10px] text-zinc-400 hover:text-amber-600"
+                >
+                  Restore AI suggestion
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* AI toolbar */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <button
+              onClick={() => runAI('improve')}
+              disabled={!!aiBusy || !reply.trim()}
+              title="Fix grammar, spelling and clarity. Keeps language and meaning."
+              className="px-2 py-1 rounded-md text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-amber-300 hover:text-amber-700 disabled:opacity-40 inline-flex items-center gap-1"
+            >
+              {aiBusy === 'improve'
+                ? <Icons.Loader size={10} className="animate-spin" />
+                : <Icons.Sparkles size={10} />}
+              Improve
+            </button>
+
+            {/* Translate dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenMenu(openMenu === 'translate' ? null : 'translate')}
+                disabled={!!aiBusy || !reply.trim()}
+                className="px-2 py-1 rounded-md text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-amber-300 hover:text-amber-700 disabled:opacity-40 inline-flex items-center gap-1"
+              >
+                {aiBusy === 'translate'
+                  ? <Icons.Loader size={10} className="animate-spin" />
+                  : <Icons.Globe size={10} />}
+                Translate <Icons.ChevronDown size={9} />
+              </button>
+              {openMenu === 'translate' && (
+                <div className="absolute z-20 right-0 mt-1 w-44 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-1">
+                  {[
+                    { code: 'en', label: 'English' },
+                    { code: 'es', label: 'Español' },
+                    { code: 'pt', label: 'Português' },
+                    { code: 'fr', label: 'Français' },
+                    { code: 'de', label: 'Deutsch' },
+                    { code: 'it', label: 'Italiano' },
+                  ].map(opt => (
+                    <button
+                      key={opt.code}
+                      onClick={() => runAI('translate', { target_language: opt.code })}
+                      className="w-full text-left px-2 py-1 text-[11px] rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Tone dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenMenu(openMenu === 'tone' ? null : 'tone')}
+                disabled={!!aiBusy || !reply.trim()}
+                className="px-2 py-1 rounded-md text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-amber-300 hover:text-amber-700 disabled:opacity-40 inline-flex items-center gap-1"
+              >
+                {aiBusy === 'rewrite_tone'
+                  ? <Icons.Loader size={10} className="animate-spin" />
+                  : <Icons.Message size={10} />}
+                Tone <Icons.ChevronDown size={9} />
+              </button>
+              {openMenu === 'tone' && (
+                <div className="absolute z-20 right-0 mt-1 w-44 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-1">
+                  {['formal', 'friendly', 'concise', 'apologetic', 'enthusiastic', 'firm'].map(t => (
+                    <button
+                      key={t}
+                      onClick={() => runAI('rewrite_tone', { tone: t })}
+                      className="w-full text-left px-2 py-1 text-[11px] rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 capitalize"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => runAI('generate')}
+              disabled={!!aiBusy}
+              title="Generate a fresh reply from scratch using context"
+              className="px-2 py-1 rounded-md text-[10px] font-medium bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100 disabled:opacity-40 inline-flex items-center gap-1"
+            >
+              {aiBusy === 'generate'
+                ? <Icons.Loader size={10} className="animate-spin" />
+                : <Icons.Sparkles size={10} />}
+              Generate
+            </button>
+
+            <span className="flex-1" />
+
+            {/* Project context picker */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenMenu(openMenu === 'project' ? null : 'project')}
+                className="px-2 py-1 rounded-md text-[10px] font-medium bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:border-violet-400 hover:text-violet-600 inline-flex items-center gap-1"
+                title="Sync project context — the AI will use it when composing"
+              >
+                <Icons.Briefcase size={10} />
+                {pinnedProject ? 'Change project' : 'Add project context'}
+              </button>
+              {openMenu === 'project' && (
+                <div className="absolute z-20 right-0 mt-1 w-72 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-2">
+                  <input
+                    autoFocus
+                    value={projectQuery}
+                    onChange={e => setProjectQuery(e.target.value)}
+                    placeholder="Search projects…"
+                    className="w-full px-2 py-1 mb-1 text-[11px] bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded outline-none"
+                  />
+                  <div className="max-h-48 overflow-y-auto">
+                    {projectMatches.length === 0 ? (
+                      <div className="px-2 py-3 text-[11px] text-zinc-400 text-center">No projects</div>
+                    ) : projectMatches.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setPinnedProjectId(p.id); setOpenMenu(null); setProjectQuery(''); }}
+                        className="w-full text-left px-2 py-1.5 text-[11px] rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        <div className="font-medium text-zinc-800 dark:text-zinc-100 truncate">{p.title}</div>
+                        {p.clientName && <div className="text-[10px] text-zinc-500 truncate">{p.clientName}</div>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <textarea
             value={reply}
             onChange={(e) => {
               setReply(e.target.value);
               if (cls?.suggested_reply && e.target.value !== cls.suggested_reply) setEditedFromDraft(true);
             }}
-            rows={5}
-            placeholder="Escribí tu respuesta…"
+            rows={6}
+            placeholder="Write your reply or use the AI tools above…"
             className="w-full px-3 py-2 text-[13px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 resize-none"
           />
+          {aiNote && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 inline-flex items-center gap-1">
+              <Icons.Sparkles size={10} /> {aiNote}
+            </p>
+          )}
           {error && <p className="text-[11px] text-rose-500 mt-2">{error}</p>}
           <div className="flex items-center justify-between mt-2">
             <span className="text-[10px] text-zinc-400">
-              {msg.status === 'replied' ? '✓ Ya respondido' : `Enviar ${msg.platform === 'gmail' ? 'email' : 'mensaje Slack'}`}
+              {msg.status === 'replied' ? '✓ Already replied' : `Send ${msg.platform === 'gmail' ? 'email' : 'Slack message'}`}
             </span>
             <button
               onClick={handleSend}
               disabled={sending || !reply.trim() || msg.status === 'replied'}
               className="px-3 py-1.5 rounded-md text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
             >
-              {sending ? '…' : <><Icons.Send size={11} /> Enviar</>}
+              {sending ? '…' : <><Icons.Send size={11} /> Send</>}
             </button>
           </div>
         </div>
