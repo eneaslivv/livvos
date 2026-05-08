@@ -435,7 +435,13 @@ const CreateTaskModal = ({
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, navParams, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
-  const { hasFeature } = useTenant();
+  const { hasFeature, isViewingAsTenant } = useTenant();
+  // Effective platform-admin gate. Even if the user has the global
+  // `platform_admin` flag, we hide the Master surfaces while they are
+  // "viewing as" another tenant — when you've switched into payper2025,
+  // you're acting as a partner agency and shouldn't be running cross-
+  // tenant operations from inside that context. They can return to
+  // their home tenant (TenantSwitcher button) to get Master back.
   const isMobile = useIsMobile();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -455,6 +461,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     return () => window.removeEventListener('open-configuration', handler);
   }, []);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  // Effective gate for Master mode UI (switch + nav + Platform fallback
+  // button). Master only makes sense from your HOME tenant — when
+  // viewing-as another tenant, the user is operating in that tenant's
+  // context and platform-level operations would be confusing.
+  const canUseMasterMode = isPlatformAdmin && !isViewingAsTenant;
 
   // Global Task Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -491,6 +502,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       onSwitchMode('os');
     }
   }, [currentMode, hasFeature, onSwitchMode]);
+
+  // Auto-flip out of Master when the user enters "viewing-as" state
+  // (e.g. clicked "Switch to tenant" inside Master → Customers). Sitting
+  // on Master surfaces while operating inside a partner agency would
+  // mix contexts in confusing ways, so we drop them into OS so the
+  // tenant they switched into renders properly.
+  useEffect(() => {
+    if (currentMode === 'master' && isViewingAsTenant) {
+      onSwitchMode('os');
+    }
+  }, [currentMode, isViewingAsTenant, onSwitchMode]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -537,7 +559,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         } else if (e.key === '2' && currentMode !== 'sales' && hasFeature('sales_module')) {
           e.preventDefault();
           onSwitchMode('sales');
-        } else if (e.key === '3' && currentMode !== 'master' && isPlatformAdmin) {
+        } else if (e.key === '3' && currentMode !== 'master' && canUseMasterMode) {
           e.preventDefault();
           onSwitchMode('master');
         }
@@ -664,7 +686,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             if (hasFeature('sales_module') || hasFeature('finance_module')) {
               segments.push({ key: 'sales', icon: <Icons.Chart size={13} />, label: 'Sales', shortcut: '2' });
             }
-            if (isPlatformAdmin) {
+            // Master segment hides while viewing-as another tenant —
+            // you can't run platform-level work from inside a partner
+            // agency's context. Return to home tenant first.
+            if (canUseMasterMode) {
               segments.push({ key: 'master', icon: <Icons.Shield size={13} />, label: 'Master', shortcut: '3' });
             }
             const activeIdx = Math.max(0, segments.findIndex(s => s.key === currentMode));
@@ -801,8 +826,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         {/* Bottom Actions */}
         <div className="w-full flex flex-col gap-1 shrink-0 mt-2 items-center">
           {/* Platform admin fallback button — only when NOT already in master
-              mode, so admins can jump in even from OS or Sales context. */}
-          {isPlatformAdmin && currentMode !== 'master' && (
+              mode, so admins can jump in even from OS or Sales context.
+              Hidden while viewing-as another tenant for the same reason
+              the segmented switch hides Master in that state. */}
+          {canUseMasterMode && currentMode !== 'master' && (
             <NavItem
               id="platform_admin"
               icon={<Icons.Shield />}
