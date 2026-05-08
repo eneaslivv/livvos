@@ -440,6 +440,20 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  // Tab to open the ConfigurationModal on. The Team page (and anything
+  // else) can dispatch a 'open-configuration' window event with detail
+  // { tab: 'roles' | 'users' | ... } to deep-link into a section.
+  const [configInitialTab, setConfigInitialTab] = useState<'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email' | 'ai' | undefined>(undefined);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent).detail?.tab as typeof configInitialTab;
+      setConfigInitialTab(tab);
+      setIsConfigOpen(true);
+    };
+    window.addEventListener('open-configuration', handler);
+    return () => window.removeEventListener('open-configuration', handler);
+  }, []);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   // Global Task Modal State
@@ -856,7 +870,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         onSwitchMode={onSwitchMode}
         currentMode={currentMode}
       />
-      <ConfigurationModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onNavigate={onNavigate} />
+      <ConfigurationModal
+        isOpen={isConfigOpen}
+        onClose={() => { setIsConfigOpen(false); setConfigInitialTab(undefined); }}
+        onNavigate={onNavigate}
+        initialTab={configInitialTab}
+      />
       <AiAdvisor />
 
       {/* Mobile Bottom Tab Bar */}

@@ -12,16 +12,27 @@ import { useRBAC } from '../../context/RBACContext';
 import { supabase } from '../../lib/supabase';
 import type { PageView } from '../../types';
 
+type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email' | 'ai';
+
 interface ConfigurationModalProps {
     isOpen: boolean;
     onClose: () => void;
     onNavigate?: (page: PageView) => void;
+    /** Tab to land on when the modal opens. Defaults to 'general'. Lets
+     *  callers deep-link into a specific section (e.g. Team page →
+     *  "Manage roles & access" opens with initialTab='roles'). */
+    initialTab?: Tab;
 }
 
-type Tab = 'general' | 'services' | 'billing' | 'users' | 'content' | 'roles' | 'email' | 'ai';
+export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose, onNavigate, initialTab }) => {
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'general');
 
-export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, onClose, onNavigate }) => {
-    const [activeTab, setActiveTab] = useState<Tab>('general');
+    // When the modal is re-opened with a different initialTab (e.g. user
+    // clicks "Manage roles" then closes, then clicks "General settings"),
+    // honor the new target instead of remembering the previous one.
+    useEffect(() => {
+        if (isOpen && initialTab) setActiveTab(initialTab);
+    }, [isOpen, initialTab]);
     const { user, roles, hasPermission, isAdmin } = useRBAC();
 
     const ALL_TABS: { id: Tab; label: string; icon: any; requireAdmin?: boolean; permission?: { module: any; action: any } }[] = [

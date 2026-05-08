@@ -296,10 +296,12 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
     name: string; email: string; company: string; phone: string;
     status: string; notes: string; industry: string; address: string;
     color?: string | null; timezone?: string | null;
+    portalAccess?: 'view' | 'collaborate' | 'none';
   }>({
     name: '', email: '', company: '', phone: '',
     status: 'prospect', notes: '', industry: '', address: '',
     color: null, timezone: null,
+    portalAccess: 'view',
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -591,16 +593,30 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         action_date: new Date().toISOString(),
       });
 
-      // Auto-invite to portal if client has email
-      if (client.email && currentTenant?.id) {
+      // Auto-invite to portal if client has email AND the user picked an
+      // access level. 'none' explicitly opts out of the auto-invite so the
+      // user can run it manually later (or never).
+      const portalAccess = newClientData.portalAccess || 'view';
+      if (client.email && currentTenant?.id && portalAccess !== 'none') {
         try {
+          // Pick the right role depending on the access tier the user
+          // chose in the New Client panel:
+          //   view        → 'client'              (read-only, default)
+          //   collaborate → 'client_collaborator' (read + comment + upload)
+          const targetRoleName = portalAccess === 'collaborate' ? 'client_collaborator' : 'client';
           let roleId: string;
-          const { data: roleData } = await supabase.from('roles').select('id').eq('name', 'client').maybeSingle();
+          const { data: roleData } = await supabase.from('roles').select('id').eq('name', targetRoleName).maybeSingle();
           if (roleData) {
             roleId = roleData.id;
           } else {
             const { data: newRole, error: newRoleErr } = await supabase
-              .from('roles').insert({ name: 'client', description: 'Portal client access', is_system: true }).select('id').single();
+              .from('roles').insert({
+                name: targetRoleName,
+                description: targetRoleName === 'client_collaborator'
+                  ? 'Client portal with comment + upload (cannot edit)'
+                  : 'Portal client access',
+                is_system: true,
+              }).select('id').single();
             if (newRoleErr) throw newRoleErr;
             roleId = newRole.id;
           }

@@ -311,6 +311,19 @@ export const Team: React.FC = () => {
                     <button onClick={refresh} className="p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200/60 dark:border-zinc-700/40">
                         <Icons.RefreshCw size={15} className="text-zinc-400" />
                     </button>
+                    {/* "Manage roles & access" — opens the Configuration modal
+                        directly on the Roles tab. The user kept asking where
+                        roles get configured; surfacing it from the Team
+                        header is the most discoverable spot. */}
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('open-configuration', { detail: { tab: 'roles' } }))}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-300"
+                        title="Configure what each role can see and do"
+                    >
+                        <Icons.Shield size={14} className="text-zinc-500" />
+                        <span className="hidden sm:inline">Manage roles & access</span>
+                        <span className="sm:hidden">Roles</span>
+                    </button>
                 </div>
             </div>
 

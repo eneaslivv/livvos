@@ -104,6 +104,14 @@ export const PlatformRoles: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [savingPermissions, setSavingPermissions] = useState(false);
+  // "+ New role" modal state. Kept inline (no separate file) since it's
+  // a 2-field form — name + description — and only the platform admin
+  // ever sees it.
+  const [showNewRole, setShowNewRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleDescription, setNewRoleDescription] = useState('');
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
   // Single-shot loader. Refreshes on demand via the header button. We
   // fire all 4 RPCs in parallel since they each read a different table
@@ -241,6 +249,52 @@ export const PlatformRoles: React.FC = () => {
     }
   };
 
+  // Create a new global role. The RPC validates uniqueness and returns
+  // the new role_id; we refresh the overview so the new row shows up
+  // in the left rail with 0 users / 0 permissions, ready to be tuned.
+  const handleCreateRole = async () => {
+    const name = newRoleName.trim();
+    if (!name) return;
+    setCreatingRole(true);
+    setError(null);
+    try {
+      const { data, error: e } = await supabase.rpc('platform_create_role', {
+        p_name: name,
+        p_description: newRoleDescription.trim() || null,
+      });
+      if (e) throw e;
+      await refresh();
+      // Auto-select the freshly created role so the matrix opens to it.
+      if (typeof data === 'string') setSelectedRoleId(data);
+      setShowNewRole(false);
+      setNewRoleName('');
+      setNewRoleDescription('');
+    } catch (err: any) {
+      setError(err?.message || 'Could not create role');
+    } finally {
+      setCreatingRole(false);
+    }
+  };
+
+  // Delete a (custom) role. The RPC refuses if the role is system or
+  // still assigned to any user — we surface the error inline.
+  const handleDeleteRole = async (role: RoleOverview) => {
+    if (role.is_system) return;
+    if (!window.confirm(`Delete role "${role.role_name}"? This cannot be undone.`)) return;
+    setDeletingRoleId(role.role_id);
+    setError(null);
+    try {
+      const { error: e } = await supabase.rpc('platform_delete_role', { p_role_id: role.role_id });
+      if (e) throw e;
+      if (selectedRoleId === role.role_id) setSelectedRoleId(null);
+      await refresh();
+    } catch (err: any) {
+      setError(err?.message || 'Could not delete role');
+    } finally {
+      setDeletingRoleId(null);
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────────────────────────────
@@ -320,16 +374,26 @@ export const PlatformRoles: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
         {/* Roles list (left rail) */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">All roles</h3>
-            <span className="text-[10px] text-zinc-400">{roles.length}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-zinc-400">{roles.length}</span>
+              <button
+                onClick={() => setShowNewRole(true)}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity"
+                title="Create a new global role"
+              >
+                <Icons.Plus size={11} strokeWidth={3} />
+                New role
+              </button>
+            </div>
           </div>
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60 max-h-[560px] overflow-y-auto">
             {roles.map(r => {
               const isSelected = selectedRoleId === r.role_id;
               const meta = ROLE_DESCRIPTIONS[r.role_name];
               return (
-                <li key={r.role_id}>
+                <li key={r.role_id} className="group relative">
                   <button
                     onClick={() => setSelectedRoleId(r.role_id)}
                     className={`w-full text-left px-4 py-3 transition-colors ${
@@ -367,6 +431,18 @@ export const PlatformRoles: React.FC = () => {
                       </span>
                     </div>
                   </button>
+                  {/* Delete button — only for custom roles, only shows on hover.
+                      The RPC refuses if anyone still holds the role. */}
+                  {!r.is_system && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteRole(r); }}
+                      disabled={deletingRoleId === r.role_id}
+                      title="Delete this custom role"
+                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all disabled:opacity-50"
+                    >
+                      <Icons.Trash size={12} />
+                    </button>
+                  )}
                 </li>
               );
             })}
@@ -505,6 +581,74 @@ export const PlatformRoles: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ─── + New role modal ─── */}
+      {showNewRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => !creatingRole && setShowNewRole(false)}>
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Create new role</h3>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  Adds a global role available across every tenant. Edit its permissions in the matrix afterwards.
+                </p>
+              </div>
+              <button
+                onClick={() => !creatingRole && setShowNewRole(false)}
+                className="p-1 rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <Icons.X size={16} />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Role name
+                </label>
+                <input
+                  type="text"
+                  value={newRoleName}
+                  onChange={e => setNewRoleName(e.target.value)}
+                  placeholder="e.g. project_lead"
+                  autoFocus
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-500 outline-none"
+                />
+                <p className="text-[10px] text-zinc-400 mt-1">
+                  Lowercase, no spaces. Will be saved as <code className="font-mono">{(newRoleName || 'role_name').toLowerCase().trim().replace(/\s+/g, '_')}</code>.
+                </p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Description (optional)
+                </label>
+                <textarea
+                  value={newRoleDescription}
+                  onChange={e => setNewRoleDescription(e.target.value)}
+                  placeholder="e.g. Senior PM with full project + budget access, no team admin"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:ring-2 focus:ring-zinc-500/20 focus:border-zinc-500 outline-none resize-none"
+                />
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowNewRole(false)}
+                disabled={creatingRole}
+                className="px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRole}
+                disabled={creatingRole || !newRoleName.trim()}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {creatingRole ? 'Creating…' : 'Create role'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
