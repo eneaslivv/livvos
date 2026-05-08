@@ -13,7 +13,7 @@ export enum Priority {
 }
 
 export type AppMode = 'os' | 'sales' | 'master';
-export type PageView = 'home' | 'projects' | 'clients' | 'team' | 'team_clients' | 'calendar' | 'docs' | 'activity' | 'communications' | 'finance' | 'sales_dashboard' | 'sales_leads' | 'sales_analytics' | 'tenant_settings' | 'client_portal' | 'shared_project' | 'content_cms' | 'platform_admin' | 'platform_customers' | 'platform_features' | 'platform_audit';
+export type PageView = 'home' | 'projects' | 'clients' | 'team' | 'team_clients' | 'calendar' | 'docs' | 'activity' | 'communications' | 'finance' | 'sales_dashboard' | 'sales_leads' | 'sales_analytics' | 'tenant_settings' | 'client_portal' | 'shared_project' | 'content_cms' | 'platform_admin' | 'platform_customers' | 'platform_roles' | 'platform_features' | 'platform_audit';
 
 export interface NavParams {
   projectId?: string;

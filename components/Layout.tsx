@@ -580,10 +580,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   // mode is gated at the switch level by `isPlatformAdmin`. Each page also
   // re-checks via `is_platform_admin` RPC server-side.
   const masterNavItems: NavItemDef[] = [
-    { id: 'platform_admin',     label: 'Dashboard',  icon: <Icons.Home /> },
-    { id: 'platform_customers', label: 'Customers',  icon: <Icons.Users /> },
-    { id: 'platform_features',  label: 'Features',   icon: <Icons.Settings /> },
-    { id: 'platform_audit',     label: 'Audit log',  icon: <Icons.Activity /> },
+    { id: 'platform_admin',     label: 'Dashboard',         icon: <Icons.Home /> },
+    { id: 'platform_customers', label: 'Customers',         icon: <Icons.Users /> },
+    { id: 'platform_roles',     label: 'Roles & Access',    icon: <Icons.Shield /> },
+    { id: 'platform_features',  label: 'Features',          icon: <Icons.Settings /> },
+    { id: 'platform_audit',     label: 'Audit log',         icon: <Icons.Activity /> },
   ];
 
   const currentNavItems = (
@@ -597,7 +598,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     return hasPermission(item.permission.module, item.permission.action);
   });
 
-  const navSkeletonCount = currentMode === 'os' ? 6 : currentMode === 'master' ? 4 : 4;
+  const navSkeletonCount = currentMode === 'os' ? 6 : currentMode === 'master' ? 5 : 4;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans selection:bg-stone-200 selection:text-stone-900 flex overflow-hidden relative transition-colors duration-300">

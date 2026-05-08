@@ -49,6 +49,7 @@ const loadSharedDocument = () => retryDynamicImport(() => import('./pages/Shared
 const loadContentCms = () => retryDynamicImport(() => import('./pages/ContentCms').then(m => ({ default: m.ContentCms })), 'ContentCms');
 const loadPlatformAdmin = () => retryDynamicImport(() => import('./pages/PlatformAdmin').then(m => ({ default: m.PlatformAdmin })), 'PlatformAdmin');
 const loadPlatformCustomers = () => retryDynamicImport(() => import('./pages/PlatformCustomers').then(m => ({ default: m.PlatformCustomers })), 'PlatformCustomers');
+const loadPlatformRoles = () => retryDynamicImport(() => import('./pages/PlatformRoles').then(m => ({ default: m.PlatformRoles })), 'PlatformRoles');
 const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/PlatformFeatures').then(m => ({ default: m.PlatformFeatures })), 'PlatformFeatures');
 const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
 
@@ -75,6 +76,7 @@ const SharedDocument = React.lazy(loadSharedDocument);
 const ContentCms = React.lazy(loadContentCms);
 const PlatformAdmin = React.lazy(loadPlatformAdmin);
 const PlatformCustomers = React.lazy(loadPlatformCustomers);
+const PlatformRoles = React.lazy(loadPlatformRoles);
 const PlatformFeatures = React.lazy(loadPlatformFeatures);
 const PlatformAudit = React.lazy(loadPlatformAudit);
 
@@ -815,6 +817,13 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
+          {/* Platform Roles & Access — cross-tenant role/permission matrix */}
+          {visitedPages.has('platform_roles') && (
+            <KeepAlivePage page="platform_roles" active={currentPage === 'platform_roles'}>
+              <PlatformRoles />
+            </KeepAlivePage>
+          )}
+
           {/* Platform Features — read-only catalog */}
           {visitedPages.has('platform_features') && (
             <KeepAlivePage page="platform_features" active={currentPage === 'platform_features'}>
@@ -843,7 +852,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'home', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
-  'platform_customers', 'platform_features', 'platform_audit',
+  'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
 ]);
 
 const readLastPage = (): PageView => {
