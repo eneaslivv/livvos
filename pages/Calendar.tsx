@@ -200,6 +200,28 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<'schedule' | 'content'>('schedule');
 
+  // ─── List view controls ─────────────────────────────────────
+  // Persisted in localStorage so the user's preferred grouping /
+  // filtering survives across sessions. The List view is the most
+  // "data-driven" of the calendar surfaces — adding group-by +
+  // filters here closes the gap with the Project page's task list.
+  const [listGroupBy, setListGroupBy] = useState<'none' | 'project' | 'date' | 'status' | 'priority' | 'assignee'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-group-by') as any)) || 'date'
+  );
+  const [listStatusFilter, setListStatusFilter] = useState<'all' | 'todo' | 'in-progress' | 'done' | 'open'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-status') as any)) || 'open'
+  );
+  const [listPriorityFilter, setListPriorityFilter] = useState<'all' | 'urgent' | 'high' | 'medium' | 'low'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-priority') as any)) || 'all'
+  );
+  const [listSort, setListSort] = useState<'due' | 'priority' | 'created' | 'project'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-sort') as any)) || 'due'
+  );
+  useEffect(() => { try { localStorage.setItem('calendar:list-group-by', listGroupBy); } catch {} }, [listGroupBy]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-status', listStatusFilter); } catch {} }, [listStatusFilter]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-priority', listPriorityFilter); } catch {} }, [listPriorityFilter]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-sort', listSort); } catch {} }, [listSort]);
+
   const [newEventData, setNewEventData] = useState({
     title: '',
     description: '',
@@ -1619,43 +1641,253 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         </div>
       )}
 
-      {/* List view — flat list grouped by date. Reuses the SelectedDatePanel
-          which already renders today's items; here we render every task.
-          Honors the TeamFilterBar selection like the Board view. */}
+      {/* List view — flat-or-grouped list with status / priority filters
+          and a sort selector. Honors the TeamFilterBar like Board view.
+          Group-by lives in localStorage so the user's preferred slice
+          (by date / by project / by priority…) survives reloads.
+
+          Default group is "date" so the experience starts familiar
+          (the old behavior was a flat sort by date). The controls bar
+          right above the list lets the user pivot in 1 click. */}
       {view === 'list' && calendarMode === 'schedule' && (() => {
-        const visible = applyTaskFilter(tasks.filter(t => !t.parent_task_id));
+        // Phase 1: filter by status / priority on top of TeamFilterBar.
+        const baseTasks = applyTaskFilter(tasks.filter(t => !t.parent_task_id));
+        const filtered = baseTasks.filter(t => {
+          // status: 'open' is a meta-filter that excludes done & cancelled
+          if (listStatusFilter === 'open') {
+            if (t.status === 'done' || t.status === 'cancelled' || t.completed) return false;
+          } else if (listStatusFilter !== 'all') {
+            const status = t.completed ? 'done' : (t.status || 'todo');
+            if (status !== listStatusFilter) return false;
+          }
+          if (listPriorityFilter !== 'all') {
+            const p = t.priority || 'medium';
+            if (p !== listPriorityFilter) return false;
+          }
+          return true;
+        });
+
+        // Phase 2: sort the filtered set.
+        const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+        const sortFns: Record<typeof listSort, (a: any, b: any) => number> = {
+          due:      (a, b) => (((a as any).due_date as string) || a.start_date || '￿').localeCompare(((b as any).due_date as string) || b.start_date || '￿'),
+          priority: (a, b) => (PRIORITY_RANK[a.priority || 'medium'] ?? 4) - (PRIORITY_RANK[b.priority || 'medium'] ?? 4),
+          created:  (a, b) => (b.created_at || '').localeCompare(a.created_at || ''),
+          project:  (a, b) => getProjectLabel(a).localeCompare(getProjectLabel(b)),
+        };
+        const sorted = [...filtered].sort(sortFns[listSort]);
+
+        // Phase 3: build groups for the chosen group-by axis. We use a
+        // Map to preserve insertion order — important for "date" so the
+        // sections come out chronologically.
+        const groups = new Map<string, typeof sorted>();
+        const groupKeyOf = (t: any): string => {
+          switch (listGroupBy) {
+            case 'project':  return getProjectLabel(t);
+            case 'date':     return ((t as any).due_date as string) || t.start_date || '— No date';
+            case 'status':   return t.completed ? 'done' : (t.status || 'todo');
+            case 'priority': return t.priority || 'medium';
+            case 'assignee': return t.assignee_id ? (getMemberName(t.assignee_id) || 'Unknown') : 'Unassigned';
+            case 'none':
+            default:         return '__all__';
+          }
+        };
+        for (const t of sorted) {
+          const k = groupKeyOf(t);
+          const arr = groups.get(k) || [];
+          arr.push(t);
+          groups.set(k, arr);
+        }
+
+        // Pretty group label — most cases pass through, but date-keyed
+        // groups get a friendlier rendering.
+        const labelFor = (key: string): string => {
+          if (listGroupBy === 'date') {
+            if (key === '— No date') return 'No date';
+            const d = new Date(key + 'T12:00:00');
+            const today = new Date(); today.setHours(0,0,0,0);
+            const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+            if (diff === 0) return 'Today';
+            if (diff === 1) return 'Tomorrow';
+            if (diff === -1) return 'Yesterday';
+            if (diff > 1 && diff <= 7) return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: diff > 365 || diff < -365 ? 'numeric' : undefined });
+          }
+          if (listGroupBy === 'priority' || listGroupBy === 'status') {
+            return key.replace('_', ' ').replace(/^./, c => c.toUpperCase());
+          }
+          return key;
+        };
+
+        // Color accent for group headers (subtle, just to read fast).
+        const accentFor = (key: string): string => {
+          if (listGroupBy === 'priority') {
+            if (key === 'urgent') return 'bg-rose-500';
+            if (key === 'high')   return 'bg-amber-500';
+            if (key === 'medium') return 'bg-indigo-400';
+            if (key === 'low')    return 'bg-zinc-300';
+          }
+          if (listGroupBy === 'status') {
+            if (key === 'done')        return 'bg-emerald-500';
+            if (key === 'in-progress') return 'bg-amber-500';
+            if (key === 'cancelled')   return 'bg-rose-400';
+          }
+          return 'bg-zinc-300 dark:bg-zinc-600';
+        };
+
+        const totalShown = filtered.length;
+        const totalAll = baseTasks.length;
+
         return (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800/60">
-          {visible.length === 0 ? (
-            <div className="p-8 text-center text-xs text-zinc-400">
-              {tasks.length === 0 ? 'No hay tareas todavía.' : 'Ninguna tarea coincide con el filtro actual.'}
-            </div>
-          ) : (
-            [...visible]
-              .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-              .map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => handleOpenTaskDetail(t)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
+          <div className="space-y-3">
+            {/* ─── Controls toolbar ───────────────────────────────── */}
+            <div className="flex flex-wrap items-center gap-2 px-1">
+              {/* Group by */}
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Group</span>
+                <select
+                  value={listGroupBy}
+                  onChange={e => setListGroupBy(e.target.value as any)}
+                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
                 >
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${
-                    t.status === 'done' ? 'bg-emerald-500'
-                    : t.status === 'in-progress' ? 'bg-amber-500'
-                    : t.status === 'cancelled' ? 'bg-rose-400'
-                    : 'bg-zinc-400'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-[13px] font-medium truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{t.title}</div>
-                    <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
-                      {(t.start_date || '—')}{t.start_time ? ` · ${t.start_time}` : ''}{t.priority && t.priority !== 'medium' ? ` · ${t.priority}` : ''}
+                  <option value="date">Date</option>
+                  <option value="project">Project</option>
+                  <option value="status">Status</option>
+                  <option value="priority">Priority</option>
+                  <option value="assignee">Assignee</option>
+                  <option value="none">No grouping</option>
+                </select>
+              </div>
+
+              {/* Sort */}
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Sort</span>
+                <select
+                  value={listSort}
+                  onChange={e => setListSort(e.target.value as any)}
+                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
+                >
+                  <option value="due">Due date</option>
+                  <option value="priority">Priority</option>
+                  <option value="created">Recently created</option>
+                  <option value="project">Project name</option>
+                </select>
+              </div>
+
+              <span className="w-px h-5 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+
+              {/* Status filter pills */}
+              <div className="flex items-center gap-1">
+                {([
+                  { id: 'open',        label: 'Open' },
+                  { id: 'todo',        label: 'Todo' },
+                  { id: 'in-progress', label: 'In progress' },
+                  { id: 'done',        label: 'Done' },
+                  { id: 'all',         label: 'All' },
+                ] as Array<{ id: typeof listStatusFilter; label: string }>).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setListStatusFilter(opt.id)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                      listStatusFilter === opt.id
+                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Priority filter (compact dropdown to keep the bar short) */}
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Priority</span>
+                <select
+                  value={listPriorityFilter}
+                  onChange={e => setListPriorityFilter(e.target.value as any)}
+                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
+                >
+                  <option value="all">All</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+
+              <span className="ml-auto text-[10px] text-zinc-400 font-mono tabular-nums">
+                {totalShown} of {totalAll}
+              </span>
+            </div>
+
+            {/* ─── Grouped list ────────────────────────────────────── */}
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+              {filtered.length === 0 ? (
+                <div className="p-8 text-center text-xs text-zinc-400">
+                  {totalAll === 0 ? 'No hay tareas todavía.' : 'Ninguna tarea coincide con los filtros actuales.'}
+                </div>
+              ) : (
+                Array.from(groups.entries()).map(([key, items], gIdx) => (
+                  <div key={key} className={gIdx > 0 ? 'border-t border-zinc-100 dark:border-zinc-800/60' : ''}>
+                    {listGroupBy !== 'none' && (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-zinc-50/70 dark:bg-zinc-800/40 sticky top-0 z-[1] backdrop-blur">
+                        <span className={`w-2 h-2 rounded-full ${accentFor(key)}`} />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                          {labelFor(key)}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-mono">{items.length}</span>
+                      </div>
+                    )}
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                      {items.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => handleOpenTaskDetail(t)}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
+                        >
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            t.status === 'done' || t.completed ? 'bg-emerald-500'
+                            : t.status === 'in-progress' ? 'bg-amber-500'
+                            : t.status === 'cancelled' ? 'bg-rose-400'
+                            : 'bg-zinc-400'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-[13px] font-medium truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{t.title}</div>
+                            <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5 flex-wrap">
+                              {/* Inline meta — depends on what's NOT the current group axis */}
+                              {listGroupBy !== 'date' && ((t as any).due_date || t.start_date) && (
+                                <span className="font-mono">{(t as any).due_date || t.start_date}</span>
+                              )}
+                              {listGroupBy !== 'project' && getProjectLabel(t) !== 'No project' && (
+                                <span className="inline-flex items-center gap-1 truncate max-w-[140px]">
+                                  <Icons.Briefcase size={9} />
+                                  {getProjectLabel(t)}
+                                </span>
+                              )}
+                              {listGroupBy !== 'assignee' && t.assignee_id && (
+                                <span className="inline-flex items-center gap-1 truncate max-w-[120px]">
+                                  <Icons.User size={9} />
+                                  {getMemberName(t.assignee_id) || 'Unknown'}
+                                </span>
+                              )}
+                              {listGroupBy !== 'priority' && t.priority && t.priority !== 'medium' && (
+                                <span className={`px-1 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                  t.priority === 'urgent' ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                  : t.priority === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+                                }`}>{t.priority}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 uppercase tracking-wider shrink-0">{t.completed ? 'done' : (t.status || 'todo')}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <span className="text-[10px] text-zinc-400 uppercase tracking-wider shrink-0">{t.status || 'todo'}</span>
-                </button>
-              ))
-          )}
-        </div>
+                ))
+              )}
+            </div>
+          </div>
         );
       })()}
 
