@@ -227,6 +227,30 @@ const TenantDetailPanel: React.FC<{
   const [seeding, setSeeding] = useState(false)
   const [switching, setSwitching] = useState(false)
 
+  // Members of this tenant — small live-loaded list rendered above the
+  // feature toggles. Lets the platform admin see who's inside without
+  // having to switch-into the tenant first. Refetched whenever the
+  // selected tenant changes.
+  const [members, setMembers] = useState<Array<{ user_id: string; email: string; full_name: string; role: string; source: string; joined_at: string; last_seen_at: string | null }>>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadMembers = async () => {
+      setMembersLoading(true)
+      try {
+        const { data, error } = await (await import('../../lib/supabase')).supabase
+          .rpc('platform_tenant_members', { p_tenant_id: tenant.id })
+        if (cancelled) return
+        if (!error && data) setMembers(data as any)
+      } finally {
+        if (!cancelled) setMembersLoading(false)
+      }
+    }
+    loadMembers()
+    return () => { cancelled = true }
+  }, [tenant.id])
+
   useEffect(() => {
     setPlan(tenant.plan)
     setNotes(tenant.notes || '')
@@ -277,6 +301,26 @@ const TenantDetailPanel: React.FC<{
         </span>
       </div>
 
+      {/* ─── Quick actions (top) ─────────────────────────────────
+           "Switch to Tenant" used to live at the bottom of this panel,
+           hidden under feature toggles. It's the most-used action for
+           verifying access (Eneas wanted to "enter as Luis to confirm
+           his views"), so it lives at the top now. */}
+      <div className="space-y-2">
+        <button
+          onClick={async () => { setSwitching(true); try { await onSwitchToTenant(tenant.id) } finally { setSwitching(false) } }}
+          disabled={switching}
+          className="w-full py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-600 rounded-lg hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+        >
+          <Icons.LogIn size={15} />
+          {switching ? 'Switching…' : `View as ${tenant.name}`}
+        </button>
+        <p className="text-[10px] text-zinc-400 leading-snug px-1">
+          Drops you into this tenant's workspace as a platform admin.
+          Use the "Return to home" button in the header to come back.
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-3">
           <p className="text-[11px] text-zinc-500 uppercase">Users</p>
@@ -294,6 +338,66 @@ const TenantDetailPanel: React.FC<{
           <p className="text-sm text-zinc-700 dark:text-zinc-300">{tenant.owner_email}</p>
         </div>
       )}
+
+      {/* ─── Members preview ─────────────────────────────────────
+           Live list of who's in this tenant + their role. Lets the
+           platform admin verify "Luis is admin, María is viewer"
+           without leaving the panel. The "Switch to Tenant" button
+           above is how you actually act on this — change a role, edit
+           features per user, etc. */}
+      <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            Members
+            {members.length > 0 && <span className="ml-1 text-zinc-400 normal-case">· {members.length}</span>}
+          </p>
+        </div>
+        {membersLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <div className="w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+          </div>
+        ) : members.length === 0 ? (
+          <p className="text-xs text-zinc-400 text-center py-4">
+            No members in this tenant yet.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {members.slice(0, 6).map(m => {
+              const initial = (m.full_name || m.email)[0]?.toUpperCase() || '?';
+              const isOwner = m.role === 'owner';
+              return (
+                <li key={m.user_id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    isOwner
+                      ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white'
+                      : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                  }`}>
+                    {initial}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                      {m.full_name || m.email.split('@')[0]}
+                    </div>
+                    <div className="text-[10px] text-zinc-400 truncate">{m.email}</div>
+                  </div>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+                    isOwner
+                      ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                  }`}>
+                    {m.role}
+                  </span>
+                </li>
+              );
+            })}
+            {members.length > 6 && (
+              <li className="text-[10px] text-zinc-400 text-center pt-1">
+                +{members.length - 6} more · use "View as" above to manage
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
 
       <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
         <div>
@@ -387,17 +491,8 @@ const TenantDetailPanel: React.FC<{
         </button>
       </div>
 
-      <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-2">
-        <button
-          onClick={async () => { setSwitching(true); try { await onSwitchToTenant(tenant.id) } finally { setSwitching(false) } }}
-          disabled={switching}
-          className="w-full py-2 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <Icons.LogIn size={14} />
-          {switching ? 'Switching…' : 'Switch to Tenant'}
-        </button>
-
-        {tenant.user_count === 0 && tenant.project_count === 0 && (
+      {tenant.user_count === 0 && tenant.project_count === 0 && (
+        <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
           <button
             onClick={async () => { setSeeding(true); try { await onSeedDemoData(tenant.slug) } finally { setSeeding(false) } }}
             disabled={seeding}
@@ -406,8 +501,8 @@ const TenantDetailPanel: React.FC<{
             <Icons.Sparkles size={14} />
             {seeding ? 'Seeding…' : 'Seed Demo Data'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-2">
         {tenant.status === 'suspended' ? (
