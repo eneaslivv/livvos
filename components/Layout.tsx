@@ -435,13 +435,18 @@ const CreateTaskModal = ({
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMode, navParams, onNavigate, onSwitchMode }) => {
   const { hasPermission, isInitialized } = useRBAC();
-  const { hasFeature, isViewingAsTenant } = useTenant();
-  // Effective platform-admin gate. Even if the user has the global
-  // `platform_admin` flag, we hide the Master surfaces while they are
-  // "viewing as" another tenant — when you've switched into payper2025,
-  // you're acting as a partner agency and shouldn't be running cross-
-  // tenant operations from inside that context. They can return to
-  // their home tenant (TenantSwitcher button) to get Master back.
+  const { hasFeature, isViewingAsTenant, currentTenant } = useTenant();
+  // Effective platform-admin gate. We hide the Master surfaces unless
+  // the platform admin is currently in their HOME tenant (the LIVV
+  // super-agency). Two ways to detect "not at home":
+  //   1. is_super_agency=false on the active tenant — covers every way
+  //      of changing tenants (TenantSwitcher dropdown, deep links,
+  //      direct membership in a partner). This is the durable check.
+  //   2. isViewingAsTenant — only true when they used Master →
+  //      "Switch to tenant" via platform_switch_to_tenant. Kept as a
+  //      safety belt for legacy code paths that pre-date is_super_agency.
+  // If either condition fires, Master is hidden. Coming back to the
+  // super-agency tenant restores it.
   const isMobile = useIsMobile();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -462,10 +467,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   }, []);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   // Effective gate for Master mode UI (switch + nav + Platform fallback
-  // button). Master only makes sense from your HOME tenant — when
-  // viewing-as another tenant, the user is operating in that tenant's
-  // context and platform-level operations would be confusing.
-  const canUseMasterMode = isPlatformAdmin && !isViewingAsTenant;
+  // button). Master only makes sense from inside a super-agency tenant
+  // (the platform's home). When the user is in a partner agency or any
+  // non-super-agency tenant — even one where they happen to be a
+  // member — Master is hidden. They have to switch back to their LIVV
+  // tenant to access platform-level surfaces.
+  const isInSuperAgency = currentTenant?.is_super_agency === true;
+  const canUseMasterMode = isPlatformAdmin && isInSuperAgency && !isViewingAsTenant;
 
   // Global Task Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -503,16 +511,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     }
   }, [currentMode, hasFeature, onSwitchMode]);
 
-  // Auto-flip out of Master when the user enters "viewing-as" state
-  // (e.g. clicked "Switch to tenant" inside Master → Customers). Sitting
-  // on Master surfaces while operating inside a partner agency would
-  // mix contexts in confusing ways, so we drop them into OS so the
-  // tenant they switched into renders properly.
+  // Auto-flip out of Master when the platform admin lands in a non-
+  // super-agency tenant — either via "Switch to tenant" from Master →
+  // Customers, or by picking a partner from the TenantSwitcher dropdown,
+  // or because they're already a member of multiple tenants and chose
+  // a non-LIVV one. Sitting on Master while inside a partner mixes
+  // contexts; OS is the safe default.
   useEffect(() => {
-    if (currentMode === 'master' && isViewingAsTenant) {
+    if (currentMode === 'master' && (isViewingAsTenant || (currentTenant && !currentTenant.is_super_agency))) {
       onSwitchMode('os');
     }
-  }, [currentMode, isViewingAsTenant, onSwitchMode]);
+  }, [currentMode, isViewingAsTenant, currentTenant?.id, currentTenant?.is_super_agency, onSwitchMode]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
