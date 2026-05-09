@@ -455,6 +455,36 @@ export type AdvisorAction =
       }
     }
   | {
+      kind: 'update_project'
+      summary: string
+      params: {
+        project_id: string
+        title?: string
+        status?: 'active' | 'paused' | 'completed' | 'cancelled'
+        budget?: number
+        currency?: string
+        deadline?: string | null
+        description?: string
+        client_id?: string | null
+        color?: string
+      }
+    }
+  | {
+      kind: 'update_task'
+      summary: string
+      params: {
+        task_id: string
+        title?: string
+        description?: string
+        status?: 'todo' | 'in-progress' | 'done' | 'cancelled'
+        priority?: 'low' | 'medium' | 'high' | 'urgent'
+        due_date?: string | null
+        assignee_id?: string | null
+        project_id?: string | null
+        completed?: boolean
+      }
+    }
+  | {
       kind: 'create_tasks_batch'
       summary: string
       params: {
@@ -523,6 +553,35 @@ export type AdvisorAction =
         project_id?: string | null
         due_date?: string         // YYYY-MM-DD
         num_installments?: number // default 1
+      }
+    }
+  | {
+      kind: 'update_expense'
+      summary: string
+      params: {
+        expense_id: string
+        amount?: number
+        concept?: string
+        category?: string
+        vendor?: string
+        date?: string
+        project_id?: string | null
+        client_id?: string | null
+        status?: 'paid' | 'pending'
+        recurring?: boolean
+      }
+    }
+  | {
+      kind: 'update_income'
+      summary: string
+      params: {
+        income_id: string
+        total_amount?: number
+        concept?: string
+        due_date?: string
+        status?: 'paid' | 'pending' | 'partial' | 'overdue'
+        client_id?: string | null
+        project_id?: string | null
       }
     }
   | {

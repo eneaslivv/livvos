@@ -132,12 +132,16 @@ const ActionCard: React.FC<{
 }> = ({ action, onApprove, onReject }) => {
   const kindLabel: Record<string, { icon: keyof typeof Icons; label: string; color: string }> = {
     create_task: { icon: 'Check', label: 'Crear tarea', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+    update_task: { icon: 'Edit', label: 'Modificar tarea', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
     create_project: { icon: 'Briefcase', label: 'Crear proyecto', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
+    update_project: { icon: 'Edit', label: 'Modificar proyecto', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
     create_tasks_batch: { icon: 'List', label: 'Crear varias tareas', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
     plan_week: { icon: 'Calendar', label: 'Planificar semana', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
     suggest_delegate: { icon: 'Users', label: 'Sugerencia de delegación', color: 'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20' },
     create_expense: { icon: 'TrendingUp', label: 'Cargar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
+    update_expense: { icon: 'Edit', label: 'Modificar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
     create_income: { icon: 'TrendingUp', label: 'Cargar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    update_income: { icon: 'Edit', label: 'Modificar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
     create_budget: { icon: 'DollarSign', label: 'Crear budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
     update_budget: { icon: 'DollarSign', label: 'Modificar budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
     mark_expense_paid: { icon: 'Check', label: 'Marcar gasto pagado', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
@@ -247,6 +251,45 @@ const ActionCard: React.FC<{
         <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ')}</div>
       );
     }
+    if (action.kind === 'update_project') {
+      const p = action.params as any;
+      const changes: string[] = [];
+      if (p.title !== undefined)    changes.push(`título → "${p.title}"`);
+      if (p.budget !== undefined)   changes.push(`budget → $${p.budget.toLocaleString()}${p.currency ? ' ' + p.currency : ''}`);
+      if (p.status !== undefined)   changes.push(`status → ${p.status}`);
+      if (p.deadline !== undefined) changes.push(`deadline → ${p.deadline || 'sin fecha'}`);
+      if (p.description !== undefined) changes.push('descripción actualizada');
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+    }
+    if (action.kind === 'update_task') {
+      const p = action.params as any;
+      const changes: string[] = [];
+      if (p.title !== undefined)     changes.push(`título → "${p.title}"`);
+      if (p.status !== undefined)    changes.push(`status → ${p.status}`);
+      if (p.priority !== undefined)  changes.push(`priority → ${p.priority}`);
+      if (p.due_date !== undefined)  changes.push(`fecha → ${p.due_date || 'sin fecha'}`);
+      if (p.completed !== undefined) changes.push(p.completed ? 'marcar como hecha' : 'reabrir');
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+    }
+    if (action.kind === 'update_expense') {
+      const p = action.params as any;
+      const changes: string[] = [];
+      if (p.amount !== undefined)   changes.push(`monto → $${p.amount.toLocaleString()}`);
+      if (p.concept !== undefined)  changes.push(`concepto → "${p.concept}"`);
+      if (p.category !== undefined) changes.push(`categoría → ${p.category}`);
+      if (p.date !== undefined)     changes.push(`fecha → ${p.date}`);
+      if (p.status !== undefined)   changes.push(`status → ${p.status}`);
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+    }
+    if (action.kind === 'update_income') {
+      const p = action.params as any;
+      const changes: string[] = [];
+      if (p.total_amount !== undefined) changes.push(`monto → $${p.total_amount.toLocaleString()}`);
+      if (p.concept !== undefined)      changes.push(`concepto → "${p.concept}"`);
+      if (p.due_date !== undefined)     changes.push(`vencimiento → ${p.due_date}`);
+      if (p.status !== undefined)       changes.push(`status → ${p.status}`);
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+    }
     if (action.kind === 'mark_expense_paid' || action.kind === 'mark_installment_paid') {
       // Summary already says enough; no extra details needed.
       return null;
@@ -319,10 +362,10 @@ const ActionCard: React.FC<{
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
   const { user: profile } = useRBAC();
-  const { projects, createProject } = useProjects();
-  const { incomes, expenses, budgets, createIncome, createExpense, createBudget, updateBudget, updateExpense, updateInstallment } = useFinance();
+  const { projects, createProject, updateProject } = useProjects();
+  const { incomes, expenses, budgets, createIncome, createExpense, createBudget, updateBudget, updateExpense, updateInstallment, updateIncome } = useFinance();
   const { members } = useTeam();
-  const { createTask, tasks: allTasks } = useCalendar();
+  const { createTask, updateTask, tasks: allTasks } = useCalendar();
   const { clients } = useClients();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -737,6 +780,63 @@ export const AiAdvisor: React.FC = () => {
           ...(p.is_active !== undefined ? { is_active: p.is_active } : {}),
           ...(p.end_date !== undefined ? { end_date: p.end_date } : {}),
         } as any);
+      } else if (action.kind === 'update_project') {
+        const p = action.params;
+        if (!p.project_id) throw new Error('Falta project_id');
+        // Map AI status names → ProjectStatus enum values used by the
+        // ProjectsContext. Same translation layer the project edit panel
+        // uses internally.
+        const statusMap: Record<string, string> = {
+          active: 'Active', paused: 'Paused', completed: 'Completed', cancelled: 'Cancelled',
+        };
+        await updateProject(p.project_id, {
+          ...(p.title !== undefined ? { title: p.title } : {}),
+          ...(p.status !== undefined ? { status: statusMap[p.status] || p.status } : {}),
+          ...(p.budget !== undefined ? { budget: Math.abs(p.budget) } : {}),
+          ...(p.currency !== undefined ? { currency: p.currency } : {}),
+          ...(p.deadline !== undefined ? { deadline: p.deadline } : {}),
+          ...(p.description !== undefined ? { description: p.description } : {}),
+          ...((p as any).client_id !== undefined ? { client_id: (p as any).client_id } : {}),
+          ...(p.color !== undefined ? { color: p.color } : {}),
+        } as any);
+      } else if (action.kind === 'update_task') {
+        const p = action.params;
+        if (!p.task_id) throw new Error('Falta task_id');
+        await updateTask(p.task_id, {
+          ...(p.title !== undefined ? { title: p.title } : {}),
+          ...(p.description !== undefined ? { description: p.description } : {}),
+          ...(p.status !== undefined ? { status: p.status } : {}),
+          ...(p.priority !== undefined ? { priority: p.priority } : {}),
+          ...(p.due_date !== undefined ? { start_date: p.due_date } : {}),
+          ...(p.assignee_id !== undefined ? { assignee_ids: p.assignee_id ? [p.assignee_id] : [] } : {}),
+          ...(p.project_id !== undefined ? { project_id: p.project_id } : {}),
+          ...(p.completed !== undefined ? { completed: p.completed } : {}),
+        } as any);
+      } else if (action.kind === 'update_expense') {
+        const p = action.params;
+        if (!p.expense_id) throw new Error('Falta expense_id');
+        await updateExpense(p.expense_id, {
+          ...(p.amount !== undefined ? { amount: Math.abs(p.amount) } : {}),
+          ...(p.concept !== undefined ? { concept: p.concept } : {}),
+          ...(p.category !== undefined ? { category: p.category } : {}),
+          ...(p.vendor !== undefined ? { vendor: p.vendor } : {}),
+          ...(p.date !== undefined ? { date: p.date } : {}),
+          ...(p.project_id !== undefined ? { project_id: p.project_id } : {}),
+          ...(p.client_id !== undefined ? { client_id: p.client_id } : {}),
+          ...(p.status !== undefined ? { status: p.status } : {}),
+          ...(p.recurring !== undefined ? { recurring: p.recurring } : {}),
+        } as any);
+      } else if (action.kind === 'update_income') {
+        const p = action.params;
+        if (!p.income_id) throw new Error('Falta income_id');
+        await updateIncome(p.income_id, {
+          ...(p.total_amount !== undefined ? { total_amount: Math.abs(p.total_amount) } : {}),
+          ...(p.concept !== undefined ? { concept: p.concept } : {}),
+          ...(p.due_date !== undefined ? { due_date: p.due_date } : {}),
+          ...(p.status !== undefined ? { status: p.status } : {}),
+          ...(p.client_id !== undefined ? { client_id: p.client_id } : {}),
+          ...(p.project_id !== undefined ? { project_id: p.project_id } : {}),
+        } as any);
       } else if (action.kind === 'mark_expense_paid') {
         const p = action.params;
         if (!p.expense_id) throw new Error('Falta expense_id');
@@ -754,7 +854,7 @@ export const AiAdvisor: React.FC = () => {
       errorLogger.error('advisor action failed', err);
       updateActionStatus(msgIdx, action.id, { status: 'failed', errorMsg: err?.message || 'No se pudo aplicar.' });
     }
-  }, [createTask, createProject, createExpense, createIncome, createBudget, updateBudget, updateExpense, updateInstallment, user?.id, updateActionStatus]);
+  }, [createTask, updateTask, createProject, updateProject, createExpense, updateExpense, createIncome, updateIncome, createBudget, updateBudget, updateInstallment, user?.id, updateActionStatus]);
 
   const handleRejectAction = useCallback((msgIdx: number, actionId: string) => {
     updateActionStatus(msgIdx, actionId, { status: 'rejected' });
