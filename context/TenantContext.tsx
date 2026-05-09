@@ -180,6 +180,23 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             return;
         }
         try {
+            // Best-effort cleanup: any pending tenant_connection invites
+            // for this email get auto-accepted on the way in. Covers the
+            // case where the user signed up via the regular auth flow
+            // (not the /accept-connection deep-link). Failure here is
+            // silent — the manual flow still works.
+            //
+            // Run before refreshing memberships so that newly accepted
+            // connections appear in the dropdown on first paint.
+            try {
+                const { data: autoRes } = await supabase.rpc('auto_accept_my_pending_connections');
+                if (import.meta.env.DEV && autoRes && (autoRes as any).accepted > 0) {
+                    console.log('[TenantContext] auto-accepted connections:', autoRes);
+                }
+            } catch (autoErr) {
+                if (import.meta.env.DEV) console.warn('[TenantContext] auto_accept_my_pending_connections failed:', autoErr);
+            }
+
             const { data, error: rpcError } = await supabase.rpc('get_my_tenants');
             if (rpcError) {
                 if (import.meta.env.DEV) console.warn('[TenantContext] get_my_tenants failed:', rpcError.message);
