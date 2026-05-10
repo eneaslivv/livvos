@@ -497,17 +497,53 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
     return { active, history };
   }, [filteredIncomes]);
 
-  // Status chip counts must reflect the SAME view+period gates that
-  // visibleIncomes uses — otherwise the user clicks "To collect 4" and
-  // sees an empty list because the items fall outside the period.
-  // Mirrors visibleIncomes: Active ignores period; History honors it.
+  // History view groups invoices by the month they were collected
+  // (latest paid_date), so the user sees "May 2026 · 3 invoices",
+  // "April 2026 · 2 invoices", etc — the natural mental model when
+  // reviewing what came in across recent months. Active view stays flat.
+  const groupedIncomes = useMemo(() => {
+    if (viewMode !== 'history') {
+      return [{ key: '__flat', label: '', date: new Date(0), incomes: visibleIncomes }];
+    }
+    const buckets = new Map<string, { key: string; label: string; date: Date; incomes: typeof visibleIncomes }>();
+    for (const inc of visibleIncomes) {
+      const paidInsts = (inc.installments || []).filter(i => i.status === 'paid');
+      const sorted = paidInsts.sort((a, b) =>
+        (b.paid_date || b.due_date || '').localeCompare(a.paid_date || a.due_date || '')
+      );
+      const latest = sorted[0];
+      const dateStr = latest?.paid_date || latest?.due_date || (inc as any).created_at?.split('T')[0] || '1970-01-01';
+      const d = new Date(dateStr + 'T12:00:00');
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (!buckets.has(key)) buckets.set(key, { key, label, date: d, incomes: [] });
+      buckets.get(key)!.incomes.push(inc);
+    }
+    return Array.from(buckets.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [visibleIncomes, viewMode]);
+
+  // Status chip counts.
+  //   • "All" reflects the current view (so the user knows how big the
+  //     visible scope is).
+  //   • "To collect" and "Overdue" reflect the ACTIVE view (since
+  //     clicking those chips auto-switches the view to Active).
+  //   • "Collected" reflects the HISTORY view (since clicking it
+  //     auto-switches the view to History).
+  // This way "Collected 7" always shows the 7 invoices you'd see if you
+  // clicked it — never a misleading number.
   const filterCounts = useMemo(() => {
-    const inViewAndPeriod = (incomes || []).filter((inc: any) => {
+    // Active scope: incomes NOT fully paid. Period filter ignored.
+    const activeScope = (incomes || []).filter((inc: any) => {
       const insts = inc.installments || [];
       const allPaid = insts.length > 0 && insts.every((i: any) => i.status === 'paid');
-      if (viewMode === 'active' && allPaid) return false;
-      if (viewMode === 'history' && !allPaid) return false;
-      if (viewMode === 'active') return true;
+      return !allPaid;
+    });
+    // History scope: fully paid AND honoring the period filter (paid_date
+    // inside the window). With period='all', no date gate.
+    const historyScope = (incomes || []).filter((inc: any) => {
+      const insts = inc.installments || [];
+      const allPaid = insts.length > 0 && insts.every((i: any) => i.status === 'paid');
+      if (!allPaid) return false;
       if (!periodBounds) return true;
       return insts.some((i: any) => {
         if (i.status !== 'paid') return false;
@@ -517,11 +553,12 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         return d >= periodBounds.from && d <= periodBounds.to;
       });
     });
+    const currentScope = viewMode === 'active' ? activeScope : historyScope;
     return {
-      all: inViewAndPeriod.length,
-      pending: inViewAndPeriod.filter(i => i.status === 'pending' || i.status === 'partial').length,
-      paid: inViewAndPeriod.filter(i => i.status === 'paid').length,
-      overdue: inViewAndPeriod.filter(i => i.status === 'overdue').length,
+      all: currentScope.length,
+      pending: activeScope.filter(i => i.status === 'pending' || i.status === 'partial').length,
+      paid: historyScope.length, // Collected = fully-paid invoices in the period
+      overdue: activeScope.filter(i => i.status === 'overdue').length,
     };
   }, [incomes, viewMode, periodBounds]);
 
@@ -610,12 +647,16 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         </span>
       </div>
 
-      {/* Filter row (status + search + date) */}
+      {/* Filter row (status + search + date)
+          Smart chip clicks: 'Collected' lives in History (fully-paid items),
+          while 'To collect' / 'Overdue' live in Active (open work). Auto-switching
+          the view on click means the user always sees what the chip promises
+          instead of an empty list. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
         <FilterPill active={incomeStatusFilter === 'all'} onClick={() => setIncomeStatusFilter('all')} count={filterCounts.all}>All</FilterPill>
-        <FilterPill active={incomeStatusFilter === 'pending'} onClick={() => setIncomeStatusFilter('pending')} count={filterCounts.pending}>To collect</FilterPill>
-        <FilterPill active={incomeStatusFilter === 'paid'} onClick={() => setIncomeStatusFilter('paid')} count={filterCounts.paid}>Collected</FilterPill>
-        <FilterPill active={incomeStatusFilter === 'overdue'} onClick={() => setIncomeStatusFilter('overdue')} count={filterCounts.overdue}>Overdue</FilterPill>
+        <FilterPill active={incomeStatusFilter === 'pending'} onClick={() => { setIncomeStatusFilter('pending'); setViewMode('active'); }} count={filterCounts.pending}>To collect</FilterPill>
+        <FilterPill active={incomeStatusFilter === 'paid'} onClick={() => { setIncomeStatusFilter('paid'); setViewMode('history'); }} count={filterCounts.paid}>Collected</FilterPill>
+        <FilterPill active={incomeStatusFilter === 'overdue'} onClick={() => { setIncomeStatusFilter('overdue'); setViewMode('active'); }} count={filterCounts.overdue}>Overdue</FilterPill>
         <Dashed vertical style={{ height: 24, margin: '0 4px' }} />
         <SearchPill value={incomeSearch} onChange={setIncomeSearch} placeholder="Client, project, or concept…" width={260} />
         <input type="date" value={incomeDateFrom} onChange={e => setIncomeDateFrom(e.target.value)}
@@ -679,7 +720,37 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         />
       ) : (
         <Card padding={0}>
-          {visibleIncomes.map((inc, idx) => {
+          {groupedIncomes.map((group, gIdx) => (
+            <React.Fragment key={group.key}>
+              {group.label && (
+                <div style={{
+                  display: 'flex', alignItems: 'baseline', gap: 10,
+                  padding: '14px 24px 8px',
+                  borderTop: gIdx > 0 ? `1px dashed ${C.dashedSoft}` : 'none',
+                  background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(90,62,62,0.025)',
+                }}>
+                  <span style={{
+                    fontFamily: 'Inter', fontSize: 11, fontWeight: 600,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: C.meta,
+                  }}>{group.label}</span>
+                  <span style={{
+                    fontFamily: 'Inter', fontSize: 10, color: C.meta, opacity: 0.7,
+                  }}>· {group.incomes.length} invoice{group.incomes.length !== 1 ? 's' : ''}</span>
+                  <span style={{
+                    marginLeft: 'auto', fontFamily: 'Inter', fontSize: 11, fontWeight: 500,
+                    color: C.income, fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {fmt(group.incomes.reduce((s, inc) => {
+                      const paidSum = (inc.installments || [])
+                        .filter(i => i.status === 'paid')
+                        .reduce((acc, i) => acc + (i.amount || 0), 0);
+                      return s + paidSum;
+                    }, 0))}
+                  </span>
+                </div>
+              )}
+              {group.incomes.map((inc, idx) => {
             const paid = (inc.installments || []).filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
             const totalCount = (inc.installments || []).length;
             const paidCount = (inc.installments || []).filter(i => i.status === 'paid').length;
@@ -691,7 +762,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
               .filter(i => i.status !== 'paid')
               .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))[0];
             return (
-              <div key={inc.id} style={{ borderBottom: idx < visibleIncomes.length - 1 ? `1px dashed ${C.dashedSoft}` : 'none' }}>
+              <div key={inc.id} style={{ borderBottom: idx < group.incomes.length - 1 ? `1px dashed ${C.dashedSoft}` : 'none' }}>
                 <div
                   onClick={() => { setExpandedIncome(isExpanded ? null : inc.id); if (!isExpanded && inc.project_id) fetchProjectTasks(inc.project_id); }}
                   style={{
@@ -877,6 +948,8 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
               </div>
             );
           })}
+            </React.Fragment>
+          ))}
           <style>{`.livv-row:hover .livv-row-action { opacity: 0.6 !important; } .livv-row .livv-row-action:hover { opacity: 1 !important; background: rgba(0,0,0,0.05) !important; }`}</style>
         </Card>
       )}
