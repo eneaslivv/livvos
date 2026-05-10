@@ -55,12 +55,14 @@ const getIconComponent = (iconName: string) => {
 
 const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Icons; kind: 'chat' | 'insights' }[] = [
   { label: 'Strategic overview', prompt: '__INSIGHTS__', icon: 'Sparkles', kind: 'insights' },
-  { label: 'Planificá mi semana', prompt: 'Armame un plan para esta semana: 4-6 tareas prioritarias distribuidas L-V con foco en mis proyectos activos. Proponé las acciones para que las pueda aprobar.', icon: 'Calendar', kind: 'chat' },
-  { label: '¿En qué enfocarme?', prompt: '¿En qué proyectos y tareas debería enfocarme esta semana, considerando deadlines y prioridades?', icon: 'Target', kind: 'chat' },
-  { label: 'Salud financiera', prompt: 'Analizá mi salud financiera actual: ingresos cobrados vs pendientes, gastos y balance.', icon: 'TrendingUp', kind: 'chat' },
-  { label: 'Riesgos en proyectos', prompt: '¿Qué proyectos están en riesgo o atrasados, y qué puedo hacer? Si hay que delegar algo, sugerimelo.', icon: 'Flag', kind: 'chat' },
-  { label: 'Romper proyecto en tareas', prompt: 'Elegí mi proyecto más urgente y rompelo en 5-8 tareas concretas que pueda aprobar para crear de una.', icon: 'List', kind: 'chat' },
-  { label: 'Cargar gasto', prompt: 'Cargá un gasto de $X concept Y a la categoría Z. Si te falta info, preguntame antes de proponer la acción.', icon: 'DollarSign', kind: 'chat' },
+  { label: 'Plan my week', prompt: 'Plan my week: pick 4-6 priority tasks spread Mon-Fri across my active projects. Propose the actions so I can approve them.', icon: 'Calendar', kind: 'chat' },
+  { label: 'Where to focus', prompt: 'What projects and tasks should I focus on this week, considering deadlines and priorities?', icon: 'Target', kind: 'chat' },
+  { label: 'Team workload', prompt: 'Who on the team is most loaded right now and who has bandwidth? Cite open task counts and overdue items per person.', icon: 'Users', kind: 'chat' },
+  { label: 'Follow up on a teammate', prompt: 'Pick one teammate who looks stuck (overdue tasks or no movement this week) and propose a short follow-up task assigned to them so I can approve it.', icon: 'ListChecks', kind: 'chat' },
+  { label: 'Financial health', prompt: 'Analyze my current financial health: paid vs pending income, expenses, and balance.', icon: 'TrendingUp', kind: 'chat' },
+  { label: 'Project risks', prompt: 'What projects are at risk or behind, and what can I do? If something should be delegated, suggest it.', icon: 'Flag', kind: 'chat' },
+  { label: 'Break project into tasks', prompt: 'Pick my most urgent project and break it into 5-8 concrete tasks I can approve to create at once.', icon: 'List', kind: 'chat' },
+  { label: 'Log expense', prompt: 'Log an expense of $X concept Y to category Z. If you are missing info, ask me before proposing the action.', icon: 'DollarSign', kind: 'chat' },
 ];
 
 // Each chat message is either a user line, an assistant text reply, an
@@ -590,12 +592,71 @@ export const AiAdvisor: React.FC = () => {
       });
     }
 
+    // ─── TEAM — per-member breakdown so user-centric queries route ─────
+    // ("qué hizo Luis esta semana", "qué le falta a María", "asignale esto
+    // a Juan") work without the model defaulting to the whole tenant.
+    // For each active member we surface: open count, overdue count,
+    // completed-this-week count, plus the 3 most urgent open tasks with
+    // title/due/priority/project so the model can reason concretely.
     const activeMembers = members.filter(m => m.status === 'active');
     const totalOpen = activeMembers.reduce((s, m) => s + (m.openTasks || 0), 0);
-    lines.push(`\nEQUIPO (${activeMembers.length} activos, ${totalOpen} tareas abiertas):`);
-    activeMembers.slice(0, 12).forEach((m: any) => {
-      lines.push(`- id=${m.id} | "${m.name || m.email}" | ${m.openTasks || 0} abiertas`);
+
+    // Reusable: priority rank + week-start anchored to Monday.
+    const teamPriorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const teamWeekStart = new Date(todayStart);
+    teamWeekStart.setDate(teamWeekStart.getDate() - ((teamWeekStart.getDay() + 6) % 7));
+
+    const isAssignedTo = (t: any, memberId: string) =>
+      (Array.isArray(t.assignee_ids) && t.assignee_ids.includes(memberId))
+      || t.assigned_to === memberId
+      || t.assignee_id === memberId;
+
+    lines.push(`\nEQUIPO (${activeMembers.length} activos, ${totalOpen} tareas abiertas en total):`);
+    activeMembers.slice(0, 14).forEach((m: any) => {
+      const isCurrentUser = m.id === currentUserId;
+      // skip duplicating the TÚ block detail for self — just mark the row.
+      if (isCurrentUser) {
+        lines.push(`- id=${m.id} | "${m.name || m.email}" | (current user, see TÚ block above)`);
+        return;
+      }
+
+      const memberOpen = (allTasks || [])
+        .filter((t: any) => {
+          if (t.completed || t.status === 'cancelled' || t.parent_task_id) return false;
+          return isAssignedTo(t, m.id);
+        })
+        .sort((a: any, b: any) => {
+          const pa = teamPriorityRank[a.priority || 'medium'] ?? 2;
+          const pb = teamPriorityRank[b.priority || 'medium'] ?? 2;
+          if (pa !== pb) return pa - pb;
+          return (a.start_date || a.due_date || '9999-12-31').localeCompare(b.start_date || b.due_date || '9999-12-31');
+        });
+
+      const memberOverdue = memberOpen.filter((t: any) => {
+        const d = t.start_date || t.due_date;
+        return d && new Date(d).getTime() < todayStart.getTime();
+      });
+
+      const memberCompletedThisWeek = (allTasks || []).filter((t: any) => {
+        if (!t.completed || !t.completed_at) return false;
+        const wasMine = t.completed_by === m.id || isAssignedTo(t, m.id);
+        if (!wasMine) return false;
+        return new Date(t.completed_at) >= teamWeekStart;
+      });
+
+      lines.push(`- id=${m.id} | "${m.name || m.email}" | role: ${m.role || 'n/a'} | open: ${memberOpen.length} (${memberOverdue.length} vencidas) | done esta semana: ${memberCompletedThisWeek.length}`);
+
+      // Top 3 open tasks — enough to reason ("qué le falta", "qué tiene
+      // pendiente"), without exploding context for big teams.
+      memberOpen.slice(0, 3).forEach((t: any) => {
+        const due = t.start_date || t.due_date;
+        const overdueFlag = due && new Date(due).getTime() < todayStart.getTime() ? ' [VENCIDA]' : '';
+        lines.push(`    · task_id=${t.id} | "${t.title}" | ${t.priority || 'medium'} | due ${due || 'n/a'}${overdueFlag}${t.project_name ? ` | ${t.project_name}` : ''}`);
+      });
+      if (memberOpen.length > 3) lines.push(`    · …+${memberOpen.length - 3} más`);
     });
+    if (activeMembers.length > 14) lines.push(`  …+${activeMembers.length - 14} miembros más`);
 
     // Compute Monday of the current week so plan_week defaults sensibly.
     const monday = new Date(now);
@@ -604,7 +665,9 @@ export const AiAdvisor: React.FC = () => {
     lines.push(`\nToday: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('en-US', { weekday: 'long' })}). Monday of this week: ${monday.toISOString().split('T')[0]}`);
 
     let result = lines.join('\n');
-    if (result.length > 5000) result = result.slice(0, 5000);
+    // Bumped from 5000 to 7500 to fit the per-member TEAM breakdown.
+    // Gemini handles ~30K tokens of context comfortably; this is well under.
+    if (result.length > 7500) result = result.slice(0, 7500);
     return result;
   }, [projects, clients, incomes, expenses, budgets, members, allTasks, user?.id, user?.email, profile?.name]);
 
