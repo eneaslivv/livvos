@@ -548,7 +548,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
   const handleFile = useCallback(async (file: File) => {
     setError(null);
     if (file.size > 5 * 1024 * 1024) {
-      setError('El archivo supera 5MB. Probá con uno más chico.');
+      setError('File exceeds 5MB. Try a smaller one.');
       return;
     }
     try {
@@ -556,7 +556,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       const XLSX = await loadXLSX();
       const wb = XLSX.read(buf, { type: 'array', cellDates: true, cellNF: false, cellText: true });
       if (wb.SheetNames.length === 0) {
-        setError('El archivo no tiene hojas.');
+        setError('The file has no sheets.');
         return;
       }
       // Iterate every sheet (tab) of the workbook. Each sheet is processed
@@ -589,7 +589,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       }
 
       if (sheets.length === 0) {
-        setError('El archivo está vacío o ninguna hoja tiene filas con datos.');
+        setError('The file is empty or no sheet has data rows.');
         return;
       }
 
@@ -597,7 +597,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setWorkbookData({ sheets, totalRows: totalRowsAcrossWorkbook });
     } catch (err: any) {
       console.error('[FinanceAssistant] file parse error', err);
-      setError('No pude leer ese archivo. Asegurate de que sea CSV o Excel válido.');
+      setError('Could not read that file. Make sure it is a valid CSV or Excel.');
     }
   }, []);
 
@@ -672,7 +672,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         }
 
         if (allEntries.length === 0) {
-          setError('La IA no encontró filas válidas en el archivo. Verificá los encabezados.');
+          setError('The AI did not find valid rows in the file. Check the headers.');
           setStep('input');
           setBatchProgress(null);
           return;
@@ -725,7 +725,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         setStep('preview_batch');
       } catch (err: any) {
         console.error('[FinanceAssistant] batch parse error', err);
-        setError(err?.message || 'No pude procesar el archivo.');
+        setError(err?.message || 'Could not process the file.');
         setStep('input');
         setBatchProgress(null);
       }
@@ -763,7 +763,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setStep('preview');
     } catch (err: any) {
       console.error('[FinanceAssistant] parse error', err);
-      setError(err?.message || 'No pude procesar la descripción. Probá reformular.');
+      setError(err?.message || 'Could not process the description. Try rephrasing.');
       setStep('input');
     }
   }, [workbookData, fileName, userInput, clients, projects, expenses, incomes, budgets]);
@@ -856,7 +856,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setTimeout(() => { onClose(); }, 900);
     } catch (err: any) {
       console.error('[FinanceAssistant] save error', err);
-      setError(err?.message || 'No pude guardar la entrada.');
+      setError(err?.message || 'Could not save the entry.');
       setStep('preview');
     }
   }, [draft, persistDraft, onClose]);
@@ -922,7 +922,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       setUnknownClients(prev => prev.filter(n => n !== name));
     } catch (err: any) {
       console.error('[FinanceAssistant] create client error', err);
-      setError(err?.message || 'No pude crear el cliente.');
+      setError(err?.message || 'Could not create the client.');
     }
   }, [createClient, draft]);
 
@@ -1071,7 +1071,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         ) : step === 'preview_batch' ? (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3 text-[11px] text-zinc-500">
-              <span className="font-medium text-zinc-700 dark:text-zinc-300">{batchTotals.n} filas seleccionadas</span>
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">{batchTotals.n} rows selected</span>
               <span className="text-emerald-600 dark:text-emerald-400 font-semibold">+{fmtCurrency(batchTotals.income)}</span>
               <span className="text-rose-600 dark:text-rose-400 font-semibold">−{fmtCurrency(batchTotals.expense)}</span>
             </div>
@@ -1085,7 +1085,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                 className="px-4 py-1.5 rounded-lg text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
                 style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}>
                 <CheckCircle2 size={13} />
-                Confirmar {selectedRows.size} {selectedRows.size === 1 ? 'fila' : 'filas'}
+                Confirm {selectedRows.size} {selectedRows.size === 1 ? 'row' : 'rows'}
               </button>
             </div>
           </div>
@@ -1134,8 +1134,8 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   <FileSpreadsheet size={18} className="text-zinc-500 group-hover:text-fuchsia-600 dark:group-hover:text-fuchsia-300 transition-colors" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Subí un Excel o CSV</div>
-                  <div className="text-[10px] text-zinc-400">Arrastrá un archivo o hacé click — procesa todas las pestañas en tandas de {BATCH_CHUNK_SIZE} filas</div>
+                  <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Upload an Excel or CSV</div>
+                  <div className="text-[10px] text-zinc-400">Drop a file or click — processes every tab in batches of {BATCH_CHUNK_SIZE} rows</div>
                 </div>
                 <Upload size={14} className="text-zinc-400 group-hover:text-fuchsia-600 transition-colors" />
                 <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.tsv,text/csv" onChange={onPickFile} className="hidden" />
@@ -1149,7 +1149,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{fileName}</div>
                     <div className="text-[10px] text-zinc-500">
-                      {workbookData.sheets.length} {workbookData.sheets.length === 1 ? 'hoja' : 'hojas'} · {workbookData.totalRows} filas totales
+                      {workbookData.sheets.length} {workbookData.sheets.length === 1 ? 'sheet' : 'sheets'} · {workbookData.totalRows} total rows
                     </div>
                   </div>
                   <button onClick={clearFile} type="button" className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
@@ -1186,7 +1186,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   <div className="flex items-start gap-1.5 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded px-2 py-1.5">
                     <AlertTriangle size={11} className="shrink-0 mt-0.5" />
                     <span>
-                      El archivo tiene {workbookData.totalRows} filas — solo se procesarán las primeras {MAX_TOTAL_ROWS}.
+                      File has {workbookData.totalRows} rows — only the first {MAX_TOTAL_ROWS} will be processed.
                     </span>
                   </div>
                 )}
@@ -1247,13 +1247,13 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             )}
 
             <div className="flex items-center justify-between pt-1">
-              <p className="text-[10px] text-zinc-400">⌘/Ctrl + Enter para enviar</p>
+              <p className="text-[10px] text-zinc-400">⌘/Ctrl + Enter to send</p>
               <button onClick={handleParse} type="button"
                 disabled={!userInput.trim() && !workbookData}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
                 style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)' }}>
                 <Wand2 size={13} />
-                {workbookData ? 'Procesar archivo' : 'Parse with AI'}
+                {workbookData ? 'Process file' : 'Parse with AI'}
               </button>
             </div>
           </>
@@ -1269,9 +1269,9 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               {workbookData
                 ? batchProgress
-                  ? `Tanda ${batchProgress.current} de ${batchProgress.total} — analizando filas y matcheando con tu CRM…`
-                  : 'Preparando tandas…'
-                : 'Procesando…'}
+                  ? `Batch ${batchProgress.current} of ${batchProgress.total} — analyzing rows and matching with your CRM…`
+                  : 'Preparing batches…'
+                : 'Processing…'}
             </p>
             {batchProgress && (
               <div className="w-48 h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
@@ -1285,7 +1285,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
         {step === 'saving' && (
           <div className="flex flex-col items-center justify-center gap-3 py-16">
             <Loader2 size={32} className="animate-spin text-emerald-500" />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Guardando…</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Saving…</p>
           </div>
         )}
 
@@ -1649,7 +1649,7 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
             <input type="checkbox" checked={allSelected} onChange={toggleAll}
               className="rounded border-zinc-300 dark:border-zinc-700 text-fuchsia-600 focus:ring-fuchsia-500" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              {drafts.length} filas detectadas
+              {drafts.length} rows detected
             </span>
           </label>
           <div className="flex items-center gap-3">

@@ -153,12 +153,12 @@ export const LivvSalesPipeline: React.FC = () => {
           <div key={g.group} className="bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-xl overflow-hidden">
             <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/40 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                Proyectos de {g.group}
+                Projects from {g.group}
               </h3>
               <div className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums flex items-center gap-3">
                 <span>Total: <strong className="text-zinc-700 dark:text-zinc-200">{fmtMoney(g.total)}</strong></span>
-                <span>Cobrado: <strong className="text-emerald-600 dark:text-emerald-400">{fmtMoney(g.collected)}</strong></span>
-                <span>Pendiente: <strong className="text-amber-600 dark:text-amber-400">{fmtMoney(g.pending)}</strong></span>
+                <span>Collected: <strong className="text-emerald-600 dark:text-emerald-400">{fmtMoney(g.collected)}</strong></span>
+                <span>Pending: <strong className="text-amber-600 dark:text-amber-400">{fmtMoney(g.pending)}</strong></span>
               </div>
             </div>
             <table className="w-full text-sm">
@@ -167,8 +167,8 @@ export const LivvSalesPipeline: React.FC = () => {
                   <th className="text-left px-4 py-2 font-medium">Project</th>
                   <th className="text-left px-4 py-2 font-medium">Client</th>
                   <th className="text-right px-4 py-2 font-medium">Total</th>
-                  <th className="text-right px-4 py-2 font-medium">Cobrado</th>
-                  <th className="text-right px-4 py-2 font-medium">Pendiente</th>
+                  <th className="text-right px-4 py-2 font-medium">Collected</th>
+                  <th className="text-right px-4 py-2 font-medium">Pending</th>
                   <th className="text-left px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2"></th>
                 </tr>
@@ -289,7 +289,7 @@ export const LivvSalesPipeline: React.FC = () => {
                 {projects.map(p => <option key={p.id} value={p.title} />)}
               </datalist>
               <input type="number" step="0.01" placeholder="Total" value={draft.total_amount || ''} onChange={e => setDraft(d => ({ ...d, total_amount: Number(e.target.value) }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-right" />
-              <input type="number" step="0.01" placeholder="Cobrado" value={draft.collected_amount || ''} onChange={e => setDraft(d => ({ ...d, collected_amount: Number(e.target.value) }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-right" />
+              <input type="number" step="0.01" placeholder="Collected" value={draft.collected_amount || ''} onChange={e => setDraft(d => ({ ...d, collected_amount: Number(e.target.value) }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-right" />
               <select value={draft.status} onChange={e => setDraft(d => ({ ...d, status: e.target.value as PipelineProject['status'] }))} className="px-2 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded">
                 {(Object.keys(STATUS_LABELS) as PipelineProject['status'][]).map(s => (
                   <option key={s} value={s}>{STATUS_LABELS[s]}</option>
@@ -314,7 +314,7 @@ export const LivvSalesPipeline: React.FC = () => {
               <span className="font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums">{fmtMoney(totalClosed)}</span>
             </div>
             <div className="flex items-center justify-between p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded">
-              <span className="text-zinc-500 dark:text-zinc-400">Total Cobrado</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Total Collected</span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{fmtMoney(totalCollected)}</span>
             </div>
             <div className="flex items-center justify-between p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded">
@@ -324,7 +324,7 @@ export const LivvSalesPipeline: React.FC = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
             <div className="flex items-center justify-between p-2 bg-amber-50/40 dark:bg-amber-500/5 rounded">
-              <span className="text-zinc-500 dark:text-zinc-400">Total Cobrado + Gastos · ratio</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Total Collected + Expenses · ratio</span>
               <span className="font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums">
                 {fmtMoney(totalCollected)} · {fmtMoney(totalExpenses)} · {fmtPct(expenseRatioOnCollected)}
               </span>

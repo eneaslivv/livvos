@@ -352,7 +352,7 @@ const TenantDetailPanel: React.FC<{
       })
       setSavedAt(Date.now())
     } catch (err: any) {
-      setSaveError(err?.message || 'No se pudieron guardar los cambios')
+      setSaveError(err?.message || 'Could not save changes')
     } finally {
       setSaving(false)
     }
@@ -481,7 +481,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
             Plan
-            {dirty.plan && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.plan && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <select
             value={plan}
@@ -497,7 +497,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 flex items-center gap-2">
             Features
-            {dirty.features && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.features && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <div className={`grid grid-cols-2 gap-1.5 rounded-lg p-1 transition-all ${dirty.features ? 'ring-2 ring-amber-300/60 dark:ring-amber-500/30' : ''}`}>
             {ALL_FEATURES.map(key => (
@@ -517,7 +517,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 flex items-center gap-2">
             Resource Limits
-            {dirty.resource_limits && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.resource_limits && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <div className={`grid grid-cols-2 gap-2 rounded-lg p-1 transition-all ${dirty.resource_limits ? 'ring-2 ring-amber-300/60 dark:ring-amber-500/30' : ''}`}>
             {([
@@ -542,7 +542,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
             Contact Name
-            {dirty.contact_name && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.contact_name && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <input
             type="text"
@@ -555,7 +555,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
             Contact Email
-            {dirty.contact_email && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.contact_email && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <input
             type="email"
@@ -568,7 +568,7 @@ const TenantDetailPanel: React.FC<{
         <div>
           <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
             Notes
-            {dirty.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+            {dirty.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Unsaved" />}
           </label>
           <textarea
             value={notes}
@@ -587,10 +587,10 @@ const TenantDetailPanel: React.FC<{
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Cambios sin guardar
+                Unsaved changes
               </span>
               <span className="ml-auto text-[10px] text-amber-600/70 dark:text-amber-400/70">
-                {Object.entries(dirty).filter(([k, v]) => k !== 'any' && v).length} campo(s)
+                {Object.entries(dirty).filter(([k, v]) => k !== 'any' && v).length} field(s)
               </span>
             </div>
           )}
@@ -598,7 +598,7 @@ const TenantDetailPanel: React.FC<{
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 animate-in fade-in slide-in-from-top-1">
               <Icons.Check size={13} className="text-emerald-600 dark:text-emerald-400" />
               <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                Guardado · cambios aplicados
+                Saved · changes applied
               </span>
             </div>
           )}
@@ -624,19 +624,19 @@ const TenantDetailPanel: React.FC<{
             {saving ? (
               <>
                 <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                Guardando…
+                Saving…
               </>
             ) : !dirty.any && savedAt ? (
               <>
                 <Icons.Check size={14} strokeWidth={3} />
-                Guardado
+                Saved
               </>
             ) : !dirty.any ? (
-              'Sin cambios para guardar'
+              'No changes to save'
             ) : (
               <>
                 <Icons.Save size={14} />
-                Guardar cambios
+                Save changes
               </>
             )}
           </button>

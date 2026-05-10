@@ -601,7 +601,7 @@ export const AiAdvisor: React.FC = () => {
     const monday = new Date(now);
     monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    lines.push(`\nFecha hoy: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('es-AR', { weekday: 'long' })}). Lunes de esta semana: ${monday.toISOString().split('T')[0]}`);
+    lines.push(`\nToday: ${now.toISOString().split('T')[0]} (${now.toLocaleDateString('en-US', { weekday: 'long' })}). Monday of this week: ${monday.toISOString().split('T')[0]}`);
 
     let result = lines.join('\n');
     if (result.length > 5000) result = result.slice(0, 5000);

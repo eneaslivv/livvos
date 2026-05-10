@@ -33,23 +33,23 @@ const SUGGESTION_GROUPS: Array<{
 }> = [
   {
     id: 'analyze',
-    label: 'Analizar',
+    label: 'Analyze',
     icon: TrendingUp,
     accent: 'text-violet-600 dark:text-violet-400',
     prompts: [
-      '¿Cuál es mi runway si mantengo este nivel de gastos?',
-      'Mostrame mis 5 mayores gastos del mes',
-      '¿Cómo voy con los cobros este mes?',
+      'What\'s my runway if expenses stay at this level?',
+      'Show me my 5 biggest expenses this month',
+      'How are this month\'s collections tracking?',
     ],
   },
   {
     id: 'log',
-    label: 'Registrar',
+    label: 'Log',
     icon: Receipt,
     accent: 'text-rose-600 dark:text-rose-400',
     prompts: [
-      'Anota un gasto de $120 en Software por Figma',
-      'Crea una factura de $5,000 a Acme con vencimiento en 15 días',
+      'Log a $120 Software expense for Figma',
+      'Create a $5,000 invoice for Acme due in 15 days',
     ],
   },
   {
@@ -58,8 +58,8 @@ const SUGGESTION_GROUPS: Array<{
     icon: Target,
     accent: 'text-amber-600 dark:text-amber-400',
     prompts: [
-      '¿Estoy cerca del límite de algún budget?',
-      'Aumentá el budget de Marketing en 20%',
+      'Am I close to any budget cap?',
+      'Increase the Marketing budget by 20%',
     ],
   },
 ];
@@ -210,8 +210,8 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
   // header so the user knows what the AI can see right now. Reassures
   // the user that the answers are grounded in their actual data.
   const contextPreview = useMemo(() => ([
-    { icon: Receipt, label: `${expenses.length} gastos`, color: 'text-rose-500 bg-rose-50 dark:bg-rose-500/10' },
-    { icon: ArrowDownLeft, label: `${incomes.length} ingresos`, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
+    { icon: Receipt, label: `${expenses.length} expenses`, color: 'text-rose-500 bg-rose-50 dark:bg-rose-500/10' },
+    { icon: ArrowDownLeft, label: `${incomes.length} incomes`, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
     { icon: Wallet, label: `${budgets.filter(b => b.is_active).length} budgets`, color: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10' },
   ]), [expenses.length, incomes.length, budgets]);
 
@@ -256,7 +256,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
         action_error: validActions.length > 0 ? validActions.map(() => '') : undefined,
       }]);
     } catch (err: any) {
-      setError(err?.message || 'No pude responder. Probá de nuevo.');
+      setError(err?.message || 'Could not get a reply. Try again.');
     } finally {
       setIsSending(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -329,7 +329,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
       }
       setActionState(msgIdx, actionIdx, 'done');
     } catch (err: any) {
-      setActionState(msgIdx, actionIdx, 'error', err?.message || 'Error al ejecutar');
+      setActionState(msgIdx, actionIdx, 'error', err?.message || 'Could not execute');
     }
   }, [messages, clients, createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome, updateBudget, setActionState]);
 
@@ -350,14 +350,14 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
       onClose={onClose}
       width="3xl"
       title="Finance copilot"
-      subtitle="Hacele preguntas o registrá movimientos en lenguaje natural — siempre con tus datos reales"
+      subtitle="Ask questions or log entries in natural language — always grounded in your real data"
       headerRight={
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
             <button
               type="button"
               onClick={resetConversation}
-              title="Empezar de nuevo"
+              title="Start over"
               className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <RotateCcw size={11} />
@@ -420,7 +420,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
               }}
               rows={1}
               disabled={isSending}
-              placeholder="Preguntale al copilot, o registrá un movimiento…"
+              placeholder="Ask the copilot, or log an entry…"
               className="w-full resize-none rounded-2xl bg-transparent px-4 pt-3.5 pb-12 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none leading-relaxed"
               style={{ minHeight: 76 }}
             />
@@ -430,12 +430,12 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
                 <kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-500 dark:text-zinc-400 text-[9px] border border-zinc-200/60 dark:border-zinc-700/60">
                   Enter
                 </kbd>
-                <span>enviar</span>
+                <span>send</span>
                 <span className="text-zinc-300 dark:text-zinc-700">·</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-500 dark:text-zinc-400 text-[9px] border border-zinc-200/60 dark:border-zinc-700/60">
                   Shift + Enter
                 </kbd>
-                <span>nueva línea</span>
+                <span>new line</span>
               </div>
               <button
                 onClick={() => send()}
@@ -446,13 +446,13 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
                   background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
                 }}
               >
-                <span>Enviar</span>
+                <span>Send</span>
                 <CornerDownLeft size={11} strokeWidth={2.5} />
               </button>
             </div>
           </div>
           <p className="text-[10px] text-zinc-400 mt-2 text-center">
-            Las respuestas se basan en tus datos reales. Doble-checkear cualquier número antes de tomar decisiones.
+            Replies are grounded in your real data. Double-check any number before acting on it.
           </p>
         </div>
       </div>
@@ -480,12 +480,12 @@ const EmptyState: React.FC<{
       </div>
       <div className="flex-1 min-w-0 pt-1">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
-          ¿En qué te ayudo hoy?
+          How can I help today?
         </h3>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
           {tenantName
-            ? `Soy tu copilot financiero${tenantName ? ` para ${tenantName}` : ''} — analizo, registro y respondo en base a tus datos reales.`
-            : 'Soy tu copilot financiero — analizo, registro y respondo en base a tus datos reales.'}
+            ? `I'm your finance copilot${tenantName ? ` for ${tenantName}` : ''} — I analyze, log and answer using your real data.`
+            : `I'm your finance copilot — I analyze, log and answer using your real data.`}
         </p>
         {/* Context pills — what I can see */}
         <div className="flex flex-wrap items-center gap-1.5 mt-3">
@@ -505,7 +505,7 @@ const EmptyState: React.FC<{
     {/* Suggestion grid */}
     <div className="space-y-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-400 px-1">
-        Sugerencias
+        Suggestions
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {SUGGESTION_GROUPS.map((group) => (
@@ -604,15 +604,15 @@ const ActionCard: React.FC<{
   // Op-level metadata: friendly label + a tiny icon so the user can scan
   // a stack of action cards without reading every word.
   const opMeta: Record<string, { label: string; icon: any }> = {
-    mark_paid:      { label: 'Marcar como paid',      icon: CheckCircle2 },
-    mark_pending:   { label: 'Marcar como pending',   icon: Loader2 },
-    update_amount:  { label: 'Actualizar monto',      icon: Wand2 },
-    update_date:    { label: 'Actualizar fecha',      icon: Wand2 },
-    link_budget:    { label: 'Vincular a budget',     icon: Wallet },
-    delete:         { label: 'Eliminar',              icon: XCircle },
-    create_expense: { label: 'Crear gasto',           icon: ArrowUpFromLine },
-    create_income:  { label: 'Crear ingreso',         icon: ArrowDownLeft },
-    update_budget:  { label: 'Actualizar budget',     icon: Wallet },
+    mark_paid:      { label: 'Mark as paid',          icon: CheckCircle2 },
+    mark_pending:   { label: 'Mark as pending',       icon: Loader2 },
+    update_amount:  { label: 'Update amount',         icon: Wand2 },
+    update_date:    { label: 'Update date',           icon: Wand2 },
+    link_budget:    { label: 'Link to budget',        icon: Wallet },
+    delete:         { label: 'Delete',                icon: XCircle },
+    create_expense: { label: 'Create expense',        icon: ArrowUpFromLine },
+    create_income:  { label: 'Create income',         icon: ArrowDownLeft },
+    update_budget:  { label: 'Update budget',         icon: Wallet },
   };
   const meta = opMeta[a.op] || { label: a.op, icon: Wand2 };
   const OpIcon = meta.icon;
@@ -663,7 +663,7 @@ const ActionCard: React.FC<{
               onClick={onCancel}
               className="px-3 py-1 rounded-md text-[10px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
-              Cancelar
+              Cancel
             </button>
             <button
               type="button"
@@ -673,23 +673,23 @@ const ActionCard: React.FC<{
               }`}
             >
               <Wand2 size={10} />
-              {isDanger ? 'Eliminar' : 'Ejecutar'}
+              {isDanger ? 'Delete' : 'Run'}
             </button>
           </>
         )}
         {state === 'executing' && (
           <span className="flex items-center gap-1 text-[10px] text-zinc-500">
-            <Loader2 size={11} className="animate-spin" /> Ejecutando…
+            <Loader2 size={11} className="animate-spin" /> Running…
           </span>
         )}
         {state === 'done' && (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 size={11} /> Hecho
+            <CheckCircle2 size={11} /> Done
           </span>
         )}
         {state === 'cancelled' && (
           <span className="flex items-center gap-1 text-[10px] text-zinc-400">
-            <XCircle size={11} /> Cancelada
+            <XCircle size={11} /> Cancelled
           </span>
         )}
         {state === 'error' && (
@@ -698,7 +698,7 @@ const ActionCard: React.FC<{
             onClick={onExecute}
             className="px-3 py-1 rounded-md text-[10px] font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
           >
-            Reintentar
+            Retry
           </button>
         )}
       </div>

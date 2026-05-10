@@ -218,7 +218,7 @@ const AIBar: React.FC<{
         />
         <button
           type="button"
-          title="Pegar archivo / Upload Excel"
+          title="Attach file / Upload Excel"
           onClick={onOpenAssistant}
           style={{
             width: 32, height: 32, borderRadius: 9999, background: 'transparent',
@@ -230,7 +230,7 @@ const AIBar: React.FC<{
         </button>
         <button
           type="button"
-          title="Preguntale al AI"
+          title="Ask the AI"
           onClick={onOpenChat}
           style={{
             width: 32, height: 32, borderRadius: 9999, background: 'transparent',
@@ -1001,33 +1001,33 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
         </div>
         <Dashed vertical />
         <div style={{ padding: '0 24px' }}>
-          <Metric big label={`© Revenue ${currentMonth.label}`} value={fmt(currentMonth.revenue)}
+          <Metric big label={`© Revenue · ${currentMonth.label}`} value={fmt(currentMonth.revenue)}
             delta={currentMonth.revenueDelta !== undefined ? Math.round(currentMonth.revenueDelta * 10) / 10 : undefined}
-            hint="Cobrado este mes" />
+            hint="Collected this month" />
         </div>
         <Dashed vertical />
         <div style={{ padding: '0 24px' }}>
-          <Metric big label="© Pendiente cobrar" value={fmt(outstandingReceivables)}
+          <Metric big label="© Outstanding" value={fmt(outstandingReceivables)}
             hint="Open + overdue installments" />
         </div>
         <Dashed vertical />
         <div style={{ paddingLeft: 24 }}>
-          <Metric big label={`© Margin ${currentMonth.label}`} value={`${currentMonth.margin.toFixed(1)}%`}
+          <Metric big label={`© Margin · ${currentMonth.label}`} value={`${currentMonth.margin.toFixed(1)}%`}
             delta={currentMonth.marginDelta !== undefined ? Math.round(currentMonth.marginDelta * 10) / 10 : undefined}
             hint={`Net ${fmt(currentMonth.net)}`} />
         </div>
       </div>
 
-      {/* ─── Mes a Mes tracker ───────────────────────────────────
-          User said: "yo creo que lo mejor es ver cuanto se va ganando
-          mes a mes y que se actualice cada mes y lo mismo gastos mes a
-          mes profit margins y esas cosas tanto en % como en numero".
-          One row per month with revenue / expenses / net / margin —
-          highlights the current month so you spot it at a glance. */}
+      {/* ─── Month-by-month tracker ──────────────────────────────
+          User asked for: "see how much is being earned month over month
+          and have it auto-update each month, same for expenses and
+          profit margins, both in % and in number". One row per month
+          with revenue / expenses / net / margin — current month
+          highlighted so you spot it at a glance. */}
       {monthlyStats.length > 0 && (
         <div style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-            <Eyebrow gold>● Mes a mes</Eyebrow>
+            <Eyebrow gold>● Month by month</Eyebrow>
             <span style={{
               fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
               letterSpacing: '0.08em', textTransform: 'uppercase', color: C.meta,
@@ -1048,11 +1048,11 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
               padding: '12px 24px', gap: 12,
               borderBottom: `1px dashed ${C.dashedSoft}`,
             }}>
-              {['Mes', 'Revenue', 'Gastos', 'Net Profit', 'Margin'].map(h => (
+              {['Month', 'Revenue', 'Expenses', 'Net Profit', 'Margin'].map(h => (
                 <div key={h} style={{
                   fontFamily: '"JetBrains Mono", monospace', fontSize: 9,
                   letterSpacing: '0.12em', textTransform: 'uppercase', color: C.meta,
-                  textAlign: h === 'Mes' ? 'left' : 'right',
+                  textAlign: h === 'Month' ? 'left' : 'right',
                 }}>{h}</div>
               ))}
             </div>
@@ -1076,7 +1076,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
                       <span style={{
                         marginLeft: 6, fontSize: 9, fontWeight: 600, letterSpacing: '0.1em',
                         color: C.gold, textTransform: 'uppercase',
-                      }}>· hoy</span>
+                      }}>· now</span>
                     )}
                   </div>
                   <div style={{

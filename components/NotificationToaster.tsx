@@ -264,7 +264,7 @@ export const NotificationToaster: React.FC<NotificationToasterProps> = ({ onNavi
                     className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums"
                     title={formatNotificationFullDate(notification.created_at)}
                   >
-                    {formatNotificationClock(notification.created_at)} · hoy
+                    {formatNotificationClock(notification.created_at)} · today
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">

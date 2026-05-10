@@ -497,7 +497,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
                   icon={<Sparkles size={13} />}
                   label="Add with AI"
                   variant="gold"
-                  onClick={() => onOpenAIChat('Crea una factura de $5,000 a Acme con vencimiento en 15 días')}
+                  onClick={() => onOpenAIChat('Create a $5,000 invoice for Acme due in 15 days')}
                 />
               )}
               {onOpenAIAssistant && (
@@ -825,7 +825,7 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
                   icon={<Sparkles size={13} />}
                   label="Add with AI"
                   variant="gold"
-                  onClick={() => onOpenAIChat('Anota un gasto de $120 en Software por Figma')}
+                  onClick={() => onOpenAIChat('Log a $120 Software expense for Figma')}
                 />
               )}
               {onOpenAIAssistant && (
@@ -1014,7 +1014,7 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
                   icon={<Sparkles size={13} />}
                   label="Suggest budgets"
                   variant="gold"
-                  onClick={() => onOpenAIChat('Sugerí budgets razonables basados en mi historial de gastos de los últimos 3 meses')}
+                  onClick={() => onOpenAIChat('Suggest reasonable budgets based on my last 3 months of expenses')}
                 />
               )}
             </div>

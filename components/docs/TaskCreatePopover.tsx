@@ -110,7 +110,7 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
         <button
           onClick={onCancel}
           className="px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-        >Cancelar</button>
+        >Cancel</button>
         <button
           onClick={submit}
           disabled={!title.trim()}

@@ -279,12 +279,12 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                     <button
                       onClick={() => { setNotesDraft(strategy?.pinned_notes || ''); setNotesEditing(false); }}
                       className="px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                    >Cancelar</button>
+                    >Cancel</button>
                     <button
                       onClick={handleSaveNotes}
                       disabled={savingNotes}
                       className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 disabled:opacity-40"
-                    >{savingNotes ? '…' : 'Guardar'}</button>
+                    >{savingNotes ? '…' : 'Save'}</button>
                   </div>
                 </>
               ) : (

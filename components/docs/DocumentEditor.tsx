@@ -275,8 +275,8 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   const slashItems = useMemo<SlashItem[]>(() => [
     {
       id: 'task',
-      label: 'Tarea con fecha',
-      hint: 'Crea una tarea en este doc y la pone en el calendario',
+      label: 'Dated task',
+      hint: 'Creates a task in this doc and adds it to the calendar',
       icon: 'SquareCheck',
       keywords: ['tarea', 'task', 'todo', 'fecha', 'date', 'calendario'],
       run: (ed, range) => {

@@ -18,9 +18,9 @@ interface ColumnConfig {
 }
 
 const COLUMNS: ColumnConfig[] = [
-  { id: 'todo',         label: 'Pendiente',  dot: 'bg-zinc-400',    ring: 'ring-zinc-400/40',    tint: 'bg-zinc-500/[0.04]' },
-  { id: 'in-progress',  label: 'Trabajando', dot: 'bg-amber-500',   ring: 'ring-amber-400/40',   tint: 'bg-amber-500/[0.04]' },
-  { id: 'done',         label: 'Completado', dot: 'bg-emerald-500', ring: 'ring-emerald-400/40', tint: 'bg-emerald-500/[0.04]' },
+  { id: 'todo',         label: 'To do',      dot: 'bg-zinc-400',    ring: 'ring-zinc-400/40',    tint: 'bg-zinc-500/[0.04]' },
+  { id: 'in-progress',  label: 'In progress',dot: 'bg-amber-500',   ring: 'ring-amber-400/40',   tint: 'bg-amber-500/[0.04]' },
+  { id: 'done',         label: 'Done',       dot: 'bg-emerald-500', ring: 'ring-emerald-400/40', tint: 'bg-emerald-500/[0.04]' },
   { id: 'cancelled',    label: 'Cancelado',  dot: 'bg-rose-400',    ring: 'ring-rose-400/40',    tint: 'bg-rose-500/[0.04]' },
 ];
 

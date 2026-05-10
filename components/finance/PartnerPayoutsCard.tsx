@@ -159,20 +159,20 @@ export const PartnerPayoutsCard: React.FC = () => {
             Partner Payouts
           </div>
           <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            Distribución entre socios
+            Profit distribution between partners
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Repartición histórica de utilidades por período. {periods.length} período{periods.length === 1 ? '' : 's'} cargado{periods.length === 1 ? '' : 's'}.
+            Historical share split by period. {periods.length} period{periods.length === 1 ? '' : 's'} on file.
           </p>
         </div>
         <div className="flex items-center gap-3 text-right shrink-0">
           <div>
-            <div className="text-[9px] uppercase tracking-wider text-zinc-400">Distribuído</div>
+            <div className="text-[9px] uppercase tracking-wider text-zinc-400">Distributed</div>
             <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(totalDistributable)}</div>
           </div>
           {totalOutstanding > 0 && (
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-amber-500">Pendiente</div>
+              <div className="text-[9px] uppercase tracking-wider text-amber-500">Outstanding</div>
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400 tabular-nums">{fmt(totalOutstanding)}</div>
             </div>
           )}
@@ -194,7 +194,7 @@ export const PartnerPayoutsCard: React.FC = () => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-[9px] uppercase tracking-wider text-zinc-400">Distribuible</div>
+                <div className="text-[9px] uppercase tracking-wider text-zinc-400">Distributable</div>
                 <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(p.distributable)}</div>
               </div>
             </div>
@@ -218,7 +218,7 @@ export const PartnerPayoutsCard: React.FC = () => {
                       <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(partner.payout)}</span>
                       {isFullyPaid ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          <Icons.Check size={11} /> pagado
+                          <Icons.Check size={11} /> paid
                         </span>
                       ) : (
                         <button
@@ -226,13 +226,13 @@ export const PartnerPayoutsCard: React.FC = () => {
                           disabled={markingPaid === row.id}
                           className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-80 disabled:opacity-50 transition-opacity"
                         >
-                          {markingPaid === row.id ? 'Marcando…' : 'Marcar pagado'}
+                          {markingPaid === row.id ? 'Marking…' : 'Mark as paid'}
                         </button>
                       )}
                     </div>
                     {!isFullyPaid && (
                       <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
-                        Pagado {fmt(partner.paid)} · saldo {fmt(partner.balance)}
+                        Paid {fmt(partner.paid)} · balance {fmt(partner.balance)}
                       </div>
                     )}
                     {partner.notes && (
@@ -250,8 +250,8 @@ export const PartnerPayoutsCard: React.FC = () => {
 
       {/* Helper hint */}
       <p className="text-[10px] text-zinc-400 mt-3">
-        Para crear un nuevo período: añadí filas a <code className="font-mono">partner_payouts</code> via SQL o
-        pedile al copilot "armá el split del mes" cuando esté listo el módulo.
+        To add a new period: insert rows into <code className="font-mono">partner_payouts</code> directly,
+        or ask the copilot "build this month's split" once the inline workflow is wired.
       </p>
     </div>
   );

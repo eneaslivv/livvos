@@ -2885,37 +2885,37 @@ const FinanceAIQuickBar: React.FC<{
     switch (activeTab) {
       case 'ingresos':
         return [
-          'Crea una factura de $5,000 a Acme con vencimiento en 15 días',
-          '¿Qué facturas tengo pendientes de cobro?',
-          'Marca como pagada la última factura de Globex',
+          'Create a $5,000 invoice for Acme due in 15 days',
+          'Which invoices are still outstanding?',
+          'Mark the latest Globex invoice as paid',
         ];
       case 'gastos':
         return [
-          'Anota un gasto de $120 en Software por Figma',
-          '¿Cuánto gasté en marketing este mes?',
-          'Mostrame mis 5 mayores gastos del mes',
+          'Log a $120 Software expense for Figma',
+          'How much did I spend on marketing this month?',
+          'Show me my 5 biggest expenses this month',
         ];
       case 'budgets':
         return [
-          'Crea un budget de Marketing de $2,000/mes',
-          '¿Estoy cerca del límite de algún budget?',
-          'Aumenta el budget de Software en 20%',
+          'Create a $2,000/mo Marketing budget',
+          'Am I close to any budget cap?',
+          'Increase the Software budget by 20%',
         ];
       case 'propuestas':
         return [
-          '¿Qué propuestas están pendientes de aprobar?',
-          'Resumime los montos de mis propuestas activas',
+          'Which proposals are pending approval?',
+          'Summarize the amounts of my active proposals',
         ];
       case 'proyectos':
         return [
-          '¿Qué proyecto tiene mejor margen?',
-          'Mostrame los proyectos que están perdiendo plata',
+          'Which project has the best margin?',
+          'Show me the projects losing money',
         ];
       default:
         return [
-          'Anotame un gasto de $80 en transporte hoy',
-          '¿Cuál es mi runway si mantengo este nivel de gastos?',
-          '¿Cómo voy con los cobros este mes?',
+          'Log an $80 transport expense for today',
+          'What\'s my runway at this expense level?',
+          'How are this month\'s collections going?',
         ];
     }
   }, [activeTab]);
@@ -2942,7 +2942,7 @@ const FinanceAIQuickBar: React.FC<{
         <button
           type="button"
           onClick={onOpenAssistant}
-          title="Adjuntar Excel / archivo"
+          title="Attach Excel / file"
           className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
           <Plus size={14} />

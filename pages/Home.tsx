@@ -1219,7 +1219,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                     </div>
                                 )
                             ) : overdueTasks.length === 0 ? (
-                                <p className="text-xs text-zinc-400 py-3 text-center">Sin eventos ni tareas para hoy</p>
+                                <p className="text-xs text-zinc-400 py-3 text-center">No events or tasks for today</p>
                             ) : null}
                         </div>
                     )}

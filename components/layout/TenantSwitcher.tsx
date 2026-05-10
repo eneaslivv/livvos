@@ -70,7 +70,7 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
     };
 
     const revokeInvite = async (invite: PendingInvite) => {
-        if (!window.confirm(`Cancelar la invitación a "${invite.invited_agency_name}" (${invite.invited_email})?`)) return;
+        if (!window.confirm(`Cancel the invitation to "${invite.invited_agency_name}" (${invite.invited_email})?`)) return;
         setRevokingId(invite.id);
         try {
             // Try the SECURITY DEFINER RPC first (cleanest path); fall back to
