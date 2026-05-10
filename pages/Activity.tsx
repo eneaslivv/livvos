@@ -118,7 +118,9 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
     // source of truth is assignee_ids[] (current) + assigned_to (legacy
     // single). Pulling all three so the per-person stats below resolve
     // to a non-null id reliably regardless of when the task was created.
-    select: 'id,title,assignee_id,assignee_ids,assigned_to,owner_id,completed,completed_at,completed_by,priority,status,project_id,client_id,due_date,start_date',
+    // started_at + created_at let the Member panel compute real time-to-complete
+    // (started_at → completed_at) per task and surface durations in the recap.
+    select: 'id,title,assignee_id,assignee_ids,assigned_to,owner_id,completed,completed_at,completed_by,priority,status,project_id,client_id,due_date,start_date,started_at,created_at',
   });
   const { members } = useTeam();
 

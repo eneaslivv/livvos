@@ -47,9 +47,45 @@ interface Task {
   project_name?: string | null;
   client_name?: string | null;
   created_at?: string | null;
+  /** First time the task entered status='in-progress'. Auto-set by DB
+   *  trigger; used to compute real time-to-complete. Falls back to
+   *  created_at for tasks that bypassed in-progress. */
+  started_at?: string | null;
   due_date?: string | null;
   start_date?: string | null;
 }
+
+// ─── Duration helpers ─────────────────────────────────────────────
+// Compute time from started_at → completed_at (or created_at → completed_at
+// as fallback). Returns hours as a number + a human label.
+const taskDuration = (t: Task): { hours: number; label: string } | null => {
+  if (!t.completed || !t.completed_at) return null;
+  const startSrc = t.started_at || t.created_at;
+  if (!startSrc) return null;
+  const start = new Date(startSrc).getTime();
+  const end = new Date(t.completed_at).getTime();
+  if (!isFinite(start) || !isFinite(end) || end < start) return null;
+  const hours = Math.max(0, (end - start) / 3_600_000);
+  return { hours, label: humanizeDuration(hours) };
+};
+
+// "same day" / "3h" / "2d 4h" / "5d" — concise enough to fit in a row.
+const humanizeDuration = (hours: number): string => {
+  if (hours < 1) return 'mismo día';
+  if (hours < 24) return `${Math.round(hours)}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = Math.round(hours - days * 24);
+  if (days < 7) {
+    return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+  }
+  // Past 7 days, drop the hours — clutter, not signal.
+  return `${days}d`;
+};
+
+// "Slow" threshold: tasks taking more than 5 days from start to completion.
+// 5 days roughly = a typical work week. Anything longer is worth flagging
+// so the panel and AI surface where things are sticking.
+const SLOW_THRESHOLD_HOURS = 5 * 24;
 
 // Whether a task "belongs to" the given member — checks every column
 // variant (legacy single, current array, completion attribution).
@@ -285,7 +321,11 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
 
   // Tasks scoped to this member + period.
   const scope = useMemo(() => {
-    if (!member) return { completedInPeriod: [], openAssigned: [], delegatedByThem: [], overdue: [], allCompletedHistorical: [] };
+    if (!member) return {
+      completedInPeriod: [], openAssigned: [], delegatedByThem: [], overdue: [],
+      allCompletedHistorical: [], slowestInPeriod: [],
+      avgHours: null as number | null, longTimers: [] as Task[],
+    };
 
     const isInRange = (s?: string | null) => {
       if (!s) return false;
@@ -321,7 +361,42 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
       .filter(t => isMemberTask(t, member.id) && t.completed)
       .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
 
-    return { completedInPeriod, openAssigned, delegatedByThem, overdue, allCompletedHistorical };
+    // ─── Duration analytics ──────────────────────────────────────
+    // Top 5 slowest closures in the period — anything taking longer than
+    // SLOW_THRESHOLD_HOURS gets surfaced as a "where are we sticking" signal.
+    const completedWithDuration = completedInPeriod
+      .map(t => ({ task: t, dur: taskDuration(t) }))
+      .filter(x => x.dur !== null) as { task: Task; dur: { hours: number; label: string } }[];
+    const slowestInPeriod = completedWithDuration
+      .filter(x => x.dur.hours >= SLOW_THRESHOLD_HOURS)
+      .sort((a, b) => b.dur.hours - a.dur.hours)
+      .slice(0, 5)
+      .map(x => x.task);
+
+    // Average completion time across all completions in the period (hours).
+    const avgHours = completedWithDuration.length > 0
+      ? Math.round(
+          completedWithDuration.reduce((s, x) => s + x.dur.hours, 0)
+          / completedWithDuration.length
+        )
+      : null;
+
+    // OPEN tasks that are sitting in-progress for >SLOW_THRESHOLD without
+    // being closed yet. These are the "where are things stuck right now"
+    // signal. Excludes tasks that were just created — only flags ones that
+    // have actually been worked on (started_at set).
+    const nowMs = Date.now();
+    const longTimers = openAssigned
+      .filter(t => {
+        const started = t.started_at;
+        if (!started) return false;
+        const ageHours = (nowMs - new Date(started).getTime()) / 3_600_000;
+        return ageHours >= SLOW_THRESHOLD_HOURS;
+      })
+      .sort((a, b) => new Date(a.started_at!).getTime() - new Date(b.started_at!).getTime())
+      .slice(0, 5);
+
+    return { completedInPeriod, openAssigned, delegatedByThem, overdue, allCompletedHistorical, slowestInPeriod, avgHours, longTimers };
   }, [member, tasks, range]);
 
   // Activity events scoped to this member + period.
@@ -389,13 +464,20 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         period: PERIOD_LABEL[period],
         period_range: { from: range.from.toISOString().split('T')[0], to: range.to.toISOString().split('T')[0] },
         completed_count: scope.completedInPeriod.length,
-        completed: scope.completedInPeriod.slice(0, 30).map(t => ({
-          title: t.title,
-          project: t.project_name,
-          client: t.client_name,
-          completed_at: t.completed_at,
-          priority: t.priority,
-        })),
+        // Each completed task now carries duration_hours + duration_label
+        // so the AI can call out specific slow closures by name.
+        completed: scope.completedInPeriod.slice(0, 30).map(t => {
+          const dur = taskDuration(t);
+          return {
+            title: t.title,
+            project: t.project_name,
+            client: t.client_name,
+            completed_at: t.completed_at,
+            priority: t.priority,
+            duration_hours: dur ? Math.round(dur.hours) : null,
+            duration_label: dur ? dur.label : null,
+          };
+        }),
         open_count: scope.openAssigned.length,
         open_high_priority: scope.openAssigned.filter(t => t.priority === 'high' || t.priority === 'urgent').slice(0, 10).map(t => ({
           title: t.title,
@@ -406,6 +488,23 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         delegated_count: scope.delegatedByThem.length,
         login_count: loginCount,
         activity_count: memberActivities.length,
+        // Duration analytics so the AI can flag where things are sticking.
+        duration_stats: {
+          avg_hours_in_period: scope.avgHours,
+          slow_threshold_hours: SLOW_THRESHOLD_HOURS,
+          slowest_completed_in_period: scope.slowestInPeriod.map(t => ({
+            title: t.title,
+            project: t.project_name,
+            duration_label: taskDuration(t)?.label || null,
+            duration_hours: Math.round(taskDuration(t)?.hours || 0),
+          })),
+          long_running_open_now: scope.longTimers.map(t => ({
+            title: t.title,
+            project: t.project_name,
+            in_progress_for_label: humanizeDuration((Date.now() - new Date(t.started_at!).getTime()) / 3_600_000),
+            in_progress_for_hours: Math.round((Date.now() - new Date(t.started_at!).getTime()) / 3_600_000),
+          })),
+        },
         // Performance learning context — drives "best week in N" / trend phrasing.
         trend: {
           weekly_completed_last_8w: trendSignals.weeklyCompletedLast8w,
@@ -602,27 +701,98 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
           )}
         </div>
 
-        {/* Completed tasks list */}
+        {/* Completed tasks list — each row now carries a duration chip
+            (started_at → completed_at) so the user can see at a glance
+            which tasks took a beat vs which closed same-day. */}
         <Section
           title="Tareas completadas"
           count={scope.completedInPeriod.length}
           emptyText="Ninguna tarea completada en este período."
+          headerExtra={scope.avgHours != null ? (
+            <span className="text-[10px] text-zinc-400">
+              prom. <span className="text-zinc-600 dark:text-zinc-300 font-medium tabular-nums">{humanizeDuration(scope.avgHours)}</span> por tarea
+            </span>
+          ) : undefined}
         >
-          {scope.completedInPeriod.slice(0, 25).map(t => (
-            <TaskRow
-              key={t.id}
-              icon={<Icons.CheckCircle size={11} className="text-emerald-500" />}
-              title={t.title || 'Sin título'}
-              subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
-              meta={fmtDate(t.completed_at)}
-              priority={t.priority}
-              strike
-            />
-          ))}
+          {scope.completedInPeriod.slice(0, 25).map(t => {
+            const dur = taskDuration(t);
+            const isSlow = dur && dur.hours >= SLOW_THRESHOLD_HOURS;
+            return (
+              <TaskRow
+                key={t.id}
+                icon={<Icons.CheckCircle size={11} className="text-emerald-500" />}
+                title={t.title || 'Sin título'}
+                subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
+                meta={
+                  dur
+                    ? `${fmtDate(t.completed_at)} · tomó ${dur.label}`
+                    : fmtDate(t.completed_at)
+                }
+                metaClass={isSlow ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}
+                priority={t.priority}
+                strike
+              />
+            );
+          })}
           {scope.completedInPeriod.length > 25 && (
             <p className="text-[10px] text-zinc-400 italic px-1 mt-1">+{scope.completedInPeriod.length - 25} más</p>
           )}
         </Section>
+
+        {/* Slowest closures in the period — only renders when there's at
+            least one task above the threshold. Helps the user see which
+            specific deliverables are dragging out, not just an aggregate. */}
+        {scope.slowestInPeriod.length > 0 && (
+          <Section
+            title="Tardó más de la cuenta"
+            count={scope.slowestInPeriod.length}
+            tone="warning"
+            emptyText=""
+          >
+            {scope.slowestInPeriod.map(t => {
+              const dur = taskDuration(t)!;
+              return (
+                <TaskRow
+                  key={t.id}
+                  icon={<Icons.Clock size={11} className="text-amber-500" />}
+                  title={t.title || 'Sin título'}
+                  subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
+                  meta={`${dur.label} · cerrada ${fmtDate(t.completed_at)}`}
+                  metaClass="text-amber-600 dark:text-amber-400 font-medium"
+                  priority={t.priority}
+                />
+              );
+            })}
+          </Section>
+        )}
+
+        {/* Tasks currently sitting in-progress for >5 days. These are the
+            "where are we stuck right now" signal — different from overdue
+            (which is about due_date) because it's purely about how long
+            the task has been actively on someone's plate. */}
+        {scope.longTimers.length > 0 && (
+          <Section
+            title="En curso hace mucho"
+            count={scope.longTimers.length}
+            tone="warning"
+            emptyText=""
+          >
+            {scope.longTimers.map(t => {
+              const ageHours = (Date.now() - new Date(t.started_at!).getTime()) / 3_600_000;
+              return (
+                <TaskRow
+                  key={t.id}
+                  icon={<Icons.Clock size={11} className="text-rose-500" />}
+                  title={t.title || 'Sin título'}
+                  subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
+                  meta={`empezada hace ${humanizeDuration(ageHours)}`}
+                  metaClass="text-rose-600 dark:text-rose-400 font-medium"
+                  priority={t.priority}
+                />
+              );
+            })}
+          </Section>
+        )}
 
         {/* Open / pending tasks */}
         <Section
@@ -886,8 +1056,11 @@ const Section: React.FC<{
   count: number;
   emptyText: string;
   tone?: 'default' | 'warning';
+  /** Optional right-aligned annotation rendered next to the title — used
+   *  for "promedio Xh por tarea" on the completed list. */
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ title, count, emptyText, tone = 'default', children }) => (
+}> = ({ title, count, emptyText, tone = 'default', headerExtra, children }) => (
   <div className="mb-6">
     <div className="flex items-center gap-2 mb-2">
       <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
@@ -898,6 +1071,7 @@ const Section: React.FC<{
         : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
       }`}>{count}</span>
       <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+      {headerExtra}
     </div>
     {count === 0 && emptyText
       ? <p className="text-[11px] text-zinc-400 italic px-1">{emptyText}</p>

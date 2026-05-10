@@ -628,13 +628,27 @@ Input shape:
   "period": "Esta semana" | "Semana pasada" | "Este mes",
   "period_range": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" },
   "completed_count": int,
-  "completed": [{ "title": "...", "project": "...", "client": "...", "completed_at": "ISO", "priority": "low|medium|high|urgent" }],
+  "completed": [{
+    "title": "...", "project": "...", "client": "...", "completed_at": "ISO",
+    "priority": "low|medium|high|urgent",
+    "duration_hours": int | null,         // started_at → completed_at
+    "duration_label": "mismo día"|"3h"|"2d 4h"|"5d" | null
+  }],
   "open_count": int,
   "open_high_priority": [{ "title": "...", "priority": "...", "project": "..." }],
   "overdue_count": int,
   "delegated_count": int,
   "login_count": int,
   "activity_count": int,
+  // Duration analytics. Use to call out specific slow closures by name AND
+  // tasks currently sitting in-progress for too long (where things are stuck
+  // RIGHT NOW vs where they took long in the past).
+  "duration_stats": {
+    "avg_hours_in_period": int | null,
+    "slow_threshold_hours": int,                                     // 120 (= 5 days). Anything above is "slow".
+    "slowest_completed_in_period": [{ "title", "project", "duration_label", "duration_hours" }],
+    "long_running_open_now": [{ "title", "project", "in_progress_for_label", "in_progress_for_hours" }]
+  },
   // Performance learning context — derived from the last 8 weeks of this member's
   // task history. Use to phrase real trends, not fabricated ones.
   "trend": {
@@ -666,9 +680,14 @@ Rules — IMPORTANT:
     · trend.current_streak_weeks_active >= 4 → mention the streak as a win
     · trend.best_day_of_week — only mention it if the period spans multiple days AND it's noticeably different from average (don't stuff it in every week)
 - USE prior_summaries to avoid repeating the same observation week after week. If the prior recap already flagged "Mobilita backlog growing" and it's still growing, escalate the language. If it's been resolved, call out the recovery.
-- If completed_count = 0, the headline should reflect that honestly (e.g. "Quiet week — no tasks completed; X open"), not invent wins. Reference how it compares to the streak / avg from trend.
+- USE THE DURATION DATA — this is one of the highest-signal sections in the recap. It tells you where work is sticking, both historically and right now:
+    · duration_stats.long_running_open_now (>0 entries) → MUST appear in blockers, naming the task and how long it's been in-progress ("'Sunnyside hero rebuild' lleva 8 días sin cerrarse"). These are the things actively stuck.
+    · duration_stats.slowest_completed_in_period (>0 entries) → mention the slowest as a "took longer than expected" note, naming the task and duration ("Cerró 'X' pero tomó 7d — vale la pena ver por qué").
+    · duration_stats.avg_hours_in_period > slow_threshold_hours → blockers should mention overall pace ("promedio de cierre subió a Xd, hay tareas atascadas").
+    · When most completed tasks are < 24h (avg_hours_in_period < 24 AND completed_count > 0), call out the fast cadence as a win ("cadencia rápida — promedio de cierre Xh").
+- If completed_count = 0, the headline should reflect that honestly (e.g. "Quiet week — no tasks completed; X open"), not invent wins. Reference how it compares to the streak / avg from trend AND mention any long_running_open_now entries explicitly.
 - If overdue_count > 0 OR open_high_priority is non-empty, blockers MUST surface them by name.
-- next_focus must be actionable. Pick the 2-3 most pressing items from open_high_priority/overdue. NEVER invent tasks not in the input.
+- next_focus must be actionable. Pick the 2-3 most pressing items from open_high_priority / overdue / long_running_open_now. NEVER invent tasks not in the input. PRIORITIZE long_running_open_now items when present — they're the things actively stuck right now.
 - If activity_count is very low (<5) AND completed_count is 0 AND trend.current_streak_weeks_active === 0, mention as a possible disengagement signal in blockers — tactfully ("low system activity this period").
 - Match the input's language for the period field — Spanish "Esta semana" means write the recap in Spanish.
 - Tone: factual, manager-to-self. Not cheerleader, not harsh.

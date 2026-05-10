@@ -58,6 +58,11 @@ export interface CalendarTask {
   created_at: string
   updated_at: string
   completed_at?: string | null
+  /** Timestamp the task FIRST entered status='in-progress'. Auto-set
+   *  by a DB trigger (see migrations/2026-05-12_tasks_started_at.sql).
+   *  Used to compute real time-to-complete (started_at → completed_at)
+   *  in the Activity → Member panel and the AI weekly recap. */
+  started_at?: string | null
   mirror_pair_id?: string | null
   mirror_origin_tenant_id?: string | null
 }
@@ -153,6 +158,7 @@ const normalizeTask = (task: any): CalendarTask => ({
   created_at: task.created_at ?? new Date().toISOString(),
   updated_at: task.updated_at ?? new Date().toISOString(),
   completed_at: task.completed_at ?? null,
+  started_at: task.started_at ?? null,
   mirror_pair_id: task.mirror_pair_id ?? null,
   mirror_origin_tenant_id: task.mirror_origin_tenant_id ?? null,
 })
