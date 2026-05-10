@@ -756,12 +756,17 @@ export const Finance: React.FC = () => {
       );
 
       if (editingIncomeId) {
+        // Now updates total_amount + due_date too so retroactive corrections
+        // work end-to-end. The DB trigger stamps updated_by + updated_at on
+        // every UPDATE so the audit trail is automatic.
         const updates: Partial<IncomeEntry> = {
           client_id: incomeForm.client_id || null,
           project_id: incomeForm.project_id || null,
           client_name: client?.name || (incomeForm.client_id ? 'Client' : 'No client'),
           project_name: project?.title || (incomeForm.project_id ? 'Project' : 'No project'),
           concept: incomeForm.concept.trim(),
+          total_amount: Number(incomeForm.total_amount),
+          due_date: incomeForm.due_date || undefined,
         };
         if (import.meta.env.DEV) console.log('[Finance] Updating income:', editingIncomeId, updates);
         await Promise.race([updateIncome(editingIncomeId, updates), timeout]);
@@ -2657,21 +2662,29 @@ export const Finance: React.FC = () => {
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
 
-              {/* Amount + installments in a row */}
+              {/* Amount + installments in a row.
+                  When editing, total_amount + due_date are EDITABLE so the
+                  user can correct mistakes from past months. The number of
+                  installments stays locked (changing N would have to recreate
+                  rows and lose paid_date history); to redistribute amounts,
+                  use the per-installment editor below. */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total Amount *{editingIncomeId ? ' (read-only)' : ''}</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Total Amount *{editingIncomeId ? ' (recompute installments below if changed)' : ''}
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">$</span>
                     <input type="number" min="0" step="0.01" value={incomeForm.total_amount}
                       onChange={e => setIncomeForm(p => ({ ...p, total_amount: e.target.value }))}
                       placeholder="0"
-                      disabled={!!editingIncomeId}
-                      className={`w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 ${editingIncomeId ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Installments</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Installments{editingIncomeId ? ' (locked)' : ''}
+                  </label>
                   <input type="number" min="1" max="24" value={incomeForm.num_installments}
                     onChange={e => setIncomeForm(p => ({ ...p, num_installments: e.target.value }))}
                     disabled={!!editingIncomeId}
@@ -2679,17 +2692,18 @@ export const Finance: React.FC = () => {
                 </div>
               </div>
 
-              {/* Due date */}
-              {!editingIncomeId && (
+              {/* Due date — now editable when editing too, so a misplaced
+                  invoice from last month can be moved to its real date. */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">First installment date</label>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                  {editingIncomeId ? 'Invoice date' : 'First installment date'}
+                </label>
                 <input type="date" value={incomeForm.due_date}
                   onChange={e => setIncomeForm(p => ({ ...p, due_date: e.target.value }))}
                   className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100" />
               </div>
-              )}
 
-              {/* Installment preview */}
+              {/* Installment preview (CREATE only). */}
               {!editingIncomeId && incomeForm.total_amount && parseInt(incomeForm.num_installments) > 1 && (
                 <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
                   <Receipt size={14} className="text-emerald-500 shrink-0" />
@@ -2697,6 +2711,19 @@ export const Finance: React.FC = () => {
                     {incomeForm.num_installments} installments of ~{fmtCurrency(Number(incomeForm.total_amount) / parseInt(incomeForm.num_installments))} each
                   </span>
                 </div>
+              )}
+
+              {/* INSTALLMENTS EDITOR (EDIT mode only).
+                  Shows every installment of the income being edited with
+                  inline amount + due_date + paid_date inputs. Saves on blur.
+                  This is what makes retroactive correction actually possible
+                  for invoices that were split across months. */}
+              {editingIncomeId && (
+                <InlineInstallmentsEditor
+                  incomeId={editingIncomeId}
+                  incomes={incomes}
+                  updateInstallment={updateInstallment}
+                />
               )}
             </>
           ) : entryType === 'budget' ? (
@@ -2890,6 +2917,141 @@ export const Finance: React.FC = () => {
 };
 
 export default Finance;
+
+// ─── InlineInstallmentsEditor ─────────────────────────────────────────────
+// Lives inside the income edit modal. Lists every installment of the income
+// being edited and lets the user fix amount / due_date / paid_date inline.
+// Each field saves on blur. This is what makes retroactive correction of
+// past-month invoices actually work: if the date or split was wrong, you
+// can fix the specific installment without recreating the whole income.
+const InlineInstallmentsEditor: React.FC<{
+  incomeId: string;
+  incomes: IncomeEntry[];
+  updateInstallment: (id: string, updates: Partial<Installment>) => Promise<void>;
+}> = ({ incomeId, incomes, updateInstallment }) => {
+  const income = incomes.find(i => i.id === incomeId);
+  const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [errorId, setErrorId] = React.useState<string | null>(null);
+
+  if (!income || !income.installments || income.installments.length === 0) {
+    return null;
+  }
+
+  const sorted = [...income.installments].sort(
+    (a, b) => (a.number || 0) - (b.number || 0)
+  );
+
+  const saveField = async (
+    instId: string,
+    patch: Partial<Installment>,
+  ) => {
+    setSavingId(instId);
+    setErrorId(null);
+    try {
+      await updateInstallment(instId, patch);
+    } catch (err) {
+      console.error('[Finance] inline installment update failed', err);
+      setErrorId(instId);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const totalChecked = sorted.reduce((s, i) => s + (i.amount || 0), 0);
+  const headlineDelta = totalChecked - income.total_amount;
+
+  return (
+    <div className="space-y-2 mt-1">
+      <div className="flex items-baseline justify-between">
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          Installments · {sorted.length}
+        </label>
+        <span className={`text-[10px] tabular-nums ${
+          Math.abs(headlineDelta) < 0.01
+            ? 'text-zinc-400'
+            : 'text-amber-600 dark:text-amber-400'
+        }`}>
+          sum {fmtCurrency(totalChecked)}
+          {Math.abs(headlineDelta) >= 0.01 && (
+            <> · {headlineDelta > 0 ? '+' : ''}{fmtCurrency(headlineDelta)} vs total</>
+          )}
+        </span>
+      </div>
+      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+        {sorted.map((inst, idx) => {
+          const isPaid = inst.status === 'paid';
+          const isSaving = savingId === inst.id;
+          const hasError = errorId === inst.id;
+          return (
+            <div
+              key={inst.id}
+              className={`grid grid-cols-[auto_1fr_1fr_auto_auto] items-center gap-2 px-3 py-2 ${
+                idx > 0 ? 'border-t border-zinc-100 dark:border-zinc-800/60' : ''
+              } ${isPaid ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : ''}`}
+            >
+              <span className="text-[10px] font-mono tabular-nums text-zinc-400 w-6">
+                #{inst.number}
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={inst.amount}
+                onBlur={(e) => {
+                  const next = parseFloat(e.target.value);
+                  if (!isNaN(next) && next !== inst.amount) {
+                    saveField(inst.id, { amount: next });
+                  }
+                }}
+                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[12px] tabular-nums text-zinc-900 dark:text-zinc-100"
+              />
+              <input
+                type="date"
+                defaultValue={inst.due_date || ''}
+                onBlur={(e) => {
+                  const next = e.target.value || null;
+                  if (next !== inst.due_date) {
+                    saveField(inst.id, { due_date: next as any });
+                  }
+                }}
+                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[11px] tabular-nums text-zinc-700 dark:text-zinc-300"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  saveField(inst.id, isPaid
+                    ? { status: 'pending', paid_date: null as any }
+                    : { status: 'paid', paid_date: todayStr as any });
+                }}
+                title={isPaid ? 'Marcar pendiente' : 'Marcar pagada'}
+                className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-md font-semibold ${
+                  isPaid
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-400 transition-colors'
+                }`}
+              >
+                {isPaid ? 'paid' : 'pending'}
+              </button>
+              <span className="text-[10px] w-8 text-right">
+                {isSaving ? (
+                  <span className="text-amber-500">…</span>
+                ) : hasError ? (
+                  <span className="text-rose-500" title="Error">⚠</span>
+                ) : (
+                  <span className="text-emerald-500 opacity-0 transition-opacity">✓</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-zinc-400 italic">
+        Edits save automatically when you tab out of a field.
+      </p>
+    </div>
+  );
+};
 
 // ─── FinanceForecastBanner ────────────────────────────────────────────────
 // Compact strip that lives above the tab row on every non-Dashboard Finance
