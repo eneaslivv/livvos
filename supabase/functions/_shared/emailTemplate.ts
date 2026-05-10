@@ -172,16 +172,21 @@ const button = (label: string, href: string, opts: { fullWidth?: boolean; varian
   const arrowBg = isDark ? T.cream50 : T.cream900
   const arrowFg = isDark ? T.cream900 : T.cream50
   const widthAttr = opts.fullWidth ? 'width:100%;' : ''
-  // Use a single-row table so the arrow chip lines up cleanly across clients.
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${widthAttr}border-collapse:collapse;">
+  // Padding is applied to the LABEL <td> (not the wrapping <a>) because
+  // Gmail aggressively strips padding off display:block anchor tags. The
+  // label text is also wrapped in an explicit <span style="color:..."> so
+  // Gmail's "this looks like a link" auto-formatter doesn't repaint it
+  // cyan + underline (was the visible bug in production).
+  const labelHtml = `<span style="color:${fg};font-family:${FONT_SANS};font-weight:500;font-size:13px;letter-spacing:0.01em;text-decoration:none;">${escapeHtml(label)}</span>`
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${widthAttr}border-collapse:separate;">
     <tr>
-      <td style="border-radius:9999px;background:${bg};">
-        <a href="${escapeHtml(href)}" style="display:block;padding:12px 22px;color:${fg};font-family:${FONT_SANS};font-weight:500;font-size:13px;letter-spacing:0.01em;text-decoration:none;border-radius:9999px;">
+      <td style="border-radius:9999px;background:${bg};padding:0;">
+        <a href="${escapeHtml(href)}" style="display:block;text-decoration:none;border-radius:9999px;color:${fg};">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${widthAttr}border-collapse:collapse;">
             <tr>
-              <td style="vertical-align:middle;color:${fg};">${escapeHtml(label)}</td>
-              <td align="right" style="vertical-align:middle;width:30px;">
-                <span style="display:inline-block;width:30px;height:30px;border-radius:9999px;background:${arrowBg};color:${arrowFg};line-height:30px;text-align:center;font-size:13px;">&rarr;</span>
+              <td style="padding:13px 8px 13px 24px;vertical-align:middle;color:${fg};font-family:${FONT_SANS};font-weight:500;font-size:13px;letter-spacing:0.01em;line-height:1.3;text-decoration:none;">${labelHtml}</td>
+              <td align="right" style="padding:6px 6px 6px 0;vertical-align:middle;width:36px;">
+                <span style="display:inline-block;width:30px;height:30px;border-radius:9999px;background:${arrowBg};color:${arrowFg};line-height:30px;text-align:center;font-size:13px;font-family:${FONT_SANS};">&rarr;</span>
               </td>
             </tr>
           </table>
@@ -215,12 +220,15 @@ const taskRow = (t: { title: string; project?: string; assignee?: string; due?: 
 }
 
 const statCell = (s: { label: string; value: string; delta?: string; deltaPositive?: boolean; dark?: boolean; accent?: boolean }, isLast = false) => {
-  const labelColor = s.dark ? T.cream400 : T.cream500
-  const valueColor = s.accent ? T.gold : (s.dark ? T.parchment : T.cream900)
-  const borderColor = s.dark ? 'rgba(237,229,216,0.18)' : T.cream200
-  return `<td style="padding:16px 14px;border-right:${isLast ? 'none' : `1px dashed ${borderColor}`};vertical-align:top;">
-    <div style="font-family:${FONT_MONO};font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:${labelColor};margin-bottom:8px;">${escapeHtml(s.label)}</div>
-    <div style="font-family:${FONT_SANS};font-weight:300;font-size:36px;line-height:1;letter-spacing:-0.04em;color:${valueColor};">${escapeHtml(s.value)}</div>
+  // Labels on the dark stats row used cream400 (#A8A29A) which is medium gray
+  // on near-black wine700 — too low contrast to read. Parchment with 0.7 alpha
+  // gives ~5:1 contrast (WCAG AA). Values stay full-strength parchment / gold.
+  const labelColor = s.dark ? 'rgba(237,229,216,0.78)' : T.cream500
+  const valueColor = s.accent ? (s.dark ? T.goldBright : T.gold) : (s.dark ? '#FDFBF7' : T.cream900)
+  const borderColor = s.dark ? 'rgba(237,229,216,0.22)' : T.cream200
+  return `<td style="padding:18px 14px;border-right:${isLast ? 'none' : `1px dashed ${borderColor}`};vertical-align:top;">
+    <div style="font-family:${FONT_MONO};font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:${labelColor};margin-bottom:10px;">${colored(s.label, labelColor)}</div>
+    <div style="font-family:${FONT_SANS};font-weight:300;font-size:36px;line-height:1;letter-spacing:-0.04em;color:${valueColor};">${colored(s.value, valueColor)}</div>
     ${s.delta ? `<div style="margin-top:6px;font-size:10.5px;color:${s.deltaPositive ? T.sage : T.wine200};">${s.deltaPositive ? '&uarr;' : '&darr;'} ${escapeHtml(s.delta)}</div>` : ''}
   </td>`
 }
@@ -459,22 +467,25 @@ export function buildWeeklyDigestTeamEmail(p: WeeklyDigestTeamPayload): string {
   }).join('')
 
   const inner = `
-    <!-- Dark wine hero with subtle texture image (falls back to solid wine) -->
-    <div style="background:${T.wine400} url(${ASSETS.aboutBg}) center/cover no-repeat;color:${T.parchment};padding:36px 36px 32px;">
+    <!-- Dark wine hero. We dropped the about-bg.jpg overlay because the
+         asset has bright yellows that washed out the light headline.
+         A solid wine background with a subtle radial highlight in the
+         top-left keeps the cinematic feel without killing readability. -->
+    <div style="background:${T.wine400};background-image:radial-gradient(circle at 20% 0%, rgba(232,188,89,0.18), transparent 55%), radial-gradient(circle at 80% 100%, rgba(118,146,104,0.10), transparent 60%);color:${T.parchment};padding:36px 36px 32px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:28px;">
         <tr>
           <td>${wordmark(p.brandName, p.logoUrl, true)}</td>
-          <td align="right">${meta(`WDX® — DIGEST${p.digestNumber ? ` · ${p.digestNumber}` : ''}`, 'rgba(237,229,216,0.55)')}</td>
+          <td align="right">${meta(`WDX® — DIGEST${p.digestNumber ? ` · ${p.digestNumber}` : ''}`, 'rgba(237,229,216,0.7)')}</td>
         </tr>
       </table>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;padding-bottom:12px;border-bottom:1px dashed rgba(237,229,216,0.25);margin-bottom:22px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;padding-bottom:12px;border-bottom:1px dashed rgba(237,229,216,0.3);margin-bottom:22px;">
         <tr>
-          <td>${eyebrow('Weekly digest', 'rgba(241,173,216,0.85)')}</td>
-          <td align="right">${meta(p.weekLabel, 'rgba(241,173,216,0.7)')}</td>
+          <td>${eyebrow('Weekly digest', 'rgba(232,188,89,0.9)')}</td>
+          <td align="right">${meta(p.weekLabel, 'rgba(237,229,216,0.7)')}</td>
         </tr>
       </table>
-      <h1 style="margin:0;font-family:${FONT_SANS};font-weight:300;font-size:30px;line-height:1.05;letter-spacing:-0.045em;color:${T.parchment};">${escapeHtml(p.headline)}</h1>
-      ${p.intro ? `<div style="margin-top:22px;font-size:12.5px;color:rgba(237,229,216,0.7);line-height:1.6;max-width:480px;">${escapeHtml(p.intro)}</div>` : ''}
+      <h1 style="margin:0;font-family:${FONT_SANS};font-weight:300;font-size:30px;line-height:1.1;letter-spacing:-0.045em;color:#FDFBF7;">${escapeHtml(p.headline)}</h1>
+      ${p.intro ? `<div style="margin-top:18px;font-size:12.5px;color:rgba(237,229,216,0.75);line-height:1.6;max-width:480px;">${escapeHtml(p.intro)}</div>` : ''}
     </div>
 
     <!-- Stats row (dark) -->
