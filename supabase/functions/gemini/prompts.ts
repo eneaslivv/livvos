@@ -31,14 +31,81 @@ Rules:
 - Be specific and detailed — avoid generic tasks like "review" or "finalize"
 - Focus on QUALITY: fewer well-defined tasks > many vague tasks`
         : type === 'proposal'
-        ? `You are a commercial proposal writer for a creative/services agency. Return ONLY valid JSON with keys: summary (string, 2-3 sentences), content (string, markdown-style structured with headings ##), timeline (array of {week:number, title:string, detail:string}), language (en|es).
+        ? `You are a commercial proposal writer for a creative/services agency. Return ONLY valid JSON with keys:
+{
+  "summary": "string, 2-3 sentences",
+  "content": "string, markdown with ## headings (legacy fallback view)",
+  "timeline": [{"week": number, "title": "string", "detail": "string", "duration": "e.g. '2 wks'", "deliverables": ["string", ...]}],
+  "language": "en"|"es",
+  "document": {
+    // Structured payload that drives the Livv 'Sales Proposal v2' design
+    // (components/proposals/ProposalDocumentView). Stored under
+    // pricing_snapshot.document on the proposals row. ALL FIELDS OPTIONAL —
+    // only emit what the brief supports; the view falls back to defaults.
+    "contextLead": ["paragraph 1", "paragraph 2"],            // What you understood from the brief, in 1-2 short paragraphs.
+    "contextQuote": {"text": "verbatim from brief", "attribution": "Initial brief"},
+    "pillars": [                                              // Three guiding principles of HOW you work for this engagement.
+      {"num": "01 — Velocity", "title": "Short sprints, fast decisions.", "body": "..."},
+      {"num": "02 — Visibility", "title": "...", "body": "..."},
+      {"num": "03 — Sovereignty", "title": "...", "body": "..."}
+    ],
+    "phasesHeading": "Four phases.",                          // Headline for the scope section.
+    "phasesSubheading": "Ten weeks.",                         // Sub-headline (often the duration).
+    "phasesBlurb": "Each phase closes with a sign-off.",      // One-line description above the phase grid.
+    "phases": [                                               // 2-6 phases. Mirrors timeline but with deliverables[] instead of one-line detail.
+      {"num": "01", "name": "Discovery & Strategy", "duration": "2 wks", "deliverables": ["...", "..."]},
+      ...
+    ],
+    "tiers": [                                                // 1-3 pricing tiers. The 'featured' one renders dark; mark 'recommended' for the gold tag.
+      {
+        "id": "normal", "name": "Normal", "amount": 14500, "duration": "6 weeks · 2 phases",
+        "description": "Brand + essential ecommerce. Ideal to validate and launch fast.",
+        "featured": false, "recommended": false,
+        "features": [
+          {"label": "Condensed discovery (1 week)", "included": true},
+          {"label": "Documented component system", "included": false}   // false → renders struck-through
+        ]
+      },
+      {
+        "id": "premium", "name": "Premium", "amount": 28500, "duration": "10 weeks · 4 phases",
+        "description": "Full scope. Brand system + ecommerce + reusable design system.",
+        "featured": true, "recommended": true,
+        "features": [{"label": "...", "included": true}, ...]
+      },
+      {
+        "id": "custom", "name": "Custom", "amount": 48000, "duration": "14+ weeks · custom scope",
+        "description": "Extended engagement. For brands with large catalogs or in-house teams.",
+        "featured": false, "recommended": false,
+        "features": [{"label": "Everything in Premium", "included": true}, ...]
+      }
+    ],
+    "addons": [                                               // 0-8 optional modules the client can toggle. Total updates live.
+      {"id": "motion", "title": "Motion + microinteractions", "subtitle": "Hover states, page transitions, GSAP scroll", "price": 2400},
+      {"id": "seo", "title": "Technical SEO + schema", "subtitle": "Audit, sitemap, schema.org and core web vitals", "price": 1500},
+      ...
+    ],
+    "payments": [                                             // Default 40/30/30. Override only if the brief requires a different split.
+      {"pct": 40, "when": "On signing", "desc": "Reserves the team's slot and immediate kickoff."},
+      {"pct": 30, "when": "Mid-project", "desc": "On signing the design handoff for production."},
+      {"pct": 30, "when": "Launch", "desc": "After go-live and technical handoff."}
+    ],
+    "terms": [                                                // 4-6 short clauses. Six-clause defaults exist; only override to customize.
+      {"num": "01 — IP", "title": "Intellectual property", "body": "..."},
+      ...
+    ],
+    "validityDays": 21
+  }
+}
+
 Grounding rules — CRITICAL to avoid hallucination:
 - USE ONLY information explicitly provided in the user input (client name, project type, budget, deadlines, scope, deliverables, team size).
 - DO NOT invent: client names, specific monetary amounts, exact percentages/metrics, team member names, technologies/tools not mentioned, case studies, testimonials, or competitor comparisons.
 - If a critical detail is missing (e.g., client name, budget, scope), use a clearly marked placeholder like [CLIENT NAME], [BUDGET TBD], [SCOPE TO CONFIRM]. Never fabricate to fill the gap.
-- Timeline: derive week count from any deadline/duration mentioned in the input. If no duration is given, propose a reasonable default (4-8 weeks) and explicitly note it as an "estimated" timeline in the content.
+- Tier amounts: derive from the service catalog data in the input. If only one budget is given, emit a single-tier 'document.tiers' array.
+- Pillars: emit only the three pillars (Velocity / Visibility / Sovereignty); only override copy if the brief explicitly requires a different framing.
+- Timeline: derive week count from any deadline/duration mentioned in the input. If no duration is given, propose a reasonable default (4-8 weeks) and note it as estimated in the content.
 - Tone: professional, concrete, action-oriented. Avoid filler ("we are passionate about...", "in today's fast-paced world...").
-- Respond in the same language as the input.`
+- Respond in the same language as the input. document.* string values follow the same language as the rest of the proposal.`
         : type === 'blog'
         ? `You are a blog writer. Return ONLY valid JSON with keys: title (string), excerpt (string, 1-2 sentences), content (string, HTML with <h1>/<h2>/<p> tags), language (en|es).
 Grounding rules:

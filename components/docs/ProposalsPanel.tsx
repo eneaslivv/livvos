@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { errorLogger } from '../../lib/errorLogger';
 import { Icons } from '../ui/Icons';
@@ -6,6 +7,8 @@ import { Client } from '../../context/ClientsContext';
 import { useTenant } from '../../context/TenantContext';
 import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { AIFeedbackBar } from '../ai/AIFeedbackBar';
+import { ProposalDocumentView } from '../proposals/ProposalDocumentView';
+import { buildProposalDocumentData } from '../proposals/buildProposalDocumentData';
 
 type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
 
@@ -158,6 +161,10 @@ export const ProposalsPanel: React.FC = () => {
   const [createCloneFromId, setCreateCloneFromId] = useState<string>('');
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [lastAIOutputId, setLastAIOutputId] = useState<string | null>(null);
+  // Preview modal — opens the same client-facing Livv design that the
+  // public token URL serves, but with `hideAccept` so the studio user
+  // can review their proposal without an active "Accept" form.
+  const [previewing, setPreviewing] = useState(false);
 
   // ─── Custom templates manager ────────────────────────────────────
   // The proposal_templates table holds the per-tenant template catalog
@@ -435,12 +442,17 @@ export const ProposalsPanel: React.FC = () => {
     setAiWarning(null);
     generateProposalFromAI(prompt).then((result) => {
       setLastAIOutputId(getOutputId(result));
+      // The AI may return a `document` field — the structured payload that
+      // drives the Livv "Sales Proposal v2" client-facing design. We tuck
+      // it under pricing_snapshot.document so the existing column carries
+      // both pricing metadata AND presentation data without a migration.
       handleUpdate({
         pricing_snapshot: {
           ...(selectedService || {}),
           base_price: basePrice,
           complexity,
-          complexity_factor: factor
+          complexity_factor: factor,
+          ...(result.document ? { document: result.document } : {}),
         },
         pricing_total: total,
         timeline: result.timeline?.length ? { weeks: timeline.weeks, items: result.timeline } : timeline,
@@ -856,6 +868,13 @@ export const ProposalsPanel: React.FC = () => {
                   Generate structure
                 </button>
                 <button
+                  onClick={() => setPreviewing(true)}
+                  className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  title="Open the client-facing design preview"
+                >
+                  Preview
+                </button>
+                <button
                   onClick={handleSend}
                   className="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-semibold"
                 >
@@ -1026,6 +1045,53 @@ export const ProposalsPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ─── Preview overlay — Livv "Sales Proposal v2" design ────────
+          Studio-side preview of the same client-facing document the
+          public token URL serves. We hide the Accept section so the
+          user can't accidentally self-approve. */}
+      {previewing && selectedProposal && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex flex-col"
+          onClick={(e) => { if (e.target === e.currentTarget) setPreviewing(false); }}
+        >
+          <div className="flex items-center justify-between px-5 py-3 bg-zinc-900/80 backdrop-blur text-zinc-100 shrink-0">
+            <div className="text-xs font-medium uppercase tracking-wider opacity-80">
+              Preview — client view
+            </div>
+            <div className="flex items-center gap-3">
+              {selectedProposal.public_token && (
+                <a
+                  href={`${window.location.origin}?proposal=${selectedProposal.public_token}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-200"
+                >
+                  Open public link →
+                </a>
+              )}
+              <button
+                onClick={() => setPreviewing(false)}
+                className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-xs font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto bg-[#FDFBF7]">
+            <ProposalDocumentView
+              data={buildProposalDocumentData(selectedProposal, {
+                clientName: clients.find(c => c.id === selectedProposal.client_id)?.name
+                  || leads.find(l => l.id === selectedProposal.lead_id)?.name
+                  || undefined,
+              })}
+              hideAccept
+              readOnly
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

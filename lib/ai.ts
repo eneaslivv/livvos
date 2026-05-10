@@ -362,8 +362,14 @@ type TaskAIResult = {
 type ProposalAIResult = {
   summary: string
   content: string
-  timeline: { week: number; title: string; detail: string }[]
+  timeline: { week: number; title: string; detail: string; duration?: string; deliverables?: string[] }[]
   language?: 'en' | 'es'
+  /** Structured payload that drives the Livv "Sales Proposal v2"
+   *  client-facing design. Stored under proposals.pricing_snapshot.document.
+   *  Fully optional — when absent the view derives sensible defaults from
+   *  summary/content/timeline/pricing_total. See gemini/prompts.ts → 'proposal'
+   *  for the full schema the model is asked to emit. */
+  document?: Record<string, any>
 }
 
 type BlogAIResult = {

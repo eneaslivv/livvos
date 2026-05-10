@@ -1,0 +1,1137 @@
+/* ============================================================
+   LIVV STUDIO — Sales Proposal v2 (scoped under .livv-doc)
+   Direct port of /tmp/design-extract/.../proposal-styles*.css.
+   All selectors are nested under .livv-doc so the rest of the
+   app's tokens are untouched. CSS variables also re-declared
+   on .livv-doc for the same reason.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+.livv-doc {
+  --cream-50: #FDFBF7;
+  --cream-100: #F5F2EB;
+  --cream-200: #E6E2D8;
+  --cream-300: #D6D1C7;
+  --cream-400: #A8A29A;
+  --cream-500: #78736A;
+  --cream-800: #27272A;
+  --cream-900: #09090B;
+  --wine-200: #5c1d18;
+  --wine-400: #2C0405;
+  --wine-500: #2A1818;
+  --wine-700: #0F0505;
+  --parchment: #EDE5D8;
+  --gold: #C4A35A;
+  --gold-soft: #D4A574;
+  --gold-bright: #E8BC59;
+  --sage: #769268;
+  --sky: #6DBEDC;
+  --pink: #F1ADD8;
+  --fg-body: #5A3E3E;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+  --font-display: "Inter", sans-serif;
+
+  --gradient-gold: linear-gradient(110deg, #2C0405 0%, #5c1d18 40%, #2C0405 80%);
+  --gradient-conic: conic-gradient(from 0deg, #E8BC59, #769268, #6DBEDC, #E8BC59);
+
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);
+
+  background: var(--cream-50);
+  color: var(--cream-900);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.livv-doc * { box-sizing: border-box; }
+
+/* ============ Atoms ============ */
+.livv-doc .eyebrow {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.6);
+}
+.livv-doc .eyebrow.on-dark { color: rgba(253, 251, 247, 0.7); }
+.livv-doc .eyebrow.gold { color: var(--gold); }
+
+.livv-doc .wdx {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.55);
+}
+.livv-doc .wdx.on-dark { color: rgba(253, 251, 247, 0.5); }
+
+.livv-doc .dashed-rule {
+  border: 0;
+  border-top: 1px dashed rgba(90, 62, 62, 0.3);
+  margin: 0;
+}
+
+.livv-doc .eyebrow-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed rgba(90, 62, 62, 0.3);
+  margin-bottom: 48px;
+}
+.livv-doc .eyebrow-row.on-dark { border-bottom-color: rgba(237, 229, 216, 0.18); }
+
+/* ============ Headlines ============ */
+.livv-doc .h-display {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: clamp(40px, 6.5vw, 84px);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+  margin: 0;
+  color: var(--cream-50);
+  text-wrap: pretty;
+}
+.livv-doc .h-section {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: clamp(36px, 5vw, 64px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin: 0;
+  color: var(--wine-500);
+  text-wrap: pretty;
+}
+.livv-doc .text-gold { color: var(--wine-200); }
+
+/* ============ Layout ============ */
+.livv-doc .shell { max-width: 1280px; margin: 0 auto; padding: 0 48px; }
+@media (max-width: 768px) { .livv-doc .shell { padding: 0 24px; } }
+
+.livv-doc section.bleed { padding: 96px 48px; position: relative; }
+.livv-doc section.bleed.compact { padding: 64px 48px; }
+@media (max-width: 768px) {
+  .livv-doc section.bleed { padding: 64px 20px; }
+  .livv-doc section.bleed.compact { padding: 48px 20px; }
+}
+
+/* ============ Pill button ============ */
+.livv-doc .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 5px 5px 18px;
+  background: var(--cream-900);
+  color: var(--cream-50);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: transform 0.4s var(--ease-soft), letter-spacing 0.4s, background 0.3s;
+}
+.livv-doc .pill:not([disabled]):hover { transform: scale(1.02); letter-spacing: 0.02em; }
+.livv-doc .pill.gold {
+  background: linear-gradient(110deg, #2C0405 0%, #5c1d18 40%, #2C0405 80%);
+  color: #FDFBF7;
+  border: 1px solid rgba(232, 188, 89, 0.4);
+}
+.livv-doc .pill .arrow-ring {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: inline-block;
+}
+.livv-doc .pill .arrow-ring .halo {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  background: var(--gradient-conic);
+  filter: blur(1px);
+  opacity: 0;
+  transition: opacity 0.3s;
+  animation: livv-spin 2s linear infinite;
+}
+.livv-doc .pill:hover .arrow-ring .halo { opacity: 1; }
+.livv-doc .pill .arrow-ring .core {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--gold-bright);
+  color: var(--wine-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes livv-spin { to { transform: rotate(360deg); } }
+
+/* ============ Chip ============ */
+.livv-doc .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(237, 229, 216, 0.08);
+  border: 1px solid rgba(237, 229, 216, 0.18);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: rgba(237, 229, 216, 0.75);
+}
+.livv-doc .chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--gold-bright);
+  box-shadow: 0 0 8px var(--gold-bright);
+}
+
+/* ============ Scroll progress ============ */
+.livv-doc .scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--gold-bright);
+  width: 0%;
+  z-index: 100;
+  box-shadow: 0 0 8px rgba(232, 188, 89, 0.6);
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+
+/* ============ Top nav (floating pill) ============ */
+.livv-doc .topnav {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 8px 8px 20px;
+  background: rgba(9, 9, 11, 0.4);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  color: var(--cream-50);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.livv-doc .topnav .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+}
+.livv-doc .topnav .brand-monogram {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--cream-50);
+  color: var(--cream-900);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+}
+.livv-doc .topnav a {
+  color: rgba(253, 251, 247, 0.7);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.livv-doc .topnav a:hover { color: var(--cream-50); }
+.livv-doc .topnav .ref {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(253, 251, 247, 0.45);
+  letter-spacing: 0.1em;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+}
+
+/* ============ Hero ============ */
+.livv-doc .hero {
+  position: relative;
+  min-height: 92vh;
+  padding: 24px;
+  background: var(--cream-50);
+  overflow: hidden;
+}
+.livv-doc .hero-frame {
+  position: relative;
+  width: 100%;
+  min-height: calc(92vh - 48px);
+  border-radius: 40px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2A1818 0%, #5c1d18 50%, #2C0405 100%);
+}
+.livv-doc .hero-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 60% at 30% 40%, rgba(232, 188, 89, 0.55), transparent 70%),
+              radial-gradient(50% 50% at 75% 65%, rgba(118, 146, 104, 0.35), transparent 70%),
+              radial-gradient(40% 40% at 65% 30%, rgba(109, 190, 220, 0.3), transparent 70%);
+  mix-blend-mode: overlay;
+  animation: livv-drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.livv-doc .hero-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(253, 251, 247, 0.25) 0%, transparent 20%, transparent 55%, rgba(44, 4, 5, 0.5) 100%);
+  pointer-events: none;
+}
+@keyframes livv-drift {
+  0% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.05) rotate(2deg); }
+}
+
+.livv-doc .hero-content {
+  position: relative;
+  z-index: 2;
+  min-height: calc(92vh - 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 48px;
+  color: var(--cream-50);
+}
+.livv-doc .hero-top { display: flex; justify-content: space-between; align-items: center; }
+.livv-doc .hero-bottom { display: flex; flex-direction: column; gap: 36px; }
+.livv-doc .hero-meta-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 24px;
+  padding-top: 24px;
+  border-top: 1px dashed rgba(253, 251, 247, 0.25);
+}
+.livv-doc .hero-meta-grid .cell .lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(253, 251, 247, 0.55);
+  margin-bottom: 8px;
+}
+.livv-doc .hero-meta-grid .cell .val {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--cream-50);
+  letter-spacing: -0.01em;
+}
+.livv-doc .hero-meta-grid .cell .val.gold { color: #FDFBF7; font-weight: 400; }
+
+@media (max-width: 768px) {
+  .livv-doc .hero-content { padding: 32px 24px; }
+  .livv-doc .hero-meta-grid { grid-template-columns: 1fr 1fr; }
+  .livv-doc .hero-frame { border-radius: 24px; }
+}
+
+/* ============ Context inline ============ */
+.livv-doc .context-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: start;
+}
+.livv-doc .context-inline .lead p {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--fg-body);
+  margin: 0 0 14px;
+}
+.livv-doc .context-inline .lead p:last-child { margin-bottom: 0; }
+.livv-doc .context-inline .lead p .em { color: var(--wine-500); font-weight: 500; }
+.livv-doc .context-inline .quote {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  color: var(--wine-500);
+  margin: 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--wine-200);
+}
+.livv-doc .context-inline .quote footer {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.55);
+}
+@media (max-width: 900px) {
+  .livv-doc .context-inline { grid-template-columns: 1fr; gap: 32px; }
+}
+
+/* ============ Compact pillars ============ */
+.livv-doc .compact-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px dashed rgba(90, 62, 62, 0.25);
+  border-bottom: 1px dashed rgba(90, 62, 62, 0.25);
+}
+.livv-doc .compact-pillars .pillar {
+  padding: 24px 24px 24px 0;
+  border-right: 1px dashed rgba(90, 62, 62, 0.25);
+}
+.livv-doc .compact-pillars .pillar:last-child { border-right: 0; padding-right: 0; }
+.livv-doc .compact-pillars .pillar:not(:first-child) { padding-left: 24px; }
+.livv-doc .compact-pillars .pillar .num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--wine-200);
+  margin-bottom: 8px;
+}
+.livv-doc .compact-pillars .pillar h3 {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--wine-500);
+  margin: 0 0 10px;
+}
+.livv-doc .compact-pillars .pillar p {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-body);
+  margin: 0;
+}
+@media (max-width: 768px) {
+  .livv-doc .compact-pillars { grid-template-columns: 1fr; }
+  .livv-doc .compact-pillars .pillar {
+    border-right: 0;
+    border-bottom: 1px dashed rgba(90, 62, 62, 0.25);
+    padding: 20px 0;
+  }
+  .livv-doc .compact-pillars .pillar:not(:first-child) { padding-left: 0; }
+}
+
+/* ============ Phase grid ============ */
+.livv-doc .phase-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+}
+.livv-doc .phase-grid .phase-item {
+  padding: 28px 28px 28px 0;
+  border-right: 1px dashed rgba(90, 62, 62, 0.25);
+  border-bottom: 1px dashed rgba(90, 62, 62, 0.25);
+}
+.livv-doc .phase-grid .phase-item:nth-child(2n) {
+  padding-right: 0;
+  padding-left: 28px;
+  border-right: 0;
+}
+.livv-doc .phase-grid .phase-item:nth-last-child(-n+2) { border-bottom: 0; }
+.livv-doc .phase-grid .phase-item .ph-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.livv-doc .phase-grid .phase-item .ph-num-sm {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--wine-200);
+}
+.livv-doc .phase-grid .phase-item .ph-name {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--wine-500);
+  flex: 1;
+}
+.livv-doc .phase-grid .phase-item .ph-wks {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--cream-500);
+}
+.livv-doc .phase-grid .phase-item ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.livv-doc .phase-grid .phase-item ul li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-body);
+}
+.livv-doc .phase-grid .phase-item ul li::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--wine-500);
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .livv-doc .phase-grid { grid-template-columns: 1fr; }
+  .livv-doc .phase-grid .phase-item,
+  .livv-doc .phase-grid .phase-item:nth-child(2n) {
+    padding: 20px 0;
+    border-right: 0;
+    border-bottom: 1px dashed rgba(90, 62, 62, 0.25);
+  }
+  .livv-doc .phase-grid .phase-item:last-child { border-bottom: 0; }
+}
+
+/* ============ Tier grid ============ */
+.livv-doc .tier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.livv-doc .tier-card {
+  position: relative;
+  padding: 28px 24px 24px;
+  background: var(--cream-50);
+  border: 1px solid var(--cream-200);
+  border-radius: 24px;
+  transition: transform 0.4s var(--ease-soft), border-color 0.3s, box-shadow 0.3s;
+  cursor: pointer;
+}
+.livv-doc .tier-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.08);
+}
+.livv-doc .tier-card.featured {
+  background: var(--cream-900);
+  color: var(--parchment);
+  border-color: var(--cream-800);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.18);
+}
+.livv-doc .tier-card.selected {
+  border-color: var(--wine-200);
+  box-shadow: 0 0 0 1px var(--wine-200), 0 12px 24px -6px rgba(92, 29, 24, 0.18);
+}
+.livv-doc .tier-card.featured.selected {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 1px var(--gold-bright), 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+.livv-doc .tier-card .tier-tag {
+  position: absolute;
+  top: -10px;
+  right: 18px;
+  background: var(--gold-bright);
+  color: var(--wine-400);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 9999px;
+}
+.livv-doc .tier-card .tier-name {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.6);
+  margin-bottom: 4px;
+}
+.livv-doc .tier-card.featured .tier-name { color: var(--wine-200); }
+.livv-doc .tier-card .tier-desc {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-body);
+  margin: 14px 0 18px;
+  min-height: 40px;
+}
+.livv-doc .tier-card.featured .tier-desc { color: rgba(237, 229, 216, 0.7); }
+.livv-doc .tier-card .tier-price {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 48px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--cream-900);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+.livv-doc .tier-card.featured .tier-price { color: var(--cream-50); }
+.livv-doc .tier-card .tier-price .currency {
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  color: rgba(90, 62, 62, 0.5);
+  margin-right: 4px;
+  vertical-align: super;
+  font-weight: 400;
+}
+.livv-doc .tier-card.featured .tier-price .currency { color: rgba(237, 229, 216, 0.5); }
+.livv-doc .tier-card .tier-duration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.55);
+  margin-bottom: 18px;
+}
+.livv-doc .tier-card.featured .tier-duration { color: rgba(237, 229, 216, 0.5); }
+.livv-doc .tier-card .tier-features {
+  list-style: none;
+  padding: 16px 0 0;
+  margin: 0;
+  border-top: 1px dashed rgba(90, 62, 62, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.livv-doc .tier-card.featured .tier-features { border-top-color: rgba(237, 229, 216, 0.18); }
+.livv-doc .tier-card .tier-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--wine-500);
+}
+.livv-doc .tier-card.featured .tier-features li { color: rgba(237, 229, 216, 0.85); }
+.livv-doc .tier-card .tier-features li::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--wine-500);
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+.livv-doc .tier-card.featured .tier-features li::before { background: var(--wine-200); }
+.livv-doc .tier-card .tier-features li.muted {
+  color: rgba(90, 62, 62, 0.4);
+  text-decoration: line-through;
+}
+.livv-doc .tier-card.featured .tier-features li.muted { color: rgba(237, 229, 216, 0.3); }
+.livv-doc .tier-card .tier-pick {
+  margin-top: 20px;
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(90, 62, 62, 0.25);
+  color: var(--wine-500);
+  padding: 10px 16px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+.livv-doc .tier-card.featured .tier-pick {
+  border-color: rgba(237, 229, 216, 0.25);
+  color: var(--parchment);
+}
+.livv-doc .tier-card .tier-pick:hover {
+  background: var(--cream-900);
+  color: var(--cream-50);
+  border-color: var(--cream-900);
+}
+.livv-doc .tier-card.featured .tier-pick:hover {
+  background: var(--wine-200);
+  color: var(--cream-50);
+  border-color: var(--wine-200);
+}
+.livv-doc .tier-card.selected .tier-pick {
+  background: var(--wine-200);
+  color: var(--cream-50);
+  border-color: var(--wine-200);
+}
+
+@media (max-width: 768px) {
+  .livv-doc .tier-grid { grid-template-columns: 1fr; }
+}
+
+/* ============ Add-ons ============ */
+.livv-doc .addons-wrap {
+  margin-top: 32px;
+  padding: 28px;
+  background: var(--cream-50);
+  border: 1px solid var(--cream-200);
+  border-radius: 24px;
+}
+.livv-doc .addons-wrap .addons-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed rgba(90, 62, 62, 0.25);
+}
+.livv-doc .addons-wrap .addons-head .ttl {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--wine-500);
+  margin: 0;
+}
+.livv-doc .addons-wrap .addons-head .hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.55);
+}
+.livv-doc .addons-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.livv-doc .addon-pill {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background-color: #F5F2EB;
+  border: 1px solid var(--cream-200);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s var(--ease-soft), border-color 0.3s var(--ease-soft), transform 0.3s var(--ease-soft);
+  user-select: none;
+}
+.livv-doc .addon-pill:hover {
+  background-color: #fff;
+  border-color: var(--cream-300);
+  transform: translateY(-1px);
+}
+.livv-doc .addon-pill.on {
+  background-color: #09090B !important;
+  border-color: #09090B !important;
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.14);
+}
+.livv-doc .addon-pill .check {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--cream-300);
+  background: #fff;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s var(--ease-soft);
+}
+.livv-doc .addon-pill.on .check {
+  background: var(--wine-200);
+  border-color: var(--wine-200);
+}
+.livv-doc .addon-pill.on .check::after {
+  content: '';
+  width: 8px;
+  height: 5px;
+  border-left: 1.5px solid var(--wine-400);
+  border-bottom: 1.5px solid var(--wine-400);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.livv-doc .addon-pill .body { flex: 1; min-width: 0; }
+.livv-doc .addon-pill .ad-title {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--wine-500);
+  letter-spacing: -0.01em;
+}
+.livv-doc .addon-pill.on .ad-title { color: var(--cream-50); }
+.livv-doc .addon-pill .ad-sub {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: rgba(90, 62, 62, 0.6);
+  margin-top: 2px;
+}
+.livv-doc .addon-pill.on .ad-sub { color: rgba(237, 229, 216, 0.6); }
+.livv-doc .addon-pill .ad-price {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--wine-500);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.livv-doc .addon-pill.on .ad-price { color: #E8BC59; }
+@media (max-width: 768px) { .livv-doc .addons-list { grid-template-columns: 1fr; } }
+
+/* ============ Pricing total ============ */
+.livv-doc .pricing-total {
+  background: var(--cream-900);
+  color: var(--parchment);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 32px;
+  gap: 24px;
+  border-radius: 16px;
+  margin-top: 16px;
+}
+.livv-doc .pricing-total .lbl {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(237, 229, 216, 0.6);
+  margin-bottom: 6px;
+}
+.livv-doc .pricing-total .total-name {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--parchment);
+}
+.livv-doc .pricing-total .total-amount {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 64px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.livv-doc .pricing-total .total-amount .currency {
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  color: rgba(232, 188, 89, 0.6);
+  margin-right: 8px;
+  vertical-align: super;
+  font-weight: 400;
+}
+.livv-doc .pricing-total .total-breakdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(237, 229, 216, 0.55);
+  margin-top: 6px;
+}
+.livv-doc .pricing-total .total-breakdown .plus { color: var(--cream-50); }
+.livv-doc .amount-flash {
+  display: inline-block;
+  transition: color 0.4s, transform 0.4s var(--ease-soft);
+}
+.livv-doc .amount-flash.flash {
+  color: #E8BC59;
+  transform: scale(1.04);
+}
+@media (max-width: 768px) {
+  .livv-doc .pricing-total { grid-template-columns: 1fr; padding: 24px 20px; }
+  .livv-doc .pricing-total .total-amount { text-align: left; font-size: 48px; }
+}
+
+/* ============ Payments ============ */
+.livv-doc .payments {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--cream-200);
+  border: 1px solid var(--cream-200);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 32px;
+}
+.livv-doc .payments .pay { background: var(--cream-50); padding: 24px; }
+.livv-doc .payments .pay .pct {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.livv-doc .payments .pay .when {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.6);
+  margin-bottom: 14px;
+}
+.livv-doc .payments .pay .desc {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-body);
+  margin: 0;
+}
+@media (max-width: 768px) { .livv-doc .payments { grid-template-columns: 1fr; } }
+
+/* ============ Acceptance section ============ */
+.livv-doc .accept-section {
+  background: var(--cream-900);
+  color: var(--parchment);
+  padding: 64px 48px;
+  position: relative;
+  overflow: hidden;
+}
+.livv-doc .accept-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 60% at 30% 40%, rgba(232, 188, 89, 0.18), transparent 70%),
+              radial-gradient(50% 50% at 75% 65%, rgba(118, 146, 104, 0.12), transparent 70%);
+  pointer-events: none;
+}
+.livv-doc .accept-section .shell { position: relative; z-index: 2; }
+.livv-doc .accept-card {
+  background: rgba(15, 5, 5, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(232, 188, 89, 0.25);
+  border-radius: 24px;
+  padding: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.livv-doc .accept-card .left .h {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 28px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--cream-50);
+  margin: 0 0 16px;
+}
+.livv-doc .accept-card .left p {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(237, 229, 216, 0.7);
+  margin: 0;
+}
+.livv-doc .accept-card .right { display: flex; flex-direction: column; gap: 16px; }
+.livv-doc .accept-card .right .field { display: flex; flex-direction: column; gap: 6px; }
+.livv-doc .accept-card .right label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(237, 229, 216, 0.55);
+}
+.livv-doc .accept-card .right input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(237, 229, 216, 0.18);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--cream-50);
+  outline: none;
+  transition: border-color 0.3s, background 0.3s;
+}
+.livv-doc .accept-card .right input:focus {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.06);
+}
+.livv-doc .accept-card .checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: rgba(237, 229, 216, 0.7);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.livv-doc .accept-card .checkbox-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid rgba(237, 229, 216, 0.4);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
+}
+.livv-doc .accept-card .checkbox-row input[type="checkbox"]:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.livv-doc .accept-card .checkbox-row input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 5px;
+  height: 9px;
+  border-right: 1.5px solid var(--wine-400);
+  border-bottom: 1.5px solid var(--wine-400);
+  transform: rotate(45deg);
+}
+.livv-doc .accept-card .right .pill {
+  width: 100%;
+  justify-content: space-between;
+  padding: 8px 8px 8px 22px;
+  font-size: 14px;
+}
+.livv-doc .accept-card .right .pill[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* Confirmation */
+.livv-doc .accept-confirmed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 24px;
+  padding: 24px;
+}
+.livv-doc .accept-confirmed .seal {
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: var(--gradient-conic);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: livv-spin 8s linear infinite;
+  position: relative;
+}
+.livv-doc .accept-confirmed .seal::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: var(--cream-900);
+  border-radius: 999px;
+}
+.livv-doc .accept-confirmed .seal svg {
+  position: relative;
+  z-index: 1;
+  color: var(--gold-bright);
+}
+.livv-doc .accept-confirmed .h {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 32px;
+  letter-spacing: -0.03em;
+  color: var(--cream-50);
+  margin: 0;
+}
+.livv-doc .accept-confirmed p {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: rgba(237, 229, 216, 0.7);
+  max-width: 40ch;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .livv-doc .accept-card { grid-template-columns: 1fr; padding: 24px; gap: 24px; }
+  .livv-doc .accept-section { padding: 64px 20px; }
+}
+
+/* ============ Footer ============ */
+.livv-doc .proposal-footer {
+  background: var(--cream-50);
+  border-top: 1px solid var(--cream-200);
+  padding: 32px 48px 24px;
+}
+.livv-doc .proposal-footer .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.livv-doc .proposal-footer .lockup {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  color: var(--cream-900);
+  line-height: 0.9;
+}
+.livv-doc .proposal-footer .meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(90, 62, 62, 0.5);
+  text-align: right;
+  line-height: 2;
+}
+
+/* Terms grid */
+.livv-doc .terms-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.livv-doc .terms-grid .term-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--wine-200);
+  margin-bottom: 8px;
+}
+.livv-doc .terms-grid h4 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--wine-500);
+  margin: 0 0 6px;
+}
+.livv-doc .terms-grid p {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--fg-body);
+  margin: 0;
+  line-height: 1.5;
+}
+@media (max-width: 768px) { .livv-doc .terms-grid { grid-template-columns: 1fr; } }

@@ -1,18 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Icons } from '../components/ui/Icons';
+import { ProposalDocumentView } from '../components/proposals/ProposalDocumentView';
+import { buildProposalDocumentData } from '../components/proposals/buildProposalDocumentData';
 
 interface PublicProposalPayload {
   proposal: any;
   comments: any[];
 }
 
+/**
+ * Public client-facing proposal page (anonymous, served by token).
+ *
+ * Renders the Livv "Sales Proposal v2" design (see
+ * components/proposals/ProposalDocumentView). All proposal data flows
+ * through `buildProposalDocumentData` which reads structured content
+ * from `pricing_snapshot.document` when present and falls back to the
+ * proposal's own columns otherwise — so old proposals keep working
+ * while the AI generator is being upgraded to write the richer shape.
+ *
+ * Acceptance posts back through the existing
+ * `submit_proposal_feedback` RPC.
+ */
 export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
   const [data, setData] = useState<PublicProposalPayload | null>(null);
-  const [portfolio, setPortfolio] = useState<any[]>([]);
-  const [comment, setComment] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,155 +36,68 @@ export const ProposalPublic: React.FC<{ token: string }> = ({ token }) => {
         return;
       }
       setData(data as PublicProposalPayload);
-      const { data: portfolioData } = await supabase.rpc('get_public_portfolio', { p_token: token });
-      if (Array.isArray(portfolioData)) setPortfolio(portfolioData as any[]);
       setLoading(false);
     };
     fetchProposal();
   }, [token]);
 
-  const handleFeedback = async (status: 'approved' | 'rejected') => {
-    if (status === 'approved' && (!fullName.trim() || !email.trim())) {
-      setError('Please enter name and email to sign.');
-      return;
-    }
+  const documentData = useMemo(() => {
+    if (!data?.proposal) return null;
+    return buildProposalDocumentData(data.proposal);
+  }, [data]);
+
+  const handleAccept = async (payload: {
+    tierId: string;
+    addons: string[];
+    total: number;
+    signerName: string;
+    signerRole: string;
+  }) => {
+    if (!data?.proposal) return;
+    const consentText = data.proposal.consent_text
+      || `Accepted ${payload.tierId} plan with ${payload.addons.length} add-ons. Total ${data.proposal.currency || 'USD'} ${payload.total}.`;
     const { error } = await supabase.rpc('submit_proposal_feedback', {
       p_token: token,
-      p_status: status,
-      p_comment: comment,
-      p_full_name: fullName.trim() || null,
-      p_email: email.trim() || null,
-      p_consent_text: data?.proposal?.consent_text || null
+      p_status: 'approved',
+      p_comment: `Plan: ${payload.tierId}; Add-ons: ${payload.addons.join(', ') || 'none'}; Total: ${payload.total}`,
+      p_full_name: `${payload.signerName} · ${payload.signerRole}`,
+      p_email: null,
+      p_consent_text: consentText,
     });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setComment('');
-    const { data: refreshed } = await supabase.rpc('get_public_proposal', { p_token: token });
-    if (refreshed) setData(refreshed as PublicProposalPayload);
+    if (error) throw new Error(error.message);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading proposal...</div>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#FDFBF7', color: '#5A3E3E',
+        fontFamily: 'Inter, system-ui, sans-serif', fontSize: 14,
+      }}>
+        Loading proposal…
+      </div>
     );
   }
 
-  if (error || !data?.proposal) {
+  if (error || !data?.proposal || !documentData) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500">{error || 'Proposal not found'}</div>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#FDFBF7', color: '#5A3E3E',
+        fontFamily: 'Inter, system-ui, sans-serif', fontSize: 14,
+      }}>
+        {error || 'Proposal not found'}
+      </div>
     );
   }
 
-  const proposal = data.proposal;
-  const consentText = proposal.consent_text || 'By approving, you agree to the scope, timeline, and pricing outlined above.';
+  const alreadyAccepted = !!data.proposal.approved_at;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <div className="max-w-3xl mx-auto p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">{proposal.title}</h1>
-            <p className="text-xs text-zinc-500">Status: {proposal.status}</p>
-          </div>
-          <div className="text-xs text-zinc-500">{proposal.currency || 'USD'}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-zinc-200 p-6 whitespace-pre-wrap text-sm">
-          {proposal.content || 'Proposal in preparation'}
-        </div>
-
-        {proposal.timeline?.items?.length ? (
-          <div className="mt-6 bg-white rounded-2xl border border-zinc-200 p-6">
-            <h3 className="text-sm font-semibold mb-3">Timeline</h3>
-            <div className="space-y-3">
-              {proposal.timeline.items.map((item: any) => (
-                <div key={item.week} className="text-xs">
-                  <div className="font-semibold text-zinc-800">{item.title}</div>
-                  <div className="text-zinc-500">{item.detail}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {proposal.pricing_total ? (
-          <div className="mt-6 bg-white rounded-2xl border border-zinc-200 p-6">
-            <h3 className="text-sm font-semibold mb-2">Pricing</h3>
-            <div className="text-lg font-bold text-zinc-900">
-              {proposal.currency || 'USD'} {Number(proposal.pricing_total).toFixed(2)}
-            </div>
-          </div>
-        ) : null}
-
-        {portfolio.length ? (
-          <div className="mt-6 bg-white rounded-2xl border border-zinc-200 p-6">
-            <h3 className="text-sm font-semibold mb-3">Portfolio References</h3>
-            <div className="space-y-2">
-              {portfolio.map((item) => (
-                <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-600">
-                  {item.title}
-                </a>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button
-            onClick={() => handleFeedback('approved')}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold"
-          >
-            <Icons.Check size={16} /> Approve
-          </button>
-          <button
-            onClick={() => handleFeedback('rejected')}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-rose-600 text-white text-sm font-semibold"
-          >
-            <Icons.X size={16} /> Reject
-          </button>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Full name"
-            className="px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm"
-          />
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm"
-          />
-        </div>
-
-        <div className="mt-4 text-xs text-zinc-500">
-          {consentText}
-        </div>
-
-        <div className="mt-6">
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Comments or suggested changes"
-            className="w-full min-h-[120px] p-4 rounded-xl border border-zinc-200 bg-white text-sm"
-          />
-        </div>
-
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold">Comments</h3>
-          <div className="space-y-2 mt-2">
-            {(data.comments || []).map((c: any) => (
-              <div key={c.id} className={`text-xs p-3 rounded-lg ${c.is_client ? 'bg-blue-50' : 'bg-zinc-100'}`}>
-                {c.comment}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    <ProposalDocumentView
+      data={documentData}
+      onAccept={handleAccept}
+      alreadyAccepted={alreadyAccepted}
+    />
   );
 };
