@@ -226,6 +226,24 @@ const TenantDetailPanel: React.FC<{
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [switching, setSwitching] = useState(false)
+  // Save feedback: shows a green checkmark + "Saved" toast for a few
+  // seconds after a successful update so the user gets explicit
+  // acknowledgement that their changes hit the DB.
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  // Snapshot of the values as last seen on the server. Used to compute
+  // the dirty state — every input compares against this snapshot so the
+  // "Unsaved changes" indicator + Save button can react in real time
+  // and even highlight individual fields that changed. Refreshed on
+  // tenant switch and after a successful save.
+  const [serverSnapshot, setServerSnapshot] = useState({
+    plan: tenant.plan,
+    notes: tenant.notes || '',
+    contact_email: tenant.contact_email || '',
+    contact_name: tenant.contact_name || '',
+    features: { ...getFeaturesForPlan(tenant.plan), ...(tenant.features || {}) } as PlanFeatures,
+    resource_limits: { ...getResourceLimitsForPlan(tenant.plan), ...(tenant.resource_limits || {}) } as PlanResourceLimits,
+  })
 
   // Members of this tenant — small live-loaded list rendered above the
   // feature toggles. Lets the platform admin see who's inside without
@@ -257,13 +275,58 @@ const TenantDetailPanel: React.FC<{
     setContactEmail(tenant.contact_email || '')
     setContactName(tenant.contact_name || '')
     const fDefaults = getFeaturesForPlan(tenant.plan)
-    setFeatures(tenant.features ? { ...fDefaults, ...tenant.features } as PlanFeatures : fDefaults)
+    const mergedFeatures = tenant.features ? { ...fDefaults, ...tenant.features } as PlanFeatures : fDefaults
+    setFeatures(mergedFeatures)
     const rDefaults = getResourceLimitsForPlan(tenant.plan)
-    setResourceLimits(tenant.resource_limits ? { ...rDefaults, ...tenant.resource_limits } as PlanResourceLimits : rDefaults)
+    const mergedLimits = tenant.resource_limits ? { ...rDefaults, ...tenant.resource_limits } as PlanResourceLimits : rDefaults
+    setResourceLimits(mergedLimits)
     setSuspendReason('')
     setShowSuspendConfirm(false)
+    // Reset the server snapshot so dirty checks work for the new tenant.
+    setServerSnapshot({
+      plan: tenant.plan,
+      notes: tenant.notes || '',
+      contact_email: tenant.contact_email || '',
+      contact_name: tenant.contact_name || '',
+      features: mergedFeatures,
+      resource_limits: mergedLimits,
+    })
+    setSavedAt(null)
+    setSaveError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.id])
+
+  // Auto-clear the "Saved" pulse after 4s so the panel returns to a
+  // calm state instead of holding the green badge forever.
+  useEffect(() => {
+    if (!savedAt) return
+    const t = setTimeout(() => setSavedAt(null), 4000)
+    return () => clearTimeout(t)
+  }, [savedAt])
+
+  // Dirty state computed from the live form values vs. the snapshot
+  // we last loaded from / saved to the server. Per-field flags drive
+  // the highlight ring, the aggregate flag drives the toolbar.
+  const dirty = useMemo(() => {
+    const f: Record<string, boolean> = {
+      plan:           plan !== serverSnapshot.plan,
+      notes:          notes !== serverSnapshot.notes,
+      contact_email:  contactEmail !== serverSnapshot.contact_email,
+      contact_name:   contactName !== serverSnapshot.contact_name,
+      features:       JSON.stringify(features) !== JSON.stringify(serverSnapshot.features),
+      resource_limits: JSON.stringify(resourceLimits) !== JSON.stringify(serverSnapshot.resource_limits),
+    }
+    f.any = Object.values(f).some(Boolean)
+    return f
+  }, [plan, notes, contactEmail, contactName, features, resourceLimits, serverSnapshot])
+
+  // Helper: merge a Tailwind class string with a "changed" ring when
+  // the given field is dirty. Keeps the change visible on the input
+  // itself, not just on the toolbar.
+  const dirtyRing = (isDirty: boolean) =>
+    isDirty
+      ? 'ring-2 ring-amber-300/70 dark:ring-amber-500/40 border-amber-300 dark:border-amber-500/40'
+      : ''
 
   const handlePlanChange = (newPlan: string) => {
     setPlan(newPlan)
@@ -272,9 +335,24 @@ const TenantDetailPanel: React.FC<{
   }
 
   const handleSave = async () => {
+    if (!dirty.any) return
     setSaving(true)
+    setSaveError(null)
     try {
       await onUpdate(tenant.id, { plan, notes, contact_email: contactEmail, contact_name: contactName, features, resource_limits: resourceLimits })
+      // Sync the snapshot to the just-saved values so the dirty
+      // checks immediately go back to "clean" without waiting for
+      // the parent to re-fetch and pass a new tenant prop.
+      setServerSnapshot({
+        plan, notes,
+        contact_email: contactEmail,
+        contact_name: contactName,
+        features,
+        resource_limits: resourceLimits,
+      })
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setSaveError(err?.message || 'No se pudieron guardar los cambios')
     } finally {
       setSaving(false)
     }
@@ -401,11 +479,14 @@ const TenantDetailPanel: React.FC<{
 
       <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase">Plan</label>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
+            Plan
+            {dirty.plan && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
           <select
             value={plan}
             onChange={e => handlePlanChange(e.target.value)}
-            className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+            className={`w-full mt-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400 transition-all border-zinc-200 dark:border-zinc-700 ${dirtyRing(dirty.plan)}`}
           >
             <option value="starter">Starter</option>
             <option value="professional">Professional</option>
@@ -414,8 +495,11 @@ const TenantDetailPanel: React.FC<{
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Features</label>
-          <div className="grid grid-cols-2 gap-1.5">
+          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 flex items-center gap-2">
+            Features
+            {dirty.features && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
+          <div className={`grid grid-cols-2 gap-1.5 rounded-lg p-1 transition-all ${dirty.features ? 'ring-2 ring-amber-300/60 dark:ring-amber-500/30' : ''}`}>
             {ALL_FEATURES.map(key => (
               <label key={key} className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 py-1 px-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer">
                 <input
@@ -431,8 +515,11 @@ const TenantDetailPanel: React.FC<{
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 block">Resource Limits</label>
-          <div className="grid grid-cols-2 gap-2">
+          <label className="text-[11px] font-medium text-zinc-500 uppercase mb-2 flex items-center gap-2">
+            Resource Limits
+            {dirty.resource_limits && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
+          <div className={`grid grid-cols-2 gap-2 rounded-lg p-1 transition-all ${dirty.resource_limits ? 'ring-2 ring-amber-300/60 dark:ring-amber-500/30' : ''}`}>
             {([
               ['max_users', 'Max Users'],
               ['max_projects', 'Max Projects'],
@@ -453,42 +540,107 @@ const TenantDetailPanel: React.FC<{
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase">Contact Name</label>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
+            Contact Name
+            {dirty.contact_name && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
           <input
             type="text"
             value={contactName}
             onChange={e => setContactName(e.target.value)}
-            className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+            className={`w-full mt-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400 transition-all border-zinc-200 dark:border-zinc-700 ${dirtyRing(dirty.contact_name)}`}
           />
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase">Contact Email</label>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
+            Contact Email
+            {dirty.contact_email && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
           <input
             type="email"
             value={contactEmail}
             onChange={e => setContactEmail(e.target.value)}
-            className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+            className={`w-full mt-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400 transition-all border-zinc-200 dark:border-zinc-700 ${dirtyRing(dirty.contact_email)}`}
           />
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-zinc-500 uppercase">Notes</label>
+          <label className="text-[11px] font-medium text-zinc-500 uppercase flex items-center gap-2">
+            Notes
+            {dirty.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Sin guardar" />}
+          </label>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
             rows={3}
-            className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none"
+            className={`w-full mt-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none transition-all border-zinc-200 dark:border-zinc-700 ${dirtyRing(dirty.notes)}`}
           />
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-2 text-sm font-medium text-white bg-zinc-800 dark:bg-zinc-200 dark:text-zinc-900 rounded-lg hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Saving…' : 'Save Changes'}
-        </button>
+        {/* Save bar — combines disabled-when-clean + saving spinner +
+            green confirmation pulse + error surface. The user wanted
+            unmistakable feedback that something hit the DB; this gives
+            them a 4-state UI: idle (clean) / dirty / saving / saved. */}
+        <div className="space-y-2">
+          {dirty.any && !savedAt && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Cambios sin guardar
+              </span>
+              <span className="ml-auto text-[10px] text-amber-600/70 dark:text-amber-400/70">
+                {Object.entries(dirty).filter(([k, v]) => k !== 'any' && v).length} campo(s)
+              </span>
+            </div>
+          )}
+          {savedAt && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 animate-in fade-in slide-in-from-top-1">
+              <Icons.Check size={13} className="text-emerald-600 dark:text-emerald-400" />
+              <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                Guardado · cambios aplicados
+              </span>
+            </div>
+          )}
+          {saveError && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30">
+              <Icons.AlertCircle size={13} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+              <span className="text-[11px] font-medium text-rose-700 dark:text-rose-300">{saveError}</span>
+            </div>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty.any}
+            className={`w-full py-2.5 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              saving
+                ? 'bg-zinc-700 dark:bg-zinc-300 text-white dark:text-zinc-900 cursor-wait'
+                : !dirty.any && !savedAt
+                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed'
+                  : !dirty.any && savedAt
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 shadow-sm'
+            }`}
+          >
+            {saving ? (
+              <>
+                <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Guardando…
+              </>
+            ) : !dirty.any && savedAt ? (
+              <>
+                <Icons.Check size={14} strokeWidth={3} />
+                Guardado
+              </>
+            ) : !dirty.any ? (
+              'Sin cambios para guardar'
+            ) : (
+              <>
+                <Icons.Save size={14} />
+                Guardar cambios
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {tenant.user_count === 0 && tenant.project_count === 0 && (
