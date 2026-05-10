@@ -428,6 +428,7 @@ export const AiAdvisor: React.FC = () => {
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Close on Escape, lock body scroll while open ─────────────────
@@ -446,11 +447,69 @@ export const AiAdvisor: React.FC = () => {
   }, [isOpen]);
 
   // ── Auto-scroll on new messages ──────────────────────────────────
+  // Long pasted prompts caused the chat to land at the TOP of the new
+  // message instead of the bottom of the conversation. Two issues we hit:
+  //   1. The first scroll fires before the new message has fully laid
+  //      out, so scrollHeight is still the old value.
+  //   2. Framer-motion enter animations + markdown / LinkifiedText
+  //      reflow keep changing the height for a few hundred ms after
+  //      mount.
+  // Fix: scroll a sentinel <div> at the very bottom into view on the
+  // next two animation frames (post-paint, post-motion). Plus a
+  // MutationObserver tracks any DOM growth while sending=true so the
+  // assistant reply also anchors. We only auto-anchor when the user is
+  // already near the bottom so reading history isn't disrupted.
+  const isNearBottomRef = useRef(true);
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      isNearBottomRef.current = distanceFromBottom < 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const sentinel = endRef.current;
+    const container = scrollRef.current;
+    if (sentinel && typeof sentinel.scrollIntoView === 'function') {
+      sentinel.scrollIntoView({ block: 'end', behavior });
+    } else if (container) {
+      container.scrollTop = container.scrollHeight;
     }
-  }, [messages, sending, insightsLoading]);
+  }, []);
+
+  useEffect(() => {
+    // A new turn always anchors to the bottom — that's what the user
+    // expects after sending.
+    isNearBottomRef.current = true;
+    scrollToEnd('auto');
+    const r1 = requestAnimationFrame(() => {
+      scrollToEnd('auto');
+      const r2 = requestAnimationFrame(() => scrollToEnd('auto'));
+      (scrollToEnd as any)._r2 = r2;
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      const r2 = (scrollToEnd as any)._r2;
+      if (r2) cancelAnimationFrame(r2);
+    };
+  }, [messages, sending, insightsLoading, scrollToEnd]);
+
+  // MutationObserver — re-anchor when DOM grows after mount (markdown
+  // expanding, motion finishing, action cards appearing). Only when the
+  // user is still near the bottom.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof MutationObserver === 'undefined') return;
+    const mo = new MutationObserver(() => {
+      if (isNearBottomRef.current) scrollToEnd('auto');
+    });
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => mo.disconnect();
+  }, [isOpen, scrollToEnd]);
 
   // ── Build context summary from app state ─────────────────────────
   // Includes IDs for projects/clients/members so the AI can reference
@@ -1189,6 +1248,9 @@ export const AiAdvisor: React.FC = () => {
                     </div>
                   </div>
                 )}
+                {/* Sentinel for auto-scroll. Tiny but present so
+                    scrollIntoView({block:'end'}) always anchors here. */}
+                <div ref={endRef} aria-hidden="true" style={{ height: 1 }} />
               </div>
 
               {/* ── Session expired banner ── */}
