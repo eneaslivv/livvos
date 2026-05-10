@@ -353,12 +353,29 @@ const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; 
   const C = useFinancePalette();
   const isDark = useIsDarkMode();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const W = 720, H = height, padX = 48, padY = 32, padBottom = 52;
+  // Wider viewBox (matches typical full-width container ~1200px) so we can
+  // keep the SVG's natural aspect ratio without dropping `preserveAspectRatio
+  // ="none"` (which was stretching bars and labels into stretched shapes).
+  const W = 1200, H = height, padX = 56, padY = 32, padBottom = 44;
   const innerW = W - padX * 2;
   const innerH = H - padY - padBottom;
   const safe = data.length > 0 ? data : [{ month: '—', ingresos: 0, gastos: 0, balance: 0 }];
   const maxRaw = Math.max(...safe.flatMap(d => [d.ingresos, d.gastos]));
-  const max = (maxRaw > 0 ? maxRaw : 1) * 1.15;
+  // Round the y-axis ceiling to a "nice" number (next $1k / $2k / $5k step)
+  // so ticks read as $0 / $2k / $4k / $6k instead of weird $7k / $9k slices.
+  const niceCeiling = (v: number): number => {
+    if (v <= 0) return 1000;
+    const padded = v * 1.15;
+    const exp = Math.pow(10, Math.floor(Math.log10(padded)));
+    const norm = padded / exp;
+    let nice;
+    if (norm <= 1) nice = 1;
+    else if (norm <= 2) nice = 2;
+    else if (norm <= 5) nice = 5;
+    else nice = 10;
+    return nice * exp;
+  };
+  const max = niceCeiling(maxRaw);
   const x = (i: number) => padX + (innerW / Math.max(1, safe.length - 1)) * i;
   const yI = (v: number) => padY + innerH - (v / max) * innerH;
   const balPts = safe.map((d, i) => [x(i), yI(d.ingresos - d.gastos)] as [number, number]);
@@ -383,7 +400,13 @@ const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; 
 
   return (
     <div style={{ position: 'relative', width: '100%' }} onMouseLeave={() => setHoverIdx(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: 'block', overflow: 'visible' }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height="auto"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: 'block', overflow: 'visible', maxHeight: height + 40 }}
+      >
         <defs>
           <linearGradient id="livv-incGrad" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={C.income} stopOpacity="0.32" />
@@ -404,12 +427,22 @@ const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; 
           </linearGradient>
         </defs>
 
-        {/* Y grid + labels */}
+        {/* Y grid + labels — Inter font for crisper rendering at scale.
+            Tick values are now nice-rounded (1/2/5 sequence) so the
+            axis reads as $0 / $2k / $4k / $6k / $8k instead of $7k/$9k. */}
         {tickVals.map((v, i) => (
           <g key={i}>
-            <line x1={padX} x2={W - padX} y1={yI(v)} y2={yI(v)} stroke="rgba(90,62,62,0.08)" strokeDasharray={i === 0 ? '' : '2 4'} />
-            <text x={padX - 12} y={yI(v) + 3} fontSize="10" fontFamily="JetBrains Mono" fill={C.meta} textAnchor="end" letterSpacing="0.05em">
-              ${(v / 1000).toFixed(0)}k
+            <line
+              x1={padX} x2={W - padX} y1={yI(v)} y2={yI(v)}
+              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(90,62,62,0.06)'}
+              strokeDasharray={i === 0 ? '' : '2 5'}
+            />
+            <text
+              x={padX - 14} y={yI(v) + 4}
+              fontSize="11" fontFamily="Inter, system-ui, sans-serif"
+              fill={C.meta} textAnchor="end" style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {v >= 1000 ? `$${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : `$${v.toFixed(0)}`}
             </text>
           </g>
         ))}
@@ -419,7 +452,11 @@ const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; 
 
         {/* Bars */}
         {variant === 'bars' && safe.map((d, i) => {
-          const bw = 16, gap = 4;
+          // Scale bar width to the available column so a 12-month chart
+          // doesn't look anorexic and a 4-month chart doesn't look chunky.
+          const colW = innerW / Math.max(1, safe.length);
+          const bw = Math.min(28, Math.max(12, colW * 0.18));
+          const gap = Math.max(3, bw * 0.25);
           const baseX = x(i) - bw - gap / 2;
           const inH = (d.ingresos / max) * innerH;
           const exH = (d.gastos / max) * innerH;
@@ -474,15 +511,17 @@ const LiquidityChart: React.FC<{ data: LiquidityPoint[]; variant: ChartVariant; 
           );
         })}
 
-        {/* X labels */}
+        {/* X labels — Inter is more legible at small sizes than the
+            mono face, and 0 letter-spacing prevents the stretched look
+            we used to get under preserveAspectRatio="none". */}
         {safe.map((d, i) => (
           <text
-            key={'l' + i} x={x(i)} y={H - 24}
-            fontSize="10" fontFamily="JetBrains Mono"
+            key={'l' + i} x={x(i)} y={H - 18}
+            fontSize="13" fontFamily="Inter, system-ui, sans-serif"
             fill={hoverIdx === i ? C.ink : C.meta}
-            textAnchor="middle" letterSpacing="0.12em"
-            fontWeight={hoverIdx === i ? 600 : 400}
-          >{d.month.toUpperCase()}</text>
+            textAnchor="middle"
+            fontWeight={hoverIdx === i ? 600 : 500}
+          >{d.month}</text>
         ))}
       </svg>
 
@@ -1093,16 +1132,16 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
       {/* ─── Overview ─── */}
       {tab === 'Overview' && (
         <>
-          <div style={{
-            marginTop: 28, background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
-            borderRadius: 24, padding: 28,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 12 }}>
+          {/* Liquidity timeline — frame removed per user feedback ("saquemos
+              el marco"). Now sits flat on the page with just dashed dividers
+              for separation, matching the editorial rhythm of the rest of
+              the dashboard. */}
+          <div style={{ marginTop: 32 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <Eyebrow gold>● Live</Eyebrow>
                 <h3 style={{
-                  fontFamily: 'Inter', fontWeight: 300, fontSize: 30,
+                  fontFamily: 'Inter', fontWeight: 300, fontSize: 28,
                   letterSpacing: '-0.04em', margin: '8px 0 4px', color: C.ink,
                 }}>Liquidity timeline</h3>
                 <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.body, margin: 0 }}>
@@ -1111,7 +1150,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
                 <ChartToggle variant={chartVariant} setVariant={setChartVariant} />
-                <div style={{ display: 'flex', gap: 14, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.1em', color: C.meta, textTransform: 'uppercase' }}>
+                <div style={{ display: 'flex', gap: 14, fontFamily: 'Inter, system-ui, sans-serif', fontSize: 11, color: C.meta, fontWeight: 500 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 9999, background: C.income }} />Income
                   </span>
