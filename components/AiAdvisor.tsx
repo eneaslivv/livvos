@@ -483,7 +483,11 @@ export const AiAdvisor: React.FC = () => {
 
   useEffect(() => {
     // A new turn always anchors to the bottom — that's what the user
-    // expects after sending.
+    // expects after sending. Same goes for opening the panel: when
+    // isOpen flips false → true the messages array is unchanged but the
+    // panel was just remounted/revealed, so we still want the most
+    // recent turn in view.
+    if (!isOpen) return;
     isNearBottomRef.current = true;
     scrollToEnd('auto');
     const r1 = requestAnimationFrame(() => {
@@ -496,7 +500,7 @@ export const AiAdvisor: React.FC = () => {
       const r2 = (scrollToEnd as any)._r2;
       if (r2) cancelAnimationFrame(r2);
     };
-  }, [messages, sending, insightsLoading, scrollToEnd]);
+  }, [messages, sending, insightsLoading, scrollToEnd, isOpen]);
 
   // MutationObserver — re-anchor when DOM grows after mount (markdown
   // expanding, motion finishing, action cards appearing). Only when the
