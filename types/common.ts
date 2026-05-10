@@ -20,4 +20,8 @@ export interface NavParams {
   clientId?: string;
   /** When set on a navigate to 'calendar', the task panel auto-opens. */
   taskId?: string;
+  /** Internal — set by handleNavigate so consumer useEffects always see
+   *  a dep change, even when the underlying ids are identical to the
+   *  previous nav. Do not set this manually from caller code. */
+  _nonce?: number;
 }

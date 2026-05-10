@@ -1001,11 +1001,24 @@ const App: React.FC = () => {
   };
 
   // Handle Navigation with error handling
+  // Every navigation tags the params with a fresh `_nonce` so consumer
+  // useEffects that watch `navParams` always see a dep change — even
+  // when the user clicks the same project twice in a row, or when React
+  // batching collapses two state updates into one render. Without the
+  // nonce, two clicks on the same project produced an effect with the
+  // same id string and the dep array thought nothing changed; with two
+  // clicks on different projects, a stale clear-to-null could land
+  // BETWEEN the two clicks during batching and leave the previous
+  // selection sticky. The nonce makes nav events monotonic.
   const handleNavigate = (page: PageView, params?: NavParams) => {
     try {
       if (import.meta.env.DEV) console.log('Navigating to:', page, params);
       setCurrentPage(page);
-      setNavParams(params || null);
+      setNavParams(
+        params
+          ? ({ ...params, _nonce: (typeof performance !== 'undefined' ? performance.now() : Date.now()) + Math.random() } as NavParams)
+          : null
+      );
     } catch (error) {
       console.error('❌ Error al navegar:', error);
     }
@@ -1027,18 +1040,15 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Clear navParams after target page consumes them. We give a longer
-  // window when navParams carries a taskId because the Calendar's task
-  // list is realtime-loaded — the prop must stay alive long enough for
-  // the matching task to hydrate from the subscription. 5s covers
-  // initial load on cold cache; 150ms is plenty for synchronous reads
-  // of projectId / clientId.
-  useEffect(() => {
-    if (!navParams) return;
-    const delay = navParams.taskId ? 5000 : 150;
-    const timer = setTimeout(() => setNavParams(null), delay);
-    return () => clearTimeout(timer);
-  }, [navParams]);
+  // Note: we used to auto-clear navParams after 150ms (5s for taskId)
+  // so re-clicking the same project could re-trigger the dep change.
+  // The new `_nonce` in handleNavigate makes every nav event unique,
+  // so the auto-clear is no longer needed AND was actually causing an
+  // intermittent bug: clicking project A then quickly clicking project
+  // B could race against the timer firing setNavParams(null) between
+  // renders, leaving project A's selection sticky. Calendar's
+  // navTaskId effect already de-dupes via openedNavTaskRef, so leaving
+  // navParams sticky has no downside there either.
 
   if (isInvite) {
     return (
