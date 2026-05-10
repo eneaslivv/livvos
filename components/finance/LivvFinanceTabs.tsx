@@ -455,9 +455,17 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   }, [period]);
 
   // Apply view + period filters on top of what the parent already filtered.
-  // An income shows in "active" iff at least one of its installments is
-  // still open (pending/overdue) OR was paid recently inside the window.
-  // History = fully-paid incomes, optionally bounded by the period.
+  // Semantics differ by view because "this month" means different things:
+  //   • Active + this-month  = "work I should collect by end of May"
+  //                            → any open installment due ON OR BEFORE
+  //                              the period's end (includes overdue from
+  //                              earlier months — you still owe it).
+  //   • History + this-month = "what I actually collected this month"
+  //                            → paid_date inside the window.
+  //   • Either + all         = no period gate.
+  // Earlier behavior was strict-window for both views, which hid every
+  // active income whose installments were due next month, leaving the
+  // user with "Showing 0 of 4" even though 4 incomes were active.
   const visibleIncomes = useMemo(() => {
     return filteredIncomes.filter((inc: any) => {
       const insts = inc.installments || [];
@@ -467,13 +475,31 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
       if (viewMode === 'history' && !allPaid) return false;
       // Period gate (ignored when 'all')
       if (!periodBounds) return true;
-      const inRange = insts.some((i: any) => {
-        const dRef = (i.paid_date || i.due_date);
+
+      if (viewMode === 'active') {
+        // Show if any OPEN (not paid) installment is due by end-of-period.
+        // This is cumulative — "by end of this month" covers overdue too.
+        const hasDueByEnd = insts.some((i: any) => {
+          if (i.status === 'paid') return false;
+          const dRef = i.due_date;
+          if (!dRef) return true; // no due date → keep, can't filter blindly
+          const d = new Date(dRef + 'T12:00:00');
+          return d <= periodBounds.to;
+        });
+        // Income with no installments at all: keep it visible so the user
+        // can still see and manage it.
+        if (insts.length === 0) return true;
+        return hasDueByEnd;
+      }
+
+      // History view — paid inside the window.
+      return insts.some((i: any) => {
+        if (i.status !== 'paid') return false;
+        const dRef = i.paid_date || i.due_date;
         if (!dRef) return false;
         const d = new Date(dRef + 'T12:00:00');
         return d >= periodBounds.from && d <= periodBounds.to;
       });
-      return inRange;
     });
   }, [filteredIncomes, viewMode, periodBounds]);
 
@@ -615,8 +641,12 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
             incomeSearch
               ? 'No matches.'
               : viewMode === 'history'
-                ? (period !== 'all' ? 'No fully-paid invoices in this period.' : 'No invoices have been fully collected yet.')
-                : (filteredIncomes.length === 0 ? 'No income recorded yet.' : 'Nothing active in this period.')
+                ? (period !== 'all' ? 'Nothing collected in this period.' : 'No invoices have been fully collected yet.')
+                : (filteredIncomes.length === 0
+                    ? 'No income recorded yet.'
+                    : (period !== 'all'
+                        ? 'Nothing due by the end of this period — switch to All time to see everything open.'
+                        : 'Nothing open right now.'))
           }
           subtitle={
             incomeSearch
