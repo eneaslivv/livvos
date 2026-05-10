@@ -820,6 +820,81 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
   const netYTD = ytdIncome - ytdExpenses;
   const best = bestMonth(liquidityData);
 
+  // ─── Monthly tracker data ───────────────────────────────────
+  // Walk every paid installment + every expense, bucket them by month.
+  // Net = revenue − expenses; margin = net ÷ revenue. We only show the
+  // months that have ANY activity (either revenue or expense), so the
+  // tracker doesn't get filled with empty months on a fresh tenant.
+  const monthlyStats = useMemo(() => {
+    const map = new Map<string, { ym: string; revenue: number; expenses: number }>();
+    const ensure = (ym: string) => {
+      if (!map.has(ym)) map.set(ym, { ym, revenue: 0, expenses: 0 });
+      return map.get(ym)!;
+    };
+    incomes.forEach(inc => {
+      (inc.installments || []).forEach(inst => {
+        if (inst.status !== 'paid') return;
+        const dateRef = inst.paid_date || inst.due_date;
+        if (!dateRef) return;
+        const ym = dateRef.slice(0, 7); // YYYY-MM
+        ensure(ym).revenue += Number(inst.amount || 0);
+      });
+    });
+    expenses.forEach(exp => {
+      if (!exp.date) return;
+      const ym = exp.date.slice(0, 7);
+      ensure(ym).expenses += Number(exp.amount || 0);
+    });
+    return Array.from(map.values())
+      .sort((a, b) => a.ym.localeCompare(b.ym))
+      .map(m => {
+        const net = m.revenue - m.expenses;
+        const margin = m.revenue > 0 ? (net / m.revenue) * 100 : 0;
+        const [year, mo] = m.ym.split('-').map(Number);
+        const dt = new Date(year, mo - 1, 1);
+        const label = dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        return { ...m, net, margin, label };
+      });
+  }, [incomes, expenses]);
+
+  // Current-month metrics (the slice the user lands on first).
+  const currentMonth = useMemo(() => {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const row = monthlyStats.find(m => m.ym === ym);
+    const prevDt = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevYm = `${prevDt.getFullYear()}-${String(prevDt.getMonth() + 1).padStart(2, '0')}`;
+    const prev = monthlyStats.find(m => m.ym === prevYm);
+    const pctChange = (curr: number, p: number | undefined) => {
+      if (!p || p === 0) return undefined;
+      return ((curr - p) / Math.abs(p)) * 100;
+    };
+    return {
+      ym,
+      label: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      revenue: row?.revenue || 0,
+      expenses: row?.expenses || 0,
+      net: row?.net || 0,
+      margin: row?.margin || 0,
+      revenueDelta: pctChange(row?.revenue || 0, prev?.revenue),
+      expensesDelta: pctChange(row?.expenses || 0, prev?.expenses),
+      marginDelta: row && prev ? row.margin - prev.margin : undefined,
+    };
+  }, [monthlyStats]);
+
+  // Total outstanding receivables across all incomes (pending + overdue).
+  const outstandingReceivables = useMemo(() => {
+    let total = 0;
+    incomes.forEach(inc => {
+      (inc.installments || []).forEach(inst => {
+        if (inst.status === 'pending' || inst.status === 'overdue') {
+          total += Number(inst.amount || 0);
+        }
+      });
+    });
+    return total;
+  }, [incomes]);
+
   return (
     <div style={{
       background: C.cream, color: C.ink, fontFamily: 'Inter',
@@ -870,29 +945,126 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
         </div>
       )}
 
-      {/* ─── 3 hero metrics with dashed dividers ─── */}
+      {/* ─── 4 hero metrics with dashed dividers ───────────────────
+          Reorganized per user feedback: 90-Day Forecast was nuked from
+          the main strip — it's not actionable enough to deserve top
+          billing. Replaced with the metrics the user actually monitors
+          month-to-month: revenue cobrado del mes, lo pendiente, y el
+          margin del mes. Cash on Hand stays as the anchor. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr',
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr auto 1fr',
         borderTop: `1px dashed ${C.dashed}`, borderBottom: `1px dashed ${C.dashed}`,
         padding: '32px 0',
       }}>
-        <div style={{ paddingRight: 32 }}>
+        <div style={{ paddingRight: 24 }}>
           <Metric big label="© Cash on Hand" value={fmt(currentBalance)}
-            delta={incomes.length > 0 ? +12.4 : undefined}
             hint="USD · Reconciled today" />
         </div>
         <Dashed vertical />
-        <div style={{ padding: '0 32px' }}>
-          <Metric big label="© 90-Day Forecast" value={fmt(projection90d)}
-            hint="Projected net inflow" />
+        <div style={{ padding: '0 24px' }}>
+          <Metric big label={`© Revenue ${currentMonth.label}`} value={fmt(currentMonth.revenue)}
+            delta={currentMonth.revenueDelta !== undefined ? Math.round(currentMonth.revenueDelta * 10) / 10 : undefined}
+            hint="Cobrado este mes" />
         </div>
         <Dashed vertical />
-        <div style={{ paddingLeft: 32 }}>
-          <Metric big label="© Operating Margin" value={`${margin.toFixed(1)}%`}
-            delta={incomes.length > 0 ? +3.1 : undefined}
-            hint={margin > 50 ? 'Above target · 75%' : 'Below target'} />
+        <div style={{ padding: '0 24px' }}>
+          <Metric big label="© Pendiente cobrar" value={fmt(outstandingReceivables)}
+            hint="Open + overdue installments" />
+        </div>
+        <Dashed vertical />
+        <div style={{ paddingLeft: 24 }}>
+          <Metric big label={`© Margin ${currentMonth.label}`} value={`${currentMonth.margin.toFixed(1)}%`}
+            delta={currentMonth.marginDelta !== undefined ? Math.round(currentMonth.marginDelta * 10) / 10 : undefined}
+            hint={`Net ${fmt(currentMonth.net)}`} />
         </div>
       </div>
+
+      {/* ─── Mes a Mes tracker ───────────────────────────────────
+          User said: "yo creo que lo mejor es ver cuanto se va ganando
+          mes a mes y que se actualice cada mes y lo mismo gastos mes a
+          mes profit margins y esas cosas tanto en % como en numero".
+          One row per month with revenue / expenses / net / margin —
+          highlights the current month so you spot it at a glance. */}
+      {monthlyStats.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Eyebrow gold>● Mes a mes</Eyebrow>
+            <span style={{
+              fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+              letterSpacing: '0.08em', textTransform: 'uppercase', color: C.meta,
+            }}>
+              90-day forecast: {fmt(projection90d)}
+            </span>
+          </div>
+          <div style={{
+            background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`,
+            borderRadius: 18, overflow: 'hidden',
+            boxShadow: isDark
+              ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
+              : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(110px, 1fr) repeat(4, minmax(110px, 1fr))',
+              padding: '12px 24px', gap: 12,
+              borderBottom: `1px dashed ${C.dashedSoft}`,
+            }}>
+              {['Mes', 'Revenue', 'Gastos', 'Net Profit', 'Margin'].map(h => (
+                <div key={h} style={{
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 9,
+                  letterSpacing: '0.12em', textTransform: 'uppercase', color: C.meta,
+                  textAlign: h === 'Mes' ? 'left' : 'right',
+                }}>{h}</div>
+              ))}
+            </div>
+            {monthlyStats.slice().reverse().slice(0, 12).map((m, i, arr) => {
+              const isCurrent = m.ym === currentMonth.ym;
+              return (
+                <div key={m.ym} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(110px, 1fr) repeat(4, minmax(110px, 1fr))',
+                  padding: '14px 24px', gap: 12, alignItems: 'baseline',
+                  borderBottom: i < arr.length - 1 ? `1px dashed ${C.dashedSoft}` : 'none',
+                  background: isCurrent
+                    ? (isDark ? 'rgba(232,188,89,0.08)' : 'rgba(232,188,89,0.06)')
+                    : 'transparent',
+                }}>
+                  <div style={{
+                    fontFamily: 'Inter', fontSize: 13, fontWeight: isCurrent ? 600 : 500,
+                    color: C.ink, letterSpacing: '-0.005em',
+                  }}>
+                    {m.label}{isCurrent && (
+                      <span style={{
+                        marginLeft: 6, fontSize: 9, fontWeight: 600, letterSpacing: '0.1em',
+                        color: C.gold, textTransform: 'uppercase',
+                      }}>· hoy</span>
+                    )}
+                  </div>
+                  <div style={{
+                    fontFamily: 'Inter', fontSize: 13, fontVariantNumeric: 'tabular-nums',
+                    color: C.income, textAlign: 'right',
+                  }}>{fmt(m.revenue)}</div>
+                  <div style={{
+                    fontFamily: 'Inter', fontSize: 13, fontVariantNumeric: 'tabular-nums',
+                    color: C.expense, textAlign: 'right',
+                  }}>{fmt(m.expenses)}</div>
+                  <div style={{
+                    fontFamily: 'Inter', fontSize: 13, fontWeight: 500,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: m.net >= 0 ? C.ink : C.expense, textAlign: 'right',
+                  }}>{m.net >= 0 ? '' : '-'}{fmt(Math.abs(m.net))}</div>
+                  <div style={{
+                    fontFamily: 'Inter', fontSize: 13, fontWeight: 500,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: m.margin >= 50 ? C.income : m.margin >= 20 ? C.gold : C.expense,
+                    textAlign: 'right',
+                  }}>{m.margin.toFixed(1)}%</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ─── Sub-tabs ─── */}
       <div style={{ display: 'flex', marginTop: 28, borderBottom: `1px dashed ${C.dashed}` }}>
