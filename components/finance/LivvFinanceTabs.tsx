@@ -14,7 +14,7 @@
  * pages/Finance.tsx already wires up. Only the visual layer moves.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, ChevronLeft, ChevronRight, Pencil, Trash2, Plus, Wallet,
   Receipt, ArrowDownLeft, Link2, Check, Clock, AlertTriangle, ChevronDown,
@@ -399,6 +399,10 @@ export interface LivvIncomeTabProps {
   onOpenAIAssistant?: () => void;
   /** Optional: open the AI chat. The empty state CTA passes a seed phrase. */
   onOpenAIChat?: (seed?: string) => void;
+  /** Optional: deep-link to a project page. Surfaces the project as a
+   *  clickable chip in each row so the user can jump from "owe me $X"
+   *  to "what's the project status / which milestones are pending". */
+  onOpenProject?: (projectId: string) => void;
 }
 
 export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
@@ -412,10 +416,78 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   projectTasksCache, fetchProjectTasks,
   openEditIncome, handleDeleteIncome, handleMarkInstallmentPaid, updateInstallment,
   openIncomeForm, canCreate,
-  onOpenAIAssistant, onOpenAIChat,
+  onOpenAIAssistant, onOpenAIChat, onOpenProject,
 }) => {
   const C = useFinancePalette();
   const isDark = useIsDarkMode();
+
+  // ─── View / period state ──────────────────────────────────
+  // The user asked to stop dumping every invoice into a single flat list:
+  // "filtralo por mes a mes, y si ya se marcó todo como cobrado, que aparezca
+  //  en otra sección como un historial". So:
+  //   • viewMode 'active'  — open work + recent partial collections
+  //   • viewMode 'history' — fully-paid incomes archive
+  //   • period  'this-month' default — only this month's installments
+  const [viewMode, setViewMode] = useState<'active' | 'history'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('livv:income-view') as any)) || 'active'
+  );
+  const [period, setPeriod] = useState<'this-month' | 'last-month' | 'quarter' | 'all'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('livv:income-period') as any)) || 'this-month'
+  );
+  useEffect(() => { try { localStorage.setItem('livv:income-view', viewMode); } catch {} }, [viewMode]);
+  useEffect(() => { try { localStorage.setItem('livv:income-period', period); } catch {} }, [period]);
+
+  // Period date bounds
+  const periodBounds = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    if (period === 'this-month') {
+      return { from: new Date(y, m, 1), to: new Date(y, m + 1, 0) };
+    }
+    if (period === 'last-month') {
+      return { from: new Date(y, m - 1, 1), to: new Date(y, m, 0) };
+    }
+    if (period === 'quarter') {
+      const qStart = Math.floor(m / 3) * 3;
+      return { from: new Date(y, qStart, 1), to: new Date(y, qStart + 3, 0) };
+    }
+    return null; // 'all'
+  }, [period]);
+
+  // Apply view + period filters on top of what the parent already filtered.
+  // An income shows in "active" iff at least one of its installments is
+  // still open (pending/overdue) OR was paid recently inside the window.
+  // History = fully-paid incomes, optionally bounded by the period.
+  const visibleIncomes = useMemo(() => {
+    return filteredIncomes.filter((inc: any) => {
+      const insts = inc.installments || [];
+      const allPaid = insts.length > 0 && insts.every((i: any) => i.status === 'paid');
+      // View-mode gate
+      if (viewMode === 'active' && allPaid) return false;
+      if (viewMode === 'history' && !allPaid) return false;
+      // Period gate (ignored when 'all')
+      if (!periodBounds) return true;
+      const inRange = insts.some((i: any) => {
+        const dRef = (i.paid_date || i.due_date);
+        if (!dRef) return false;
+        const d = new Date(dRef + 'T12:00:00');
+        return d >= periodBounds.from && d <= periodBounds.to;
+      });
+      return inRange;
+    });
+  }, [filteredIncomes, viewMode, periodBounds]);
+
+  // Counts for the segmented control labels
+  const counts = useMemo(() => {
+    let active = 0, history = 0;
+    filteredIncomes.forEach((inc: any) => {
+      const insts = inc.installments || [];
+      const allPaid = insts.length > 0 && insts.every((i: any) => i.status === 'paid');
+      if (allPaid) history++; else active++;
+    });
+    return { active, history };
+  }, [filteredIncomes]);
+
   const filterCounts = {
     all: incomes.length,
     pending: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length,
@@ -447,7 +519,63 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         { label: '© Overdue', value: fmt(totalOverdueIncome), color: totalOverdueIncome > 0 ? C.expense : C.ink, hint: overdueInstallmentCount > 0 ? `${overdueInstallmentCount} late installment${overdueInstallmentCount > 1 ? 's' : ''}` : 'On track' },
       ]} />
 
-      {/* Filter row */}
+      {/* View toggle + period selector — high-level slice of the data.
+          The user explicitly asked for "filtralo por mes a mes" + "los
+          ya cobrados que pasen a un historial". This row is the answer:
+          decide what bucket of work (active vs history) AND what time
+          window (this month is the default — 99% of daily check-ins). */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        {/* Active / History segmented control */}
+        <div style={{
+          display: 'inline-flex', padding: 3, borderRadius: 9999,
+          background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(90,62,62,0.06)',
+        }}>
+          {([
+            { id: 'active' as const,  label: 'Active',  count: counts.active },
+            { id: 'history' as const, label: 'History', count: counts.history },
+          ]).map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setViewMode(opt.id)}
+              style={{
+                padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer',
+                background: viewMode === opt.id ? C.ink : 'transparent',
+                color: viewMode === opt.id ? C.cream : C.meta,
+                fontFamily: 'Inter', fontSize: 11, fontWeight: 600,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                transition: 'all .25s cubic-bezier(.16,1,.3,1)',
+              }}
+            >
+              {opt.label}
+              <span style={{
+                fontSize: 9, opacity: 0.7, fontFamily: '"JetBrains Mono", monospace',
+              }}>{opt.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Period selector */}
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value as any)}
+          style={{
+            padding: '7px 14px', borderRadius: 9999, border: `1px solid ${C.bone}`,
+            background: isDark ? C.oat : '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
+            outline: 'none', cursor: 'pointer',
+          }}
+        >
+          <option value="this-month">This month</option>
+          <option value="last-month">Last month</option>
+          <option value="quarter">This quarter</option>
+          <option value="all">All time</option>
+        </select>
+
+        <span style={{ fontSize: 10, color: C.meta, marginLeft: 'auto' }}>
+          Showing {visibleIncomes.length} of {filteredIncomes.length}
+        </span>
+      </div>
+
+      {/* Filter row (status + search + date) */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
         <FilterPill active={incomeStatusFilter === 'all'} onClick={() => setIncomeStatusFilter('all')} count={filterCounts.all}>All</FilterPill>
         <FilterPill active={incomeStatusFilter === 'pending'} onClick={() => setIncomeStatusFilter('pending')} count={filterCounts.pending}>To collect</FilterPill>
@@ -480,10 +608,16 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
       {/* List */}
       {incomesLoading && !incomesTimedOut ? (
         <Loading label="Loading income…" />
-      ) : filteredIncomes.length === 0 ? (
+      ) : visibleIncomes.length === 0 ? (
         <StateBlock
           icon={ArrowDownLeft}
-          title={incomeSearch ? 'No matches.' : 'No income recorded yet.'}
+          title={
+            incomeSearch
+              ? 'No matches.'
+              : viewMode === 'history'
+                ? (period !== 'all' ? 'No fully-paid invoices in this period.' : 'No invoices have been fully collected yet.')
+                : (filteredIncomes.length === 0 ? 'No income recorded yet.' : 'Nothing active in this period.')
+          }
           subtitle={
             incomeSearch
               ? 'Try clearing filters.'
@@ -508,13 +642,19 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
         />
       ) : (
         <Card padding={0}>
-          {filteredIncomes.map((inc, idx) => {
+          {visibleIncomes.map((inc, idx) => {
             const paid = (inc.installments || []).filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
             const totalCount = (inc.installments || []).length;
             const paidCount = (inc.installments || []).filter(i => i.status === 'paid').length;
             const isExpanded = expandedIncome === inc.id;
+            // Next pending installment — used for the inline "Mark as paid"
+            // shortcut so the user can settle the most-due item without
+            // expanding the row.
+            const nextPending = (inc.installments || [])
+              .filter(i => i.status !== 'paid')
+              .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))[0];
             return (
-              <div key={inc.id} style={{ borderBottom: idx < filteredIncomes.length - 1 ? `1px dashed ${C.dashedSoft}` : 'none' }}>
+              <div key={inc.id} style={{ borderBottom: idx < visibleIncomes.length - 1 ? `1px dashed ${C.dashedSoft}` : 'none' }}>
                 <div
                   onClick={() => { setExpandedIncome(isExpanded ? null : inc.id); if (!isExpanded && inc.project_id) fetchProjectTasks(inc.project_id); }}
                   style={{
@@ -532,8 +672,24 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
                       fontFamily: 'Inter', fontSize: 14, fontWeight: 500, color: C.ink,
                       letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>{inc.client_name || 'No client'}</div>
-                    <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.meta, marginTop: 2 }}>
-                      {inc.project_name || '—'} · {inc.concept || '—'}
+                    <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.meta, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {inc.project_id && onOpenProject ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onOpenProject(inc.project_id!); }}
+                          style={{
+                            background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                            color: C.gold, textDecoration: 'underline',
+                            textDecorationThickness: '1px', textUnderlineOffset: '2px',
+                            fontFamily: 'Inter', fontSize: 11, fontWeight: 500,
+                          }}
+                          title={`Open project · ${inc.project_name || 'project'}`}
+                        >
+                          {inc.project_name || 'Project'}
+                        </button>
+                      ) : (
+                        <span>{inc.project_name || '—'}</span>
+                      )}
+                      <span>· {inc.concept || '—'}</span>
                     </div>
                   </div>
                   <div style={{
@@ -558,6 +714,29 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
                   }}>{paidCount}/{totalCount}</div>
                   <StatusBadge status={inc.status} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {/* Inline "Mark as paid" — settles the next pending
+                        installment and stamps paid_date = today via the
+                        parent handler. Visible on hover so the row stays
+                        clean. The user said: "que sea bien fácil
+                        marcar como pagado y que nos quede documentado
+                        la fecha cuando se cobró". */}
+                    {nextPending && (
+                      <button
+                        className="livv-row-action"
+                        onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(nextPending); }}
+                        title={`Mark installment ${nextPending.number} as paid (${fmt(nextPending.amount)} · ${fmtDate(nextPending.due_date)})`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          background: C.income + '18', border: `1px solid ${C.income}40`,
+                          color: C.income, fontFamily: 'Inter', fontSize: 10, fontWeight: 600,
+                          padding: '4px 8px', borderRadius: 9999, cursor: 'pointer', opacity: 0,
+                          transition: 'opacity .15s, transform .15s',
+                        }}
+                      >
+                        <Check size={11} strokeWidth={2.5} />
+                        Mark paid
+                      </button>
+                    )}
                     <button
                       className="livv-row-action"
                       onClick={(e) => { e.stopPropagation(); openEditIncome(inc); }}

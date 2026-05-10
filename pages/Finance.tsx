@@ -1309,6 +1309,11 @@ export const Finance: React.FC = () => {
             canCreate={hasPermission('finance', 'create')}
             onOpenAIAssistant={() => setIsAssistantOpen(true)}
             onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
+            onOpenProject={(projectId) => {
+              window.dispatchEvent(new CustomEvent('app-navigate', {
+                detail: { page: 'projects', params: { projectId } },
+              }));
+            }}
           />
         </div>
       )}

@@ -1011,6 +1011,22 @@ const App: React.FC = () => {
     }
   };
 
+  // Global "navigate" event — lets any component (even ones that don't
+  // receive onNavigate as a prop, like the lazy-loaded Finance page)
+  // request a route change. Use:
+  //   window.dispatchEvent(new CustomEvent('app-navigate', {
+  //     detail: { page: 'projects', params: { projectId } }
+  //   }))
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      if (detail.page) handleNavigate(detail.page, detail.params);
+    };
+    window.addEventListener('app-navigate', handler);
+    return () => window.removeEventListener('app-navigate', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Clear navParams after target page consumes them. We give a longer
   // window when navParams carries a taskId because the Calendar's task
   // list is realtime-loaded — the prop must stay alive long enough for
