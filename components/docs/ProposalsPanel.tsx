@@ -437,7 +437,49 @@ export const ProposalsPanel: React.FC = () => {
     const factor = factorMap[complexity] ?? 1.0;
     const total = basePrice * factor;
 
-    const prompt = `Project type: ${selectedProposal.project_type || 'web'}\nLanguage: ${language}\nSections: ${sections.join(', ')}\nBrief: ${brief}\nDeliverables: ${(selectedService?.deliverables || []).join(', ')}\nTech stack: ${(selectedService?.tech_stack || []).join(', ')}\nTimeline (weeks): ${timeline.weeks}\nPricing model: ${pricingModel}\nBase price: ${basePrice}\nComplexity: ${complexity} (${factor}x)\nPortfolio references: ${portfolio.filter(p => selectedPortfolioIds.includes(p.id)).map(p => `${p.title} (${p.url})`).join('; ')}\nTone: ${matchingTemplate?.tone || 'confident'}\nOutput should read like a professional contract-style proposal with clear headings and concise sections.\n`;
+    // Service catalog as grounding for the AI's pricing — the Livv quoting
+    // framework already gives bracket numbers, but the AI should also
+    // reference the user's configured per-service rates when relevant.
+    const catalogLines = services
+      .filter(s => s.is_active)
+      .slice(0, 20)
+      .map(s => {
+        const priceBit = s.pricing_model === 'hourly'
+          ? `hourly @ USD ${s.hourly_rate}/h`
+          : `fixed USD ${s.fixed_price}`;
+        const stack = s.tech_stack?.length ? ` · stack: ${s.tech_stack.join(', ')}` : '';
+        return `- ${s.name} (${priceBit}, ~${s.estimated_weeks || '?'} wks${stack})`;
+      })
+      .join('\n');
+
+    // Up to 5 recent CONFIRMED proposals (status=approved with pricing) as
+    // a "what we've actually closed at" reference. Keeps the AI calibrated
+    // to real wins instead of guessing from the bracket alone.
+    const recentWins = proposals
+      .filter(p => p.status === 'approved' && (p.pricing_total || 0) > 0)
+      .slice(0, 5)
+      .map(p => `- ${p.title} · ${p.project_type || 'web'} · ${p.complexity || 'standard'} · ${p.currency || 'USD'} ${p.pricing_total}`)
+      .join('\n');
+
+    const prompt = [
+      `Project type: ${selectedProposal.project_type || 'web'}`,
+      `Language: ${language}`,
+      `Sections: ${sections.join(', ')}`,
+      `Brief: ${brief}`,
+      `Deliverables (selected service): ${(selectedService?.deliverables || []).join(', ')}`,
+      `Tech stack (selected service): ${(selectedService?.tech_stack || []).join(', ')}`,
+      `Timeline (weeks, selected service): ${timeline.weeks}`,
+      `Pricing model (selected service): ${pricingModel}`,
+      `Base price (selected service): USD ${basePrice}`,
+      `Complexity: ${complexity} (${factor}x)`,
+      `Portfolio references: ${portfolio.filter(p => selectedPortfolioIds.includes(p.id)).map(p => `${p.title} (${p.url})`).join('; ') || '(none)'}`,
+      `Tone: ${matchingTemplate?.tone || 'confident'}`,
+      '',
+      catalogLines ? `=== SERVICE CATALOG (the user's configured rates — use as price grounding) ===\n${catalogLines}` : '',
+      recentWins ? `\n=== RECENTLY CLOSED PROPOSALS (use to calibrate this quote to real wins) ===\n${recentWins}` : '',
+      '',
+      'Output: a Livv-formatted quote following the system prompt. Default to the 2-tier (Simple + Premium) layout unless the brief explicitly asks for a 4-option / "full quote" / "Simple Custom and Simple CMS" presentation.',
+    ].filter(Boolean).join('\n');
 
     setAiWarning(null);
     generateProposalFromAI(prompt).then((result) => {

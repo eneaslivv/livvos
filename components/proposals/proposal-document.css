@@ -686,8 +686,135 @@
   border-color: var(--wine-200);
 }
 
+/* 4-tier mode (Simple Custom / Simple CMS / Premium Custom / Premium CMS).
+   Drop one column at md, then to single col on mobile. */
+.livv-doc .tier-grid.four-cols { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1100px) {
+  .livv-doc .tier-grid.four-cols { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 768px) {
-  .livv-doc .tier-grid { grid-template-columns: 1fr; }
+  .livv-doc .tier-grid,
+  .livv-doc .tier-grid.four-cols { grid-template-columns: 1fr; }
+}
+
+/* Variant label under tier name (e.g. "Custom code" / "CMS"). */
+.livv-doc .tier-card .tier-variant {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 12px;
+}
+.livv-doc .tier-card.featured .tier-variant { color: var(--gold-bright); }
+
+/* Platform tag shown next to duration. */
+.livv-doc .tier-card .tier-platform {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(196, 163, 90, 0.12);
+  color: var(--wine-200);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.livv-doc .tier-card.featured .tier-platform {
+  background: rgba(232, 188, 89, 0.15);
+  color: var(--gold-bright);
+}
+
+/* ============ Assumptions block (AI states scope assumptions) ============ */
+.livv-doc .assumptions-block {
+  margin: 0 0 32px;
+  padding: 18px 22px;
+  background: linear-gradient(135deg, rgba(196, 163, 90, 0.06), rgba(196, 163, 90, 0));
+  border: 1px dashed rgba(196, 163, 90, 0.4);
+  border-radius: 16px;
+}
+.livv-doc .assumptions-block .ass-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--wine-200);
+  margin-bottom: 8px;
+}
+.livv-doc .assumptions-block ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.livv-doc .assumptions-block li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-body);
+}
+.livv-doc .assumptions-block li::before {
+  content: '–';
+  color: var(--gold);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* ============ Comparison summary table ============ */
+.livv-doc .comparison-table {
+  margin-top: 32px;
+  background: var(--cream-50);
+  border: 1px solid var(--cream-200);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.livv-doc .comparison-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.livv-doc .comparison-table thead th {
+  background: var(--cream-900);
+  color: var(--gold-bright);
+  text-align: left;
+  padding: 14px 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.livv-doc .comparison-table thead th:first-child { color: rgba(237, 229, 216, 0.6); }
+.livv-doc .comparison-table tbody tr { border-top: 1px dashed rgba(90, 62, 62, 0.18); }
+.livv-doc .comparison-table tbody tr:nth-child(even) { background: rgba(245, 242, 235, 0.4); }
+.livv-doc .comparison-table tbody tr:last-child {
+  font-weight: 600;
+  background: rgba(196, 163, 90, 0.08);
+  color: var(--wine-500);
+}
+.livv-doc .comparison-table td {
+  padding: 12px 18px;
+  color: var(--wine-500);
+  vertical-align: top;
+}
+.livv-doc .comparison-table td:first-child {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: rgba(90, 62, 62, 0.7);
+  width: 24%;
+}
+@media (max-width: 768px) {
+  .livv-doc .comparison-table { font-size: 12px; }
+  .livv-doc .comparison-table thead th,
+  .livv-doc .comparison-table td { padding: 10px 12px; }
 }
 
 /* ============ Add-ons ============ */

@@ -25,6 +25,13 @@ export interface ProposalTier {
   features: { label: string; included: boolean }[];
   featured?: boolean;
   recommended?: boolean;
+  /** Optional sub-label printed under the tier name. The Livv quoting
+   *  framework uses this for "Custom code" / "CMS" suffixes when 4
+   *  variants are shown side-by-side. */
+  variantLabel?: string;
+  /** Optional platform name ("Webflow", "Next.js", "Shopify", …) shown
+   *  in the duration row alongside the timeline. */
+  platform?: string;
 }
 
 export interface ProposalAddon {
@@ -101,6 +108,23 @@ export interface ProposalDocumentData {
 
   /** Contact e-mail for "prefer to talk it over". */
   contactEmail: string;
+
+  /** Explicit assumptions the AI made when scope was thin. Rendered as
+   *  a small preface above the investment section so the client can
+   *  flag anything that doesn't match their expectation. From the
+   *  Livv quoting framework: "If the brief is missing details, make
+   *  logical assumptions and state them explicitly." */
+  assumptions?: string[];
+
+  /** Optional spec-by-spec comparison table (Pages / Animations /
+   *  Integrations / Timeline / Price …). When the AI emits this, the
+   *  view renders it after the tier cards as a single readable matrix.
+   *  Rows are arbitrary; first column is the spec name, the rest map
+   *  1:1 to the tier list. */
+  comparisonTable?: {
+    headers: string[]; // typically tier names ("Simple", "Premium")
+    rows: { label: string; values: string[] }[];
+  };
 }
 
 interface Props {
@@ -415,13 +439,29 @@ export const ProposalDocumentView: React.FC<Props> = ({
             </p>
           </div>
 
-          <div className="tier-grid" style={{
-            gridTemplateColumns: data.tiers.length === 1
-              ? '1fr'
-              : data.tiers.length === 2
-                ? 'repeat(2, 1fr)'
-                : 'repeat(3, 1fr)',
-          }}>
+          {/* Assumptions block — surfaces explicit AI assumptions when
+              the brief was thin, per the Livv quoting framework. */}
+          {data.assumptions && data.assumptions.length > 0 && (
+            <div className="assumptions-block">
+              <div className="ass-head">© Assumptions</div>
+              <ul>
+                {data.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {/* Tier grid. Auto-adapts to 1/2/3/4 columns based on the
+              number of tiers the AI produced. */}
+          <div
+            className={`tier-grid ${data.tiers.length === 4 ? 'four-cols' : ''}`}
+            style={data.tiers.length <= 3 ? {
+              gridTemplateColumns: data.tiers.length === 1
+                ? '1fr'
+                : data.tiers.length === 2
+                  ? 'repeat(2, 1fr)'
+                  : 'repeat(3, 1fr)',
+            } : undefined}
+          >
             {data.tiers.map(tier => {
               const isSelected = tier.id === selectedTier?.id;
               return (
@@ -432,11 +472,15 @@ export const ProposalDocumentView: React.FC<Props> = ({
                 >
                   {tier.recommended && <span className="tier-tag">★ Recommended</span>}
                   <div className="tier-name">{tier.name}</div>
+                  {tier.variantLabel && <div className="tier-variant">{tier.variantLabel}</div>}
                   <div className="tier-desc">{tier.description}</div>
                   <div className="tier-price">
                     <span className="currency">{data.currency}</span>{formatNum(tier.amount)}
                   </div>
-                  <div className="tier-duration">{tier.duration}</div>
+                  <div className="tier-duration">
+                    {tier.duration}
+                    {tier.platform && <span className="tier-platform">{tier.platform}</span>}
+                  </div>
                   <ul className="tier-features">
                     {tier.features.map((f, i) => (
                       <li key={i} className={f.included ? '' : 'muted'}>{f.label}</li>
@@ -455,6 +499,30 @@ export const ProposalDocumentView: React.FC<Props> = ({
               );
             })}
           </div>
+
+          {/* Comparison summary table — required by the Livv quoting
+              framework for serious clients. Only renders when the AI
+              emits it (it always should for >=2 tiers). */}
+          {data.comparisonTable && data.comparisonTable.rows.length > 0 && (
+            <div className="comparison-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Spec</th>
+                    {data.comparisonTable.headers.map((h, i) => <th key={i}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.comparisonTable.rows.map((row, i) => (
+                    <tr key={i}>
+                      <td>{row.label}</td>
+                      {row.values.map((v, j) => <td key={j}>{v}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Add-ons */}
           {data.addons.length > 0 && (

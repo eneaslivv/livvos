@@ -123,6 +123,8 @@ const tiersFromProposal = (proposal: any, doc: any): ProposalTier[] => {
       description: t.description || '',
       featured: !!t.featured,
       recommended: !!t.recommended,
+      variantLabel: t.variantLabel || t.variant_label || undefined,
+      platform: t.platform || undefined,
       features: Array.isArray(t.features)
         ? t.features.map((f: any) => typeof f === 'string'
             ? { label: f, included: true }
@@ -230,5 +232,13 @@ export function buildProposalDocumentData(proposal: any, opts: BuildOptions = {}
       : fallbackTerms(validity.days),
 
     contactEmail: opts.contactEmail || doc.contactEmail || 'hola@livv.systems',
+
+    // Pass-through for the Livv quoting framework's optional sections.
+    assumptions: Array.isArray(doc.assumptions) && doc.assumptions.length > 0
+      ? doc.assumptions
+      : undefined,
+    comparisonTable: doc.comparisonTable && Array.isArray(doc.comparisonTable.headers) && Array.isArray(doc.comparisonTable.rows)
+      ? doc.comparisonTable
+      : undefined,
   };
 }
