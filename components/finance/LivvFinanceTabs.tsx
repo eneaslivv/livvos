@@ -455,17 +455,16 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   }, [period]);
 
   // Apply view + period filters on top of what the parent already filtered.
-  // Semantics differ by view because "this month" means different things:
-  //   • Active + this-month  = "work I should collect by end of May"
-  //                            → any open installment due ON OR BEFORE
-  //                              the period's end (includes overdue from
-  //                              earlier months — you still owe it).
-  //   • History + this-month = "what I actually collected this month"
-  //                            → paid_date inside the window.
-  //   • Either + all         = no period gate.
-  // Earlier behavior was strict-window for both views, which hid every
-  // active income whose installments were due next month, leaving the
-  // user with "Showing 0 of 4" even though 4 incomes were active.
+  //   • Active view = open work. Period filter does NOT hide items —
+  //                   if you owe me money, I want to see it whether it's
+  //                   due this month, next month, or already overdue.
+  //                   The period dropdown is hidden in Active mode.
+  //   • History view + period = what was actually collected in that
+  //                             window (paid_date inside the period).
+  //   • History view + all    = lifetime collected.
+  // Previously the period filter applied to Active too, which hid every
+  // open invoice whose installments were due next month, leaving the
+  // user staring at "Showing 0 of 4" even though 4 incomes were open.
   const visibleIncomes = useMemo(() => {
     return filteredIncomes.filter((inc: any) => {
       const insts = inc.installments || [];
@@ -473,25 +472,9 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
       // View-mode gate
       if (viewMode === 'active' && allPaid) return false;
       if (viewMode === 'history' && !allPaid) return false;
-      // Period gate (ignored when 'all')
+      // Period gate is Active-mode-exempt (always show open work).
+      if (viewMode === 'active') return true;
       if (!periodBounds) return true;
-
-      if (viewMode === 'active') {
-        // Show if any OPEN (not paid) installment is due by end-of-period.
-        // This is cumulative — "by end of this month" covers overdue too.
-        const hasDueByEnd = insts.some((i: any) => {
-          if (i.status === 'paid') return false;
-          const dRef = i.due_date;
-          if (!dRef) return true; // no due date → keep, can't filter blindly
-          const d = new Date(dRef + 'T12:00:00');
-          return d <= periodBounds.to;
-        });
-        // Income with no installments at all: keep it visible so the user
-        // can still see and manage it.
-        if (insts.length === 0) return true;
-        return hasDueByEnd;
-      }
-
       // History view — paid inside the window.
       return insts.some((i: any) => {
         if (i.status !== 'paid') return false;
@@ -514,12 +497,33 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
     return { active, history };
   }, [filteredIncomes]);
 
-  const filterCounts = {
-    all: incomes.length,
-    pending: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length,
-    paid: incomes.filter(i => i.status === 'paid').length,
-    overdue: incomes.filter(i => i.status === 'overdue').length,
-  };
+  // Status chip counts must reflect the SAME view+period gates that
+  // visibleIncomes uses — otherwise the user clicks "To collect 4" and
+  // sees an empty list because the items fall outside the period.
+  // Mirrors visibleIncomes: Active ignores period; History honors it.
+  const filterCounts = useMemo(() => {
+    const inViewAndPeriod = (incomes || []).filter((inc: any) => {
+      const insts = inc.installments || [];
+      const allPaid = insts.length > 0 && insts.every((i: any) => i.status === 'paid');
+      if (viewMode === 'active' && allPaid) return false;
+      if (viewMode === 'history' && !allPaid) return false;
+      if (viewMode === 'active') return true;
+      if (!periodBounds) return true;
+      return insts.some((i: any) => {
+        if (i.status !== 'paid') return false;
+        const dRef = i.paid_date || i.due_date;
+        if (!dRef) return false;
+        const d = new Date(dRef + 'T12:00:00');
+        return d >= periodBounds.from && d <= periodBounds.to;
+      });
+    });
+    return {
+      all: inViewAndPeriod.length,
+      pending: inViewAndPeriod.filter(i => i.status === 'pending' || i.status === 'partial').length,
+      paid: inViewAndPeriod.filter(i => i.status === 'paid').length,
+      overdue: inViewAndPeriod.filter(i => i.status === 'overdue').length,
+    };
+  }, [incomes, viewMode, periodBounds]);
 
   return (
     <div style={{
@@ -580,21 +584,26 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
           ))}
         </div>
 
-        {/* Period selector */}
-        <select
-          value={period}
-          onChange={e => setPeriod(e.target.value as any)}
-          style={{
-            padding: '7px 14px', borderRadius: 9999, border: `1px solid ${C.bone}`,
-            background: isDark ? C.oat : '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
-            outline: 'none', cursor: 'pointer',
-          }}
-        >
-          <option value="this-month">This month</option>
-          <option value="last-month">Last month</option>
-          <option value="quarter">This quarter</option>
-          <option value="all">All time</option>
-        </select>
+        {/* Period selector — only meaningful in History view (which window
+            of paid invoices to show). In Active view all open work is
+            relevant regardless of due date, so the dropdown is hidden to
+            avoid confusion. */}
+        {viewMode === 'history' && (
+          <select
+            value={period}
+            onChange={e => setPeriod(e.target.value as any)}
+            style={{
+              padding: '7px 14px', borderRadius: 9999, border: `1px solid ${C.bone}`,
+              background: isDark ? C.oat : '#FFFFFF', fontFamily: 'Inter', fontSize: 11, color: C.body,
+              outline: 'none', cursor: 'pointer',
+            }}
+          >
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="quarter">This quarter</option>
+            <option value="all">All time</option>
+          </select>
+        )}
 
         <span style={{ fontSize: 10, color: C.meta, marginLeft: 'auto' }}>
           Showing {visibleIncomes.length} of {filteredIncomes.length}
@@ -644,9 +653,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
                 ? (period !== 'all' ? 'Nothing collected in this period.' : 'No invoices have been fully collected yet.')
                 : (filteredIncomes.length === 0
                     ? 'No income recorded yet.'
-                    : (period !== 'all'
-                        ? 'Nothing due by the end of this period — switch to All time to see everything open.'
-                        : 'Nothing open right now.'))
+                    : 'Nothing open right now.')
           }
           subtitle={
             incomeSearch
