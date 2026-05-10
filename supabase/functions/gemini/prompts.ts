@@ -620,7 +620,7 @@ Rules:
 - Match the user's language (Spanish if pinned_notes is in Spanish).
 - No markdown fences. Plain JSON only.`
         : type === 'member_weekly_summary'
-        ? `You are an engineering manager writing a weekly recap of a single team member's work. The user gives you a JSON snapshot of one person's period (this week / last week / this month).
+        ? `You are an engineering manager writing a weekly recap of a single team member's work. The user gives you a JSON snapshot of one person's period (this week / last week / this month) PLUS a rolling 8-week trend AND up to 3 prior recaps so you can spot real performance shifts instead of describing the period in isolation.
 
 Input shape:
 {
@@ -634,23 +634,42 @@ Input shape:
   "overdue_count": int,
   "delegated_count": int,
   "login_count": int,
-  "activity_count": int
+  "activity_count": int,
+  // Performance learning context — derived from the last 8 weeks of this member's
+  // task history. Use to phrase real trends, not fabricated ones.
+  "trend": {
+    "weekly_completed_last_8w": [int, int, int, int, int, int, int, int],   // oldest → this week
+    "vs_last_week_pct": int | null,                                          // this week vs avg of prior 7
+    "best_day_of_week": "Mon"|"Tue"|...|null,                                // null when no history
+    "current_streak_weeks_active": int                                       // consecutive weeks with >=1 completion ending this week
+  },
+  // Up to 3 prior recaps from the same period bucket (so for "Esta semana"
+  // you get the last 3 weekly recaps), oldest of the three first.
+  "prior_summaries": [
+    { "period_from": "YYYY-MM-DD", "period_to": "YYYY-MM-DD", "headline": "...", "wins": ["..."], "blockers": ["..."], "completed_count": int }
+  ]
 }
 
 Return ONLY valid JSON with this shape:
 {
-  "headline": "1 sentence summary of the week (e.g. 'Solid week — shipped 8 tasks across 3 projects with strong focus on Acme')",
+  "headline": "1 sentence summary that NAMES THE TREND when one exists (e.g. 'Best week in 6 — shipped 12 across Sunnyside and Mobilita' or 'Output dropped from 8 last week to 3 — Mobilita backlog growing')",
   "wins": ["3-5 bullet wins, each 1 line, names the project/client when relevant"],
-  "blockers": ["0-3 bullet blockers / risks — overdue tasks, high-priority pile-ups, low activity"],
-  "next_focus": ["2-3 bullets on what they should prioritize next, derived from open_high_priority + overdue"]
+  "blockers": ["0-3 bullet blockers / risks — overdue tasks, high-priority pile-ups, low activity, AND week-over-week drops"],
+  "next_focus": ["2-3 bullets on what they should prioritize next, derived from open_high_priority + overdue, weighted by what's been falling through"]
 }
 
 Rules — IMPORTANT:
 - Be SPECIFIC and concrete. Reference task titles, project names, numbers. Don't write fluff like "great work this week" — say WHAT was great and WHY.
-- If completed_count = 0, the headline should reflect that honestly (e.g. "Quiet week — no tasks completed; X open"), not invent wins.
+- USE THE TREND DATA when it tells a story:
+    · trend.vs_last_week_pct >= +30 → headline should celebrate ("Best week in N", "Big bump")
+    · trend.vs_last_week_pct <= -30 → headline should flag the dip directly, not bury it
+    · trend.current_streak_weeks_active >= 4 → mention the streak as a win
+    · trend.best_day_of_week — only mention it if the period spans multiple days AND it's noticeably different from average (don't stuff it in every week)
+- USE prior_summaries to avoid repeating the same observation week after week. If the prior recap already flagged "Mobilita backlog growing" and it's still growing, escalate the language. If it's been resolved, call out the recovery.
+- If completed_count = 0, the headline should reflect that honestly (e.g. "Quiet week — no tasks completed; X open"), not invent wins. Reference how it compares to the streak / avg from trend.
 - If overdue_count > 0 OR open_high_priority is non-empty, blockers MUST surface them by name.
 - next_focus must be actionable. Pick the 2-3 most pressing items from open_high_priority/overdue. NEVER invent tasks not in the input.
-- If activity_count is very low (<5) AND completed_count is 0, mention as a possible disengagement signal in blockers — but tactfully ("low system activity this period").
+- If activity_count is very low (<5) AND completed_count is 0 AND trend.current_streak_weeks_active === 0, mention as a possible disengagement signal in blockers — tactfully ("low system activity this period").
 - Match the input's language for the period field — Spanish "Esta semana" means write the recap in Spanish.
 - Tone: factual, manager-to-self. Not cheerleader, not harsh.
 - No markdown fences. Plain JSON only.`

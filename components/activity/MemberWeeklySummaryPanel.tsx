@@ -22,6 +22,8 @@ import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
 import { generateMemberWeeklySummary, type MemberWeeklySummaryResult } from '../../lib/ai';
 import { errorLogger } from '../../lib/errorLogger';
+import { useTenant } from '../../context/TenantContext';
+import { useAuth } from '../../hooks/useAuth';
 
 interface Member {
   id: string;
@@ -132,14 +134,152 @@ const getPeriodRange = (period: Period): { from: Date; to: Date } => {
   return { from: start, to: now };
 };
 
+// ─── Trend computation helpers ─────────────────────────────────────
+// All client-side. Operates on the same `tasks` array the panel already
+// has, so no new round-trip. The signals get passed to the AI so it can
+// reference real performance shifts ("best week in 6 weeks", "output
+// dropped vs last week") instead of describing the same week in isolation.
+
+interface TrendSignals {
+  /** [oldest, …, this-week] count of completed tasks, length 8. */
+  weeklyCompletedLast8w: number[];
+  /** Percentage delta of this-week vs the average of the prior 7 weeks. */
+  vsLastWeekPct: number | null;
+  /** Day of week the member completes the most tasks ('Mon'..'Sun') over last 8 weeks. */
+  bestDayOfWeek: string | null;
+  /** Consecutive weeks with at least 1 completion ending in this week. */
+  currentStreakWeeksActive: number;
+}
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+const startOfWeekMonday = (d: Date): Date => {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
+  return out;
+};
+
+const computeTrendSignals = (tasks: Task[], memberId: string): TrendSignals => {
+  const now = new Date();
+  const thisMonday = startOfWeekMonday(now);
+  // 8 weeks ending this Monday — bucket the member's completed tasks by week.
+  const weeklyCounts: number[] = Array(8).fill(0);
+  const weekStarts: number[] = Array(8).fill(0).map((_, i) => {
+    const d = new Date(thisMonday);
+    d.setDate(d.getDate() - 7 * (7 - i)); // i=0 → 7 weeks ago, i=7 → this week
+    return d.getTime();
+  });
+  const dayCounts: number[] = Array(7).fill(0);
+
+  for (const t of tasks) {
+    if (!isMemberTask(t, memberId)) continue;
+    if (!t.completed || !t.completed_at) continue;
+    const tCompleted = new Date(t.completed_at);
+    const tMs = tCompleted.getTime();
+    // Bucket into 8-week window
+    for (let i = 0; i < 8; i++) {
+      const start = weekStarts[i];
+      const end = i < 7 ? weekStarts[i + 1] : Infinity;
+      if (tMs >= start && tMs < end) {
+        weeklyCounts[i]++;
+        // Day-of-week tally only counts the 8-week window.
+        dayCounts[tCompleted.getDay()]++;
+        break;
+      }
+    }
+  }
+
+  // vs prior 7 weeks (avg). Null when there's no prior data.
+  const thisWeek = weeklyCounts[7];
+  const prior = weeklyCounts.slice(0, 7);
+  const priorTotal = prior.reduce((a, b) => a + b, 0);
+  const priorAvg = priorTotal / 7;
+  let vsLastWeekPct: number | null = null;
+  if (priorTotal > 0) {
+    vsLastWeekPct = Math.round(((thisWeek - priorAvg) / priorAvg) * 100);
+  }
+
+  // Best day of week (only when there's at least 1 completion total).
+  const totalCompletedInWindow = dayCounts.reduce((a, b) => a + b, 0);
+  let bestDayOfWeek: string | null = null;
+  if (totalCompletedInWindow > 0) {
+    const bestIdx = dayCounts.indexOf(Math.max(...dayCounts));
+    bestDayOfWeek = DAY_LABELS[bestIdx];
+  }
+
+  // Streak: count consecutive weeks ending in this-week with >=1 completion.
+  let currentStreakWeeksActive = 0;
+  for (let i = 7; i >= 0; i--) {
+    if (weeklyCounts[i] > 0) currentStreakWeeksActive++;
+    else break;
+  }
+
+  return { weeklyCompletedLast8w: weeklyCounts, vsLastWeekPct, bestDayOfWeek, currentStreakWeeksActive };
+};
+
+// ─── Persisted summaries loader ────────────────────────────────────
+interface SavedSummary {
+  id: string;
+  period: Period;
+  period_label: string;
+  period_from: string; // YYYY-MM-DD
+  period_to: string;
+  completed_count: number;
+  open_count: number;
+  overdue_count: number;
+  delegated_count: number;
+  login_count: number;
+  activity_count: number;
+  headline: string | null;
+  wins: string[];
+  blockers: string[];
+  next_focus: string[];
+  signals: Record<string, any>;
+  generated_at: string;
+}
+
 export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, member, tasks, activities }) => {
   const [period, setPeriod] = useState<Period>('this_week');
   const [aiResult, setAiResult] = useState<MemberWeeklySummaryResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Persisted past summaries for THIS member, sorted newest-first.
+  const [savedSummaries, setSavedSummaries] = useState<SavedSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const { currentTenant } = useTenant();
+  const { user: currentUser } = useAuth();
 
   // Reset AI summary when member or period changes — different scope = stale.
   useEffect(() => { setAiResult(null); setAiError(null); }, [member?.id, period]);
+
+  // Load past summaries whenever the member changes. Newest 12 across any period.
+  useEffect(() => {
+    if (!member || !currentTenant?.id) { setSavedSummaries([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('member_performance_summaries')
+          .select('id, period, period_label, period_from, period_to, completed_count, open_count, overdue_count, delegated_count, login_count, activity_count, headline, wins, blockers, next_focus, signals, generated_at')
+          .eq('tenant_id', currentTenant.id)
+          .eq('user_id', member.id)
+          .order('period_from', { ascending: false })
+          .limit(12);
+        if (cancelled) return;
+        if (error) {
+          errorLogger.warn('member summaries load failed', error);
+          setSavedSummaries([]);
+          return;
+        }
+        setSavedSummaries((data as any) || []);
+      } catch (err) {
+        if (!cancelled) errorLogger.warn('member summaries load throw', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [member?.id, currentTenant?.id]);
 
   const range = useMemo(() => getPeriodRange(period), [period]);
 
@@ -199,12 +339,51 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
 
   const loginCount = useMemo(() => memberActivities.filter(a => a.type === 'user_login').length, [memberActivities]);
 
+  // 8-week trend window — recomputes whenever the underlying tasks change.
+  // Independent of `period` because it always shows the rolling 8 weeks.
+  const trendSignals = useMemo<TrendSignals>(() => {
+    if (!member) return { weeklyCompletedLast8w: Array(8).fill(0), vsLastWeekPct: null, bestDayOfWeek: null, currentStreakWeeksActive: 0 };
+    return computeTrendSignals(tasks, member.id);
+  }, [member, tasks]);
+
+  // When the user opens the panel and there's a saved summary that exactly
+  // matches the current period window, surface it immediately (so they see
+  // last time's recap without having to regenerate). The "Regenerar" button
+  // still works to refresh.
+  useEffect(() => {
+    if (!member || aiResult) return;
+    const fromStr = range.from.toISOString().split('T')[0];
+    const match = savedSummaries.find(s => s.period === period && s.period_from === fromStr);
+    if (match && match.headline) {
+      setAiResult({
+        headline: match.headline,
+        wins: match.wins || [],
+        blockers: match.blockers || [],
+        next_focus: match.next_focus || [],
+      });
+    }
+  }, [savedSummaries, member, period, range.from, aiResult]);
+
   // ─── AI summary generation ─────────────────────────────────────────
   const handleGenerateSummary = async () => {
     if (!member) return;
     setAiLoading(true);
     setAiError(null);
     try {
+      // Last 3 prior summaries from the SAME period bucket — gives the AI
+      // a sense of trajectory ("last week you said X, this week Y").
+      const priorOfSamePeriod = savedSummaries
+        .filter(s => s.period === period && s.period_from !== range.from.toISOString().split('T')[0])
+        .slice(0, 3)
+        .map(s => ({
+          period_from: s.period_from,
+          period_to: s.period_to,
+          headline: s.headline,
+          wins: (s.wins || []).slice(0, 3),
+          blockers: (s.blockers || []).slice(0, 3),
+          completed_count: s.completed_count,
+        }));
+
       const payload = {
         member: { name: member.name, id: member.id },
         period: PERIOD_LABEL[period],
@@ -227,9 +406,64 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         delegated_count: scope.delegatedByThem.length,
         login_count: loginCount,
         activity_count: memberActivities.length,
+        // Performance learning context — drives "best week in N" / trend phrasing.
+        trend: {
+          weekly_completed_last_8w: trendSignals.weeklyCompletedLast8w,
+          vs_last_week_pct: trendSignals.vsLastWeekPct,
+          best_day_of_week: trendSignals.bestDayOfWeek,
+          current_streak_weeks_active: trendSignals.currentStreakWeeksActive,
+        },
+        prior_summaries: priorOfSamePeriod,
       };
       const result = await generateMemberWeeklySummary(JSON.stringify(payload));
       setAiResult(result);
+
+      // Persist so future runs can reference this in prior_summaries, and
+      // so the panel can show history without re-asking the AI. Upserts on
+      // the (tenant, user, period, period_from) uniqueness so a regenerate
+      // overwrites the previous attempt for the same window.
+      if (currentTenant?.id) {
+        try {
+          const { error: upsertErr } = await supabase
+            .from('member_performance_summaries')
+            .upsert({
+              tenant_id: currentTenant.id,
+              user_id: member.id,
+              period,
+              period_label: PERIOD_LABEL[period],
+              period_from: range.from.toISOString().split('T')[0],
+              period_to: range.to.toISOString().split('T')[0],
+              completed_count: scope.completedInPeriod.length,
+              open_count: scope.openAssigned.length,
+              overdue_count: scope.overdue.length,
+              delegated_count: scope.delegatedByThem.length,
+              login_count: loginCount,
+              activity_count: memberActivities.length,
+              headline: result.headline || null,
+              wins: result.wins || [],
+              blockers: result.blockers || [],
+              next_focus: result.next_focus || [],
+              signals: trendSignals,
+              generated_by: currentUser?.id || null,
+              generated_at: new Date().toISOString(),
+            }, { onConflict: 'tenant_id,user_id,period,period_from' });
+          if (upsertErr) {
+            errorLogger.warn('member summary upsert failed', upsertErr);
+          } else {
+            // Re-fetch so the History section + "vs prior" reflect the new row.
+            const { data } = await supabase
+              .from('member_performance_summaries')
+              .select('id, period, period_label, period_from, period_to, completed_count, open_count, overdue_count, delegated_count, login_count, activity_count, headline, wins, blockers, next_focus, signals, generated_at')
+              .eq('tenant_id', currentTenant.id)
+              .eq('user_id', member.id)
+              .order('period_from', { ascending: false })
+              .limit(12);
+            if (data) setSavedSummaries(data as any);
+          }
+        } catch (err) {
+          errorLogger.warn('member summary persist throw', err);
+        }
+      }
     } catch (err: any) {
       setAiError(err?.message || 'Could not generate summary');
     } finally {
@@ -285,7 +519,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         </div>
 
         {/* Stats strip */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
           {stats.map(s => (
             <div key={s.label} className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-xl">
               <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold mb-0.5 truncate">{s.label}</div>
@@ -293,6 +527,12 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             </div>
           ))}
         </div>
+
+        {/* 8-week trend strip — sparkline of weekly completions, plus
+            chips for vs-last-week, best day of week, current streak.
+            All learned from this member's own task history. */}
+        <TrendStrip signals={trendSignals} />
+
 
         {/* AI summary card */}
         <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-white to-white dark:from-amber-500/10 dark:via-zinc-900 dark:to-zinc-900 border border-amber-200/50 dark:border-amber-500/15">
@@ -457,8 +697,183 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             </div>
           </Section>
         )}
+
+        {/* Past AI recaps — collapsed by default. Each row shows the
+            window, completed count, headline, and (when expanded) wins.
+            This is the "memory" — every regeneration writes a row, so
+            over time we have a real performance log per member. */}
+        {savedSummaries.length > 0 && (
+          <div className="mt-2">
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              className="w-full flex items-center justify-between gap-2 mb-2 text-left group"
+            >
+              <div className="flex items-center gap-2">
+                <Icons.ChevronDown
+                  size={11}
+                  className={`text-zinc-400 transition-transform ${showHistory ? '' : '-rotate-90'}`}
+                />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
+                  Historial de resúmenes
+                </span>
+                <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded font-semibold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                  {savedSummaries.length}
+                </span>
+              </div>
+              <span className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+            </button>
+            {showHistory && (
+              <div className="space-y-1.5">
+                {savedSummaries.map(s => (
+                  <SavedSummaryRow key={s.id} summary={s} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </SlidePanel>
+  );
+};
+
+// ─── TrendStrip — 8-week sparkline + signals chips ────────────────
+const TrendStrip: React.FC<{ signals: TrendSignals }> = ({ signals }) => {
+  const max = Math.max(...signals.weeklyCompletedLast8w, 1);
+  const hasData = signals.weeklyCompletedLast8w.some(v => v > 0);
+  if (!hasData) {
+    return (
+      <div className="mb-6 px-3 py-2.5 bg-white/40 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[11px] text-zinc-400 italic">
+        Sin tareas completadas en las últimas 8 semanas. La tendencia aparece cuando empezás a marcar tareas como hechas.
+      </div>
+    );
+  }
+  const trendColor = signals.vsLastWeekPct == null
+    ? 'text-zinc-500'
+    : signals.vsLastWeekPct > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : signals.vsLastWeekPct < 0
+        ? 'text-rose-500 dark:text-rose-400'
+        : 'text-zinc-500';
+  const trendArrow = signals.vsLastWeekPct == null ? '·'
+    : signals.vsLastWeekPct > 0 ? '▲'
+    : signals.vsLastWeekPct < 0 ? '▼' : '→';
+  return (
+    <div className="mb-6 px-3 py-3 bg-white/60 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 rounded-xl">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+          Tendencia · 8 semanas
+        </span>
+        <div className="flex items-center gap-2">
+          {signals.vsLastWeekPct != null && (
+            <span className={`text-[11px] font-medium tabular-nums ${trendColor}`}>
+              {trendArrow} {signals.vsLastWeekPct > 0 ? '+' : ''}{signals.vsLastWeekPct}% vs prom.
+            </span>
+          )}
+          {signals.bestDayOfWeek && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+              best: {signals.bestDayOfWeek}
+            </span>
+          )}
+          {signals.currentStreakWeeksActive >= 2 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">
+              {signals.currentStreakWeeksActive}w streak
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Sparkline */}
+      <div className="flex items-end gap-1 h-10">
+        {signals.weeklyCompletedLast8w.map((v, i) => {
+          const isThisWeek = i === 7;
+          const pct = (v / max) * 100;
+          return (
+            <div
+              key={i}
+              className="flex-1 flex flex-col items-center justify-end gap-1"
+              title={`${i === 7 ? 'Esta semana' : `${7 - i} sem atrás`}: ${v} ${v === 1 ? 'tarea' : 'tareas'}`}
+            >
+              <div
+                className={`w-full rounded-sm transition-all ${
+                  isThisWeek
+                    ? 'bg-zinc-900 dark:bg-zinc-100'
+                    : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+                style={{ height: `${Math.max(4, pct)}%` }}
+              />
+              <span className={`text-[8px] tabular-nums ${isThisWeek ? 'text-zinc-700 dark:text-zinc-300 font-medium' : 'text-zinc-400'}`}>
+                {v}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── SavedSummaryRow — collapsible past recap entry ─────────────────
+const SavedSummaryRow: React.FC<{ summary: SavedSummary }> = ({ summary }) => {
+  const [expanded, setExpanded] = useState(false);
+  const dateLabel = `${fmtDate(summary.period_from)} → ${fmtDate(summary.period_to)}`;
+  return (
+    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 shrink-0">
+          {summary.period_label}
+        </span>
+        <span className="text-[10px] text-zinc-400 shrink-0">·</span>
+        <span className="text-[10px] tabular-nums text-zinc-500 shrink-0">{dateLabel}</span>
+        <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 shrink-0 font-semibold">
+          {summary.completed_count} ✓
+        </span>
+        {summary.headline && (
+          <span className="text-[11px] text-zinc-700 dark:text-zinc-200 truncate flex-1">
+            {summary.headline}
+          </span>
+        )}
+        <Icons.ChevronDown
+          size={11}
+          className={`text-zinc-400 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pt-1 space-y-2 bg-zinc-50/50 dark:bg-zinc-900/40 border-t border-zinc-100 dark:border-zinc-800">
+          {summary.wins.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-1">✓ Wins</div>
+              <ul className="space-y-0.5">
+                {summary.wins.slice(0, 5).map((w, i) => (
+                  <li key={i} className="text-[11px] text-zinc-700 dark:text-zinc-200 leading-snug">— {w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.blockers.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-semibold mb-1">⚠ Bloqueos</div>
+              <ul className="space-y-0.5">
+                {summary.blockers.slice(0, 3).map((b, i) => (
+                  <li key={i} className="text-[11px] text-zinc-700 dark:text-zinc-200 leading-snug">— {b}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.next_focus.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-semibold mb-1">→ Foco</div>
+              <ul className="space-y-0.5">
+                {summary.next_focus.slice(0, 3).map((n, i) => (
+                  <li key={i} className="text-[11px] text-zinc-700 dark:text-zinc-200 leading-snug">— {n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
