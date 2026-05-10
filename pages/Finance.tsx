@@ -297,7 +297,38 @@ export const Finance: React.FC = () => {
     const lostRevenue = rejected.reduce((s, p) => s + (p.pricing_total || 0), 0);
     const responded = sent.length + approved.length + rejected.length;
     const conversionRate = responded > 0 ? (approved.length / responded) * 100 : 0;
-    return { sent, approved, rejected, draft, potentialRevenue, confirmedRevenue, lostRevenue, conversionRate };
+
+    // ── THIS MONTH ─────────────────────────────────────────────────
+    // The user wants a clear "how many proposals did I send this month
+    // and what's their value" answer at a glance, plus the confirmed
+    // and lost cuts of the same window. We bucket by sent_at when set,
+    // falling back to created_at for drafts that never went out.
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).getTime();
+    const inThisMonth = (iso?: string | null) => {
+      if (!iso) return false;
+      const t = new Date(iso).getTime();
+      return t >= monthStart && t <= monthEnd;
+    };
+    const sentThisMonth = proposals.filter(p =>
+      inThisMonth(p.sent_at) || (!p.sent_at && p.status !== 'draft' && inThisMonth(p.created_at))
+    );
+    const approvedThisMonth = proposals.filter(p => inThisMonth(p.approved_at));
+    const rejectedThisMonth = proposals.filter(p => inThisMonth(p.rejected_at));
+    const sentValueThisMonth = sentThisMonth.reduce((s, p) => s + (p.pricing_total || 0), 0);
+    const approvedValueThisMonth = approvedThisMonth.reduce((s, p) => s + (p.pricing_total || 0), 0);
+    const monthConversion = sentThisMonth.length > 0
+      ? (approvedThisMonth.length / sentThisMonth.length) * 100
+      : 0;
+
+    return {
+      sent, approved, rejected, draft,
+      potentialRevenue, confirmedRevenue, lostRevenue, conversionRate,
+      // this-month rollups
+      sentThisMonth, approvedThisMonth, rejectedThisMonth,
+      sentValueThisMonth, approvedValueThisMonth, monthConversion,
+    };
   }, [proposals]);
 
   const filteredProposals = useMemo(() => {
@@ -2077,7 +2108,46 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ PROPOSALS ═══════════════ */}
       {activeTab === 'propuestas' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
-          {/* Summary cards */}
+          {/* This-month strip — answers "how many proposals went out
+              this month and what's their dollar value" in one glance,
+              plus the confirmed cut so the user can see win-rate at the
+              monthly cadence they actually plan against. */}
+          <div className="rounded-xl border border-zinc-100 dark:border-zinc-800/60 bg-gradient-to-br from-indigo-50/40 to-transparent dark:from-indigo-500/5 dark:to-transparent px-5 py-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                  {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                  Proposals sent this month
+                </div>
+              </div>
+              <div className="text-[11px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+                {proposalMetrics.monthConversion.toFixed(0)}% won
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Sent</div>
+                <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{proposalMetrics.sentThisMonth.length}</div>
+                <div className="text-[10px] text-indigo-500 font-medium mt-0.5 tabular-nums">{fmtCurrency(proposalMetrics.sentValueThisMonth)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Confirmed</div>
+                <div className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{proposalMetrics.approvedThisMonth.length}</div>
+                <div className="text-[10px] text-emerald-500 font-medium mt-0.5 tabular-nums">{fmtCurrency(proposalMetrics.approvedValueThisMonth)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Not confirmed</div>
+                <div className="text-2xl font-semibold text-rose-500 dark:text-rose-400 tabular-nums">{proposalMetrics.rejectedThisMonth.length}</div>
+                <div className="text-[10px] text-zinc-400 font-medium mt-0.5">
+                  {proposalMetrics.sentThisMonth.length - proposalMetrics.approvedThisMonth.length - proposalMetrics.rejectedThisMonth.length} awaiting reply
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary cards (lifetime) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
               <div className="flex items-center gap-2 mb-2">
@@ -2222,23 +2292,51 @@ export const Finance: React.FC = () => {
                           >
                             <Pencil size={13} />
                           </button>
+                          {/* Send draft → sent (always visible for drafts so the user
+                              can move things forward without hunting). */}
+                          {p.status === 'draft' && (
+                            <button
+                              onClick={() => updateProposalStatus(p.id, 'sent')}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-[10px] font-semibold transition-colors"
+                              title="Mark as sent"
+                            >
+                              <Send size={10} />
+                              Sent
+                            </button>
+                          )}
+                          {/* Confirm / Not confirmed pills — always-visible for sent
+                              proposals so the user can update status the moment they
+                              get a reply (one click instead of hover-hunting). */}
                           {p.status === 'sent' && (
                             <>
                               <button
                                 onClick={() => updateProposalStatus(p.id, 'approved')}
-                                className="p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                                title="Approve"
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-[10px] font-semibold transition-colors"
+                                title="Mark as confirmed"
                               >
-                                <CheckCircle2 size={14} />
+                                <CheckCircle2 size={11} />
+                                Confirm
                               </button>
                               <button
                                 onClick={() => updateProposalStatus(p.id, 'rejected')}
-                                className="p-1.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                                title="Reject"
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-[10px] font-semibold transition-colors"
+                                title="Mark as not confirmed"
                               >
-                                <ThumbsDown size={14} />
+                                <ThumbsDown size={11} />
+                                Not now
                               </button>
                             </>
+                          )}
+                          {/* Reopen — let the user undo a confirm/reject if they marked
+                              the wrong status. */}
+                          {(p.status === 'approved' || p.status === 'rejected') && (
+                            <button
+                              onClick={() => updateProposalStatus(p.id, 'sent')}
+                              className="opacity-0 group-hover/proposal:opacity-100 flex items-center gap-1 px-2 py-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[10px] font-medium transition-all"
+                              title="Reopen — set back to sent"
+                            >
+                              Reopen
+                            </button>
                           )}
                           {p.status === 'approved' && p.pricing_total && (
                             <button

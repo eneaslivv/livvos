@@ -149,8 +149,97 @@ export const ProposalsPanel: React.FC = () => {
   const [createProjectType, setCreateProjectType] = useState('web');
   const [createLanguage, setCreateLanguage] = useState<'en' | 'es'>('en');
   const [createComplexity, setCreateComplexity] = useState('standard');
+  // "Start from existing proposal" — when set, handleCreate copies the
+  // chosen proposal's content / pricing / service / portfolio into the
+  // new draft so the user can iterate from a prior shape instead of a
+  // blank page. This is the "ya configurado a un precio lógico" the
+  // user asked for: each new proposal carries forward the heuristics
+  // we already settled on.
+  const [createCloneFromId, setCreateCloneFromId] = useState<string>('');
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [lastAIOutputId, setLastAIOutputId] = useState<string | null>(null);
+
+  // ─── Custom templates manager ────────────────────────────────────
+  // The proposal_templates table holds the per-tenant template catalog
+  // (project_type + language + sections + tone + consent_text). Until
+  // now there was no UI to manage them — they were seeded from a SQL
+  // INSERT and never touched again. This adds inline CRUD so the user
+  // can shape templates that match how THEY pitch (sections like
+  // 'Discovery', 'Scope', 'Investment', 'Next steps', etc).
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [tplProjectType, setTplProjectType] = useState('web');
+  const [tplLanguage, setTplLanguage] = useState<'en' | 'es'>('en');
+  const [tplSections, setTplSections] = useState('Overview, Scope, Timeline, Investment, Next steps');
+  const [tplTone, setTplTone] = useState('confident');
+  const [tplConsent, setTplConsent] = useState('');
+
+  const resetTemplateForm = () => {
+    setEditingTemplateId(null);
+    setTplProjectType('web');
+    setTplLanguage('en');
+    setTplSections('Overview, Scope, Timeline, Investment, Next steps');
+    setTplTone('confident');
+    setTplConsent('');
+  };
+
+  const startEditTemplate = (t: ProposalTemplate) => {
+    setEditingTemplateId(t.id);
+    setTplProjectType(t.project_type);
+    setTplLanguage((t.language as 'en' | 'es') || 'en');
+    setTplSections((t.sections || []).join(', '));
+    setTplTone(t.tone || 'confident');
+    setTplConsent(t.consent_text || '');
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!currentTenant?.id) { alert('Tenant not ready'); return; }
+    const sections = tplSections.split(',').map(s => s.trim()).filter(Boolean);
+    if (sections.length === 0) { alert('Add at least one section'); return; }
+    const payload = {
+      tenant_id: currentTenant.id,
+      project_type: tplProjectType,
+      language: tplLanguage,
+      sections,
+      tone: tplTone || null,
+      consent_text: tplConsent || null,
+    };
+    try {
+      if (editingTemplateId) {
+        const { data, error } = await supabase
+          .from('proposal_templates')
+          .update(payload)
+          .eq('id', editingTemplateId)
+          .select()
+          .single();
+        if (error) throw error;
+        setTemplates(prev => prev.map(t => t.id === editingTemplateId ? (data as ProposalTemplate) : t));
+      } else {
+        const { data, error } = await supabase
+          .from('proposal_templates')
+          .insert(payload)
+          .select()
+          .single();
+        if (error) throw error;
+        setTemplates(prev => [data as ProposalTemplate, ...prev]);
+      }
+      resetTemplateForm();
+    } catch (err: any) {
+      alert(err?.message || 'Could not save template');
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (!confirm('Delete this template? Existing proposals are not affected.')) return;
+    try {
+      const { error } = await supabase.from('proposal_templates').delete().eq('id', id);
+      if (error) throw error;
+      setTemplates(prev => prev.filter(t => t.id !== id));
+      if (editingTemplateId === id) resetTemplateForm();
+    } catch (err: any) {
+      alert(err?.message || 'Could not delete template');
+    }
+  };
 
   const selectedProposal = useMemo(
     () => proposals.find(p => p.id === selectedId) || null,
@@ -240,21 +329,30 @@ export const ProposalsPanel: React.FC = () => {
     }
     setIsSaving(true);
     try {
+      // If the user picked a previous proposal as a starting point, copy
+      // its shape into the new draft. We never carry over status/sent_at/
+      // approved_at/public_token — those reset to a fresh draft state.
+      const cloneSource = createCloneFromId
+        ? proposals.find(p => p.id === createCloneFromId)
+        : null;
       const payload = {
         tenant_id: currentTenant?.id,
         title: createTitle.trim(),
         lead_id: createLeadId || null,
         client_id: createClientId || null,
         status: 'draft',
-        content: '',
-        pricing_snapshot: {},
-        timeline: {},
-        currency: 'USD',
-        project_type: createProjectType,
-        language: createLanguage,
-        complexity: createComplexity,
-        brief_text: createBrief,
-        portfolio_ids: []
+        content: cloneSource?.content || '',
+        pricing_snapshot: cloneSource?.pricing_snapshot || {},
+        pricing_total: cloneSource?.pricing_total ?? null,
+        timeline: cloneSource?.timeline || {},
+        currency: cloneSource?.currency || 'USD',
+        project_type: cloneSource?.project_type || createProjectType,
+        language: cloneSource?.language || createLanguage,
+        complexity: cloneSource?.complexity || createComplexity,
+        complexity_factor: cloneSource?.complexity_factor ?? null,
+        brief_text: createBrief || cloneSource?.brief_text || '',
+        portfolio_ids: cloneSource?.portfolio_ids || [],
+        consent_text: cloneSource?.consent_text || null,
       };
       const { data, error } = await supabase.from('proposals').insert(payload).select().single();
       if (error) throw error;
@@ -268,6 +366,7 @@ export const ProposalsPanel: React.FC = () => {
       setCreateProjectType('web');
       setCreateLanguage('en');
       setCreateComplexity('standard');
+      setCreateCloneFromId('');
     } catch (err: any) {
       alert(err.message || 'Error creating proposal');
     } finally {
@@ -411,13 +510,149 @@ export const ProposalsPanel: React.FC = () => {
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Proposals</h3>
             <p className="text-xs text-zinc-500">From leads or clients, with status tracking.</p>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide"
-          >
-            New
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowTemplates(v => !v); if (!showTemplates) resetTemplateForm(); }}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                showTemplates
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-200 dark:border-zinc-800 dark:hover:bg-zinc-800'
+              }`}
+              title="Manage proposal templates"
+            >
+              Templates
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide"
+            >
+              New
+            </button>
+          </div>
         </div>
+
+        {/* ─── Templates manager (toggled) ────────────────────────── */}
+        {showTemplates && (
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Templates
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">
+                  Reusable section sets that the AI follows when generating proposals.
+                </div>
+              </div>
+              <span className="text-[10px] tabular-nums text-zinc-400">
+                {templates.length} saved
+              </span>
+            </div>
+
+            {/* List of existing templates */}
+            {templates.length > 0 && (
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60 -mx-1">
+                {templates.map(t => {
+                  const isEditing = editingTemplateId === t.id;
+                  return (
+                    <div
+                      key={t.id}
+                      className={`flex items-center gap-2 px-2 py-2 rounded-md group/tpl ${
+                        isEditing ? 'bg-indigo-50 dark:bg-indigo-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-zinc-900 dark:text-zinc-100">
+                          {t.project_type} · {t.language}
+                          {t.tone && <span className="text-[10px] text-zinc-400 ml-2">{t.tone}</span>}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 truncate">
+                          {(t.sections || []).join(' · ')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => startEditTemplate(t)}
+                        className="text-[10px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTemplate(t.id)}
+                        className="opacity-0 group-hover/tpl:opacity-100 text-[10px] font-medium text-rose-500 hover:text-rose-700 px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Create / edit form */}
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                {editingTemplateId ? 'Edit template' : 'New template'}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={tplProjectType}
+                  onChange={(e) => setTplProjectType(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                >
+                  {PROJECT_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <select
+                  value={tplLanguage}
+                  onChange={(e) => setTplLanguage(e.target.value as 'en' | 'es')}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                >
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Sections</label>
+                <input
+                  value={tplSections}
+                  onChange={(e) => setTplSections(e.target.value)}
+                  placeholder="Comma-separated, e.g. Overview, Scope, Timeline, Investment, Next steps"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={tplTone}
+                  onChange={(e) => setTplTone(e.target.value)}
+                  placeholder="Tone (e.g. confident, friendly)"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                />
+                <input
+                  value={tplConsent}
+                  onChange={(e) => setTplConsent(e.target.value)}
+                  placeholder="Consent line (optional)"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveTemplate}
+                  className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide hover:opacity-90 transition-opacity"
+                >
+                  {editingTemplateId ? 'Save changes' : 'Add template'}
+                </button>
+                {editingTemplateId && (
+                  <button
+                    onClick={resetTemplateForm}
+                    className="px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!currentTenant?.id && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -439,6 +674,38 @@ export const ProposalsPanel: React.FC = () => {
               placeholder="Proposal title"
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
             />
+            {/* Start from existing — pre-fills brief / pricing / project_type
+                / complexity / portfolio from a prior proposal so the user
+                isn't writing from scratch every time. Empty value = blank. */}
+            {proposals.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">
+                  Start from existing
+                </label>
+                <select
+                  value={createCloneFromId}
+                  onChange={(e) => setCreateCloneFromId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                >
+                  <option value="">Blank — start from scratch</option>
+                  {proposals
+                    .filter(p => p.content && p.content.trim().length > 0)
+                    .slice(0, 25)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                        {p.pricing_total ? ` · $${p.pricing_total.toLocaleString()}` : ''}
+                        {p.project_type ? ` · ${p.project_type}` : ''}
+                      </option>
+                    ))}
+                </select>
+                {createCloneFromId && (
+                  <p className="text-[10px] text-zinc-400">
+                    Content, pricing, timeline, project type, complexity and portfolio links will be copied as a starting point. Status resets to draft.
+                  </p>
+                )}
+              </div>
+            )}
             <textarea
               value={createBrief}
               onChange={(e) => setCreateBrief(e.target.value)}
