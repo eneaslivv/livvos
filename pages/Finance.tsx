@@ -16,6 +16,7 @@ import { FinanceChat } from '../components/finance/FinanceChat';
 import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
 import { PartnerPayoutsCard } from '../components/finance/PartnerPayoutsCard';
 import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
+import { ProjectQuickEditModal } from '../components/finance/ProjectQuickEditModal';
 import {
   useFinance,
   type IncomeEntry,
@@ -213,6 +214,11 @@ export const Finance: React.FC = () => {
   // Local state for the slim AI bar input itself, lifted to the page so the
   // text survives tab switches (annoying to lose mid-thought).
   const [aiBarInput, setAiBarInput] = useState('');
+  // Quick-edit project modal — opened when user clicks a project name in
+  // an income / expense row. Lets them tweak THAT project's title /
+  // status / deadline / budget / description without leaving Finance and
+  // without seeing the full Projects sidebar with every other project.
+  const [quickEditProjectId, setQuickEditProjectId] = useState<string | null>(null);
 
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
@@ -1309,11 +1315,7 @@ export const Finance: React.FC = () => {
             canCreate={hasPermission('finance', 'create')}
             onOpenAIAssistant={() => setIsAssistantOpen(true)}
             onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
-            onOpenProject={(projectId) => {
-              window.dispatchEvent(new CustomEvent('app-navigate', {
-                detail: { page: 'projects', params: { projectId } },
-              }));
-            }}
+            onOpenProject={(projectId) => setQuickEditProjectId(projectId)}
           />
         </div>
       )}
@@ -2773,6 +2775,17 @@ export const Finance: React.FC = () => {
         isOpen={isChatOpen}
         onClose={() => { setIsChatOpen(false); setChatSeedInput(''); }}
         initialInput={chatSeedInput}
+      />
+
+      {/* ═══════════════ PROJECT QUICK EDIT ═══════════════ */}
+      <ProjectQuickEditModal
+        projectId={quickEditProjectId}
+        onClose={() => setQuickEditProjectId(null)}
+        onOpenFullPage={(projectId) => {
+          window.dispatchEvent(new CustomEvent('app-navigate', {
+            detail: { page: 'projects', params: { projectId } },
+          }));
+        }}
       />
     </div>
   );
