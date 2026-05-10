@@ -35,11 +35,25 @@ import {
 } from '../lib/communications/gmail';
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
-  slackTextToPreview, type AvailableSlackChannel,
+  slackTextToPreview, syncSlack, type AvailableSlackChannel,
 } from '../lib/communications/slack';
 
 type Tab = 'inbox' | 'settings';
 type Filter = 'all' | 'pending' | 'high' | 'gmail' | 'slack';
+
+// Compact "5s ago" / "12m ago" / "3h ago" formatter for the inline last-sync
+// indicator. We don't need an i18n library for one ephemeral piece of text.
+function formatRelative(d: Date): string {
+  const diffMs = Date.now() - d.getTime();
+  const s = Math.max(0, Math.round(diffMs / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 
 // ────────────────────────────────────────────────────────────────────────
 //  ROOT PAGE
@@ -89,6 +103,73 @@ export const Communications: React.FC = () => {
     { enabled: tenantReady, subscribe: true, select: '*' }
   );
 
+  // ── Auto-poll: pull new Gmail + Slack messages on an interval ──────
+  // The page already subscribes to realtime postgres_changes on the
+  // communication_messages table — but realtime only fires when something
+  // INSERTs. Until we wire push-based webhooks (Gmail Pub/Sub, Slack
+  // Events API), the only way new mail/messages appear is by calling
+  // the sync edge functions. This poll runs every 90s while the page is
+  // visible, calls both syncs in parallel, and lets realtime do the rest.
+  // Throttled / paused while the tab is hidden so we don't hammer the
+  // edge functions when nobody's looking.
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncTickRef = useRef(0);
+
+  const hasGmail = (tokens || []).some(t => t.platform === 'gmail' && t.is_active);
+  const hasSlack = (tokens || []).some(t => t.platform === 'slack' && t.is_active);
+
+  const runAutoSync = useCallback(async (silent: boolean) => {
+    if (!currentTenant?.id) return;
+    if (!hasGmail && !hasSlack) return; // no integrations, nothing to do
+    if (!silent) setIsSyncing(true);
+    const tickId = ++syncTickRef.current;
+    try {
+      await Promise.allSettled([
+        hasGmail ? syncGmail(currentTenant.id, { limit: 50 }) : Promise.resolve(),
+        hasSlack ? syncSlack(currentTenant.id, { hours: 24 }) : Promise.resolve(),
+      ]);
+      // Only stamp the time if THIS run is still the latest one (avoids
+      // stale time after a manual click superseded a background poll).
+      if (tickId === syncTickRef.current) setLastSyncedAt(new Date());
+    } catch (err) {
+      errorLogger.warn('comm auto-sync', err);
+    } finally {
+      if (!silent) setIsSyncing(false);
+    }
+  }, [currentTenant?.id, hasGmail, hasSlack]);
+
+  // Kick off once on mount + on integration changes, then every 90s.
+  useEffect(() => {
+    if (!tenantReady) return;
+    if (!hasGmail && !hasSlack) return;
+    runAutoSync(true);
+    const id = setInterval(() => {
+      // Skip the tick when the tab is hidden — saves edge invocations.
+      if (typeof document !== 'undefined' && document.hidden) return;
+      runAutoSync(true);
+    }, 90_000);
+    return () => clearInterval(id);
+  }, [tenantReady, hasGmail, hasSlack, runAutoSync]);
+
+  // Also run a sync when the tab regains focus after being hidden, so
+  // the user sees fresh state the moment they come back.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handler = () => { if (!document.hidden) runAutoSync(true); };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [runAutoSync]);
+
+  // Tick every 15s so the "Sync 12s ago" pill ages without waiting for
+  // the next sync cycle. Cheap setState — only updates this component.
+  const [, forceRerender] = useState(0);
+  useEffect(() => {
+    if (!lastSyncedAt) return;
+    const id = setInterval(() => forceRerender(n => n + 1), 15_000);
+    return () => clearInterval(id);
+  }, [lastSyncedAt]);
+
   if (!user || !tenantReady) {
     return (
       <div className="flex items-center justify-center h-64 text-zinc-400 text-sm">
@@ -107,12 +188,35 @@ export const Communications: React.FC = () => {
             Communications Hub
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Inbox</h1>
-          <p className="text-zinc-400 text-xs mt-0.5">
-            {(messages || []).filter(m => m.status === 'pending').length} pendientes ·{' '}
-            {(tokens || []).filter(t => t.platform === 'gmail').length} Gmail ·{' '}
-            {(tokens || []).filter(t => t.platform === 'slack').length} Slack
+          <p className="text-zinc-400 text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>{(messages || []).filter(m => m.status === 'pending').length} pendientes</span>
+            <span className="text-zinc-300">·</span>
+            <span>{(tokens || []).filter(t => t.platform === 'gmail').length} Gmail</span>
+            <span className="text-zinc-300">·</span>
+            <span>{(tokens || []).filter(t => t.platform === 'slack').length} Slack</span>
+            {lastSyncedAt && (
+              <>
+                <span className="text-zinc-300">·</span>
+                <span className="inline-flex items-center gap-1 text-zinc-400">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                  {isSyncing ? 'Sincronizando…' : `Sync ${formatRelative(lastSyncedAt)}`}
+                </span>
+              </>
+            )}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          {(hasGmail || hasSlack) && (
+            <button
+              onClick={() => runAutoSync(false)}
+              disabled={isSyncing}
+              className="px-2.5 py-1.5 text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 disabled:opacity-40 inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300"
+              title="Pull new messages from Gmail + Slack now"
+            >
+              <Icons.RefreshCw size={11} className={isSyncing ? 'animate-spin' : ''} />
+              {isSyncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          )}
         <div className="flex gap-1 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg">
           {(['inbox', 'settings'] as Tab[]).map(t => (
             <button
@@ -127,6 +231,7 @@ export const Communications: React.FC = () => {
               {t === 'inbox' ? 'Inbox' : 'Settings'}
             </button>
           ))}
+        </div>
         </div>
       </div>
 

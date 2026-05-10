@@ -85,6 +85,39 @@ export async function setMonitoredChannels(
   return data as SlackMonitoredChannel[];
 }
 
+// ── Pull recent messages from monitored channels ──────────────────────────
+// Edge fn: slack-sync — calls conversations.history on each channel listed
+// in slack_monitored_channels and inserts new messages into
+// communication_messages. Idempotent (deduped by channel_id:ts).
+//
+// Called from the manual "Sync now" button AND from the auto-poll interval
+// in pages/Communications.tsx.
+export async function syncSlack(
+  tenantId: string,
+  opts: { hours?: number } = {},
+): Promise<{ synced: number; errors: string[] }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/slack-sync`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tenant_id: tenantId, hours: opts.hours ?? 24 }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `slack-sync failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Send Slack reply ──────────────────────────────────────────────────────
 // Same edge fn as gmail (comm-reply) — it routes by platform.
 export async function sendSlackReply(args: {
