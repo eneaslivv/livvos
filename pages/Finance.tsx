@@ -14,6 +14,7 @@ import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import { FinanceAssistant } from '../components/finance/FinanceAssistant';
 import { FinanceChat } from '../components/finance/FinanceChat';
 import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
+import { PartnerPayoutsCard } from '../components/finance/PartnerPayoutsCard';
 import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
 import {
   useFinance,
@@ -1057,6 +1058,10 @@ export const Finance: React.FC = () => {
             onJumpToTab={setActiveTab}
             canCreate={hasPermission('finance', 'create')}
           />
+          {/* Partner payouts (70/30 distribución entre socios). Auto-hide
+              cuando el tenant no tiene rows en partner_payouts — para LIVV
+              Studio aparece con los 4 períodos históricos seedeados. */}
+          <PartnerPayoutsCard />
         </div>
       )}
 
