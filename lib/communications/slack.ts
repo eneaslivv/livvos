@@ -85,6 +85,59 @@ export async function setMonitoredChannels(
   return data as SlackMonitoredChannel[];
 }
 
+// ── Post a message INTO a Slack channel (outbound) ────────────────────────
+// Edge fn: slack-notify — uses the connected workspace's bot token to call
+// chat.postMessage. Used for manual "send to channel" actions and for
+// automatic notifications (new lead, approved proposal, etc).
+//
+// channel_id is optional: when omitted we use the per-workspace default
+// stored in integration_tokens.slack_notify_channel_id (set in Settings).
+export async function postToSlack(args: {
+  tenantId: string;
+  channelId?: string;
+  text: string;
+  blocks?: any[];
+  integrationTokenId?: string;
+}): Promise<{ ok: true; ts: string; channel: string; workspace?: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/slack-notify`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: args.tenantId,
+        channel_id: args.channelId,
+        text: args.text,
+        blocks: args.blocks,
+        integration_token_id: args.integrationTokenId,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `slack-notify failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Set / clear the default notification channel for a workspace ─────────
+// Direct table update — no edge fn needed. RLS scopes to the caller's tenant.
+// Pass null to clear it (notifications won't auto-send anywhere until reset).
+export async function setSlackNotifyChannel(
+  integrationTokenId: string,
+  channelId: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('integration_tokens')
+    .update({ slack_notify_channel_id: channelId })
+    .eq('id', integrationTokenId);
+  if (error) throw error;
+}
+
 // ── Pull recent messages from monitored channels ──────────────────────────
 // Edge fn: slack-sync — calls conversations.history on each channel listed
 // in slack_monitored_channels and inserts new messages into

@@ -139,6 +139,9 @@ export interface IntegrationToken {
   slack_team_name: string | null;
   slack_bot_user_id: string | null;
   slack_bot_token?: string;
+  /** Default channel for outbound notifications (set in Settings).
+   *  Used by slack-notify when the caller doesn't pass channel_id. */
+  slack_notify_channel_id?: string | null;
 
   connected_at: string;
   last_sync_at: string | null;

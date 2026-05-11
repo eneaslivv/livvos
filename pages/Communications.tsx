@@ -35,7 +35,8 @@ import {
 } from '../lib/communications/gmail';
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
-  slackTextToPreview, syncSlack, type AvailableSlackChannel,
+  setSlackNotifyChannel, postToSlack, slackTextToPreview, syncSlack,
+  type AvailableSlackChannel,
 } from '../lib/communications/slack';
 
 type Tab = 'inbox' | 'settings';
@@ -768,6 +769,7 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
           </div>
           {/* Quick actions */}
           <div className="flex gap-1">
+            <ForwardToSlackButton msg={msg} />
             <button
               onClick={() => handleStatusChange('snoozed')}
               title="Posponer"
@@ -1333,7 +1335,16 @@ const SlackWorkspaceRow: React.FC<{
         </div>
       </div>
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 space-y-2">
+        <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 space-y-3">
+          {/* Notification channel picker — where outbound auto-notifications
+              (new lead, approved proposal, manual broadcasts) get posted. */}
+          <NotifyChannelPicker
+            tokenId={token.id}
+            currentChannelId={token.slack_notify_channel_id || null}
+            available={available}
+            onChange={onChannelsChange}
+          />
+
           {/* Header: count + refresh + invite hint */}
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] text-zinc-500">
@@ -1403,6 +1414,146 @@ const SlackWorkspaceRow: React.FC<{
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ────────────────────────────────────────────────────────────────────────
+//  ForwardToSlackButton
+// ────────────────────────────────────────────────────────────────────────
+// Posts the current inbox message into the tenant's default Slack notify
+// channel (set in Settings). Useful for triaging an email or a Slack DM
+// into a wider channel for the team to weigh in. The button is hidden
+// when no Slack workspace is connected.
+const ForwardToSlackButton: React.FC<{ msg: CommunicationMessage }> = ({ msg }) => {
+  const { currentTenant } = useTenant();
+  const [posting, setPosting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handleForward = async () => {
+    if (!currentTenant?.id) return;
+    setPosting(true);
+    setErr(null);
+    try {
+      const headline = msg.platform === 'gmail'
+        ? (msg.subject || '(no subject)')
+        : (msg.channel_name ? `#${msg.channel_name}` : 'Slack message');
+      const sender = msg.from_name || msg.from_email || 'unknown';
+      const preview = (msg.body_text || '').slice(0, 600);
+      const text = `📬 *${headline}* — from *${sender}*\n${preview}${(msg.body_text || '').length > 600 ? '…' : ''}`;
+      await postToSlack({ tenantId: currentTenant.id, text });
+      setDone(true);
+      setTimeout(() => setDone(false), 2500);
+    } catch (e: any) {
+      setErr(e?.message || 'No se pudo enviar');
+      setTimeout(() => setErr(null), 4000);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleForward}
+      disabled={posting}
+      title={
+        err
+          ? `Error: ${err}`
+          : done
+            ? 'Enviado ✓'
+            : 'Reenviar este mensaje al canal de notificaciones de Slack'
+      }
+      className={`p-1.5 rounded-md transition-colors ${
+        done
+          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
+          : err
+            ? 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'
+            : 'text-zinc-400 hover:text-violet-600 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10'
+      } disabled:opacity-50`}
+    >
+      {done ? <Icons.Check size={14} /> : err ? <Icons.AlertCircle size={14} /> : <Icons.Send size={14} />}
+    </button>
+  );
+};
+
+// ────────────────────────────────────────────────────────────────────────
+//  NotifyChannelPicker
+// ────────────────────────────────────────────────────────────────────────
+// Lets the user pick a default channel where the system will post
+// outbound notifications (new leads, approved proposals, manual
+// broadcasts). The bot must already be a member of the chosen channel.
+// Stored on integration_tokens.slack_notify_channel_id.
+const NotifyChannelPicker: React.FC<{
+  tokenId: string;
+  currentChannelId: string | null;
+  available: AvailableSlackChannel[] | null;
+  onChange: () => void;
+}> = ({ tokenId, currentChannelId, available, onChange }) => {
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const memberChannels = useMemo(
+    () => (available || []).filter(c => c.is_member !== false),
+    [available],
+  );
+  const current = memberChannels.find(c => c.id === currentChannelId) || null;
+
+  const handleSelect = async (channelId: string | null) => {
+    setSaving(true);
+    setErr(null);
+    try {
+      await setSlackNotifyChannel(tokenId, channelId);
+      onChange();
+    } catch (e: any) {
+      setErr(e?.message || 'Error guardando canal');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-violet-200/70 dark:border-violet-500/20 bg-violet-50/40 dark:bg-violet-500/5 px-3 py-2.5">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300 flex items-center gap-1.5">
+          <Icons.Bell size={11} />
+          Canal de notificaciones
+        </div>
+        {current && (
+          <button
+            onClick={() => handleSelect(null)}
+            disabled={saving}
+            className="text-[10px] text-zinc-500 hover:text-rose-500 disabled:opacity-40"
+          >
+            Quitar
+          </button>
+        )}
+      </div>
+      <div className="text-[10.5px] text-zinc-600 dark:text-zinc-400 mb-2">
+        Cuando llegue un lead nuevo o aprueben una propuesta, el bot va a postear acá.
+      </div>
+      {available === null ? (
+        <div className="text-[11px] text-zinc-400 italic">Cargá los canales para elegir uno…</div>
+      ) : memberChannels.length === 0 ? (
+        <div className="text-[11px] text-zinc-500 italic">
+          El bot no es miembro de ningún canal todavía. Invitalo a uno y refrescá.
+        </div>
+      ) : (
+        <select
+          value={currentChannelId || ''}
+          onChange={(e) => handleSelect(e.target.value || null)}
+          disabled={saving}
+          className="w-full text-[12px] px-2 py-1.5 rounded-md border border-violet-200 dark:border-violet-700/40 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-50"
+        >
+          <option value="">— Sin canal por defecto —</option>
+          {memberChannels.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.is_private ? '🔒' : '#'}{c.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {err && <div className="text-[10px] text-rose-500 mt-1.5">{err}</div>}
     </div>
   );
 };

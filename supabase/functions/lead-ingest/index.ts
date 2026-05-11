@@ -350,6 +350,81 @@ serve(async (req) => {
       notifyStatus.in_app.error = String(e)
       console.error('lead-ingest in-app notify throw', e)
     }
+
+    // ── Slack channel notification (best-effort, async-safe) ──────
+    // If this tenant has a Slack workspace connected AND a default
+    // notify channel configured, post a formatted Block Kit message.
+    // Skips silently if either is missing — the user opts in by
+    // picking a channel in Communications → Settings.
+    notifyStatus.slack = { attempted: false }
+    try {
+      const { data: slackTok } = await supabase
+        .from('integration_tokens')
+        .select('id, slack_bot_token, access_token, slack_notify_channel_id, slack_team_name')
+        .eq('tenant_id', tenant.id)
+        .eq('platform', 'slack')
+        .eq('is_active', true)
+        .not('slack_notify_channel_id', 'is', null)
+        .limit(1)
+        .maybeSingle()
+
+      if (slackTok?.slack_notify_channel_id) {
+        notifyStatus.slack.attempted = true
+        const botToken = slackTok.slack_bot_token || slackTok.access_token
+        if (botToken) {
+          const tempBadge = temperature === 'hot' ? ' · 🔥 HOT' : temperature === 'warm' ? ' · ☀️ warm' : ''
+          const fitText = company ? `${company} · ${email}` : email
+          const briefText = (message || '').slice(0, 280)
+          const blocks: any[] = [
+            {
+              type: 'header',
+              text: { type: 'plain_text', text: `🔥 New lead · ${name}${tempBadge}`, emoji: true },
+            },
+            {
+              type: 'section',
+              fields: [
+                { type: 'mrkdwn', text: `*Contact*\n${fitText}` },
+                { type: 'mrkdwn', text: `*Looking for*\n${project_type || '—'}` },
+              ],
+            },
+          ]
+          if (briefText) {
+            blocks.push({
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*Brief*\n${briefText}${(message || '').length > 280 ? '…' : ''}` },
+            })
+          }
+          if (origin || source) {
+            blocks.push({
+              type: 'context',
+              elements: [
+                { type: 'mrkdwn', text: `Source: \`${origin || source}\`` },
+              ],
+            })
+          }
+
+          const slackRes = await fetch('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({
+              channel: slackTok.slack_notify_channel_id,
+              text: `New lead: ${name} (${email})`, // fallback for notifications
+              blocks,
+            }),
+          })
+          const slackData = await slackRes.json() as { ok: boolean; error?: string }
+          if (!slackData.ok) {
+            notifyStatus.slack.error = slackData.error || 'unknown'
+            console.error('lead-ingest slack notify failed:', slackData.error)
+          } else {
+            notifyStatus.slack.posted = true
+          }
+        }
+      }
+    } catch (e) {
+      notifyStatus.slack.error = String(e)
+      console.error('lead-ingest slack notify throw', e)
+    }
     const fromName = Deno.env.get('LEAD_FROM_NAME') || 'Eneas Aldabe'
     // Default to a livv.space sender because that's the domain verified in
     // Resend right now. To send from eneas@livv.systems instead (more personal),
