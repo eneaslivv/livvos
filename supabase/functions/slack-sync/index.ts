@@ -76,13 +76,21 @@ async function classifyAndUpdate(admin: any, messageId: string, classifyInput: a
     const { result } = await res.json()
     if (!result) return
 
+    // Pre-existing matched_project_id (e.g. from a slack channel→project
+    // link) wins over the AI guess. The user's explicit configuration is
+    // the source of truth.
+    const { data: existing } = await admin
+      .from('communication_messages')
+      .select('matched_project_id')
+      .eq('id', messageId)
+      .maybeSingle()
     const updates: any = { ai_processed: true, ai_classification: result }
     if (result.matched_client_id) {
       const { data: c } = await admin
         .from('clients').select('id').eq('id', result.matched_client_id).eq('tenant_id', tenantId).maybeSingle()
       if (c) updates.matched_client_id = result.matched_client_id
     }
-    if (result.matched_project_id) {
+    if (result.matched_project_id && !existing?.matched_project_id) {
       const { data: p } = await admin
         .from('projects').select('id').eq('id', result.matched_project_id).eq('tenant_id', tenantId).maybeSingle()
       if (p) updates.matched_project_id = result.matched_project_id
@@ -147,7 +155,7 @@ Deno.serve(async (req) => {
       // Channels we're supposed to monitor for THIS workspace.
       const { data: channels, error: chErr } = await admin
         .from('slack_monitored_channels')
-        .select('channel_id, channel_name, channel_type')
+        .select('channel_id, channel_name, channel_type, project_id')
         .eq('tenant_id', ctx.tenant_id)
         .eq('integration_token_id', tok.id)
         .eq('is_active', true)
@@ -253,6 +261,10 @@ Deno.serve(async (req) => {
                   thread_context: threadContext,
                   received_at: receivedAt,
                   ai_processed: false,
+                  // If the user linked this channel to a project, stamp it
+                  // up-front. The AI classifier in classifyAndUpdate won't
+                  // overwrite a non-null FK.
+                  matched_project_id: (ch as any).project_id || null,
                 })
                 .select('id')
                 .single()

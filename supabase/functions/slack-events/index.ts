@@ -107,12 +107,20 @@ async function classifyAndUpdate(admin: SupabaseClient, messageId: string, class
     if (!res.ok) return
     const { result } = await res.json()
     if (!result) return
+    // Read the row first so we can see if matched_project_id was already
+    // set from the channel→project link. If yes, the AI's project guess
+    // never wins — the explicit human-set link is the source of truth.
+    const { data: existing } = await admin
+      .from('communication_messages')
+      .select('matched_project_id')
+      .eq('id', messageId)
+      .maybeSingle()
     const updates: any = { ai_processed: true, ai_classification: result }
     if (result.matched_client_id) {
       const { data: c } = await admin.from('clients').select('id').eq('id', result.matched_client_id).eq('tenant_id', tenantId).maybeSingle()
       if (c) updates.matched_client_id = result.matched_client_id
     }
-    if (result.matched_project_id) {
+    if (result.matched_project_id && !existing?.matched_project_id) {
       const { data: p } = await admin.from('projects').select('id').eq('id', result.matched_project_id).eq('tenant_id', tenantId).maybeSingle()
       if (p) updates.matched_project_id = result.matched_project_id
     }
@@ -199,7 +207,7 @@ async function handleEvent(payload: any) {
   // Channel must be in slack_monitored_channels for this workspace.
   const { data: monitored } = await admin
     .from('slack_monitored_channels')
-    .select('channel_id, channel_name')
+    .select('channel_id, channel_name, project_id')
     .eq('tenant_id', tok.tenant_id)
     .eq('integration_token_id', tok.id)
     .eq('channel_id', event.channel)
@@ -255,6 +263,9 @@ async function handleEvent(payload: any) {
     } catch { /* best-effort */ }
   }
 
+  // If the user linked this channel to a project, stamp matched_project_id
+  // up-front. The AI classifier still runs (in classifyAndUpdate below)
+  // but won't overwrite a non-null FK — see classifyAndUpdate guard.
   const { data: inserted, error: insErr } = await admin
     .from('communication_messages')
     .insert({
@@ -274,6 +285,7 @@ async function handleEvent(payload: any) {
       thread_context: threadContext,
       received_at: receivedAt,
       ai_processed: false,
+      matched_project_id: monitored.project_id || null,
     })
     .select('id')
     .single()

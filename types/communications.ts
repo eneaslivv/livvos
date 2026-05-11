@@ -160,6 +160,10 @@ export interface SlackMonitoredChannel {
   channel_name: string;
   channel_type: ChannelType;
   is_active: boolean;
+  /** When set, every message coming through this channel auto-fills
+   *  matched_project_id on communication_messages — overrides the AI
+   *  matcher and gives the inbox a stable channel→project pairing. */
+  project_id?: string | null;
   created_at: string;
 }
 

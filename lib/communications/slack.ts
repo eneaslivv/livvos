@@ -74,13 +74,27 @@ export async function listAvailableSlackChannels(
 // ── Toggle which channels are monitored ───────────────────────────────────
 // Direct Supabase mutation — no edge fn needed. RLS already scopes to the
 // caller's tenant.
+//
+// Now preserves the project_id mapping per channel: we read the existing
+// rows BEFORE deleting and carry their project_id into the inserts. So
+// re-toggling a channel doesn't wipe the channel→project link the user
+// already configured.
 export async function setMonitoredChannels(
   tenantId: string,
   integrationTokenId: string,
   channels: AvailableSlackChannel[],
 ): Promise<SlackMonitoredChannel[]> {
-  // Replace-all semantics: delete the existing rows for this integration,
-  // insert the new set. Simpler than diffing in the UI.
+  // 1. Snapshot existing project_id mappings keyed by channel_id so we can
+  //    re-apply them after the replace-all.
+  const { data: existing } = await supabase
+    .from('slack_monitored_channels')
+    .select('channel_id, project_id')
+    .eq('integration_token_id', integrationTokenId);
+  const projectByChannel = new Map<string, string | null>();
+  (existing || []).forEach((r: any) => {
+    if (r.project_id) projectByChannel.set(r.channel_id, r.project_id);
+  });
+
   const { error: delErr } = await supabase
     .from('slack_monitored_channels')
     .delete()
@@ -98,11 +112,31 @@ export async function setMonitoredChannels(
         channel_name: c.name,
         channel_type: c.is_private ? 'private' : 'public',
         is_active: true,
+        project_id: projectByChannel.get(c.id) || null,
       })),
     )
     .select();
   if (error) throw error;
   return data as SlackMonitoredChannel[];
+}
+
+// ── Link a monitored channel to a project (or unlink with null) ──────────
+// Updates slack_monitored_channels.project_id directly. After this call
+// every NEW message arriving from that channel will have its
+// matched_project_id auto-populated by slack-events / slack-sync.
+//
+// Existing messages from before the link are not retroactively re-tagged
+// (they were classified at insert time). If you need to backfill, run
+// an UPDATE manually or ask the AI to re-classify.
+export async function linkSlackChannelToProject(
+  monitoredChannelRowId: string,
+  projectId: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('slack_monitored_channels')
+    .update({ project_id: projectId })
+    .eq('id', monitoredChannelRowId);
+  if (error) throw error;
 }
 
 // ── Post a message INTO a Slack channel (outbound) ────────────────────────

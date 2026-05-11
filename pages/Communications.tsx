@@ -35,7 +35,8 @@ import {
 } from '../lib/communications/gmail';
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
-  setSlackNotifyChannel, postToSlack, slackTextToPreview, syncSlack,
+  setSlackNotifyChannel, linkSlackChannelToProject, postToSlack,
+  slackTextToPreview, syncSlack,
   type AvailableSlackChannel,
 } from '../lib/communications/slack';
 
@@ -1266,6 +1267,20 @@ const SlackWorkspaceRow: React.FC<{
   onDisconnect: () => void;
   onChannelsChange: () => void;
 }> = ({ tenantId, token, channels, onDisconnect, onChannelsChange }) => {
+  const { projects } = useProjects();
+  // Stable sort: active projects first, then by title. Used by the
+  // per-channel project picker so the user sees the most-relevant
+  // options near the top.
+  const projectOptions = useMemo(() => {
+    return [...projects]
+      .sort((a, b) => {
+        const aActive = a.status === 'Active' || a.status === 'Pending';
+        const bActive = b.status === 'Active' || b.status === 'Pending';
+        if (aActive !== bActive) return aActive ? -1 : 1;
+        return a.title.localeCompare(b.title);
+      })
+      .map(p => ({ id: p.id, title: p.title, client: p.clientName }));
+  }, [projects]);
   const [expanded, setExpanded] = useState(false);
   const [available, setAvailable] = useState<AvailableSlackChannel[] | null>(null);
   const [bot, setBot] = useState<{ handle: string | null; display_name: string | null } | null>(null);
@@ -1458,39 +1473,130 @@ const SlackWorkspaceRow: React.FC<{
               El bot no tiene acceso a ningún canal todavía. Invitalo a los canales en Slack y tocá Refrescar.
             </div>
           )}
-          {!loading && available && available.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[300px] overflow-y-auto pr-1">
-              {available.map(ch => {
-                const checked = monitoredIds.has(ch.id);
-                return (
+
+          {/* MONITORED — each channel gets a project-link picker. Linking
+              a channel to a project means every NEW message in that channel
+              auto-fills matched_project_id on communication_messages, so
+              the inbox + project page stay in sync without AI guessing. */}
+          {!loading && available && channels.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Canales activos · {channels.length}
+              </div>
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/60 overflow-hidden">
+                {channels.map(monitored => {
+                  const meta = available.find(a => a.id === monitored.channel_id);
+                  return (
+                    <ChannelLinkRow
+                      key={monitored.id}
+                      monitored={monitored}
+                      isPrivate={meta?.is_private || monitored.channel_type === 'private'}
+                      projects={projectOptions}
+                      onUnmonitor={() => meta && handleToggleChannel(meta)}
+                      onLinkChange={async (projectId) => {
+                        try {
+                          await linkSlackChannelToProject(monitored.id, projectId);
+                          onChannelsChange();
+                        } catch (err) {
+                          errorLogger.error('link channel to project', err);
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* AVAILABLE BUT NOT MONITORED — compact toggle grid. */}
+          {!loading && available && available.filter(a => !monitoredIds.has(a.id)).length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Otros canales disponibles
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[260px] overflow-y-auto pr-1">
+                {available.filter(a => !monitoredIds.has(a.id)).map(ch => (
                   <button
                     key={ch.id}
                     onClick={() => handleToggleChannel(ch)}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors text-left ${
-                      checked
-                        ? 'bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300'
-                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300'
-                    }`}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300"
                     title={ch.is_member === false ? 'El bot todavía no es miembro de este canal' : undefined}
                   >
-                    <span className={`w-3 h-3 rounded-sm flex items-center justify-center border ${
-                      checked ? 'bg-violet-500 border-violet-500' : 'border-zinc-300 dark:border-zinc-600'
-                    }`}>
-                      {checked && <Icons.Check size={9} className="text-white" />}
-                    </span>
+                    <span className="w-3 h-3 rounded-sm border border-zinc-300 dark:border-zinc-600" />
                     <span className="truncate flex-1">
                       {ch.is_private ? '🔒' : '#'}{ch.name}
-                      {ch.is_member === false && !checked && (
+                      {ch.is_member === false && (
                         <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400">· invitar</span>
                       )}
                     </span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ────────────────────────────────────────────────────────────────────────
+//  ChannelLinkRow — one row per monitored Slack channel
+// ────────────────────────────────────────────────────────────────────────
+// Lets the user (a) see which channels are being watched, (b) link each
+// to a project so messages auto-tag matched_project_id, (c) unmonitor.
+// The project link survives toggling (handled in setMonitoredChannels).
+const ChannelLinkRow: React.FC<{
+  monitored: SlackMonitoredChannel;
+  isPrivate: boolean;
+  projects: Array<{ id: string; title: string; client?: string }>;
+  onLinkChange: (projectId: string | null) => Promise<void> | void;
+  onUnmonitor: () => void;
+}> = ({ monitored, isPrivate, projects, onLinkChange, onUnmonitor }) => {
+  const [saving, setSaving] = useState(false);
+  const linked = projects.find(p => p.id === monitored.project_id) || null;
+
+  const handleSelect = async (val: string) => {
+    setSaving(true);
+    try {
+      await onLinkChange(val || null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+      <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100 inline-flex items-center gap-1 shrink-0 min-w-0 max-w-[180px]">
+        <span className="text-zinc-400">{isPrivate ? '🔒' : '#'}</span>
+        <span className="truncate">{monitored.channel_name}</span>
+      </span>
+      <span className="text-[10px] text-zinc-300 dark:text-zinc-600 shrink-0">→</span>
+      <select
+        value={monitored.project_id || ''}
+        onChange={(e) => handleSelect(e.target.value)}
+        disabled={saving}
+        title="Vincular este canal a un proyecto. Los mensajes se auto-etiquetan."
+        className={`flex-1 min-w-0 text-[11px] px-2 py-1 rounded-md border bg-white dark:bg-zinc-900 transition-colors disabled:opacity-50 ${
+          linked
+            ? 'border-violet-200 dark:border-violet-700/40 text-violet-700 dark:text-violet-300'
+            : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
+        }`}
+      >
+        <option value="">— sin proyecto vinculado —</option>
+        {projects.map(p => (
+          <option key={p.id} value={p.id}>
+            {p.title}{p.client ? ` · ${p.client}` : ''}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={onUnmonitor}
+        title="Dejar de monitorear este canal"
+        className="shrink-0 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+      >
+        <Icons.X size={11} />
+      </button>
     </div>
   );
 };
