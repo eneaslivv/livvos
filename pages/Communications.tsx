@@ -31,7 +31,7 @@ import {
 import type { Client } from '../context/ClientsContext';
 import type { Project } from '../context/ProjectsContext';
 import {
-  getGmailConnectUrl, syncGmail, htmlToText, previewFromBody,
+  getGmailConnectUrl, syncGmail, registerGmailWatch, htmlToText, previewFromBody,
 } from '../lib/communications/gmail';
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
@@ -1115,6 +1115,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
     }
   };
 
+  // Register Gmail Pub/Sub watch — calls users.watch on every connected
+  // Gmail account so Google starts pushing real-time history notifications
+  // to our gmail-events webhook. Watches expire after 7 days; this button
+  // is also how the user re-arms them. The Edge Function returns a clear
+  // error if GMAIL_PUBSUB_TOPIC isn't set, which we surface verbatim.
+  const handleRegisterGmailWatch = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await registerGmailWatch(tenantId);
+      const detail = r.errors.length ? `\n⚠ ${r.errors.length} errores:\n${r.errors.join('\n')}` : '';
+      alert(`✓ ${r.watched} Gmail account(s) ahora reciben push notifications.${detail}\n\nLas suscripciones expiran en 7 días — refrescá entonces.`);
+      onTokensChange();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {error && (
@@ -1137,13 +1157,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
           </div>
           <div className="flex items-center gap-2">
             {gmailTokens.length > 0 && (
-              <button
-                onClick={handleSyncGmail}
-                disabled={busy}
-                className="px-3 py-1.5 text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 disabled:opacity-40 inline-flex items-center gap-1.5"
-              >
-                <Icons.RefreshCw size={11} /> Sync
-              </button>
+              <>
+                <button
+                  onClick={handleRegisterGmailWatch}
+                  disabled={busy}
+                  className="px-3 py-1.5 text-[11px] font-medium border border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-500/10 rounded-md hover:bg-amber-100 dark:hover:bg-amber-500/15 disabled:opacity-40 inline-flex items-center gap-1.5"
+                  title="Activa push notifications via Pub/Sub. Requiere setup en Google Cloud (ver WEBHOOKS.md). Caduca cada 7 días."
+                >
+                  <Icons.Zap size={11} /> Enable push
+                </button>
+                <button
+                  onClick={handleSyncGmail}
+                  disabled={busy}
+                  className="px-3 py-1.5 text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 disabled:opacity-40 inline-flex items-center gap-1.5"
+                >
+                  <Icons.RefreshCw size={11} /> Sync
+                </button>
+              </>
             )}
             <button
               onClick={handleConnectGmail}

@@ -35,6 +35,39 @@ export async function getGmailConnectUrl(tenantId: string): Promise<string> {
   return auth_url as string;
 }
 
+// ── Register Gmail push notifications via Pub/Sub ────────────────────────
+// Edge fn: gmail-watch — calls users.watch on each connected Gmail account
+// in this tenant so Google starts pushing change notifications to our
+// gmail-events webhook. Requires GMAIL_PUBSUB_TOPIC set as an Edge Function
+// secret + the Pub/Sub topic configured (see WEBHOOKS.md).
+//
+// The watch expires after 7 days. The user (or a scheduled job later)
+// must re-run this to keep push alive.
+export async function registerGmailWatch(
+  tenantId: string,
+): Promise<{ watched: number; errors: string[] }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-watch`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tenant_id: tenantId }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `gmail-watch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Manual sync trigger ───────────────────────────────────────────────────
 // Useful in dev (where Pub/Sub webhooks aren't configured) and as a "Sync
 // now" button in the settings UI. Edge function: gmail-sync.
