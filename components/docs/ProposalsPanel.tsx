@@ -9,6 +9,7 @@ import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { AIFeedbackBar } from '../ai/AIFeedbackBar';
 import { ProposalDocumentView } from '../proposals/ProposalDocumentView';
 import { ProposalComposer } from './ProposalComposer';
+import { ProposalChatEditor } from './ProposalChatEditor';
 import { buildProposalDocumentData } from '../proposals/buildProposalDocumentData';
 
 type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
@@ -950,45 +951,63 @@ export const ProposalsPanel: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2 space-y-3">
-                <textarea
-                  value={selectedProposal.summary || ''}
-                  onChange={(e) => handleUpdate({ summary: e.target.value })}
-                  placeholder="Executive summary"
-                  className="w-full min-h-[90px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+                {/* Chat-style editor: brief (collapsible) → rendered
+                    document preview → AI chat to refine. The legacy
+                    3-textarea layout was replaced because the user
+                    couldn't see the actual document, just raw markdown,
+                    and there was no iterate-via-chat flow. */}
+                <ProposalChatEditor
+                  proposal={selectedProposal}
+                  services={services}
+                  recentWins={proposals
+                    .filter(p => p.status === 'approved' && (p.pricing_total || 0) > 0)
+                    .slice(0, 5)
+                    .map(p => ({
+                      title: p.title,
+                      pricing_total: p.pricing_total || 0,
+                      project_type: p.project_type,
+                      complexity: p.complexity,
+                      currency: p.currency,
+                    }))}
+                  onUpdate={handleUpdate}
+                  onAIOutput={(id) => setLastAIOutputId(id)}
                 />
-                <textarea
-                  value={selectedProposal.brief_text || ''}
-                  onChange={(e) => handleUpdate({ brief_text: e.target.value })}
-                  placeholder="Raw text or client brief..."
-                  className="w-full min-h-[140px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
-                />
-                <textarea
-                  value={selectedProposal.content || ''}
-                  onChange={(e) => handleUpdate({ content: e.target.value })}
-                  placeholder="Write your proposal here..."
-                  className="w-full min-h-[280px] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
-                />
-                <div>
-                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Comments</h4>
-                  <div className="space-y-2 mt-2">
-                    {comments.map((c) => (
-                      <div key={c.id} className={`text-xs p-3 rounded-lg ${c.is_client ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}>
-                        {c.comment}
-                      </div>
-                    ))}
+
+                {/* Comments stays — it's an internal thread between
+                    teammates, distinct from the AI chat above. */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-1.5">
+                    <Icons.Message size={11} className="text-zinc-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                      Comentarios internos
+                    </span>
+                    {comments.length > 0 && (
+                      <span className="text-[10px] tabular-nums text-zinc-400">· {comments.length}</span>
+                    )}
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
+                  {comments.length > 0 && (
+                    <div className="p-3 space-y-1.5 max-h-[160px] overflow-y-auto">
+                      {comments.map((c) => (
+                        <div key={c.id} className={`text-xs px-3 py-2 rounded-lg ${c.is_client ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-zinc-100 dark:bg-zinc-800/60'}`}>
+                          {c.comment}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="p-3 flex items-center gap-2 border-t border-zinc-100 dark:border-zinc-800/60">
                     <input
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
-                      placeholder="Add internal comment"
+                      onKeyDown={(e) => { if (e.key === 'Enter' && commentText.trim()) handleComment(); }}
+                      placeholder="Nota para tu equipo (no la ve el cliente)"
                       className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs"
                     />
                     <button
                       onClick={handleComment}
-                      className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs"
+                      disabled={!commentText.trim()}
+                      className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs disabled:opacity-40"
                     >
-                      Send
+                      Comentar
                     </button>
                   </div>
                 </div>
