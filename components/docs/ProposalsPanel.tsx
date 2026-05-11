@@ -8,6 +8,7 @@ import { useTenant } from '../../context/TenantContext';
 import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { AIFeedbackBar } from '../ai/AIFeedbackBar';
 import { ProposalDocumentView } from '../proposals/ProposalDocumentView';
+import { ProposalComposer } from './ProposalComposer';
 import { buildProposalDocumentData } from '../proposals/buildProposalDocumentData';
 
 type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
@@ -143,6 +144,11 @@ export const ProposalsPanel: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  // The new streamlined composer ("paste brief → AI → share"). The old
+  // inline form (showCreate / handleCreate) stays for power users who
+  // want full manual control over each field — they can reach it via
+  // the "Más opciones" link on the empty state.
+  const [showComposer, setShowComposer] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createLeadId, setCreateLeadId] = useState<string>('');
   const [createClientId, setCreateClientId] = useState<string>('');
@@ -577,9 +583,11 @@ export const ProposalsPanel: React.FC = () => {
               Templates
             </button>
             <button
-              onClick={() => setShowCreate(true)}
-              className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide"
+              onClick={() => setShowComposer(true)}
+              className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1"
+              title="Pegá lo que pidió el cliente y la IA arma todo"
             >
+              <Icons.Sparkles size={11} />
               New
             </button>
           </div>
@@ -1038,18 +1046,29 @@ export const ProposalsPanel: React.FC = () => {
 
                 <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                   <div className="text-xs text-zinc-500 mb-2">Timeline</div>
-                  {(selectedProposal.timeline?.items || []).length ? (
-                    <div className="space-y-2">
-                      {selectedProposal.timeline.items.map((item: any) => (
-                        <div key={item.week} className="text-xs">
-                          <div className="font-semibold text-zinc-700 dark:text-zinc-200">{item.title}</div>
-                          <div className="text-zinc-500">{item.detail}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-zinc-400">Generate a timeline from a template.</div>
-                  )}
+                  {(() => {
+                    // Defensive: timeline.items can legitimately be missing,
+                    // empty, or — from older proposals or buggy AI output —
+                    // a non-array value (string / object). Guard with
+                    // Array.isArray so a single bad row doesn't crash the
+                    // entire Docs page via PageErrorBoundary.
+                    const items = Array.isArray(selectedProposal.timeline?.items)
+                      ? selectedProposal.timeline!.items
+                      : [];
+                    if (items.length === 0) {
+                      return <div className="text-xs text-zinc-400">Generate a timeline from a template.</div>;
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {items.map((item: any, idx: number) => (
+                          <div key={item.week ?? idx} className="text-xs">
+                            <div className="font-semibold text-zinc-700 dark:text-zinc-200">{item.title}</div>
+                            <div className="text-zinc-500">{item.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                   <div className="text-xs text-zinc-500 mb-1">Pricing total</div>
@@ -1134,6 +1153,22 @@ export const ProposalsPanel: React.FC = () => {
         </div>,
         document.body
       )}
+
+      {/* Streamlined "paste brief → AI → share" flow. Opens from the New
+          button in the header. The legacy inline form stays as a
+          power-user fallback (still accessible via showCreate). */}
+      <ProposalComposer
+        isOpen={showComposer}
+        onClose={() => setShowComposer(false)}
+        services={services}
+        proposals={proposals}
+        leads={leads}
+        clients={clients}
+        onCreated={(id) => {
+          fetchAll();
+          setSelectedId(id);
+        }}
+      />
     </div>
   );
 };
