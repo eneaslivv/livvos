@@ -19,6 +19,7 @@ import { useTenant } from '../context/TenantContext';
 import { useSupabase } from '../hooks/useSupabase';
 import { useClients } from '../hooks/useClients';
 import { useProjects } from '../context/ProjectsContext';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
 import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
@@ -1556,6 +1557,42 @@ const ChannelLinkRow: React.FC<{
   const [saving, setSaving] = useState(false);
   const linked = projects.find(p => p.id === monitored.project_id) || null;
 
+  // Build SearchableSelect options. Each entry carries the client name in
+  // `searchValue` so typing "Christie" matches every project under that
+  // client even when the title doesn't contain her name. Headers group
+  // projects by client so a long list stays scannable.
+  const options = useMemo(() => {
+    const byClient = new Map<string, Array<{ id: string; title: string; client?: string }>>();
+    const noClient: Array<{ id: string; title: string; client?: string }> = [];
+    for (const p of projects) {
+      if (p.client) {
+        const arr = byClient.get(p.client) || [];
+        arr.push(p);
+        byClient.set(p.client, arr);
+      } else {
+        noClient.push(p);
+      }
+    }
+    const out: Array<{ value: string; label: string; hint?: string; searchValue?: string; isHeader?: boolean }> = [];
+    if (noClient.length > 0) {
+      out.push({ value: '__h_internal', label: 'Internos', isHeader: true });
+      noClient.forEach(p => out.push({ value: p.id, label: p.title }));
+    }
+    const sortedClients = Array.from(byClient.keys()).sort((a, b) => a.localeCompare(b));
+    for (const client of sortedClients) {
+      out.push({ value: `__h_${client}`, label: client, isHeader: true });
+      for (const p of byClient.get(client) || []) {
+        out.push({
+          value: p.id,
+          label: p.title,
+          hint: client,
+          searchValue: client, // typing the client name surfaces the project
+        });
+      }
+    }
+    return out;
+  }, [projects]);
+
   const handleSelect = async (val: string) => {
     setSaving(true);
     try {
@@ -1565,6 +1602,13 @@ const ChannelLinkRow: React.FC<{
     }
   };
 
+  // Custom trigger styling — violet when linked so the wiring is visible.
+  const triggerClass = `inline-flex items-center justify-between gap-2 w-full bg-white dark:bg-zinc-900 border rounded-md px-2.5 py-1.5 text-[11.5px] text-left transition-colors disabled:opacity-50 ${
+    linked
+      ? 'border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10'
+      : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+  }`;
+
   return (
     <div className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
       <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100 inline-flex items-center gap-1 shrink-0 min-w-0 max-w-[180px]">
@@ -1572,24 +1616,17 @@ const ChannelLinkRow: React.FC<{
         <span className="truncate">{monitored.channel_name}</span>
       </span>
       <span className="text-[10px] text-zinc-300 dark:text-zinc-600 shrink-0">→</span>
-      <select
-        value={monitored.project_id || ''}
-        onChange={(e) => handleSelect(e.target.value)}
-        disabled={saving}
-        title="Vincular este canal a un proyecto. Los mensajes se auto-etiquetan."
-        className={`flex-1 min-w-0 text-[11px] px-2 py-1 rounded-md border bg-white dark:bg-zinc-900 transition-colors disabled:opacity-50 ${
-          linked
-            ? 'border-violet-200 dark:border-violet-700/40 text-violet-700 dark:text-violet-300'
-            : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400'
-        }`}
-      >
-        <option value="">— sin proyecto vinculado —</option>
-        {projects.map(p => (
-          <option key={p.id} value={p.id}>
-            {p.title}{p.client ? ` · ${p.client}` : ''}
-          </option>
-        ))}
-      </select>
+      <div className="flex-1 min-w-0">
+        <SearchableSelect
+          value={monitored.project_id || ''}
+          onChange={handleSelect}
+          options={options}
+          placeholder="Buscar proyecto…"
+          emptyOption={{ value: '', label: '— sin proyecto vinculado —' }}
+          triggerClassName={triggerClass}
+          popoverWidth={320}
+        />
+      </div>
       <button
         onClick={onUnmonitor}
         title="Dejar de monitorear este canal"
