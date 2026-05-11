@@ -31,7 +31,7 @@ export const PresenceAvatars: React.FC<Props> = ({ currentPage, max = 4 }) => {
         return (
           <div
             key={p.id}
-            title={`${p.name} — ${here ? 'en esta página' : pageLabel(p.page)}`}
+            title={`${p.name} — ${here ? 'on this page' : pageLabel(p.page)}`}
             className="relative w-7 h-7 rounded-full ring-2 ring-zinc-50 dark:ring-black flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
             style={{ backgroundColor: p.color }}
           >

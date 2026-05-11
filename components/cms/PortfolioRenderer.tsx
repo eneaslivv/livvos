@@ -40,7 +40,7 @@ export const PortfolioRenderer: React.FC<PortfolioRendererProps> = ({ item, onBa
           onClick={onBack}
           className="fixed top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur border border-neutral-200 rounded-full text-xs font-medium text-neutral-600 hover:bg-neutral-50 hover:border-neutral-300 transition-all shadow-sm"
         >
-          <ArrowLeft size={14} /> Volver al editor
+          <ArrowLeft size={14} /> Back to editor
         </button>
       )}
 

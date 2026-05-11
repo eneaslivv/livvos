@@ -1102,7 +1102,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                             );
                                         })}
                                         {overdueTasks.length > 5 && (
-                                            <p className="text-[10px] text-red-400 px-3 pt-1">+{overdueTasks.length - 5} más</p>
+                                            <p className="text-[10px] text-red-400 px-3 pt-1">+{overdueTasks.length - 5} more</p>
                                         )}
                                     </div>
                                 </div>
@@ -1270,9 +1270,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
                         {projects.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 text-center">
-                                <p className="text-xs text-zinc-400 mb-2">No tenés proyectos todavía.</p>
+                                <p className="text-xs text-zinc-400 mb-2">No projects yet.</p>
                                 <button onClick={() => onNavigate('projects')} className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:underline">
-                                    Crear un proyecto →
+                                    Create a project →
                                 </button>
                             </div>
                         ) : (
@@ -1297,12 +1297,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                         the card content; only visible on hover. */}
                                     <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={(e) => { e.stopPropagation(); isPinned ? unpinProject(project.id) : pinProject(project.id); }}
-                                            title={isPinned ? 'Quitar de destacados' : 'Destacar'}
+                                            title={isPinned ? 'Unpin from highlights' : 'Pin to highlights'}
                                             className={`p-1.5 rounded-md transition-colors ${isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'}`}>
                                             <Icons.Star size={12} />
                                         </button>
                                         <button onClick={(e) => { e.stopPropagation(); deleteProjectFromHome(project.id, project.title); }}
-                                            title="Eliminar proyecto"
+                                            title="Delete project"
                                             className="p-1.5 rounded-md text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
                                             <Icons.Trash size={12} />
                                         </button>

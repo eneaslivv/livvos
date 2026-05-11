@@ -141,7 +141,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
 
     const expensesByCategory: Record<string, number> = {};
     monthExpenses.forEach(e => {
-      const k = e.category || 'Sin categoría';
+      const k = e.category || 'Uncategorized';
       expensesByCategory[k] = (expensesByCategory[k] || 0) + Number(e.amount || 0);
     });
 

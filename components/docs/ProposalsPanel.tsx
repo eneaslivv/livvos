@@ -518,7 +518,7 @@ export const ProposalsPanel: React.FC = () => {
         language,
         consent_text: consent || selectedProposal.consent_text
       });
-      setAiWarning('AI no disponible — se usó la plantilla predeterminada.');
+      setAiWarning('AI unavailable — used the default template.');
     });
   };
 

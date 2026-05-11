@@ -168,7 +168,7 @@ export const TaskKanbanBoard: React.FC<Props> = ({ tasks, onTaskClick, onStatusC
                         : 'border-zinc-200 dark:border-zinc-800 text-zinc-300 dark:text-zinc-700 hover:border-zinc-300 hover:text-zinc-500'
                     } ${!onAddTask ? 'cursor-default' : 'cursor-pointer'}`}
                   >
-                    {isOver ? 'Drop here' : (onAddTask ? '+ Añadir tarea' : (emptyHint || 'Empty'))}
+                    {isOver ? 'Drop here' : (onAddTask ? '+ Add task' : (emptyHint || 'Empty'))}
                   </button>
                 )}
 
@@ -176,7 +176,7 @@ export const TaskKanbanBoard: React.FC<Props> = ({ tasks, onTaskClick, onStatusC
                   <button
                     onClick={() => onAddTask(col.id)}
                     className="w-full text-left px-3 py-2 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 rounded-lg transition-colors flex items-center gap-1.5">
-                    <Icons.Plus size={11} /> Añadir tarea
+                    <Icons.Plus size={11} /> Add task
                   </button>
                 )}
               </div>

@@ -65,7 +65,7 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
           if (e.key === 'Enter') { e.preventDefault(); submit(); }
           else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
         }}
-        placeholder="Título de la tarea..."
+        placeholder="Task title..."
         className="w-full px-2.5 py-1.5 text-sm bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-md text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-blue-400"
       />
 
@@ -78,7 +78,7 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
               ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30 text-blue-700 dark:text-blue-400'
               : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
           }`}
-        >Hoy</button>
+        >Today</button>
         <button
           type="button"
           onClick={() => setDate(tomorrowISO())}
@@ -87,7 +87,7 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
               ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30 text-blue-700 dark:text-blue-400'
               : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
           }`}
-        >Mañana</button>
+        >Tomorrow</button>
         <button
           type="button"
           onClick={() => setDate('')}
@@ -96,7 +96,7 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
               ? 'bg-zinc-200 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300'
               : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
           }`}
-        >Sin fecha</button>
+        >No date</button>
       </div>
 
       <input
@@ -115,11 +115,11 @@ export const TaskCreatePopover: React.FC<Props> = ({ coords, defaultTitle = '', 
           onClick={submit}
           disabled={!title.trim()}
           className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
-        >Crear tarea</button>
+        >Create task</button>
       </div>
 
       <p className="mt-2 text-[10px] text-zinc-400">
-        Aparecerá en el calendario {date ? `el ${date}` : 'sin fecha'} y como checkbox en este doc.
+        Will appear on the calendar {date ? `on ${date}` : 'with no date'} and as a checkbox in this doc.
       </p>
     </div>
   );

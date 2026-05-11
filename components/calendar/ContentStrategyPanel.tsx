@@ -200,13 +200,13 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                 </span>
               ))}
               {activeObjectives.length > 3 && (
-                <span className="text-[10px] text-zinc-400">+{activeObjectives.length - 3} más</span>
+                <span className="text-[10px] text-zinc-400">+{activeObjectives.length - 3} more</span>
               )}
             </div>
           )}
         </div>
         <div className="flex items-center gap-3 text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
-          <span className="hidden sm:inline">{activeObjectives.length} {activeObjectives.length === 1 ? 'objetivo' : 'objetivos'}</span>
+          <span className="hidden sm:inline">{activeObjectives.length} {activeObjectives.length === 1 ? 'goal' : 'goals'}</span>
           <span className="hidden sm:inline">·</span>
           <span className="hidden sm:inline">{totalDocs} {totalDocs === 1 ? 'doc' : 'docs'}</span>
           <Icons.ChevronDown size={13} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -220,12 +220,12 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
-                Objetivos · semana del {new Date(weekStart + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                Goals · week of {new Date(weekStart + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
               </span>
             </div>
             <div className="space-y-1.5">
               {weekObjectives.length === 0 && evergreenObjectives.length === 0 && (
-                <p className="text-[11px] text-zinc-400 italic">Sin objetivos todavía.</p>
+                <p className="text-[11px] text-zinc-400 italic">No goals yet.</p>
               )}
               {[...weekObjectives, ...evergreenObjectives].map(o => (
                 <ObjectiveRow
@@ -241,7 +241,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                 value={newObjective}
                 onChange={(e) => setNewObjective(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddObjective(); }}
-                placeholder="Nuevo objetivo de la semana…"
+                placeholder="New goal for this week…"
                 className="flex-1 px-2.5 py-1.5 text-[11.5px] bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-300/30 text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-400"
               />
               {newObjective.trim() && (
@@ -259,7 +259,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
-                Estrategias y referencias
+                Strategy & references
               </span>
             </div>
 
@@ -272,7 +272,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                     value={notesDraft}
                     onChange={(e) => setNotesDraft(e.target.value)}
                     rows={3}
-                    placeholder="Escribí la estrategia / pilares / tono / audiencia para que la IA lo tenga siempre presente…"
+                    placeholder="Write the strategy / pillars / tone / audience so the AI always has it on hand…"
                     className="w-full px-2.5 py-2 text-[11.5px] bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-300/30 text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-400 resize-none"
                   />
                   <div className="flex justify-end gap-1.5 mt-1.5">
@@ -377,10 +377,10 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                     {item.suggested_date && onPickSuggestedDate && (
                       <button
                         onClick={() => onPickSuggestedDate(item.suggested_date!)}
-                        title="Saltar al día sugerido"
+                        title="Jump to suggested day"
                         className="text-[10px] font-mono text-amber-600 dark:text-amber-400 hover:underline shrink-0"
                       >
-                        {new Date(item.suggested_date + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                        {new Date(item.suggested_date + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
                       </button>
                     )}
                   </div>

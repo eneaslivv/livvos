@@ -66,16 +66,16 @@ const typeIcon = (type: Notification['type']) => {
 
 const typeLabel = (type: Notification['type']): string => {
   switch (type) {
-    case 'lead': return 'Nuevo lead';
-    case 'task': return 'Tarea';
-    case 'project': return 'Proyecto';
-    case 'invite': return 'Invitación';
-    case 'activity': return 'Actividad';
-    case 'deadline': return 'Vencimiento';
-    case 'security': return 'Seguridad';
-    case 'billing': return 'Facturación';
-    case 'mention': return 'Mención';
-    default: return 'Aviso';
+    case 'lead': return 'New lead';
+    case 'task': return 'Task';
+    case 'project': return 'Project';
+    case 'invite': return 'Invite';
+    case 'activity': return 'Activity';
+    case 'deadline': return 'Deadline';
+    case 'security': return 'Security';
+    case 'billing': return 'Billing';
+    case 'mention': return 'Mention';
+    default: return 'Notice';
   }
 };
 
@@ -290,7 +290,7 @@ export const NotificationToaster: React.FC<NotificationToasterProps> = ({ onNavi
               <button
                 onClick={(e) => { e.stopPropagation(); dismiss(notification.id); }}
                 className="shrink-0 self-start p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                aria-label="Descartar notificación"
+                aria-label="Dismiss notification"
               >
                 <Icons.X size={14} />
               </button>

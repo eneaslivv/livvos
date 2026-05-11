@@ -304,12 +304,12 @@ const classifyDraft = (
       if (!sameVendor && !closeConcept) continue;
       // Match found
       if (e.recurring || draft.recurring) {
-        return { status: 'update', match: { id: e.id, kind: 'expense', reason: 'Coincide con un gasto recurrente existente' } };
+        return { status: 'update', match: { id: e.id, kind: 'expense', reason: 'Matches an existing recurring expense' } };
       }
       if (e.status !== draft.status) {
-        return { status: 'update', match: { id: e.id, kind: 'expense', reason: `Mismo gasto, status difiere (${e.status} → ${draft.status})` } };
+        return { status: 'update', match: { id: e.id, kind: 'expense', reason: `Same expense, status differs (${e.status} → ${draft.status})` } };
       }
-      return { status: 'duplicate', match: { id: e.id, kind: 'expense', reason: 'Gasto idéntico ya existe' } };
+      return { status: 'duplicate', match: { id: e.id, kind: 'expense', reason: 'Identical expense already exists' } };
     }
   } else {
     for (const i of incomes) {
@@ -319,9 +319,9 @@ const classifyDraft = (
       const closeConcept = conceptsLooseMatch(i.concept, draft.concept);
       if (!closeConcept) continue;
       if (i.status !== draft.status) {
-        return { status: 'update', match: { id: i.id, kind: 'income', reason: `Mismo income, status difiere (${i.status} → ${draft.status})` } };
+        return { status: 'update', match: { id: i.id, kind: 'income', reason: `Same income, status differs (${i.status} → ${draft.status})` } };
       }
-      return { status: 'duplicate', match: { id: i.id, kind: 'income', reason: 'Income idéntico ya existe' } };
+      return { status: 'duplicate', match: { id: i.id, kind: 'income', reason: 'Identical income already exists' } };
     }
   }
   return { status: 'new' };
@@ -395,12 +395,12 @@ const toDraft = (
 const validateAgainstSource = (draft: DraftEntry): DraftEntry => {
   const errors: string[] = [];
   if (draft.source_row == null) {
-    errors.push('La IA no devolvió source_row para esta fila.');
+    errors.push('The AI did not return source_row for this row.');
   } else if (!draft.source_row_data) {
     errors.push(
       draft.source_sheet
-        ? `La IA referenció hoja "${draft.source_sheet}", fila ${draft.source_row}, pero no existe en el archivo.`
-        : `La IA referenció source_row=${draft.source_row}, pero no existe en el archivo.`
+        ? `The AI referenced sheet "${draft.source_sheet}", row ${draft.source_row}, but it does not exist in the file.`
+        : `The AI referenced source_row=${draft.source_row}, but it does not exist in the file.`
     );
   } else {
     const fakeRow: SheetRow = {
@@ -409,11 +409,11 @@ const validateAgainstSource = (draft: DraftEntry): DraftEntry => {
       cells: draft.source_row_data,
     };
     if (draft.amount > 0 && !rowContainsNumber(fakeRow, draft.amount)) {
-      errors.push(`El monto ${fmtCurrency(draft.amount)} no aparece en la fila origen — posible alucinación.`);
+      errors.push(`Amount ${fmtCurrency(draft.amount)} doesn't appear in the source row — possible hallucination.`);
     }
     const today = new Date().toISOString().slice(0, 10);
     if (draft.date && draft.date !== today && !rowContainsDate(fakeRow, draft.date)) {
-      errors.push(`La fecha ${draft.date} no aparece en la fila origen.`);
+      errors.push(`Date ${draft.date} doesn't appear in the source row.`);
     }
   }
   return errors.length > 0
@@ -422,9 +422,9 @@ const validateAgainstSource = (draft: DraftEntry): DraftEntry => {
 };
 
 const EXAMPLES = [
-  'Recibí $2.500 de Coffe Payper por la consultoría de menú, factura el 15',
-  'Pagué $89 a Figma de licencias mensuales',
-  'Cobramos 3 cuotas de $1.000 a Studio Vélez por el rediseño web',
+  'Received $2,500 from Coffe Payper for the menu consulting, invoiced on the 15th',
+  'Paid $89 to Figma for monthly licenses',
+  'Charged 3 installments of $1,000 to Studio Vélez for the web redesign',
 ];
 
 interface FinanceAssistantProps {
@@ -735,7 +735,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     // Single mode (text)
     const input = userInput.trim();
     if (!input || input.length < 4) {
-      setError('Describe la operación con al menos unas palabras o subí un archivo.');
+      setError('Describe the operation in a few words, or upload a file.');
       return;
     }
     setStep('parsing');
@@ -866,7 +866,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
     const toSave = batchDrafts
       .map((d, i) => ({ d, i }))
       .filter(({ i }) => selectedRows.has(i));
-    if (toSave.length === 0) { setError('Seleccioná al menos una fila.'); return; }
+    if (toSave.length === 0) { setError('Select at least one row.'); return; }
     setStep('saving');
     setError(null);
     let ok = 0;
@@ -1047,7 +1047,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
       onClose={onClose}
       width="2xl"
       title="Add with AI"
-      subtitle="Describe la operación o subí un Excel/CSV — la IA llena el formulario y lo sincroniza con tu CRM"
+      subtitle="Describe the operation or upload an Excel/CSV — the AI fills out the form and syncs with your CRM"
       headerRight={
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500/10 via-fuchsia-500/10 to-rose-500/10 border border-fuchsia-500/30">
           <Sparkles size={11} className="text-fuchsia-500" />
@@ -1059,13 +1059,13 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
           <div className="flex items-center justify-between gap-2">
             <button onClick={() => { setStep('input'); }} type="button"
               className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
-              Reformular
+              Rephrase
             </button>
             <button onClick={handleConfirm} type="button"
               className="px-4 py-1.5 rounded-lg text-white text-xs font-semibold shadow-sm hover:opacity-90 transition-opacity flex items-center gap-1.5"
               style={{ background: draft.kind === 'income' ? '#059669' : '#18181b' }}>
               <CheckCircle2 size={13} />
-              {draft.kind === 'income' ? 'Confirmar Income' : 'Confirmar Expense'}
+              {draft.kind === 'income' ? 'Confirm Income' : 'Confirm Expense'}
             </button>
           </div>
         ) : step === 'preview_batch' ? (
@@ -1078,7 +1078,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             <div className="flex items-center gap-2">
               <button onClick={() => setStep('input')} type="button"
                 className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors">
-                Volver
+                Back
               </button>
               <button onClick={handleConfirmBatch} type="button"
                 disabled={selectedRows.size === 0}
@@ -1106,7 +1106,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleParse(); }
                 }}
                 rows={8}
-                placeholder="Ej: Recibí 2500 USD de Coffe Payper por la consultoría de menú&#10;&#10;Podés escribir varias operaciones, dictarlas con el micrófono, o subir un Excel/CSV abajo."
+                placeholder="e.g. Received 2500 USD from Coffe Payper for the menu consulting&#10;&#10;You can type multiple operations, dictate with the microphone, or upload an Excel/CSV below."
                 className="w-full min-h-[180px] rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 pr-12 text-sm leading-relaxed text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-y focus:outline-none focus:ring-2 focus:ring-fuchsia-500/30 focus:border-fuchsia-400 transition-all"
               />
               {speechSupported && (
@@ -1178,7 +1178,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                   return totalChunks > 1 ? (
                     <div className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1.5">
                       <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                      <span>Se procesará en {totalChunks} tandas (~{totalChunks * 4}s).</span>
+                      <span>Will run in {totalChunks} batches (~{totalChunks * 4}s).</span>
                     </div>
                   ) : null;
                 })()}
@@ -1196,7 +1196,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
                 {workbookData.sheets[0] && (
                   <div className="overflow-x-auto rounded-lg border border-zinc-100 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/60">
                     <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800/60">
-                      Vista previa: {workbookData.sheets[0].name}
+                      Preview: {workbookData.sheets[0].name}
                     </div>
                     <table className="w-full text-[10px]">
                       <thead className="bg-zinc-50/70 dark:bg-zinc-800/30">
@@ -1226,7 +1226,7 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             {/* Examples — only when no file is loaded */}
             {!workbookData && (
               <div className="space-y-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Ejemplos rápidos</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Quick examples</div>
                 <div className="flex flex-col gap-1.5">
                   {EXAMPLES.map((ex, i) => (
                     <button key={i} type="button"
@@ -1327,13 +1327,13 @@ export const FinanceAssistant: React.FC<FinanceAssistantProps> = ({ isOpen, onCl
             {draft.match_status === 'duplicate' && (
               <div className="flex items-start gap-2 text-xs font-medium text-zinc-600 bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                 <RefreshCw size={13} className="shrink-0 mt-0.5" />
-                <span>{draft.match_reason || 'Esta entrada ya existe — confirmar igual creará un duplicado.'}</span>
+                <span>{draft.match_reason || 'This entry already exists — confirming will create a duplicate.'}</span>
               </div>
             )}
             {draft.match_status === 'update' && draft.match_existing_id && (
               <div className="flex items-start gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-lg px-3 py-2">
                 <RefreshCw size={13} className="shrink-0 mt-0.5" />
-                <span>{draft.match_reason || 'Coincide con un registro existente.'}</span>
+                <span>{draft.match_reason || 'Matches an existing record.'}</span>
               </div>
             )}
 
@@ -1631,13 +1631,13 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
           )}
           {unknownProjects.length > 0 && (
             <div className="flex items-start gap-2 flex-wrap">
-              <span className="text-[10px] text-indigo-600 dark:text-indigo-300 font-medium pt-1.5">Proyectos:</span>
+              <span className="text-[10px] text-indigo-600 dark:text-indigo-300 font-medium pt-1.5">Projects:</span>
               {unknownProjects.map(title => (
                 <span key={title} className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900/60 border border-indigo-200 dark:border-indigo-500/30 text-[11px] font-medium text-indigo-700 dark:text-indigo-200">
                   {title}
                 </span>
               ))}
-              <span className="text-[10px] text-indigo-500 italic pt-1.5">creá estos proyectos desde la pestaña Projects para sincronizar</span>
+              <span className="text-[10px] text-indigo-500 italic pt-1.5">create these projects from the Projects tab to sync</span>
             </div>
           )}
         </div>
@@ -1655,10 +1655,10 @@ const BatchPreview: React.FC<BatchPreviewProps> = ({
           <div className="flex items-center gap-3">
             <button onClick={onAddManualRow} type="button"
               className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-fuchsia-600 dark:text-fuchsia-400 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-500/10 transition-colors"
-              title="Agregar una fila manualmente (cuando la IA no detectó algo)">
-              <Plus size={11} /> Agregar fila
+              title="Add a row manually (when the AI missed something)">
+              <Plus size={11} /> Add row
             </button>
-            <span className="text-[10px] text-zinc-400">{selectedRows.size} seleccionadas</span>
+            <span className="text-[10px] text-zinc-400">{selectedRows.size} selected</span>
           </div>
         </div>
 
@@ -1811,13 +1811,13 @@ const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
                       <div className="rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 text-[10px]">
                         <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
                           <FileSpreadsheet size={10} />
-                          {d.source_sheet ? `Hoja "${d.source_sheet}" · Fila #${d.source_row}` : `Fila origen #${d.source_row}`}
+                          {d.source_sheet ? `Sheet "${d.source_sheet}" · Row #${d.source_row}` : `Source row #${d.source_row}`}
                         </div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                           {Object.entries(d.source_row_data).map(([h, v]) => (
                             <div key={h} className="truncate">
                               <span className="text-zinc-400">{h}:</span>{' '}
-                              <span className="text-zinc-700 dark:text-zinc-300">{String(v ?? '') || <span className="italic text-zinc-300">vacío</span>}</span>
+                              <span className="text-zinc-700 dark:text-zinc-300">{String(v ?? '') || <span className="italic text-zinc-300">empty</span>}</span>
                             </div>
                           ))}
                         </div>
@@ -1827,12 +1827,12 @@ const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
                     {/* Update action selector — only for `update` rows */}
                     {d.match_status === 'update' && d.match_existing_id && (
                       <div className="flex items-center gap-2 text-[10px]">
-                        <span className="text-zinc-500 font-medium">Acción:</span>
+                        <span className="text-zinc-500 font-medium">Action:</span>
                         <select value={d.update_action}
                           onChange={e => updateBatchRow(i, { update_action: e.target.value as DraftEntry['update_action'] })}
                           className="rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-[10px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/30">
-                          <option value="update">Actualizar existente</option>
-                          <option value="create">Crear nuevo (ej. nueva instancia)</option>
+                          <option value="update">Update existing</option>
+                          <option value="create">Create new (e.g. new instance)</option>
                           <option value="skip">Skip</option>
                         </select>
                       </div>
@@ -1841,7 +1841,7 @@ const BatchPreviewSection: React.FC<BatchPreviewSectionProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" value={d.concept}
                         onChange={e => updateBatchRow(i, { concept: e.target.value })}
-                        placeholder="Concepto"
+                        placeholder="Concept"
                         className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1 text-[11px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/30" />
                       <input type="number" min="0" step="0.01" value={d.amount || ''}
                         onChange={e => updateBatchRow(i, { amount: Number(e.target.value) || 0 })}

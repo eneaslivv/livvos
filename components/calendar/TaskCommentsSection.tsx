@@ -137,7 +137,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   // comment renderer below detects image URLs and renders them inline.
   const uploadAndInsert = useCallback(async (file: File) => {
     if (!currentTenant?.id || !file.type.startsWith('image/')) return;
-    if (file.size > 10 * 1024 * 1024) { alert('Imagen muy grande (máx 10MB)'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('Image too large (max 10MB)'); return; }
     setUploadingImage(true);
     try {
       const ext = file.name.split('.').pop() || 'png';
@@ -379,7 +379,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploadingImage}
-          title="Adjuntar imagen (o pegá con ⌘V)"
+          title="Attach an image (or paste with ⌘V)"
           className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-50"
         >
           {uploadingImage ? <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" /> : <Icons.Image size={14} />}

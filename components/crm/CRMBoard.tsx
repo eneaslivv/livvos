@@ -221,7 +221,7 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleDelete(lead); }}
                                                             disabled={deletingId === lead.id}
-                                                            title="Eliminar lead"
+                                                            title="Delete lead"
                                                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
                                                         >
                                                             {deletingId === lead.id ? (

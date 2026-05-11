@@ -133,20 +133,20 @@ const ActionCard: React.FC<{
   onReject: () => void;
 }> = ({ action, onApprove, onReject }) => {
   const kindLabel: Record<string, { icon: keyof typeof Icons; label: string; color: string }> = {
-    create_task: { icon: 'Check', label: 'Crear tarea', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
-    update_task: { icon: 'Edit', label: 'Modificar tarea', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
-    create_project: { icon: 'Briefcase', label: 'Crear proyecto', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
-    update_project: { icon: 'Edit', label: 'Modificar proyecto', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
-    create_tasks_batch: { icon: 'List', label: 'Crear varias tareas', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
-    plan_week: { icon: 'Calendar', label: 'Planificar semana', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
+    create_task: { icon: 'Check', label: 'Create task', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+    update_task: { icon: 'Edit', label: 'Edit task', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+    create_project: { icon: 'Briefcase', label: 'Create project', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
+    update_project: { icon: 'Edit', label: 'Edit project', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
+    create_tasks_batch: { icon: 'List', label: 'Create multiple tasks', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
+    plan_week: { icon: 'Calendar', label: 'Plan the week', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
     suggest_delegate: { icon: 'Users', label: 'Delegation suggestion', color: 'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20' },
-    create_expense: { icon: 'TrendingUp', label: 'Cargar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
-    update_expense: { icon: 'Edit', label: 'Modificar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
-    create_income: { icon: 'TrendingUp', label: 'Cargar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
-    update_income: { icon: 'Edit', label: 'Modificar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
-    create_budget: { icon: 'DollarSign', label: 'Crear budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
-    update_budget: { icon: 'DollarSign', label: 'Modificar budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
-    mark_expense_paid: { icon: 'Check', label: 'Marcar gasto pagado', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    create_expense: { icon: 'TrendingUp', label: 'Log expense', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
+    update_expense: { icon: 'Edit', label: 'Edit expense', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
+    create_income: { icon: 'TrendingUp', label: 'Log income', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    update_income: { icon: 'Edit', label: 'Edit income', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    create_budget: { icon: 'DollarSign', label: 'Create budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
+    update_budget: { icon: 'DollarSign', label: 'Edit budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
+    mark_expense_paid: { icon: 'Check', label: 'Mark expense as paid', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
     mark_installment_paid: { icon: 'Check', label: 'Mark installment paid', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
   };
   const meta = kindLabel[action.kind] || { icon: 'Sparkles' as const, label: action.kind, color: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20' };
@@ -161,7 +161,7 @@ const ActionCard: React.FC<{
           <div className="font-medium text-zinc-700 dark:text-zinc-200">{p.title}</div>
           {(p.due_date || p.priority) && (
             <div className="flex gap-2">
-              {p.due_date && <span>· vence {p.due_date}</span>}
+              {p.due_date && <span>· due {p.due_date}</span>}
               {p.priority && <span>· {p.priority}</span>}
             </div>
           )}
@@ -181,12 +181,12 @@ const ActionCard: React.FC<{
       const p = action.params;
       return (
         <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 space-y-0.5">
-          <div className="font-medium text-zinc-700 dark:text-zinc-200">{p.tasks.length} tareas:</div>
+          <div className="font-medium text-zinc-700 dark:text-zinc-200">{p.tasks.length} tasks:</div>
           <ul className="pl-3 space-y-0.5">
             {p.tasks.slice(0, 6).map((t, i) => (
               <li key={i} className="truncate">— {t.title}{t.priority ? ` · ${t.priority}` : ''}</li>
             ))}
-            {p.tasks.length > 6 && <li className="italic">+{p.tasks.length - 6} más…</li>}
+            {p.tasks.length > 6 && <li className="italic">+{p.tasks.length - 6} more…</li>}
           </ul>
         </div>
       );
@@ -256,41 +256,41 @@ const ActionCard: React.FC<{
     if (action.kind === 'update_project') {
       const p = action.params as any;
       const changes: string[] = [];
-      if (p.title !== undefined)    changes.push(`título → "${p.title}"`);
+      if (p.title !== undefined)    changes.push(`title → "${p.title}"`);
       if (p.budget !== undefined)   changes.push(`budget → $${p.budget.toLocaleString()}${p.currency ? ' ' + p.currency : ''}`);
       if (p.status !== undefined)   changes.push(`status → ${p.status}`);
-      if (p.deadline !== undefined) changes.push(`deadline → ${p.deadline || 'sin fecha'}`);
-      if (p.description !== undefined) changes.push('descripción actualizada');
-      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+      if (p.deadline !== undefined) changes.push(`deadline → ${p.deadline || 'no date'}`);
+      if (p.description !== undefined) changes.push('description updated');
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'no changes'}</div>;
     }
     if (action.kind === 'update_task') {
       const p = action.params as any;
       const changes: string[] = [];
-      if (p.title !== undefined)     changes.push(`título → "${p.title}"`);
+      if (p.title !== undefined)     changes.push(`title → "${p.title}"`);
       if (p.status !== undefined)    changes.push(`status → ${p.status}`);
       if (p.priority !== undefined)  changes.push(`priority → ${p.priority}`);
-      if (p.due_date !== undefined)  changes.push(`fecha → ${p.due_date || 'sin fecha'}`);
-      if (p.completed !== undefined) changes.push(p.completed ? 'marcar como hecha' : 'reabrir');
-      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+      if (p.due_date !== undefined)  changes.push(`date → ${p.due_date || 'no date'}`);
+      if (p.completed !== undefined) changes.push(p.completed ? 'mark as done' : 'reopen');
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'no changes'}</div>;
     }
     if (action.kind === 'update_expense') {
       const p = action.params as any;
       const changes: string[] = [];
-      if (p.amount !== undefined)   changes.push(`monto → $${p.amount.toLocaleString()}`);
-      if (p.concept !== undefined)  changes.push(`concepto → "${p.concept}"`);
-      if (p.category !== undefined) changes.push(`categoría → ${p.category}`);
-      if (p.date !== undefined)     changes.push(`fecha → ${p.date}`);
+      if (p.amount !== undefined)   changes.push(`amount → $${p.amount.toLocaleString()}`);
+      if (p.concept !== undefined)  changes.push(`concept → "${p.concept}"`);
+      if (p.category !== undefined) changes.push(`category → ${p.category}`);
+      if (p.date !== undefined)     changes.push(`date → ${p.date}`);
       if (p.status !== undefined)   changes.push(`status → ${p.status}`);
-      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'no changes'}</div>;
     }
     if (action.kind === 'update_income') {
       const p = action.params as any;
       const changes: string[] = [];
-      if (p.total_amount !== undefined) changes.push(`monto → $${p.total_amount.toLocaleString()}`);
-      if (p.concept !== undefined)      changes.push(`concepto → "${p.concept}"`);
-      if (p.due_date !== undefined)     changes.push(`vencimiento → ${p.due_date}`);
+      if (p.total_amount !== undefined) changes.push(`amount → $${p.total_amount.toLocaleString()}`);
+      if (p.concept !== undefined)      changes.push(`concept → "${p.concept}"`);
+      if (p.due_date !== undefined)     changes.push(`due → ${p.due_date}`);
       if (p.status !== undefined)       changes.push(`status → ${p.status}`);
-      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'sin cambios'}</div>;
+      return <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{changes.join(' · ') || 'no changes'}</div>;
     }
     if (action.kind === 'mark_expense_paid' || action.kind === 'mark_installment_paid') {
       // Summary already says enough; no extra details needed.
@@ -573,19 +573,19 @@ export const AiAdvisor: React.FC = () => {
         return completed >= weekStart;
       });
 
-      lines.push(`MIS TAREAS ABIERTAS (${myOpenTasks.length} total, ${myOverdue.length} vencidas):`);
+      lines.push(`MY OPEN TASKS (${myOpenTasks.length} total, ${myOverdue.length} overdue):`);
       myOpenTasks.slice(0, 12).forEach((t: any) => {
         const due = t.start_date || t.due_date;
-        const overdueFlag = due && new Date(due).getTime() < new Date(today.toDateString()).getTime() ? ' [VENCIDA]' : '';
+        const overdueFlag = due && new Date(due).getTime() < new Date(today.toDateString()).getTime() ? ' [OVERDUE]' : '';
         lines.push(`- id=${t.id} | "${t.title}" | ${t.priority || 'medium'} | ${t.status || 'todo'} | due: ${due || 'n/a'}${overdueFlag}${t.project_name ? ` | ${t.project_name}` : ''}`);
       });
-      if (myOpenTasks.length > 12) lines.push(`  …+${myOpenTasks.length - 12} más`);
+      if (myOpenTasks.length > 12) lines.push(`  …+${myOpenTasks.length - 12} more`);
 
-      lines.push(`MIS TAREAS COMPLETADAS ESTA SEMANA: ${myCompletedThisWeek.length}`);
+      lines.push(`MY COMPLETED TASKS THIS WEEK: ${myCompletedThisWeek.length}`);
 
       const myOwnedProjects = projects.filter((p: any) => p.owner_id === currentUserId);
       if (myOwnedProjects.length > 0) {
-        lines.push(`MIS PROYECTOS (owner): ${myOwnedProjects.length} (${myOwnedProjects.map((p: any) => `"${p.title}"`).join(', ')})`);
+        lines.push(`MY PROJECTS (owner): ${myOwnedProjects.length} (${myOwnedProjects.map((p: any) => `"${p.title}"`).join(', ')})`);
       }
       lines.push('');
     }
@@ -714,12 +714,12 @@ export const AiAdvisor: React.FC = () => {
       // pendiente"), without exploding context for big teams.
       memberOpen.slice(0, 3).forEach((t: any) => {
         const due = t.start_date || t.due_date;
-        const overdueFlag = due && new Date(due).getTime() < todayStart.getTime() ? ' [VENCIDA]' : '';
+        const overdueFlag = due && new Date(due).getTime() < todayStart.getTime() ? ' [OVERDUE]' : '';
         lines.push(`    · task_id=${t.id} | "${t.title}" | ${t.priority || 'medium'} | due ${due || 'n/a'}${overdueFlag}${t.project_name ? ` | ${t.project_name}` : ''}`);
       });
-      if (memberOpen.length > 3) lines.push(`    · …+${memberOpen.length - 3} más`);
+      if (memberOpen.length > 3) lines.push(`    · …+${memberOpen.length - 3} more`);
     });
-    if (activeMembers.length > 14) lines.push(`  …+${activeMembers.length - 14} miembros más`);
+    if (activeMembers.length > 14) lines.push(`  …+${activeMembers.length - 14} more members`);
 
     // Compute Monday of the current week so plan_week defaults sensibly.
     const monday = new Date(now);
@@ -773,7 +773,7 @@ export const AiAdvisor: React.FC = () => {
       console.error('AI chat error:', err);
       if (err?.needsReLogin) setSessionExpired(true);
       const fallback = err?.needsReLogin
-        ? 'Tu sesión expiró. Refrescá la página para iniciar sesión de nuevo.'
+        ? 'Your session expired. Refresh the page to sign in again.'
         : (err?.message || "Couldn't process the question. Try again.");
       setMessages(prev => [...prev, { role: 'assistant', content: fallback, ts: Date.now() }]);
     } finally {
@@ -1021,7 +1021,7 @@ export const AiAdvisor: React.FC = () => {
       console.error('AI Advisor error:', err);
       if (err?.needsReLogin) setSessionExpired(true);
       const fallback = err?.needsReLogin
-        ? 'Tu sesión expiró. Refrescá la página para iniciar sesión de nuevo.'
+        ? 'Your session expired. Refresh the page to sign in again.'
         : (err?.message || "Couldn't generate the analysis. Try again.");
       setMessages(prev => [...prev, { role: 'assistant', content: fallback }]);
     } finally {
@@ -1107,7 +1107,7 @@ export const AiAdvisor: React.FC = () => {
                     <div>
                       <h2 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">AI Advisor</h2>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-                        {busy ? 'Pensando...' : 'Conversá sobre tu negocio'}
+                        {busy ? 'Thinking...' : 'Chat about your business'}
                       </p>
                     </div>
                   </div>
@@ -1116,7 +1116,7 @@ export const AiAdvisor: React.FC = () => {
                       <button
                         onClick={() => setMessages([])}
                         className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                        title="Nueva conversación"
+                        title="New conversation"
                       >
                         <Icons.RefreshCw size={13} />
                       </button>
@@ -1262,7 +1262,7 @@ export const AiAdvisor: React.FC = () => {
                 <div className="px-5 py-2 border-t border-amber-200/60 dark:border-amber-700/30 bg-amber-50/60 dark:bg-amber-500/5 shrink-0">
                   <div className="flex items-center gap-2">
                     <Icons.Alert size={12} className="text-amber-500 shrink-0" />
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400 flex-1">Sesión expirada. Iniciá sesión de nuevo.</span>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 flex-1">Session expired. Please sign in again.</span>
                     <button
                       onClick={async () => {
                         // Clear the dead session and any stray Supabase keys, then
@@ -1280,7 +1280,7 @@ export const AiAdvisor: React.FC = () => {
                       }}
                       className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
                     >
-                      Iniciar sesión
+                      Sign in
                     </button>
                   </div>
                 </div>
@@ -1310,7 +1310,7 @@ export const AiAdvisor: React.FC = () => {
                         handleSubmit();
                       }
                     }}
-                    placeholder="Preguntale algo, o pedile crear una tarea, planificar la semana..."
+                    placeholder="Ask anything, or ask it to create a task, plan the week..."
                     disabled={busy}
                     rows={1}
                     className="flex-1 px-3.5 py-2.5 text-[12px] bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 focus:outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors disabled:opacity-60 resize-none leading-snug"
@@ -1319,13 +1319,13 @@ export const AiAdvisor: React.FC = () => {
                     type="submit"
                     disabled={busy || !input.trim()}
                     className="p-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                    title="Enviar (Enter)"
+                    title="Send (Enter)"
                   >
                     <Icons.Send size={13} />
                   </button>
                 </div>
                 <div className="text-[9px] text-zinc-400 mt-1.5 text-right">
-                  Enter para enviar · Shift+Enter para nueva línea · El historial se guarda por día
+                  Enter to send · Shift+Enter for new line · History is saved per day
                 </div>
               </form>
             </motion.div>

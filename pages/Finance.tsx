@@ -3034,7 +3034,7 @@ const InlineInstallmentsEditor: React.FC<{
 
       {sorted.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 px-3 py-4 text-center text-[11px] text-zinc-400 italic">
-          Sin milestones todavía. Agregá uno con el botón de abajo.
+          No milestones yet. Add one with the button below.
         </div>
       ) : (
         <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -3096,7 +3096,7 @@ const InlineInstallmentsEditor: React.FC<{
                 <button
                   type="button"
                   onClick={() => removeMilestone(inst)}
-                  title="Borrar este milestone"
+                  title="Delete this milestone"
                   className="opacity-0 group-hover/m:opacity-100 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
                 >
                   <Trash2 size={11} />
@@ -3123,10 +3123,10 @@ const InlineInstallmentsEditor: React.FC<{
           disabled={adding}
           className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-zinc-50 px-2 py-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors disabled:opacity-50"
         >
-          <Plus size={11} /> {adding ? 'Agregando…' : 'Agregar milestone'}
+          <Plus size={11} /> {adding ? 'Adding…' : 'Add milestone'}
         </button>
         <p className="text-[10px] text-zinc-400 italic">
-          Cambios en milestones se guardan al toque · campos del total/fecha al tocar Save.
+          Milestone edits save on the fly · total/date fields save when you tap Save.
         </p>
       </div>
     </div>

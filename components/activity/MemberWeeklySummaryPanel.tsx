@@ -71,7 +71,7 @@ const taskDuration = (t: Task): { hours: number; label: string } | null => {
 
 // "same day" / "3h" / "2d 4h" / "5d" — concise enough to fit in a row.
 const humanizeDuration = (hours: number): string => {
-  if (hours < 1) return 'mismo día';
+  if (hours < 1) return 'same day';
   if (hours < 24) return `${Math.round(hours)}h`;
   const days = Math.floor(hours / 24);
   const remHours = Math.round(hours - days * 24);
@@ -656,7 +656,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
 
           {!aiResult && !aiLoading && !aiError && (
             <p className="text-[12px] text-zinc-500 dark:text-zinc-400 italic mt-1">
-              Click "Generar" para que la IA arme un resumen de los logros, bloqueos y próximos pasos de {member.name.split(' ')[0]}.
+              Click "Generate" so the AI puts together a recap of {member.name.split(' ')[0]}'s wins, blockers and next steps.
             </p>
           )}
 
@@ -725,7 +725,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                 subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
                 meta={
                   dur
-                    ? `${fmtDate(t.completed_at)} · tomó ${dur.label}`
+                    ? `${fmtDate(t.completed_at)} · took ${dur.label}`
                     : fmtDate(t.completed_at)
                 }
                 metaClass={isSlow ? 'text-amber-600 dark:text-amber-400 font-medium' : undefined}
@@ -735,7 +735,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             );
           })}
           {scope.completedInPeriod.length > 25 && (
-            <p className="text-[10px] text-zinc-400 italic px-1 mt-1">+{scope.completedInPeriod.length - 25} más</p>
+            <p className="text-[10px] text-zinc-400 italic px-1 mt-1">+{scope.completedInPeriod.length - 25} more</p>
           )}
         </Section>
 
@@ -744,7 +744,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             specific deliverables are dragging out, not just an aggregate. */}
         {scope.slowestInPeriod.length > 0 && (
           <Section
-            title="Tardó más de la cuenta"
+            title="Took longer than usual"
             count={scope.slowestInPeriod.length}
             tone="warning"
             emptyText=""
@@ -819,7 +819,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             );
           })}
           {scope.openAssigned.length > 15 && (
-            <p className="text-[10px] text-zinc-400 italic px-1 mt-1">+{scope.openAssigned.length - 15} más</p>
+            <p className="text-[10px] text-zinc-400 italic px-1 mt-1">+{scope.openAssigned.length - 15} more</p>
           )}
         </Section>
 

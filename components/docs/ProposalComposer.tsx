@@ -350,7 +350,7 @@ export const ProposalComposer: React.FC<Props> = ({
         {/* Step 1: Brief */}
         <div>
           <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-            Lo que pidió el cliente
+            What the client asked for
           </label>
           <textarea
             value={brief}

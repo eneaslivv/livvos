@@ -327,9 +327,9 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
         <div className="inline-flex p-3 rounded-full bg-amber-50 dark:bg-amber-500/10 mb-4">
           <Icons.Sparkles size={20} className="text-amber-500" />
         </div>
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Conectá tu primer canal</h3>
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Connect your first channel</h3>
         <p className="text-xs text-zinc-500 max-w-md mx-auto mb-4">
-          Conectá Gmail y/o Slack desde Settings para empezar a ver mensajes acá. La IA va a clasificarlos automáticamente.
+          Connect Gmail and/or Slack from Settings to start seeing messages here. The AI will classify them automatically.
         </p>
       </div>
     );
@@ -344,8 +344,8 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
           <div className="p-3 flex flex-wrap gap-1.5">
             {([
               { id: 'pending' as const, label: 'Pending', count: messages.filter(m => m.status === 'pending').length },
-              { id: 'all' as const, label: 'Todo', count: messages.length },
-              { id: 'high' as const, label: 'Urgente', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
+              { id: 'all' as const, label: 'All', count: messages.length },
+              { id: 'high' as const, label: 'Urgent', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
               { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
               { id: 'slack' as const, label: 'Slack', count: messages.filter(m => m.platform === 'slack').length },
             ]).map(f => (
@@ -434,7 +434,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
           <div className="flex-1 flex items-center justify-center p-12 text-zinc-400">
             <div className="text-center">
               <Icons.Mail size={28} className="mx-auto mb-3 opacity-30" />
-              <p className="text-xs">Seleccioná un mensaje para ver el detalle</p>
+              <p className="text-xs">Select a message to see the detail</p>
             </div>
           </div>
         ) : (
@@ -1642,7 +1642,7 @@ const ChannelLinkRow: React.FC<{
             value={monitored.project_id || ''}
             onChange={handleSelect}
             options={options}
-            placeholder="Buscar proyecto…"
+            placeholder="Search project…"
             emptyOption={{ value: '', label: '— no project linked —' }}
             triggerClassName={triggerClass}
             popoverWidth={320}

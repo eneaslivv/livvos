@@ -225,7 +225,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
         ts: Date.now(),
       }]);
     } catch (err: any) {
-      const msg = err?.message || 'No pude generar — probá de nuevo.';
+      const msg = err?.message || "Couldn't generate — try again.";
       setError(msg);
       setChatLog(prev => [...prev, {
         id: `${Date.now()}-a`,
@@ -278,7 +278,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
                   onClick={() => { setBriefDraft(proposal.brief_text || ''); setBriefExpanded(false); }}
                   className="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2 py-1"
                 >
-                  Cancelar
+                  Cancel
                 </button>
               )}
               <button

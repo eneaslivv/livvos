@@ -145,7 +145,7 @@ export const PlatformCustomers: React.FC = () => {
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Master · Customer control</div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">Customers</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Tenants de LivvOS y clientes externos del master — un solo lugar.
+            LivvOS tenants and master-tenant external clients — one place.
           </p>
         </div>
         <button

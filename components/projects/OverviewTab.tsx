@@ -108,7 +108,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             rows={3}
             value={project.description}
             onChange={e => onUpdateProject({ description: e.target.value })}
-            placeholder="Add a project description... pegá URLs y se vuelven clickeables abajo"
+            placeholder="Add a project description... paste URLs and they become clickable below"
             className="w-full text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-zinc-200 dark:focus:ring-zinc-700 rounded-lg px-2 py-1 -mx-2 -my-1"
           />
           {project.description && (

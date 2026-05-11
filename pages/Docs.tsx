@@ -698,7 +698,7 @@ export const Docs: React.FC = () => {
                 })}
                 {draggedItemId && (
                   <span className="ml-2 text-[10px] text-amber-600 dark:text-amber-400 italic font-medium animate-pulse">
-                    ← arrastrá acá para mover
+                    ← drag here to move
                   </span>
                 )}
               </div>
@@ -824,7 +824,7 @@ export const Docs: React.FC = () => {
                   user can drag onto folders/docs (and vice-versa). */}
               <button
                 onClick={() => setShowTasksPanel(v => !v)}
-                title="Vincular tareas a docs"
+                title="Link tasks to docs"
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
                   showTasksPanel
                     ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
@@ -1730,7 +1730,7 @@ export const Docs: React.FC = () => {
               </button>
             </div>
             <div className="px-4 py-2 text-[10px] text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-zinc-800/60">
-              Arrastrá una tarea sobre una carpeta o doc para vincularlas. O al revés.
+              Drag a task onto a folder or doc to link them. Or the other way around.
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {openTasks.length === 0 && (

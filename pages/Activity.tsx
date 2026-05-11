@@ -779,7 +779,7 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
                       </span>
                       <button
                         onClick={() => setDrillDownPersonId(prev => prev === member.id ? null : member.id)}
-                        title={isOpen ? 'Colapsar' : 'Expandir lista de tareas'}
+                        title={isOpen ? 'Collapse' : 'Expand task list'}
                         className="p-1 text-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-all"
                       >
                         <Icons.ChevronDown size={11} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
