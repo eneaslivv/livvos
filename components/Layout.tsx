@@ -612,10 +612,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const showProjectsModule = hasFeature('projects_module') && (!isInitialized || hasPermission('projects', 'view'));
 
   const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
+    // Sales Overview now hosts both the pipeline AND a leads-list toggle
+    // inside the page. The standalone 'Leads Inbox' entry was removed —
+    // it was 95% the same data as the overview, just in table form.
+    // The 'sales_leads' PageView still works for deep links / legacy URLs
+    // and renders the same Sales page with the inbox sub-view selected.
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
-    { id: 'sales_leads', label: 'Leads Inbox', icon: <Icons.Mail />, permission: { module: 'sales', action: 'view_leads' }, feature: 'sales_module' },
     // Inbox (Communications Hub) — moved here from OS mode. Sits next to
-    // Leads Inbox so all incoming-message surfaces live together.
+    // Sales Overview so all incoming-message surfaces live together.
     { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
     { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
     { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },

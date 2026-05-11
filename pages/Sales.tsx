@@ -1,4 +1,4 @@
-import React, { Suspense, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { Icons } from '../components/ui/Icons';
 import { Lead, WebAnalytics } from '../types';
 import { useSupabase } from '../hooks/useSupabase';
@@ -18,9 +18,59 @@ interface SalesProps {
   onNavigate?: (page: string) => void;
 }
 
+// ─── SubViewToggle ───────────────────────────────────────────────
+// Pipeline ↔ Inbox switch that lives inside Sales Overview. Used to
+// be two separate sidebar entries — consolidated so the user has
+// fewer top-level options but can still flip between layouts in one
+// click. Both sub-views show the SAME leads, just rendered as a
+// kanban (Pipeline) or a flat table (Inbox).
+const SubViewToggle: React.FC<{
+  subView: 'pipeline' | 'inbox';
+  onChange: (v: 'pipeline' | 'inbox') => void;
+}> = ({ subView, onChange }) => (
+  <div className="inline-flex p-0.5 bg-zinc-100/70 dark:bg-zinc-800/60 rounded-md text-[11.5px] font-medium">
+    <button
+      onClick={() => onChange('pipeline')}
+      className={`px-2.5 py-1 rounded transition-colors ${
+        subView === 'pipeline'
+          ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+          : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+      }`}
+    >
+      Pipeline
+    </button>
+    <button
+      onClick={() => onChange('inbox')}
+      className={`px-2.5 py-1 rounded transition-colors ${
+        subView === 'inbox'
+          ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+          : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+      }`}
+    >
+      Inbox
+    </button>
+  </div>
+);
+
 export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
   const leadsEnabled = view !== 'analytics';
   const analyticsEnabled = view === 'analytics';
+
+  // Pipeline ↔ Inbox toggle that lives inside Sales Overview. The
+  // 'Leads Inbox' sidebar entry was removed because the two surfaces
+  // are 95% the same data — just different layouts. Default to the
+  // sub-view that matches the incoming `view` prop, so deep links to
+  // /sales_leads still land on the inbox table, and /sales_dashboard
+  // lands on the pipeline.
+  const [subView, setSubView] = useState<'pipeline' | 'inbox'>(
+    view === 'inbox' ? 'inbox' : 'pipeline'
+  );
+  // Re-sync if the user navigates between sales_dashboard / sales_leads
+  // via a direct URL change (e.g. browser back/forward).
+  useEffect(() => {
+    if (view === 'inbox') setSubView('inbox');
+    else if (view === 'crm') setSubView('pipeline');
+  }, [view]);
   const { data: leads, loading: leadsLoading, error: leadsError, add: addLead, update: updateLead, remove: removeLead, refresh: refreshLeads } = useSupabase<Lead>('leads', {
     enabled: leadsEnabled,
     subscribe: leadsEnabled,
@@ -302,7 +352,9 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     );
   }
 
-  if (view === 'crm') {
+  // Use the local subView to decide which Sales surface to render.
+  // 'analytics' was already returned above, so here view is 'crm' | 'inbox'.
+  if (subView === 'pipeline') {
     return (
       <>
         {renderNewLeadModal()}
@@ -383,11 +435,14 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
 
           {/* Header & Filters */}
           <div className="flex items-center justify-between mb-4 shrink-0">
-            <div>
-              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
-                Sales Pipeline
-              </h1>
-              <p className="text-zinc-500 dark:text-zinc-500 text-[12px] mt-0.5">Manage and track your leads.</p>
+            <div className="flex items-baseline gap-4">
+              <div>
+                <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
+                  Sales Pipeline
+                </h1>
+                <p className="text-zinc-500 dark:text-zinc-500 text-[12px] mt-0.5">Manage and track your leads.</p>
+              </div>
+              <SubViewToggle subView={subView} onChange={setSubView} />
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -461,7 +516,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     );
   }
 
-  if (view === 'inbox') {
+  if (subView === 'inbox') {
     const newLeads = normalizedLeads.filter((l: any) => l.status === 'new');
     return (
       <>
@@ -469,9 +524,12 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
         {renderLeadPanel()}
         <div className="max-w-[1600px] mx-auto pt-4 pb-6">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">Inbox</h1>
-              <p className="text-zinc-500">You have {newLeads.length} new leads to review.</p>
+            <div className="flex items-baseline gap-4">
+              <div>
+                <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">Inbox</h1>
+                <p className="text-zinc-500">You have {newLeads.length} new leads to review.</p>
+              </div>
+              <SubViewToggle subView={subView} onChange={setSubView} />
             </div>
             <button
               onClick={() => setShowNewLeadModal(true)}
