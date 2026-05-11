@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTenant } from '../context/TenantContext'
 import { hasPermission } from '../lib/securityHelpers'
+import { notifySlackProjectEvent } from '../lib/communications/slack'
+import { errorLogger } from '../lib/errorLogger'
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -1003,6 +1005,14 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
 
   const updateInstallment = useCallback(async (id: string, updates: Partial<Installment>): Promise<void> => {
     try {
+      // Read the existing row first so we can detect a paid-transition
+      // (was != 'paid', now = 'paid') and fire a Slack notification.
+      const { data: before } = await supabase
+        .from('installments')
+        .select('id, income_id, amount, status')
+        .eq('id', id)
+        .maybeSingle()
+
       const { error: err } = await supabase
         .from('installments')
         .update(updates)
@@ -1011,6 +1021,36 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       if (err) throw err
       // Reload to get updated income status (trigger updates parent)
       await loadIncomes()
+
+      // ─── Slack channel notification on milestone paid ─────────────
+      // Fires when this update flips status to 'paid'. Best-effort —
+      // never blocks the save. Skips silently when the parent income
+      // has no project_id or no channel subscribes to 'milestone_paid'.
+      const becamePaid = updates.status === 'paid' && before?.status !== 'paid'
+      if (becamePaid && before?.income_id) {
+        ;(async () => {
+          try {
+            const { data: parent } = await supabase
+              .from('incomes')
+              .select('project_id, project_name, concept, client_name, currency, tenant_id')
+              .eq('id', before.income_id)
+              .maybeSingle()
+            if (!parent?.project_id || !parent.tenant_id) return
+            const itemTitle = parent.concept || parent.client_name || 'Cuota'
+            await notifySlackProjectEvent({
+              tenantId: parent.tenant_id,
+              projectId: parent.project_id,
+              event: 'milestone_paid',
+              itemTitle,
+              projectName: parent.project_name,
+              amount: before.amount || null,
+              currency: parent.currency || 'USD',
+            })
+          } catch (e) {
+            errorLogger.warn('slack milestone-paid notify failed', e)
+          }
+        })()
+      }
     } catch (err) {
       console.error('Error updating installment:', err)
       throw err

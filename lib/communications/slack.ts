@@ -120,6 +120,21 @@ export async function setMonitoredChannels(
   return data as SlackMonitoredChannel[];
 }
 
+// ── Update which events a monitored channel subscribes to ────────────────
+// notify_events is a jsonb array of SlackProjectEvent strings. Default at
+// migration time is ["task_completed","milestone_paid","project_completed"]
+// (task_created OFF). Use this helper to flip individual events on/off.
+export async function setSlackChannelNotifyEvents(
+  monitoredChannelRowId: string,
+  events: SlackProjectEvent[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('slack_monitored_channels')
+    .update({ notify_events: events })
+    .eq('id', monitoredChannelRowId);
+  if (error) throw error;
+}
+
 // ── Link a monitored channel to a project (or unlink with null) ──────────
 // Updates slack_monitored_channels.project_id directly. After this call
 // every NEW message arriving from that channel will have its
@@ -192,28 +207,64 @@ export async function setSlackNotifyChannel(
   if (error) throw error;
 }
 
-// ── Notify Slack when a task is completed ────────────────────────────────
-// Looks up every active monitored channel that's linked to the task's
-// project (slack_monitored_channels.project_id) and posts a one-line
-// "✅ Task done" message with a Block Kit context. Best-effort — never
-// throws to the caller, so a failed Slack post never blocks task save.
+// ── Notify Slack when something happens to a project ─────────────────────
+// Generic dispatcher: looks up every active channel linked to the project,
+// filters by per-channel `notify_events` jsonb subscription, builds the
+// right Block Kit message per event type, and posts via slack-notify.
 //
-// When the task has no project_id, or no channel is linked to that
-// project, returns { posted: 0 } silently.
-export async function notifyTaskCompletedToSlack(args: {
-  tenantId: string;
-  task: { id: string; title: string; project_id?: string | null };
-  projectName?: string | null;
-  completedByName?: string;
-}): Promise<{ posted: number; errors: string[] }> {
-  const errors: string[] = [];
-  if (!args.task.project_id) return { posted: 0, errors };
+// Best-effort: errors are collected, never thrown. A failed Slack post
+// never blocks the underlying mutation (task save / income save / etc).
+//
+// Supported events:
+//   - task_created       a new task was added under the project
+//   - task_completed     a task transitioned to status='done'
+//   - milestone_paid     an income installment was marked paid
+//   - project_completed  the project itself moved to status='Completed'
+export type SlackProjectEvent =
+  | 'task_created'
+  | 'task_completed'
+  | 'milestone_paid'
+  | 'project_completed';
 
+export interface SlackProjectEventPayload {
+  tenantId: string;
+  projectId: string;
+  event: SlackProjectEvent;
+  /** What this event is about — title of the task / income / project. */
+  itemTitle: string;
+  /** Optional pre-resolved project name; auto-fetched if missing. */
+  projectName?: string | null;
+  /** Optional actor (e.g. 'Eneas Aldabe'). Renders as a context line. */
+  actorName?: string | null;
+  /** Optional money amount for milestone_paid (e.g. 2300). */
+  amount?: number | null;
+  currency?: string | null;
+  /** Optional priority — surfaced as a small badge for task_created. */
+  priority?: string | null;
+}
+
+interface EventCopy { emoji: string; headline: string }
+
+const EVENT_COPY: Record<SlackProjectEvent, EventCopy> = {
+  task_created:       { emoji: '🆕', headline: 'Nueva tarea' },
+  task_completed:     { emoji: '✅', headline: 'Tarea completada' },
+  milestone_paid:     { emoji: '💰', headline: 'Cuota cobrada' },
+  project_completed:  { emoji: '🏁', headline: 'Proyecto completado' },
+};
+
+const fmtMoney = (n: number, curr: string) =>
+  `${curr} ${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+export async function notifySlackProjectEvent(payload: SlackProjectEventPayload): Promise<{ posted: number; errors: string[] }> {
+  const errors: string[] = [];
+  if (!payload.projectId) return { posted: 0, errors };
+
+  // 1. All active channels linked to this project.
   const { data: links, error } = await supabase
     .from('slack_monitored_channels')
-    .select('channel_id, channel_name, integration_token_id')
-    .eq('tenant_id', args.tenantId)
-    .eq('project_id', args.task.project_id)
+    .select('channel_id, channel_name, integration_token_id, notify_events')
+    .eq('tenant_id', payload.tenantId)
+    .eq('project_id', payload.projectId)
     .eq('is_active', true);
   if (error) {
     errors.push(error.message);
@@ -221,44 +272,58 @@ export async function notifyTaskCompletedToSlack(args: {
   }
   if (!links || links.length === 0) return { posted: 0, errors };
 
-  // Resolve project name for the Slack copy if the caller didn't pass one.
-  // Cheap lookup, scoped via RLS.
-  let projectName = args.projectName ?? null;
-  if (!projectName && args.task.project_id) {
+  // 2. Filter by per-channel event subscription.
+  const subscribed = links.filter((l: any) => {
+    const events = Array.isArray(l.notify_events) ? l.notify_events : [];
+    return events.includes(payload.event);
+  });
+  if (subscribed.length === 0) return { posted: 0, errors };
+
+  // 3. Resolve project name on demand.
+  let projectName = payload.projectName ?? null;
+  if (!projectName) {
     try {
       const { data: proj } = await supabase
-        .from('projects')
-        .select('title')
-        .eq('id', args.task.project_id)
-        .maybeSingle();
+        .from('projects').select('title').eq('id', payload.projectId).maybeSingle();
       projectName = (proj as any)?.title || null;
     } catch { /* ignore */ }
   }
 
+  // 4. Build the message.
+  const copy = EVENT_COPY[payload.event];
   const projectLine = projectName ? `_${projectName}_` : '';
-  const byLine = args.completedByName ? ` · cerrada por *${args.completedByName}*` : '';
-  const text = `✅ Tarea completada — *${args.task.title}*${byLine}`;
-  const blocks = [
+  const amountLine = (payload.amount != null && payload.amount > 0)
+    ? `\n*${fmtMoney(payload.amount, payload.currency || 'USD')}*`
+    : '';
+  const priorityBadge = payload.priority && payload.priority !== 'medium'
+    ? ` · prioridad ${payload.priority}` : '';
+
+  const text = `${copy.emoji} ${copy.headline} — ${payload.itemTitle}`;
+  const blocks: any[] = [
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `✅ Tarea completada\n*${args.task.title}*${projectLine ? `\n${projectLine}` : ''}`,
+        text: `${copy.emoji} ${copy.headline}\n*${payload.itemTitle}*${amountLine}${projectLine ? `\n${projectLine}` : ''}`,
       },
     },
-    ...(args.completedByName
-      ? [{
-          type: 'context',
-          elements: [{ type: 'mrkdwn', text: `Cerrada por ${args.completedByName}` }],
-        }]
-      : []),
   ];
+  const contextLines: string[] = [];
+  if (payload.actorName) contextLines.push(`Por ${payload.actorName}`);
+  if (priorityBadge) contextLines.push(priorityBadge.replace(' · ', ''));
+  if (contextLines.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: contextLines.join(' · ') }],
+    });
+  }
 
+  // 5. Post to each subscribed channel.
   let posted = 0;
-  for (const link of links) {
+  for (const link of subscribed) {
     try {
       await postToSlack({
-        tenantId: args.tenantId,
+        tenantId: payload.tenantId,
         channelId: link.channel_id,
         text,
         blocks,
@@ -270,6 +335,25 @@ export async function notifyTaskCompletedToSlack(args: {
     }
   }
   return { posted, errors };
+}
+
+// Back-compat shim — keeps the older callsite working until we delete it.
+// New code should call notifySlackProjectEvent directly.
+export async function notifyTaskCompletedToSlack(args: {
+  tenantId: string;
+  task: { id: string; title: string; project_id?: string | null };
+  projectName?: string | null;
+  completedByName?: string;
+}): Promise<{ posted: number; errors: string[] }> {
+  if (!args.task.project_id) return { posted: 0, errors: [] };
+  return notifySlackProjectEvent({
+    tenantId: args.tenantId,
+    projectId: args.task.project_id,
+    event: 'task_completed',
+    itemTitle: args.task.title,
+    projectName: args.projectName,
+    actorName: args.completedByName || null,
+  });
 }
 
 // ── Pull recent messages from monitored channels ──────────────────────────

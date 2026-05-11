@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useTenant } from './TenantContext'
 import { ResourceLimitError } from '../lib/ResourceLimitError'
 import { notifyWithEmail } from '../lib/notifyWithEmail'
+import { notifySlackProjectEvent } from '../lib/communications/slack'
 
 export enum ProjectStatus {
   Active = 'Active',
@@ -437,6 +438,39 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw err
       }
       const updatedProject = normalizeProject(data)
+
+      // Slack notification on project completion. Best-effort; never
+      // throws to the caller. Fires only on the transition into
+      // 'Completed' (so re-saving a Completed project doesn't re-spam).
+      const wasCompleted = projects.find(p => p.id === id)?.status === ProjectStatus.Completed
+      if (updates.status === ProjectStatus.Completed && !wasCompleted) {
+        ;(async () => {
+          try {
+            const tenantId = await resolveTenantId()
+            if (!tenantId) return
+            let actorName: string | undefined
+            try {
+              const { data: { user: actor } } = await supabase.auth.getUser()
+              if (actor?.id) {
+                const { data: prof } = await supabase
+                  .from('profiles').select('name, email').eq('id', actor.id).maybeSingle()
+                actorName = (prof as any)?.name || (prof as any)?.email
+              }
+            } catch {}
+            await notifySlackProjectEvent({
+              tenantId,
+              projectId: id,
+              event: 'project_completed',
+              itemTitle: updatedProject.title,
+              projectName: updatedProject.title,
+              actorName: actorName || null,
+            })
+          } catch (e) {
+            errorLogger.warn('slack project-completed notify failed', e)
+          }
+        })()
+      }
+
       setProjects(prev => prev.map(p => p.id === id ? updatedProject : p))
       return updatedProject
     } catch (err) {

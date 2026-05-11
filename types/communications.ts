@@ -164,6 +164,10 @@ export interface SlackMonitoredChannel {
    *  matched_project_id on communication_messages — overrides the AI
    *  matcher and gives the inbox a stable channel→project pairing. */
   project_id?: string | null;
+  /** Which project events this channel wants notifications for.
+   *  Defaults at the DB level to ["task_completed","milestone_paid",
+   *  "project_completed"]. task_created is OFF by default. */
+  notify_events?: string[];
   created_at: string;
 }
 

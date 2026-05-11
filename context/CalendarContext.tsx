@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { notifyWithEmail } from '../lib/notifyWithEmail'
 import { logActivity } from '../lib/activity'
-import { notifyTaskCompletedToSlack } from '../lib/communications/slack'
+import { notifyTaskCompletedToSlack, notifySlackProjectEvent } from '../lib/communications/slack'
 
 export interface CalendarEvent {
   id: string
@@ -494,6 +494,23 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               tenant_id: tenantIdForNotify,
               metadata: { task_id: data.id, assignee_ids: allAssignees },
             }).catch(() => {})
+
+            // Slack channel notification on task creation. Channels opt
+            // in/out via slack_monitored_channels.notify_events — this
+            // event is OFF by default (too noisy for most teams) so the
+            // post fires only when the user explicitly enabled it for
+            // the linked channel. Skips silently when project_id is null
+            // or no channel subscribes to 'task_created'.
+            if (data.project_id) {
+              notifySlackProjectEvent({
+                tenantId: tenantIdForNotify,
+                projectId: data.project_id,
+                event: 'task_created',
+                itemTitle: data.title,
+                actorName,
+                priority: data.priority || null,
+              }).catch((err) => errorLogger.warn('slack task-created notify failed', err))
+            }
           }
 
           return normalized

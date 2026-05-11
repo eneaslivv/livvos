@@ -37,8 +37,8 @@ import {
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
   setSlackNotifyChannel, linkSlackChannelToProject, postToSlack,
-  slackTextToPreview, syncSlack,
-  type AvailableSlackChannel,
+  setSlackChannelNotifyEvents, slackTextToPreview, syncSlack,
+  type AvailableSlackChannel, type SlackProjectEvent,
 } from '../lib/communications/slack';
 
 type Tab = 'inbox' | 'settings';
@@ -1609,34 +1609,99 @@ const ChannelLinkRow: React.FC<{
       : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
   }`;
 
+  // Event subscription state: which project events trigger a Slack post
+  // for THIS channel. Default if column is null (legacy rows).
+  const enabledEvents = useMemo<SlackProjectEvent[]>(() => {
+    const arr = (monitored.notify_events as SlackProjectEvent[] | undefined);
+    return Array.isArray(arr) ? arr : ['task_completed', 'milestone_paid', 'project_completed'];
+  }, [monitored.notify_events]);
+
+  const toggleEvent = async (ev: SlackProjectEvent) => {
+    const next = enabledEvents.includes(ev)
+      ? enabledEvents.filter(e => e !== ev)
+      : [...enabledEvents, ev];
+    try {
+      await setSlackChannelNotifyEvents(monitored.id, next);
+      // Caller refreshes the channel list — the new state lands via that.
+      await onLinkChange(monitored.project_id || null); // triggers parent refresh w/o changing project
+    } catch (err) {
+      errorLogger.error('toggle slack channel event', err);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-      <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100 inline-flex items-center gap-1 shrink-0 min-w-0 max-w-[180px]">
-        <span className="text-zinc-400">{isPrivate ? '🔒' : '#'}</span>
-        <span className="truncate">{monitored.channel_name}</span>
-      </span>
-      <span className="text-[10px] text-zinc-300 dark:text-zinc-600 shrink-0">→</span>
-      <div className="flex-1 min-w-0">
-        <SearchableSelect
-          value={monitored.project_id || ''}
-          onChange={handleSelect}
-          options={options}
-          placeholder="Buscar proyecto…"
-          emptyOption={{ value: '', label: '— sin proyecto vinculado —' }}
-          triggerClassName={triggerClass}
-          popoverWidth={320}
-        />
+    <div className="px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100 inline-flex items-center gap-1 shrink-0 min-w-0 max-w-[180px]">
+          <span className="text-zinc-400">{isPrivate ? '🔒' : '#'}</span>
+          <span className="truncate">{monitored.channel_name}</span>
+        </span>
+        <span className="text-[10px] text-zinc-300 dark:text-zinc-600 shrink-0">→</span>
+        <div className="flex-1 min-w-0">
+          <SearchableSelect
+            value={monitored.project_id || ''}
+            onChange={handleSelect}
+            options={options}
+            placeholder="Buscar proyecto…"
+            emptyOption={{ value: '', label: '— sin proyecto vinculado —' }}
+            triggerClassName={triggerClass}
+            popoverWidth={320}
+          />
+        </div>
+        <button
+          onClick={onUnmonitor}
+          title="Dejar de monitorear este canal"
+          className="shrink-0 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+        >
+          <Icons.X size={11} />
+        </button>
       </div>
-      <button
-        onClick={onUnmonitor}
-        title="Dejar de monitorear este canal"
-        className="shrink-0 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-      >
-        <Icons.X size={11} />
-      </button>
+
+      {/* Per-channel event subscription chips. Only rendered when the
+          channel is linked to a project — without a project there's
+          nothing to notify about. */}
+      {monitored.project_id && (
+        <div className="flex items-center gap-1.5 pl-[60px] flex-wrap">
+          <span className="text-[9px] uppercase tracking-wider text-zinc-400 shrink-0">Notifica:</span>
+          <EventToggleChip
+            label="🆕 task new"
+            enabled={enabledEvents.includes('task_created')}
+            onToggle={() => toggleEvent('task_created')}
+          />
+          <EventToggleChip
+            label="✅ task done"
+            enabled={enabledEvents.includes('task_completed')}
+            onToggle={() => toggleEvent('task_completed')}
+          />
+          <EventToggleChip
+            label="💰 cuota"
+            enabled={enabledEvents.includes('milestone_paid')}
+            onToggle={() => toggleEvent('milestone_paid')}
+          />
+          <EventToggleChip
+            label="🏁 proyecto done"
+            enabled={enabledEvents.includes('project_completed')}
+            onToggle={() => toggleEvent('project_completed')}
+          />
+        </div>
+      )}
     </div>
   );
 };
+
+// Tiny clickable pill for the per-channel event subscription row.
+const EventToggleChip: React.FC<{ label: string; enabled: boolean; onToggle: () => void }> = ({ label, enabled, onToggle }) => (
+  <button
+    onClick={onToggle}
+    className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+      enabled
+        ? 'bg-violet-100 border-violet-200 text-violet-700 dark:bg-violet-500/20 dark:border-violet-500/40 dark:text-violet-300'
+        : 'bg-transparent border-zinc-200 text-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-200'
+    }`}
+  >
+    {label}
+  </button>
+);
 
 // ────────────────────────────────────────────────────────────────────────
 //  ForwardToSlackButton
