@@ -1200,6 +1200,11 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
               </div>
             );
           })}
+          {/* Hover rules — without this the Edit/Trash buttons stay at
+              opacity:0 forever and the user has no way to edit/delete
+              expenses. The Income tab has the equivalent block at its
+              own Card; we need a copy here too. */}
+          <style>{`.livv-row:hover .livv-row-action { opacity: 0.6 !important; } .livv-row .livv-row-action:hover { opacity: 1 !important; background: rgba(0,0,0,0.05) !important; }`}</style>
         </Card>
       )}
     </div>
