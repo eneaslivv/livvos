@@ -23,6 +23,7 @@ import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { ProposalDocumentView } from '../proposals/ProposalDocumentView';
 import { buildProposalDocumentData } from '../proposals/buildProposalDocumentData';
 import { errorLogger } from '../../lib/errorLogger';
+import { ProposalTaskGenerator } from './ProposalTaskGenerator';
 
 interface ServicePricing {
   id: string;
@@ -76,6 +77,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
   const [chatLog, setChatLog] = useState<ChatMsg[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTaskGen, setShowTaskGen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // When switching proposals, reset local state.
@@ -293,11 +295,21 @@ export const ProposalChatEditor: React.FC<Props> = ({
       {/* ── DOCUMENT PREVIEW ───────────────────────────────────── */}
       {hasContent && docData ? (
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
-          <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+          <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between gap-2 flex-wrap">
             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 inline-flex items-center gap-1.5">
               <Icons.Eye size={11} /> Vista previa del documento
             </span>
-            <span className="text-[10px] text-zinc-400">así lo va a ver el cliente</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowTaskGen(true)}
+                disabled={busy}
+                title="Convertí esta propuesta en fases + tareas + subtareas dentro de un proyecto"
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-amber-100/70 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 disabled:opacity-40"
+              >
+                <Icons.Layers size={11} /> Generar tareas del proyecto
+              </button>
+              <span className="text-[10px] text-zinc-400 hidden sm:inline">así lo va a ver el cliente</span>
+            </div>
           </div>
           <div className="max-h-[60vh] overflow-y-auto">
             <ProposalDocumentView data={docData} hideAccept readOnly />
@@ -429,6 +441,14 @@ export const ProposalChatEditor: React.FC<Props> = ({
           </p>
         </div>
       </div>
+
+      {/* Modal: turn this proposal into a project plan. Lives at the
+          end so it portals above everything else. */}
+      <ProposalTaskGenerator
+        isOpen={showTaskGen}
+        onClose={() => setShowTaskGen(false)}
+        proposal={proposal}
+      />
     </div>
   );
 };
