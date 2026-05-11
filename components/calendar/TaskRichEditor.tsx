@@ -92,7 +92,7 @@ export const TaskRichEditor: React.FC<Props> = ({ html, onChange, placeholder, o
       }),
       TaskList.configure({ HTMLAttributes: { class: 'list-none pl-0 space-y-0.5' } }),
       TaskItem.configure({ nested: true, HTMLAttributes: { class: 'flex gap-2 items-start' } }),
-      Placeholder.configure({ placeholder: placeholder || 'Empezá a escribir, o pegá una imagen…' }),
+      Placeholder.configure({ placeholder: placeholder || 'Start typing, or paste an image…' }),
     ],
     content: linkifyHtml(html || ''),
     editorProps: {

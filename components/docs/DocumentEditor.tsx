@@ -183,7 +183,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Empezá a escribir, o tipeá / para comandos...' }),
+      Placeholder.configure({ placeholder: 'Start typing, or type / for commands…' }),
       Underline,
       Table.configure({ resizable: true }),
       TableRow,

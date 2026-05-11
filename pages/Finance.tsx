@@ -2995,8 +2995,8 @@ const InlineInstallmentsEditor: React.FC<{
   const removeMilestone = async (inst: Installment) => {
     const wasPaid = inst.status === 'paid';
     const confirmMsg = wasPaid
-      ? 'Esta cuota está marcada como pagada. ¿Seguro que querés borrarla? El total cobrado se va a recalcular.'
-      : '¿Borrar este milestone? El total a cobrar se va a recalcular.';
+      ? "This installment is marked as paid. Delete it anyway? The collected total will recompute."
+      : 'Delete this milestone? The receivable total will recompute.';
     if (!confirm(confirmMsg)) return;
     setSavingId(inst.id);
     try {
@@ -3084,7 +3084,7 @@ const InlineInstallmentsEditor: React.FC<{
                       ? { status: 'pending', paid_date: null as any }
                       : { status: 'paid', paid_date: todayStr as any });
                   }}
-                  title={isPaid ? 'Marcar pendiente' : 'Marcar pagada'}
+                  title={isPaid ? 'Mark as pending' : 'Mark as paid'}
                   className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-md font-semibold ${
                     isPaid
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'

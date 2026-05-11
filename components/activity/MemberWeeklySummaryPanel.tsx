@@ -110,9 +110,9 @@ interface Activity {
 type Period = 'this_week' | 'last_week' | 'this_month';
 
 const PERIOD_LABEL: Record<Period, string> = {
-  this_week: 'Esta semana',
-  last_week: 'Semana pasada',
-  this_month: 'Este mes',
+  this_week: 'This week',
+  last_week: 'Last week',
+  this_month: 'This month',
 };
 
 interface Props {
@@ -127,7 +127,7 @@ interface Props {
 
 const fmtDate = (s?: string | null) => {
   if (!s) return '—';
-  return new Date(s).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  return new Date(s).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 };
 const fmtDateTime = (s?: string | null) => {
   if (!s) return '';
@@ -135,12 +135,12 @@ const fmtDateTime = (s?: string | null) => {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 60) return min < 1 ? 'recién' : `${min}m`;
+  if (min < 60) return min < 1 ? 'just now' : `${min}m`;
   const hr = Math.floor(min / 60);
   if (hr < 24) return `${hr}h`;
   const days = Math.floor(hr / 24);
   if (days < 7) return `${days}d`;
-  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 };
 
 const getInitials = (name: string) => {
@@ -573,12 +573,12 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
   if (!member) return null;
 
   const stats = [
-    { label: 'Completadas', value: scope.completedInPeriod.length, color: 'text-emerald-600 dark:text-emerald-400' },
-    { label: 'Asignadas abiertas', value: scope.openAssigned.length, color: 'text-zinc-700 dark:text-zinc-300' },
-    { label: 'Delegadas', value: scope.delegatedByThem.length, color: 'text-zinc-500 dark:text-zinc-400' },
-    { label: 'Vencidas', value: scope.overdue.length, color: scope.overdue.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500' },
-    { label: 'Logins', value: loginCount, color: 'text-teal-600 dark:text-teal-400' },
-    { label: 'Eventos', value: memberActivities.length, color: 'text-zinc-500 dark:text-zinc-400' },
+    { label: 'Completed', value: scope.completedInPeriod.length, color: 'text-emerald-600 dark:text-emerald-400' },
+    { label: 'Open assigned', value: scope.openAssigned.length, color: 'text-zinc-700 dark:text-zinc-300' },
+    { label: 'Delegated', value: scope.delegatedByThem.length, color: 'text-zinc-500 dark:text-zinc-400' },
+    { label: 'Overdue', value: scope.overdue.length, color: scope.overdue.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500' },
+    { label: 'Sign-ins', value: loginCount, color: 'text-teal-600 dark:text-teal-400' },
+    { label: 'Events', value: memberActivities.length, color: 'text-zinc-500 dark:text-zinc-400' },
   ];
 
   return (
@@ -592,7 +592,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               : getInitials(member.name)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 mb-1">© Resumen semanal</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 mb-1">© Weekly recap</div>
             <h2 className="text-2xl font-light tracking-tight text-zinc-900 dark:text-zinc-100">{member.name}</h2>
             {member.email && (
               <p className="text-[12px] text-zinc-400 truncate">{member.email}</p>
@@ -648,7 +648,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               disabled={aiLoading}
               className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-amber-100/80 hover:bg-amber-200/70 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 disabled:opacity-50 transition-colors"
             >
-              {aiLoading ? 'Generando…' : aiResult ? 'Regenerar' : 'Generar resumen'}
+              {aiLoading ? 'Generating…' : aiResult ? 'Regenerate' : 'Generate recap'}
             </button>
           </div>
 
@@ -679,7 +679,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               )}
               {aiResult.blockers && aiResult.blockers.length > 0 && (
                 <div>
-                  <div className="text-[9px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-semibold mb-1">⚠ Bloqueos / pendientes</div>
+                  <div className="text-[9px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-semibold mb-1">⚠ Blockers / open items</div>
                   <ul className="space-y-0.5">
                     {aiResult.blockers.map((b, i) => (
                       <li key={i} className="text-[12px] text-zinc-700 dark:text-zinc-200 leading-snug">— {b}</li>
@@ -689,7 +689,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               )}
               {aiResult.next_focus && aiResult.next_focus.length > 0 && (
                 <div>
-                  <div className="text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-semibold mb-1">→ Foco próxima semana</div>
+                  <div className="text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-semibold mb-1">→ Focus next week</div>
                   <ul className="space-y-0.5">
                     {aiResult.next_focus.map((n, i) => (
                       <li key={i} className="text-[12px] text-zinc-700 dark:text-zinc-200 leading-snug">— {n}</li>
@@ -705,12 +705,12 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             (started_at → completed_at) so the user can see at a glance
             which tasks took a beat vs which closed same-day. */}
         <Section
-          title="Tareas completadas"
+          title="Completed tasks"
           count={scope.completedInPeriod.length}
-          emptyText="Ninguna tarea completada en este período."
+          emptyText="No tasks completed in this period."
           headerExtra={scope.avgHours != null ? (
             <span className="text-[10px] text-zinc-400">
-              prom. <span className="text-zinc-600 dark:text-zinc-300 font-medium tabular-nums">{humanizeDuration(scope.avgHours)}</span> por tarea
+              avg <span className="text-zinc-600 dark:text-zinc-300 font-medium tabular-nums">{humanizeDuration(scope.avgHours)}</span> per task
             </span>
           ) : undefined}
         >
@@ -721,7 +721,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               <TaskRow
                 key={t.id}
                 icon={<Icons.CheckCircle size={11} className="text-emerald-500" />}
-                title={t.title || 'Sin título'}
+                title={t.title || 'Untitled'}
                 subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
                 meta={
                   dur
@@ -755,7 +755,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                 <TaskRow
                   key={t.id}
                   icon={<Icons.Clock size={11} className="text-amber-500" />}
-                  title={t.title || 'Sin título'}
+                  title={t.title || 'Untitled'}
                   subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
                   meta={`${dur.label} · cerrada ${fmtDate(t.completed_at)}`}
                   metaClass="text-amber-600 dark:text-amber-400 font-medium"
@@ -772,7 +772,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
             the task has been actively on someone's plate. */}
         {scope.longTimers.length > 0 && (
           <Section
-            title="En curso hace mucho"
+            title="In progress for a while"
             count={scope.longTimers.length}
             tone="warning"
             emptyText=""
@@ -783,7 +783,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                 <TaskRow
                   key={t.id}
                   icon={<Icons.Clock size={11} className="text-rose-500" />}
-                  title={t.title || 'Sin título'}
+                  title={t.title || 'Untitled'}
                   subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
                   meta={`empezada hace ${humanizeDuration(ageHours)}`}
                   metaClass="text-rose-600 dark:text-rose-400 font-medium"
@@ -796,10 +796,10 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
 
         {/* Open / pending tasks */}
         <Section
-          title="Asignadas abiertas"
+          title="Open assigned"
           count={scope.openAssigned.length}
           tone={scope.overdue.length > 0 ? 'warning' : 'default'}
-          emptyText="Sin tareas abiertas asignadas."
+          emptyText="No open assigned tasks."
         >
           {scope.openAssigned.slice(0, 15).map(t => {
             const due = (t as any).due_date || (t as any).start_date;
@@ -810,9 +810,9 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                 icon={<span className={`w-2.5 h-2.5 rounded-full ${
                   t.status === 'in-progress' ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-600'
                 }`} />}
-                title={t.title || 'Sin título'}
+                title={t.title || 'Untitled'}
                 subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
-                meta={due ? `${isOverdue ? '⚠ Vencida ' : 'Vence '}${fmtDate(due)}` : undefined}
+                meta={due ? `${isOverdue ? '⚠ Overdue ' : 'Due '}${fmtDate(due)}` : undefined}
                 metaClass={isOverdue ? 'text-rose-500 dark:text-rose-400' : undefined}
                 priority={t.priority}
               />
@@ -826,7 +826,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         {/* Delegated */}
         {scope.delegatedByThem.length > 0 && (
           <Section
-            title="Delegadas a otros"
+            title="Delegated to others"
             count={scope.delegatedByThem.length}
             emptyText=""
           >
@@ -834,9 +834,9 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
               <TaskRow
                 key={t.id}
                 icon={<Icons.External size={11} className="text-zinc-400" />}
-                title={t.title || 'Sin título'}
+                title={t.title || 'Untitled'}
                 subtitle={[t.project_name, t.client_name].filter(Boolean).join(' · ') || undefined}
-                meta={t.completed ? `Completada ${fmtDate(t.completed_at)}` : 'En curso'}
+                meta={t.completed ? `Completed ${fmtDate(t.completed_at)}` : 'In progress'}
               />
             ))}
           </Section>
@@ -845,7 +845,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
         {/* Activity timeline */}
         {memberActivities.length > 0 && (
           <Section
-            title="Actividad"
+            title="Activity"
             count={memberActivities.length}
             emptyText=""
           >
@@ -862,7 +862,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                 </div>
               ))}
               {memberActivities.length > 20 && (
-                <p className="text-[10px] text-zinc-400 italic px-1">+{memberActivities.length - 20} eventos más</p>
+                <p className="text-[10px] text-zinc-400 italic px-1">+{memberActivities.length - 20} more events</p>
               )}
             </div>
           </Section>
@@ -884,7 +884,7 @@ export const MemberWeeklySummaryPanel: React.FC<Props> = ({ isOpen, onClose, mem
                   className={`text-zinc-400 transition-transform ${showHistory ? '' : '-rotate-90'}`}
                 />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
-                  Historial de resúmenes
+                  Recap history
                 </span>
                 <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded font-semibold bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                   {savedSummaries.length}
@@ -913,7 +913,7 @@ const TrendStrip: React.FC<{ signals: TrendSignals }> = ({ signals }) => {
   if (!hasData) {
     return (
       <div className="mb-6 px-3 py-2.5 bg-white/40 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[11px] text-zinc-400 italic">
-        Sin tareas completadas en las últimas 8 semanas. La tendencia aparece cuando empezás a marcar tareas como hechas.
+        No completed tasks in the last 8 weeks. The trend chart appears once you start marking tasks done.
       </div>
     );
   }
@@ -960,7 +960,7 @@ const TrendStrip: React.FC<{ signals: TrendSignals }> = ({ signals }) => {
             <div
               key={i}
               className="flex-1 flex flex-col items-center justify-end gap-1"
-              title={`${i === 7 ? 'Esta semana' : `${7 - i} sem atrás`}: ${v} ${v === 1 ? 'tarea' : 'tareas'}`}
+              title={`${i === 7 ? 'This week' : `${7 - i}w ago`}: ${v} ${v === 1 ? 'task' : 'tasks'}`}
             >
               <div
                 className={`w-full rounded-sm transition-all ${

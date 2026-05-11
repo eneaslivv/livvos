@@ -78,9 +78,9 @@ export const Communications: React.FC = () => {
       const detail = url.searchParams.get('detail');
       if (!connect) return;
       if (connect.endsWith('_success')) {
-        setBanner({ kind: 'success', text: `Conectado: ${detail || ''}`.trim() });
+        setBanner({ kind: 'success', text: `Connected: ${detail || ''}`.trim() });
       } else if (connect.endsWith('_error')) {
-        setBanner({ kind: 'error', text: `No se pudo conectar — ${detail || 'error desconocido'}` });
+        setBanner({ kind: 'error', text: `Couldn't connect — ${detail || 'unknown error'}` });
       }
       url.searchParams.delete('connect');
       url.searchParams.delete('detail');
@@ -176,7 +176,7 @@ export const Communications: React.FC = () => {
   if (!user || !tenantReady) {
     return (
       <div className="flex items-center justify-center h-64 text-zinc-400 text-sm">
-        Cargando…
+        Loading…
       </div>
     );
   }
@@ -202,7 +202,7 @@ export const Communications: React.FC = () => {
                 <span className="text-zinc-300">·</span>
                 <span className="inline-flex items-center gap-1 text-zinc-400">
                   <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-                  {isSyncing ? 'Sincronizando…' : `Sync ${formatRelative(lastSyncedAt)}`}
+                  {isSyncing ? 'Syncing…' : `Sync ${formatRelative(lastSyncedAt)}`}
                 </span>
               </>
             )}
@@ -343,7 +343,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
           {/* Status / platform filter pills */}
           <div className="p-3 flex flex-wrap gap-1.5">
             {([
-              { id: 'pending' as const, label: 'Pendientes', count: messages.filter(m => m.status === 'pending').length },
+              { id: 'pending' as const, label: 'Pending', count: messages.filter(m => m.status === 'pending').length },
               { id: 'all' as const, label: 'Todo', count: messages.length },
               { id: 'high' as const, label: 'Urgente', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
               { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
@@ -375,7 +375,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
                     : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
                 }`}
               >
-                Todos
+                All
               </button>
               {clientsWithMessages.map(c => (
                 <button
@@ -409,11 +409,11 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-zinc-50 dark:divide-zinc-800/40">
           {loading && messages.length === 0 && (
-            <div className="p-8 text-center text-xs text-zinc-400">Cargando mensajes…</div>
+            <div className="p-8 text-center text-xs text-zinc-400">Loading messages…</div>
           )}
           {!loading && filtered.length === 0 && (
             <div className="p-12 text-center text-xs text-zinc-400">
-              No hay mensajes con este filtro.
+              No messages match this filter.
             </div>
           )}
           {filtered.map(msg => (
@@ -825,7 +825,7 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
                 )}
                 {cls.suggested_task && cls.should_create_task && (
                   <div className="mt-2 p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Sugerencia de tarea</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Suggested task</div>
                     <div className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100">{cls.suggested_task.title}</div>
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{cls.suggested_task.description}</div>
                     {cls.suggested_task.due_date && (
@@ -836,7 +836,7 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
                       disabled={msg.status === 'task_created'}
                       className="mt-2 w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40"
                     >
-                      {msg.status === 'task_created' ? '✓ Tarea creada' : 'Crear tarea'}
+                      {msg.status === 'task_created' ? '✓ Task created' : 'Create task'}
                     </button>
                   </div>
                 )}
@@ -1096,7 +1096,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
   };
 
   const handleDisconnect = async (tokenId: string) => {
-    if (!confirm('¿Desconectar esta integración? No vas a recibir nuevos mensajes de esta cuenta.')) return;
+    if (!confirm('Disconnect this integration? You will stop receiving new messages from this account.')) return;
     try {
       await supabase.from('integration_tokens').delete().eq('id', tokenId);
       onTokensChange();
@@ -1130,7 +1130,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
     try {
       const r = await registerGmailWatch(tenantId);
       const detail = r.errors.length ? `\n⚠ ${r.errors.length} errores:\n${r.errors.join('\n')}` : '';
-      alert(`✓ ${r.watched} Gmail account(s) ahora reciben push notifications.${detail}\n\nLas suscripciones expiran en 7 días — refrescá entonces.`);
+      alert(`✓ ${r.watched} Gmail account(s) now receive push notifications.${detail}\n\nSubscriptions expire in 7 days — refresh then.`);
       onTokensChange();
     } catch (err) {
       setError((err as Error).message);
@@ -1156,7 +1156,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
             </div>
             <div>
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Gmail</h3>
-              <p className="text-[11px] text-zinc-400">{gmailTokens.length} {gmailTokens.length === 1 ? 'cuenta conectada' : 'cuentas conectadas'}</p>
+              <p className="text-[11px] text-zinc-400">{gmailTokens.length} {gmailTokens.length === 1 ? 'account connected' : 'accounts connected'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1166,7 +1166,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
                   onClick={handleRegisterGmailWatch}
                   disabled={busy}
                   className="px-3 py-1.5 text-[11px] font-medium border border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-500/10 rounded-md hover:bg-amber-100 dark:hover:bg-amber-500/15 disabled:opacity-40 inline-flex items-center gap-1.5"
-                  title="Activa push notifications via Pub/Sub. Requiere setup en Google Cloud (ver WEBHOOKS.md). Caduca cada 7 días."
+                  title="Enables push notifications via Pub/Sub. Requires setup in Google Cloud (see WEBHOOKS.md). Expires every 7 days."
                 >
                   <Icons.Zap size={11} /> Enable push
                 </button>
@@ -1184,14 +1184,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
               disabled={busy}
               className="px-3 py-1.5 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
             >
-              <Icons.Plus size={11} /> Conectar Gmail
+              <Icons.Plus size={11} /> Connect Gmail
             </button>
           </div>
         </div>
         <div className="divide-y divide-zinc-50 dark:divide-zinc-800/40">
           {gmailTokens.length === 0 ? (
             <div className="p-6 text-center text-xs text-zinc-400">
-              No hay cuentas de Gmail conectadas. Conectá una para empezar a recibir mensajes.
+              No Gmail accounts connected. Connect one to start receiving messages.
             </div>
           ) : (
             gmailTokens.map(t => (
@@ -1199,7 +1199,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
                 <div>
                   <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{t.gmail_email}</div>
                   <div className="text-[11px] text-zinc-400 mt-0.5">
-                    Conectado {timeAgo(t.connected_at)}
+                    Connected {timeAgo(t.connected_at)}
                     {t.last_sync_at && ` · Última sync ${timeAgo(t.last_sync_at)}`}
                   </div>
                 </div>
@@ -1207,7 +1207,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
                   onClick={() => handleDisconnect(t.id)}
                   className="text-[11px] text-zinc-400 hover:text-rose-500 px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded"
                 >
-                  Desconectar
+                  Disconnect
                 </button>
               </div>
             ))
@@ -1232,13 +1232,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
             disabled={busy}
             className="px-3 py-1.5 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
           >
-            <Icons.Plus size={11} /> Conectar Slack
+            <Icons.Plus size={11} /> Connect Slack
           </button>
         </div>
         <div className="divide-y divide-zinc-50 dark:divide-zinc-800/40">
           {slackTokens.length === 0 ? (
             <div className="p-6 text-center text-xs text-zinc-400">
-              No hay workspaces de Slack conectados.
+              No Slack workspaces connected.
             </div>
           ) : (
             slackTokens.map(t => (
@@ -1347,8 +1347,8 @@ const SlackWorkspaceRow: React.FC<{
         <div>
           <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">{token.slack_team_name || 'Slack workspace'}</div>
           <div className="text-[11px] text-zinc-400 mt-0.5">
-            {channels.length} {channels.length === 1 ? 'canal monitoreado' : 'canales monitoreados'}
-            {token.connected_at && ` · Conectado ${timeAgo(token.connected_at)}`}
+            {channels.length} {channels.length === 1 ? 'monitored channel' : 'monitored channels'}
+            {token.connected_at && ` · Connected ${timeAgo(token.connected_at)}`}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1356,14 +1356,14 @@ const SlackWorkspaceRow: React.FC<{
             onClick={() => setExpanded(v => !v)}
             className="text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-1 inline-flex items-center gap-1"
           >
-            {expanded ? 'Ocultar' : 'Configurar canales'}
+            {expanded ? 'Hide' : 'Configure channels'}
             <Icons.ChevronDown size={11} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
           </button>
           <button
             onClick={onDisconnect}
             className="text-[11px] text-zinc-400 hover:text-rose-500 px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded"
           >
-            Desconectar
+            Disconnect
           </button>
         </div>
       </div>
@@ -1382,21 +1382,21 @@ const SlackWorkspaceRow: React.FC<{
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] text-zinc-500">
               {loading ? (
-                'Cargando canales…'
+                'Loading channels…'
               ) : available ? (
                 <>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300">{available.length}</span>
-                  {' '}canales disponibles · <span className="font-medium text-violet-600 dark:text-violet-400">{channels.length}</span> monitoreados
+                  {' '}available channels · <span className="font-medium text-violet-600 dark:text-violet-400">{channels.length}</span> monitored
                 </>
               ) : '—'}
             </div>
             <button
               onClick={() => loadAvailable()}
               disabled={loading}
-              title="Refrescar lista desde Slack"
+              title="Refresh list from Slack"
               className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-0.5 rounded disabled:opacity-50"
             >
-              <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refrescar
+              <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
           </div>
 
@@ -1409,21 +1409,21 @@ const SlackWorkspaceRow: React.FC<{
             <div className="text-[10.5px] text-zinc-600 dark:text-zinc-300 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-3 py-2.5 space-y-3">
               <div className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                 <Icons.Bell size={11} />
-                Para sumar el bot a un canal
+                Add the bot to a channel
               </div>
 
               {/* PATH A: canonical Slack UI flow — works for public + private */}
               <div className="space-y-1">
                 <div className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-                  Recomendado · desde Slack
+                  Recommended · from Slack
                 </div>
                 <ol className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400 marker:text-amber-600">
-                  <li>Abrí el canal en Slack y clickeá el nombre del canal arriba (header).</li>
-                  <li>Pestaña <span className="font-semibold">Integraciones</span> → <span className="font-semibold">Agregar una app</span>.</li>
+                  <li>Open the channel in Slack and click the channel name at the top (header).</li>
+                  <li><span className="font-semibold">Integrations</span> tab → <span className="font-semibold">Add an app</span>.</li>
                   <li>
-                    Buscá <span className="font-mono px-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20">{bot?.display_name || token.slack_team_name || 'tu app'}</span> y tocá <span className="font-semibold">Agregar</span>.
+                    Search for <span className="font-mono px-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20">{bot?.display_name || token.slack_team_name || 'your app'}</span> and click <span className="font-semibold">Add</span>.
                   </li>
-                  <li>Volvé acá y tocá <span className="font-semibold">Refrescar</span>.</li>
+                  <li>Come back here and click <span className="font-semibold">Refresh</span>.</li>
                 </ol>
               </div>
 
@@ -1431,11 +1431,11 @@ const SlackWorkspaceRow: React.FC<{
               <details className="group/inv">
                 <summary className="cursor-pointer text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 inline-flex items-center gap-1">
                   <Icons.ChevronDown size={10} className="group-open/inv:rotate-180 transition-transform" />
-                  Alternativa con /invite (a veces falla)
+                  Alternative with /invite (sometimes fails)
                 </summary>
                 <div className="mt-2 space-y-1.5">
                   <p className="text-[10.5px] text-zinc-500">
-                    Pegá este comando dentro del canal. Si Slack contesta <span className="italic">"se requiere un nombre de miembro válido"</span>, usá el método de arriba.
+                    Paste this command inside the channel. If Slack says <span className="italic">"a valid member name is required"</span>, use the method above.
                   </p>
                   <div className="flex items-center gap-2">
                     <code className="font-mono text-[11px] px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20 text-zinc-800 dark:text-zinc-200 select-all flex-1">
@@ -1448,15 +1448,15 @@ const SlackWorkspaceRow: React.FC<{
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
                           : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'
                       }`}
-                      title="Copiar al portapapeles"
+                      title="Copy to clipboard"
                     >
-                      {copied ? <><Icons.Check size={10} /> Copiado</> : <><Icons.Copy size={10} /> Copiar</>}
+                      {copied ? <><Icons.Check size={10} /> Copied</> : <><Icons.Copy size={10} /> Copy</>}
                     </button>
                   </div>
                   {bot?.display_name && bot?.handle && bot.display_name !== bot.handle && (
                     <p className="text-[10px] text-zinc-400 italic">
-                      Tip: cuando empieces a tipear <span className="font-mono">@</span> en Slack, debería autocompletar como{' '}
-                      <span className="font-semibold not-italic text-zinc-600 dark:text-zinc-300">{bot.display_name}</span>. Si no aparece, ya no está en la sugerencia y conviene usar el método recomendado.
+                      Tip: when you start typing <span className="font-mono">@</span> in Slack, it should autocomplete as{' '}
+                      <span className="font-semibold not-italic text-zinc-600 dark:text-zinc-300">{bot.display_name}</span>. If it doesn't appear, autocomplete failed and you should use the recommended method.
                     </p>
                   )}
                 </div>
@@ -1464,14 +1464,14 @@ const SlackWorkspaceRow: React.FC<{
 
               {/* Footer reminder */}
               <p className="text-[10px] text-zinc-400 pt-1 border-t border-amber-200/40 dark:border-amber-500/10">
-                Para canales privados (🔒) tenés que estar adentro vos también — solo un miembro puede agregar la app.
+                For private channels (🔒) you must be a member yourself — only members can add the app.
               </p>
             </div>
           )}
 
           {!loading && available && available.length === 0 && (
             <div className="text-[11px] text-zinc-400 italic">
-              El bot no tiene acceso a ningún canal todavía. Invitalo a los canales en Slack y tocá Refrescar.
+              The bot has no channel access yet. Invite it to channels in Slack and click Refresh.
             </div>
           )}
 
@@ -1482,7 +1482,7 @@ const SlackWorkspaceRow: React.FC<{
           {!loading && available && channels.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                Canales activos · {channels.length}
+                Active channels · {channels.length}
               </div>
               <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/60 overflow-hidden">
                 {channels.map(monitored => {
@@ -1513,7 +1513,7 @@ const SlackWorkspaceRow: React.FC<{
           {!loading && available && available.filter(a => !monitoredIds.has(a.id)).length > 0 && (
             <div className="space-y-1.5">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                Otros canales disponibles
+                Other available channels
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[260px] overflow-y-auto pr-1">
                 {available.filter(a => !monitoredIds.has(a.id)).map(ch => (
@@ -1521,7 +1521,7 @@ const SlackWorkspaceRow: React.FC<{
                     key={ch.id}
                     onClick={() => handleToggleChannel(ch)}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300"
-                    title={ch.is_member === false ? 'El bot todavía no es miembro de este canal' : undefined}
+                    title={ch.is_member === false ? "The bot isn't a member of this channel yet" : undefined}
                   >
                     <span className="w-3 h-3 rounded-sm border border-zinc-300 dark:border-zinc-600" />
                     <span className="truncate flex-1">
@@ -1643,14 +1643,14 @@ const ChannelLinkRow: React.FC<{
             onChange={handleSelect}
             options={options}
             placeholder="Buscar proyecto…"
-            emptyOption={{ value: '', label: '— sin proyecto vinculado —' }}
+            emptyOption={{ value: '', label: '— no project linked —' }}
             triggerClassName={triggerClass}
             popoverWidth={320}
           />
         </div>
         <button
           onClick={onUnmonitor}
-          title="Dejar de monitorear este canal"
+          title="Stop monitoring this channel"
           className="shrink-0 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
         >
           <Icons.X size={11} />
@@ -1662,7 +1662,7 @@ const ChannelLinkRow: React.FC<{
           nothing to notify about. */}
       {monitored.project_id && (
         <div className="flex items-center gap-1.5 pl-[60px] flex-wrap">
-          <span className="text-[9px] uppercase tracking-wider text-zinc-400 shrink-0">Notifica:</span>
+          <span className="text-[9px] uppercase tracking-wider text-zinc-400 shrink-0">Notifies:</span>
           <EventToggleChip
             label="🆕 task new"
             enabled={enabledEvents.includes('task_created')}
@@ -1674,7 +1674,7 @@ const ChannelLinkRow: React.FC<{
             onToggle={() => toggleEvent('task_completed')}
           />
           <EventToggleChip
-            label="💰 cuota"
+            label="💰 paid"
             enabled={enabledEvents.includes('milestone_paid')}
             onToggle={() => toggleEvent('milestone_paid')}
           />
@@ -1731,7 +1731,7 @@ const ForwardToSlackButton: React.FC<{ msg: CommunicationMessage }> = ({ msg }) 
       setDone(true);
       setTimeout(() => setDone(false), 2500);
     } catch (e: any) {
-      setErr(e?.message || 'No se pudo enviar');
+      setErr(e?.message || "Couldn't send");
       setTimeout(() => setErr(null), 4000);
     } finally {
       setPosting(false);
@@ -1746,8 +1746,8 @@ const ForwardToSlackButton: React.FC<{ msg: CommunicationMessage }> = ({ msg }) 
         err
           ? `Error: ${err}`
           : done
-            ? 'Enviado ✓'
-            : 'Reenviar este mensaje al canal de notificaciones de Slack'
+            ? 'Sent ✓'
+            : "Forward this message to the Slack notification channel"
       }
       className={`p-1.5 rounded-md transition-colors ${
         done
@@ -1791,7 +1791,7 @@ const NotifyChannelPicker: React.FC<{
       await setSlackNotifyChannel(tokenId, channelId);
       onChange();
     } catch (e: any) {
-      setErr(e?.message || 'Error guardando canal');
+      setErr(e?.message || 'Error saving channel');
     } finally {
       setSaving(false);
     }
@@ -1802,7 +1802,7 @@ const NotifyChannelPicker: React.FC<{
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300 flex items-center gap-1.5">
           <Icons.Bell size={11} />
-          Canal de notificaciones
+          Notification channel
         </div>
         {current && (
           <button
@@ -1810,18 +1810,18 @@ const NotifyChannelPicker: React.FC<{
             disabled={saving}
             className="text-[10px] text-zinc-500 hover:text-rose-500 disabled:opacity-40"
           >
-            Quitar
+            Remove
           </button>
         )}
       </div>
       <div className="text-[10.5px] text-zinc-600 dark:text-zinc-400 mb-2">
-        Cuando llegue un lead nuevo o aprueben una propuesta, el bot va a postear acá.
+        When a new lead arrives or a proposal is approved, the bot will post here.
       </div>
       {available === null ? (
-        <div className="text-[11px] text-zinc-400 italic">Cargá los canales para elegir uno…</div>
+        <div className="text-[11px] text-zinc-400 italic">Load the channels to pick one…</div>
       ) : memberChannels.length === 0 ? (
         <div className="text-[11px] text-zinc-500 italic">
-          El bot no es miembro de ningún canal todavía. Invitalo a uno y refrescá.
+          The bot isn't a member of any channel yet. Invite it to one and refresh.
         </div>
       ) : (
         <select
@@ -1830,7 +1830,7 @@ const NotifyChannelPicker: React.FC<{
           disabled={saving}
           className="w-full text-[12px] px-2 py-1.5 rounded-md border border-violet-200 dark:border-violet-700/40 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-50"
         >
-          <option value="">— Sin canal por defecto —</option>
+          <option value="">— No default channel —</option>
           {memberChannels.map(c => (
             <option key={c.id} value={c.id}>
               {c.is_private ? '🔒' : '#'}{c.name}
@@ -1849,7 +1849,7 @@ const NotifyChannelPicker: React.FC<{
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return 'recién';
+  if (min < 1) return 'just now';
   if (min < 60) return `${min}m`;
   const hr = Math.floor(min / 60);
   if (hr < 24) return `${hr}h`;

@@ -1734,7 +1734,7 @@ export const Docs: React.FC = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {openTasks.length === 0 && (
-                <p className="text-xs text-zinc-400 italic text-center py-6">No hay tareas abiertas.</p>
+                <p className="text-xs text-zinc-400 italic text-center py-6">No open tasks.</p>
               )}
               {openTasks.map((task: any) => {
                 const isDragSource = draggedTaskId === task.id;

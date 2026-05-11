@@ -586,7 +586,7 @@ export const ProposalsPanel: React.FC = () => {
             <button
               onClick={() => setShowComposer(true)}
               className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1"
-              title="Pegá lo que pidió el cliente y la IA arma todo"
+              title="Paste what the client asked for and the AI builds it"
             >
               <Icons.Sparkles size={11} />
               New
@@ -979,7 +979,7 @@ export const ProposalsPanel: React.FC = () => {
                   <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-1.5">
                     <Icons.Message size={11} className="text-zinc-400" />
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
-                      Comentarios internos
+                      Internal comments
                     </span>
                     {comments.length > 0 && (
                       <span className="text-[10px] tabular-nums text-zinc-400">· {comments.length}</span>
@@ -999,7 +999,7 @@ export const ProposalsPanel: React.FC = () => {
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && commentText.trim()) handleComment(); }}
-                      placeholder="Nota para tu equipo (no la ve el cliente)"
+                      placeholder="Note for your team (client doesn't see this)"
                       className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs"
                     />
                     <button
@@ -1007,7 +1007,7 @@ export const ProposalsPanel: React.FC = () => {
                       disabled={!commentText.trim()}
                       className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs disabled:opacity-40"
                     >
-                      Comentar
+                      Comment
                     </button>
                   </div>
                 </div>

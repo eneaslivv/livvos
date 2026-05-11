@@ -127,7 +127,7 @@ export const InlineTaskDetailHost: React.FC<Props> = ({ taskId, onClose }) => {
   }, [selectedTask, editingTask, updateTask]);
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('¿Borrar esta tarea?')) return;
+    if (!confirm('Delete this task?')) return;
     await deleteTask(id);
     onClose();
   }, [deleteTask, onClose]);

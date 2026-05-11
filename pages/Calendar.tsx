@@ -1824,7 +1824,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
               {filtered.length === 0 ? (
                 <div className="p-8 text-center text-xs text-zinc-400">
-                  {totalAll === 0 ? 'No hay tareas todavía.' : 'Ninguna tarea coincide con los filtros actuales.'}
+                  {totalAll === 0 ? 'No tasks yet.' : 'No tasks match the current filters.'}
                 </div>
               ) : (
                 Array.from(groups.entries()).map(([key, items], gIdx) => (

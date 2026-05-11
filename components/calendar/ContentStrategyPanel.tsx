@@ -188,7 +188,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
               <span className="text-[10px] text-zinc-400">·</span>
             )}
             <span className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200 truncate">
-              {strategy?.summary || 'Cargá tu estrategia, objetivos y referencias para que la IA proponga ideas.'}
+              {strategy?.summary || 'Load your strategy, goals, and references so the AI can propose ideas.'}
             </span>
           </div>
           {!expanded && activeObjectives.length > 0 && (
@@ -314,7 +314,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
                 value={newDocUrl}
                 onChange={(e) => setNewDocUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddLink(); }}
-                placeholder="Pegá un link…"
+                placeholder="Paste a link…"
                 className="flex-1 px-2.5 py-1.5 text-[11.5px] bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-300/30 text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-400 min-w-0"
               />
               <button
@@ -362,7 +362,7 @@ export const ContentStrategyPanel: React.FC<Props> = ({ weekStart, onPickSuggest
               <p className="text-[11px] text-zinc-400 italic">
                 {strategy?.pinned_notes || (strategy?.documents?.length || 0) > 0
                   ? 'Click "Generar" para que la IA proponga posts a partir de tu estrategia.'
-                  : 'Cargá la estrategia o un documento para que la IA tenga material.'}
+                  : 'Load the strategy or a document so the AI has material to work with.'}
               </p>
             )}
 

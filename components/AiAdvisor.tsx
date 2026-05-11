@@ -139,7 +139,7 @@ const ActionCard: React.FC<{
     update_project: { icon: 'Edit', label: 'Modificar proyecto', color: 'bg-violet-500/10 text-violet-600 border-violet-500/20' },
     create_tasks_batch: { icon: 'List', label: 'Crear varias tareas', color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
     plan_week: { icon: 'Calendar', label: 'Planificar semana', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
-    suggest_delegate: { icon: 'Users', label: 'Sugerencia de delegación', color: 'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20' },
+    suggest_delegate: { icon: 'Users', label: 'Delegation suggestion', color: 'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20' },
     create_expense: { icon: 'TrendingUp', label: 'Cargar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
     update_expense: { icon: 'Edit', label: 'Modificar gasto', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
     create_income: { icon: 'TrendingUp', label: 'Cargar ingreso', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
@@ -147,7 +147,7 @@ const ActionCard: React.FC<{
     create_budget: { icon: 'DollarSign', label: 'Crear budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
     update_budget: { icon: 'DollarSign', label: 'Modificar budget', color: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
     mark_expense_paid: { icon: 'Check', label: 'Marcar gasto pagado', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
-    mark_installment_paid: { icon: 'Check', label: 'Marcar cuota cobrada', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+    mark_installment_paid: { icon: 'Check', label: 'Mark installment paid', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
   };
   const meta = kindLabel[action.kind] || { icon: 'Sparkles' as const, label: action.kind, color: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20' };
   const Icon = (Icons as any)[meta.icon] || Icons.Sparkles;
@@ -202,7 +202,7 @@ const ActionCard: React.FC<{
             </ul>
           )}
           {p.suggested_tasks && p.suggested_tasks.length > 0 && (
-            <div className="mt-1">{p.suggested_tasks.length} tareas propuestas</div>
+            <div className="mt-1">{p.suggested_tasks.length} proposed tasks</div>
           )}
         </div>
       );
@@ -305,7 +305,7 @@ const ActionCard: React.FC<{
       <div className={`mt-2 p-2.5 rounded-lg border bg-emerald-50/50 dark:bg-emerald-500/5 border-emerald-300/50 dark:border-emerald-500/20`}>
         <div className="flex items-center gap-2">
           <Icons.CheckCircle size={12} className="text-emerald-600 dark:text-emerald-400" />
-          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Aplicado · {meta.label}</span>
+          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Applied · {meta.label}</span>
         </div>
         <div className="text-[10px] text-emerald-600/80 dark:text-emerald-500/80 mt-0.5 ml-5 truncate">{action.summary}</div>
       </div>
@@ -316,7 +316,7 @@ const ActionCard: React.FC<{
       <div className="mt-2 p-2 rounded-lg border bg-zinc-50/50 dark:bg-zinc-800/30 border-zinc-200 dark:border-zinc-700/40">
         <div className="flex items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
           <Icons.X size={11} />
-          Rechazado · {meta.label}
+          Rejected · {meta.label}
         </div>
       </div>
     );
@@ -328,7 +328,7 @@ const ActionCard: React.FC<{
           <Icons.AlertCircle size={12} className="text-rose-500" />
           <span className="text-[11px] font-medium text-rose-700 dark:text-rose-400">Error al aplicar</span>
         </div>
-        <div className="text-[10px] text-rose-600/80 dark:text-rose-500/80 mt-0.5">{action.errorMsg || 'Reintentá o cargalo manual.'}</div>
+        <div className="text-[10px] text-rose-600/80 dark:text-rose-500/80 mt-0.5">{action.errorMsg || 'Retry, or log it manually.'}</div>
       </div>
     );
   }
@@ -348,13 +348,13 @@ const ActionCard: React.FC<{
           className="flex-1 px-2.5 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
         >
           <Icons.Check size={11} />
-          Aprobar y aplicar
+          Approve & apply
         </button>
         <button
           onClick={onReject}
           className="px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          Rechazar
+          Reject
         </button>
       </div>
     </div>
@@ -774,7 +774,7 @@ export const AiAdvisor: React.FC = () => {
       if (err?.needsReLogin) setSessionExpired(true);
       const fallback = err?.needsReLogin
         ? 'Tu sesión expiró. Refrescá la página para iniciar sesión de nuevo.'
-        : (err?.message || 'No pude procesar la pregunta. Probá de nuevo.');
+        : (err?.message || "Couldn't process the question. Try again.");
       setMessages(prev => [...prev, { role: 'assistant', content: fallback, ts: Date.now() }]);
     } finally {
       setSending(false);
@@ -1022,7 +1022,7 @@ export const AiAdvisor: React.FC = () => {
       if (err?.needsReLogin) setSessionExpired(true);
       const fallback = err?.needsReLogin
         ? 'Tu sesión expiró. Refrescá la página para iniciar sesión de nuevo.'
-        : (err?.message || 'No pude generar el análisis. Probá de nuevo.');
+        : (err?.message || "Couldn't generate the analysis. Try again.");
       setMessages(prev => [...prev, { role: 'assistant', content: fallback }]);
     } finally {
       setInsightsLoading(false);
@@ -1157,7 +1157,7 @@ export const AiAdvisor: React.FC = () => {
                         <Icons.Sparkles size={12} className="text-white" />
                       </div>
                       <div className="flex-1 px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-zinc-100 dark:bg-zinc-800 text-[12px] leading-[1.55] text-zinc-700 dark:text-zinc-200">
-                        Hola, soy tu asesor IA. Tengo contexto de tus proyectos, finanzas y equipo. ¿Sobre qué querés conversar?
+                        Hi, I'm your AI advisor. I have context on your projects, finances, and team. What would you like to talk about?
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 pt-1">

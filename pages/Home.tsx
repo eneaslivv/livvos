@@ -123,7 +123,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         try { await supabase.from('projects').update({ pinned_at: null }).eq('id', id); } catch (err) { errorLogger.error('unpin project', err); }
     }, []);
     const deleteProjectFromHome = useCallback(async (id: string, title: string) => {
-        if (!window.confirm(`¿Eliminar el proyecto "${title}"? Esta acción no se puede deshacer.`)) return;
+        if (!window.confirm(`Delete project "${title}"? This action can't be undone.`)) return;
         try { await supabase.from('projects').delete().eq('id', id); } catch (err) { errorLogger.error('delete project', err); }
     }, []);
     const [showPinPicker, setShowPinPicker] = useState(false);
@@ -567,7 +567,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 <div className="rounded-2xl border border-fuchsia-200 dark:border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-50 via-white to-indigo-50 dark:from-fuchsia-950/20 dark:via-zinc-900 dark:to-indigo-950/20 p-5 sm:p-6 relative">
                     <button onClick={dismissWelcome} type="button"
                         className="absolute top-3 right-3 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-white/60 dark:hover:bg-zinc-800/60 transition-colors"
-                        title="Cerrar bienvenida">
+                        title="Dismiss welcome">
                         <Icons.Close size={14} />
                     </button>
                     <div className="flex items-start gap-3 mb-4">
@@ -576,10 +576,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         </div>
                         <div>
                             <h2 className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                                ¡Bienvenido a {currentTenant?.name || 'tu workspace'}!
+                                Welcome to {currentTenant?.name || 'your workspace'}!
                             </h2>
                             <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                Este es tu propio espacio. Lo que cargues acá no es visible para otras agencias.
+                                This is your own space. What you upload here isn't visible to other agencies.
                             </p>
                         </div>
                     </div>
@@ -589,36 +589,36 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                             className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
                             <div className="flex items-center gap-2 mb-1">
                                 <Icons.Users size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
-                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">1. Cargá un cliente</span>
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">1. Add a client</span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Empezá por el CRM — desde ahí podés crear proyectos y propuestas.</p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Start from the CRM — from there you can create projects and proposals.</p>
                         </button>
                         <button onClick={() => onNavigate('projects' as PageView)}
                             className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
                             <div className="flex items-center gap-2 mb-1">
                                 <Icons.Briefcase size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
-                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">2. Creá un proyecto</span>
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">2. Create a project</span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Asignalo al cliente y trackeá milestones, tareas y tiempo.</p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Assign it to the client and track milestones, tasks, and time.</p>
                         </button>
                         <button onClick={() => onNavigate('finance' as PageView)}
                             className="text-left p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-fuchsia-300 dark:hover:border-fuchsia-600 hover:shadow-sm transition-all group">
                             <div className="flex items-center gap-2 mb-1">
                                 <Icons.DollarSign size={14} className="text-fuchsia-600 dark:text-fuchsia-300" />
-                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">3. Cargá tus finanzas</span>
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">3. Load your finances</span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Subí un Excel con la IA o cargá ingresos/gastos manualmente.</p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Upload an Excel with AI or add income/expenses manually.</p>
                         </button>
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                         <span className="flex items-center gap-1.5">
                             <Icons.Users size={11} className="text-zinc-400" />
-                            Sumá a tu equipo desde <strong className="text-zinc-700 dark:text-zinc-300">Settings → Team</strong>
+                            Invite teammates from <strong className="text-zinc-700 dark:text-zinc-300">Settings → Team</strong>
                         </span>
                         <span className="flex items-center gap-1.5">
                             <Icons.Sparkles size={11} className="text-zinc-400" />
-                            Probá el botón <strong className="text-zinc-700 dark:text-zinc-300">Add with AI</strong> en Finance
+                            Try the <strong className="text-zinc-700 dark:text-zinc-300">Add with AI</strong> button in Finance
                         </span>
                     </div>
                 </div>

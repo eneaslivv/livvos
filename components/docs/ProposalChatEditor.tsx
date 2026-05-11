@@ -216,8 +216,8 @@ export const ProposalChatEditor: React.FC<Props> = ({
       }
 
       const reply = userInstruction
-        ? '✓ Aplicado. Mirá el preview de arriba.'
-        : (result?.summary || '✓ Listo — propuesta generada.');
+        ? '✓ Applied. Check the preview above.'
+        : (result?.summary || '✓ Done — proposal generated.');
       setChatLog(prev => [...prev, {
         id: `${Date.now()}-a`,
         role: 'assistant',
@@ -250,7 +250,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
           <div className="flex items-center gap-2 min-w-0">
             <Icons.Docs size={12} className="text-zinc-400 shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 shrink-0">
-              Brief del cliente
+              Client brief
             </span>
             {!briefExpanded && proposal.brief_text && (
               <span className="text-[12px] text-zinc-500 dark:text-zinc-400 truncate">
@@ -268,7 +268,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
             <textarea
               value={briefDraft}
               onChange={(e) => setBriefDraft(e.target.value)}
-              placeholder="Pegá lo que pidió el cliente — email, audio transcrito, nota suelta. Cuanto más concreto, mejor cotiza la IA."
+              placeholder="Paste what the client asked for — email, transcribed audio, loose note. The more specific, the better the AI quotes."
               rows={6}
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px] leading-relaxed text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
             />
@@ -285,7 +285,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
                 onClick={saveBrief}
                 className="text-[11px] font-medium px-3 py-1.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90"
               >
-                Guardar brief
+                Save brief
               </button>
             </div>
           </div>
@@ -297,18 +297,18 @@ export const ProposalChatEditor: React.FC<Props> = ({
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
           <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between gap-2 flex-wrap">
             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 inline-flex items-center gap-1.5">
-              <Icons.Eye size={11} /> Vista previa del documento
+              <Icons.Eye size={11} /> Document preview
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowTaskGen(true)}
                 disabled={busy}
-                title="Convertí esta propuesta en fases + tareas + subtareas dentro de un proyecto"
+                title="Turn this proposal into phases + tasks + subtasks inside a project"
                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-amber-100/70 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 disabled:opacity-40"
               >
-                <Icons.Layers size={11} /> Generar tareas del proyecto
+                <Icons.Layers size={11} /> Generate project tasks
               </button>
-              <span className="text-[10px] text-zinc-400 hidden sm:inline">así lo va a ver el cliente</span>
+              <span className="text-[10px] text-zinc-400 hidden sm:inline">how the client will see it</span>
             </div>
           </div>
           <div className="max-h-[60vh] overflow-y-auto">
@@ -322,12 +322,12 @@ export const ProposalChatEditor: React.FC<Props> = ({
           </div>
           <div>
             <p className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100">
-              {proposal.brief_text ? 'Listo para generar' : 'Pegá el brief del cliente arriba'}
+              {proposal.brief_text ? 'Ready to generate' : 'Paste the client brief above'}
             </p>
             <p className="text-[11px] text-zinc-500 mt-0.5">
               {proposal.brief_text
-                ? 'La IA va a usar tu service catalog y propuestas anteriores ganadas para cotizar.'
-                : 'Después de pegarlo, podés pedirle a la IA que arme la propuesta o iterar via chat.'}
+                ? 'The AI will use your service catalog and recent wins to quote.'
+                : 'After pasting it, you can ask the AI to build the proposal or iterate via chat.'}
             </p>
           </div>
           {proposal.brief_text && (
@@ -337,9 +337,9 @@ export const ProposalChatEditor: React.FC<Props> = ({
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold hover:opacity-90 disabled:opacity-40"
             >
               {busy ? (
-                <><Icons.RefreshCw size={11} className="animate-spin" /> Generando…</>
+                <><Icons.RefreshCw size={11} className="animate-spin" /> Generating…</>
               ) : (
-                <><Icons.Sparkles size={11} /> Generar con IA</>
+                <><Icons.Sparkles size={11} /> Generate with AI</>
               )}
             </button>
           )}
@@ -382,11 +382,11 @@ export const ProposalChatEditor: React.FC<Props> = ({
           {chatLog.length === 0 && hasContent && (
             <div className="flex flex-wrap gap-1.5">
               {[
-                'Hacela más formal',
-                'Bajá el tier Simple en 20%',
-                'Agregá una opción CMS',
-                'Sumá un addon de mantenimiento mensual',
-                'Más enfocada en performance',
+                'Make it more formal',
+                'Lower the Simple tier by 20%',
+                'Add a CMS option',
+                'Add a monthly maintenance addon',
+                'More performance-focused',
               ].map(suggest => (
                 <button
                   key={suggest}
@@ -414,8 +414,8 @@ export const ProposalChatEditor: React.FC<Props> = ({
                 }
               }}
               placeholder={hasContent
-                ? "Pedile un cambio: 'subí el precio del Premium', 'añadí una sección de soporte', 'más casual'…"
-                : "Generá un brief arriba y dale Generar."}
+                ? "Ask for a change: 'raise the Premium price', 'add a support section', 'more casual'…"
+                : "Paste a brief above and hit Generate."}
               rows={2}
               disabled={busy || !proposal.brief_text}
               className="flex-1 min-h-[44px] px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[12.5px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-50 resize-none"
@@ -437,7 +437,7 @@ export const ProposalChatEditor: React.FC<Props> = ({
             <p className="text-[11px] text-rose-600 dark:text-rose-400">{error}</p>
           )}
           <p className="text-[10px] text-zinc-400">
-            ⌘+Enter para enviar · La IA usa tu service catalog y wins recientes para cotizar.
+            ⌘+Enter to send · The AI uses your service catalog and recent wins to quote.
           </p>
         </div>
       </div>

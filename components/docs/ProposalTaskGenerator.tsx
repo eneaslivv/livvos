@@ -156,7 +156,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'AI generation failed');
-      if (!json.result?.phases?.length) throw new Error('La IA no devolvió fases — probá agregar más detalle al brief.');
+      if (!json.result?.phases?.length) throw new Error("The AI didn't return phases — try adding more detail to the brief.");
       setPreview(json.result as AiPreview);
 
       // Initialize keep map: everything ON by default.
@@ -213,7 +213,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
       let targetProject: Project | undefined;
       if (mode === 'new') {
         if (!newProjectTitle.trim()) {
-          setError('Ponele un título al proyecto.');
+          setError('Give the project a title.');
           setPhaseState('preview');
           return;
         }
@@ -230,7 +230,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
       } else {
         targetProject = projects.find(p => p.id === targetProjectId);
       }
-      if (!targetProjectId) throw new Error('No se pudo resolver el proyecto');
+      if (!targetProjectId) throw new Error("Couldn't resolve the project");
 
       // 2. Merge phases into the project's tasksGroups (don't duplicate).
       const existingGroups: any[] = (targetProject as any)?.tasksGroups || [];
@@ -315,7 +315,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
       onComplete?.(targetProjectId, { phases: totalPhases, tasks: totalTasks, subtasks: totalSubtasks });
     } catch (err: any) {
       errorLogger.error('proposal task generator', err);
-      setError(err?.message || 'Error creando las tareas');
+      setError(err?.message || 'Error creating tasks');
       setPhaseState('preview');
     }
   };
@@ -343,8 +343,8 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
       isOpen={isOpen}
       onClose={onClose}
       width="3xl"
-      title="Generar tareas del proyecto"
-      subtitle="La IA convierte esta propuesta en un plan de entrega con fases, tareas y subtareas."
+      title="Generate project tasks"
+      subtitle="The AI turns this proposal into a delivery plan with phases, tasks, and subtasks."
     >
       <div className="p-6 space-y-5">
         {/* Project picker */}
@@ -352,7 +352,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
           <>
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                ¿En qué proyecto cargo las tareas?
+                Which project should the tasks go into?
               </div>
               <div className="flex gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-md text-[11px]">
                 <button
@@ -361,7 +361,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                     ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
-                  Proyecto existente ({projects.length})
+                  Existing project ({projects.length})
                 </button>
                 <button
                   onClick={() => setMode('new')}
@@ -369,7 +369,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                     ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
-                  + Crear nuevo
+                  + Create new
                 </button>
               </div>
 
@@ -379,15 +379,15 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                   onChange={(e) => setProjectId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px] text-zinc-900 dark:text-zinc-100"
                 >
-                  <option value="">— elegí un proyecto —</option>
+                  <option value="">— pick a project —</option>
                   {sameClientProjects.length > 0 && (
-                    <optgroup label="Del mismo cliente">
+                    <optgroup label="Same client">
                       {sameClientProjects.map(p => (
                         <option key={p.id} value={p.id}>{p.title}</option>
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Todos">
+                  <optgroup label="All">
                     {projects.filter(p => !sameClientProjects.includes(p)).map(p => (
                       <option key={p.id} value={p.id}>
                         {p.title}{(p as any).clientName ? ` · ${(p as any).clientName}` : ''}
@@ -401,7 +401,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                     type="text"
                     value={newProjectTitle}
                     onChange={(e) => setNewProjectTitle(e.target.value)}
-                    placeholder="Título del proyecto"
+                    placeholder="Project title"
                     className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px]"
                   />
                   <input
@@ -426,28 +426,28 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[13px] font-semibold hover:opacity-90 disabled:opacity-40"
             >
               <Icons.Sparkles size={14} />
-              Generar tareas con IA
+              Generate tasks with AI
             </button>
           </>
         ) : phase === 'generating' ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Icons.RefreshCw size={20} className="animate-spin text-amber-500" />
-            <p className="text-[13px] text-zinc-700 dark:text-zinc-200 font-medium">Armando el plan…</p>
+            <p className="text-[13px] text-zinc-700 dark:text-zinc-200 font-medium">Building the plan…</p>
             <p className="text-[11px] text-zinc-400 text-center max-w-xs">
-              La IA está leyendo la propuesta, el tier, los entregables y armando fases con tareas + subtareas asignadas al equipo.
+              The AI is reading the proposal, the tier, the deliverables and building phases with tasks + subtasks assigned to the team.
             </p>
           </div>
         ) : phase === 'preview' && preview ? (
           <>
             <div className="flex items-baseline justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                Plan generado · {totalCounts.p} fases · {totalCounts.t} tareas · {totalCounts.s} subtareas
+                Plan generated · {totalCounts.p} phases · {totalCounts.t} tasks · {totalCounts.s} subtasks
               </div>
               <button
                 onClick={() => setPhaseState('idle')}
                 className="text-[10px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
-                ← cambiar proyecto
+                ← change project
               </button>
             </div>
 
@@ -477,7 +477,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                         </span>
                       )}
                       <span className="text-[10px] tabular-nums text-zinc-400 ml-auto">
-                        {(ph.tasks || []).length} tareas
+                        {(ph.tasks || []).length} tasks
                       </span>
                     </div>
                     {phaseKept && (ph.tasks || []).map((tk, ti) => {
@@ -542,7 +542,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                 disabled={isWorking}
                 className="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2 py-1 inline-flex items-center gap-1"
               >
-                <Icons.RefreshCw size={11} /> Regenerar
+                <Icons.RefreshCw size={11} /> Regenerate
               </button>
               <button
                 onClick={handleAccept}
@@ -550,7 +550,7 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                 className="px-3 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
               >
                 {isWorking ? <Icons.RefreshCw size={11} className="animate-spin" /> : <Icons.Check size={11} />}
-                Crear {totalCounts.t} tareas en el proyecto
+                Create {totalCounts.t} tasks in the project
               </button>
             </div>
           </>
@@ -560,9 +560,9 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
               <Icons.Check size={20} className="text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <p className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100">¡Listo!</p>
+              <p className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100">Done!</p>
               <p className="text-[12px] text-zinc-500 mt-1">
-                Creé <strong>{counts.phases} fases</strong>, <strong>{counts.tasks} tareas</strong> y <strong>{counts.subtasks} subtareas</strong> en el proyecto.
+                Created <strong>{counts.phases} phases</strong>, <strong>{counts.tasks} tasks</strong> and <strong>{counts.subtasks} subtasks</strong> in the project.
               </p>
             </div>
             <div className="flex items-center justify-center gap-2 pt-2">
@@ -577,13 +577,13 @@ export const ProposalTaskGenerator: React.FC<Props> = ({ isOpen, onClose, propos
                 }}
                 className="px-3 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold hover:opacity-90 inline-flex items-center gap-1"
               >
-                <Icons.External size={11} /> Ver en el proyecto
+                <Icons.External size={11} /> Open in project
               </button>
               <button
                 onClick={onClose}
                 className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-[12px] text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
               >
-                Cerrar
+                Close
               </button>
             </div>
           </div>

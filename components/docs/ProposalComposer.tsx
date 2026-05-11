@@ -185,8 +185,8 @@ export const ProposalComposer: React.FC<Props> = ({
 
   // ── Submit: create row, then run AI generator inline ────────────
   const handleGenerate = async () => {
-    if (!brief.trim()) { setErrorMsg('Pegá el brief del cliente primero.'); return; }
-    if (!currentTenant?.id) { setErrorMsg('Tenant no listo.'); return; }
+    if (!brief.trim()) { setErrorMsg('Paste the client brief first.'); return; }
+    if (!currentTenant?.id) { setErrorMsg('Tenant not ready.'); return; }
     setErrorMsg(null);
     setPhase('creating');
 
@@ -299,14 +299,14 @@ export const ProposalComposer: React.FC<Props> = ({
       if (updErr) throw updErr;
 
       setPreviewSummary(result?.summary || null);
-      setPreviewContent(result?.content || '(El generador no devolvió contenido. Podés escribirlo manualmente desde el detalle.)');
+      setPreviewContent(result?.content || "(The generator didn't return content. You can write it manually from the detail view.)");
       setPreviewTotal(finalTotal);
       setPreviewCurrency('USD');
       setPhase('done');
       onCreated(created.id);
     } catch (err: any) {
       errorLogger.error('proposal create+generate', err);
-      setErrorMsg(err?.message || 'Error generando la propuesta');
+      setErrorMsg(err?.message || 'Error generating the proposal');
       setPhase('error');
     }
   };
@@ -332,7 +332,7 @@ export const ProposalComposer: React.FC<Props> = ({
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2500);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'No se pudo activar el share');
+      setErrorMsg(err?.message || "Couldn't enable sharing");
     }
   };
 
@@ -343,8 +343,8 @@ export const ProposalComposer: React.FC<Props> = ({
       isOpen={isOpen}
       onClose={onClose}
       width="3xl"
-      title="Nueva propuesta"
-      subtitle="Pegá lo que pidió el cliente y la IA arma el quote en el template."
+      title="New proposal"
+      subtitle="Paste what the client asked for and the AI builds the quote in the template."
     >
       <div className="p-6 space-y-5">
         {/* Step 1: Brief */}
@@ -355,20 +355,20 @@ export const ProposalComposer: React.FC<Props> = ({
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
-            placeholder="Pegá el brief, email, audio transcrito, o cualquier nota que tengas. Cuanto más concreto, mejor cotiza la IA."
+            placeholder="Paste the brief, email, transcribed audio, or any note you have. The more specific, the better the AI quotes."
             rows={8}
             disabled={phase === 'done' || isWorking}
             className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px] leading-relaxed text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-50"
           />
           <div className="flex items-baseline justify-between mt-1">
             <p className="text-[10px] text-zinc-400">
-              {brief.length} chars · idioma detectado <span className="font-mono">{language}</span> · tipo <span className="font-mono">{projectType}</span>
+              {brief.length} chars · detected language <span className="font-mono">{language}</span> · type <span className="font-mono">{projectType}</span>
             </p>
             <button
               onClick={() => setShowAdvanced(v => !v)}
               className="text-[10px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
-              {showAdvanced ? 'Ocultar opciones' : 'Más opciones'}
+              {showAdvanced ? 'Hide options' : 'More options'}
             </button>
           </div>
         </div>
@@ -377,7 +377,7 @@ export const ProposalComposer: React.FC<Props> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-              Título
+              Title
             </label>
             <input
               value={title}
@@ -389,7 +389,7 @@ export const ProposalComposer: React.FC<Props> = ({
           </div>
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-              Cliente o lead (opcional)
+              Client or lead (optional)
             </label>
             <select
               value={clientId ? `c:${clientId}` : leadId ? `l:${leadId}` : ''}
@@ -402,9 +402,9 @@ export const ProposalComposer: React.FC<Props> = ({
               disabled={phase === 'done' || isWorking}
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px] disabled:opacity-50"
             >
-              <option value="">— sin asociar —</option>
+              <option value="">— not linked —</option>
               {clients.length > 0 && (
-                <optgroup label="Clientes">
+                <optgroup label="Clients">
                   {clients.map(c => (
                     <option key={c.id} value={`c:${c.id}`}>
                       {c.name}{c.company ? ` · ${c.company}` : ''}
@@ -429,10 +429,10 @@ export const ProposalComposer: React.FC<Props> = ({
         {services.length > 0 && (
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-              Servicio (precio base)
+              Service (base price)
               {!serviceId && suggestedServiceId && (
                 <span className="ml-1.5 text-zinc-400 normal-case font-normal lowercase">
-                  · sugerido por tipo de proyecto
+                  · suggested by project type
                 </span>
               )}
             </label>
@@ -442,7 +442,7 @@ export const ProposalComposer: React.FC<Props> = ({
               disabled={phase === 'done' || isWorking}
               className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[13px] disabled:opacity-50"
             >
-              <option value="">— sin servicio (la IA cotiza desde cero) —</option>
+              <option value="">— no service (AI quotes from scratch) —</option>
               {services.filter(s => s.is_active).map(s => (
                 <option key={s.id} value={s.id}>
                   {s.name} · {s.pricing_model === 'hourly' ? `USD ${s.hourly_rate}/h` : `USD ${s.fixed_price}`}
@@ -453,7 +453,7 @@ export const ProposalComposer: React.FC<Props> = ({
               <p className="text-[10px] text-zinc-400 mt-1">
                 Base: USD {selectedService.pricing_model === 'hourly'
                   ? (selectedService.hourly_rate || 0) * (selectedService.estimated_weeks || 4) * 40
-                  : selectedService.fixed_price} · timeline {selectedService.estimated_weeks ?? 4} sem · complejidad {complexity}
+                  : selectedService.fixed_price} · timeline {selectedService.estimated_weeks ?? 4} wks · complexity {complexity}
               </p>
             )}
           </div>
@@ -462,7 +462,7 @@ export const ProposalComposer: React.FC<Props> = ({
         {/* Advanced — collapsed by default */}
         {showAdvanced && (
           <div className="space-y-3 p-3 rounded-lg bg-zinc-50/60 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Avanzado</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Advanced</div>
             <div className="grid grid-cols-3 gap-2">
               <select
                 value={projectType}
@@ -493,7 +493,7 @@ export const ProposalComposer: React.FC<Props> = ({
             {proposals.filter(p => p.content).length > 0 && (
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
-                  Arrancar desde una propuesta anterior
+                  Start from a previous proposal
                 </label>
                 <select
                   value={cloneFromId}
@@ -501,7 +501,7 @@ export const ProposalComposer: React.FC<Props> = ({
                   disabled={phase === 'done' || isWorking}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-[12px]"
                 >
-                  <option value="">Blanca</option>
+                  <option value="">Blank</option>
                   {proposals.filter(p => p.content).slice(0, 25).map(p => (
                     <option key={p.id} value={p.id}>
                       {p.title}{p.pricing_total ? ` · USD ${p.pricing_total}` : ''}
@@ -521,12 +521,12 @@ export const ProposalComposer: React.FC<Props> = ({
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[13px] font-semibold hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
             <Icons.Sparkles size={14} />
-            Generar propuesta con IA
+            Generate proposal with AI
           </button>
         ) : isWorking ? (
           <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-[13px]">
             <Icons.RefreshCw size={14} className="animate-spin" />
-            {phase === 'creating' ? 'Creando borrador…' : 'Cotizando con IA…'}
+            {phase === 'creating' ? 'Creating draft…' : 'Quoting with AI…'}
           </div>
         ) : null}
 
@@ -541,7 +541,7 @@ export const ProposalComposer: React.FC<Props> = ({
           <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
             <div className="flex items-baseline justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                ✓ Propuesta lista
+                ✓ Proposal ready
               </div>
               {previewTotal !== null && previewTotal > 0 && (
                 <div className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
@@ -577,11 +577,11 @@ export const ProposalComposer: React.FC<Props> = ({
               >
                 {shareCopied ? (
                   <>
-                    <Icons.Check size={13} /> Link copiado · marcada como enviada
+                    <Icons.Check size={13} /> Link copied · marked as sent
                   </>
                 ) : (
                   <>
-                    <Icons.Send size={13} /> Compartir con cliente (copia link)
+                    <Icons.Send size={13} /> Share with client (copies link)
                   </>
                 )}
               </button>
@@ -597,7 +597,7 @@ export const ProposalComposer: React.FC<Props> = ({
               )}
             </div>
             <p className="text-[10px] text-zinc-400">
-              El link es público pero no indexable. Lo podés desactivar después desde el detalle de la propuesta.
+              The link is public but not indexable. You can disable it later from the proposal detail view.
             </p>
           </div>
         )}

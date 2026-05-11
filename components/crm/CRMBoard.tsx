@@ -44,7 +44,7 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({ leads, onStatusChange, onCon
     const handleDelete = async (lead: Lead) => {
         if (!onDelete || deletingId) return;
         const label = lead.name || lead.email || 'this lead';
-        if (!window.confirm(`¿Eliminar "${label}"? No se puede deshacer.`)) return;
+        if (!window.confirm(`Delete "${label}"? This can't be undone.`)) return;
         setDeletingId(lead.id);
         try { await onDelete(lead.id); } finally { setDeletingId(null); }
     };
