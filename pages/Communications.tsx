@@ -1384,50 +1384,72 @@ const SlackWorkspaceRow: React.FC<{
             </button>
           </div>
 
-          {/* Invite hint — uses the bot's REAL handle (from users.info via
-              slack-channels), not a guess from the workspace name. Copy
-              button puts the exact /invite command on the clipboard so the
-              user can paste it straight into Slack. */}
+          {/* Invite hint — gives TWO paths because /invite @handle is
+              flaky for modern Slack apps (Slack often returns "valid
+              member name required" if the handle doesn't autocomplete).
+              The "Add an app" flow from the channel header is the
+              canonical, always-works path; /invite is the fallback. */}
           {!loading && available && (
-            <div className="text-[10.5px] text-zinc-600 dark:text-zinc-300 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-3 py-2 space-y-1.5">
+            <div className="text-[10.5px] text-zinc-600 dark:text-zinc-300 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-3 py-2.5 space-y-3">
               <div className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                 <Icons.Bell size={11} />
-                Para sumar un canal
+                Para sumar el bot a un canal
               </div>
-              <ol className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400">
-                <li>
-                  En Slack, abrí el canal (público o privado).
-                </li>
-                <li>
-                  Pegá este comando y enter:
-                </li>
-              </ol>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="font-mono text-[11px] px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20 text-zinc-800 dark:text-zinc-200 select-all flex-1">
-                  {inviteCommand}
-                </code>
-                <button
-                  onClick={copyInviteCommand}
-                  className={`text-[10px] font-medium px-2 py-1 rounded transition-colors inline-flex items-center gap-1 ${
-                    copied
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
-                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'
-                  }`}
-                  title="Copiar al portapapeles"
-                >
-                  {copied ? <><Icons.Check size={10} /> Copiado</> : <><Icons.Copy size={10} /> Copiar</>}
-                </button>
-              </div>
-              <ol start={3} className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400 mt-1">
-                <li>
-                  Volvé acá y tocá <span className="font-semibold">Refrescar</span> — el canal aparece marcado <span className="text-zinc-500">· invitar</span> tildable.
-                </li>
-              </ol>
-              {bot?.display_name && bot.display_name !== bot.handle && (
-                <div className="text-[10px] text-zinc-400 italic mt-1">
-                  El bot aparece como <span className="font-medium">{bot.display_name}</span> en Slack — su handle real es <span className="font-mono">@{bot.handle}</span>.
+
+              {/* PATH A: canonical Slack UI flow — works for public + private */}
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                  Recomendado · desde Slack
                 </div>
-              )}
+                <ol className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400 marker:text-amber-600">
+                  <li>Abrí el canal en Slack y clickeá el nombre del canal arriba (header).</li>
+                  <li>Pestaña <span className="font-semibold">Integraciones</span> → <span className="font-semibold">Agregar una app</span>.</li>
+                  <li>
+                    Buscá <span className="font-mono px-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20">{bot?.display_name || token.slack_team_name || 'tu app'}</span> y tocá <span className="font-semibold">Agregar</span>.
+                  </li>
+                  <li>Volvé acá y tocá <span className="font-semibold">Refrescar</span>.</li>
+                </ol>
+              </div>
+
+              {/* PATH B: /invite as fallback — explicit warning that it may fail */}
+              <details className="group/inv">
+                <summary className="cursor-pointer text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 inline-flex items-center gap-1">
+                  <Icons.ChevronDown size={10} className="group-open/inv:rotate-180 transition-transform" />
+                  Alternativa con /invite (a veces falla)
+                </summary>
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[10.5px] text-zinc-500">
+                    Pegá este comando dentro del canal. Si Slack contesta <span className="italic">"se requiere un nombre de miembro válido"</span>, usá el método de arriba.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-[11px] px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20 text-zinc-800 dark:text-zinc-200 select-all flex-1">
+                      {inviteCommand}
+                    </code>
+                    <button
+                      onClick={copyInviteCommand}
+                      className={`text-[10px] font-medium px-2 py-1 rounded transition-colors inline-flex items-center gap-1 ${
+                        copied
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'
+                      }`}
+                      title="Copiar al portapapeles"
+                    >
+                      {copied ? <><Icons.Check size={10} /> Copiado</> : <><Icons.Copy size={10} /> Copiar</>}
+                    </button>
+                  </div>
+                  {bot?.display_name && bot?.handle && bot.display_name !== bot.handle && (
+                    <p className="text-[10px] text-zinc-400 italic">
+                      Tip: cuando empieces a tipear <span className="font-mono">@</span> en Slack, debería autocompletar como{' '}
+                      <span className="font-semibold not-italic text-zinc-600 dark:text-zinc-300">{bot.display_name}</span>. Si no aparece, ya no está en la sugerencia y conviene usar el método recomendado.
+                    </p>
+                  )}
+                </div>
+              </details>
+
+              {/* Footer reminder */}
+              <p className="text-[10px] text-zinc-400 pt-1 border-t border-amber-200/40 dark:border-amber-500/10">
+                Para canales privados (🔒) tenés que estar adentro vos también — solo un miembro puede agregar la app.
+              </p>
             </div>
           )}
 
