@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { notifyWithEmail } from '../lib/notifyWithEmail'
 import { logActivity } from '../lib/activity'
+import { notifyTaskCompletedToSlack } from '../lib/communications/slack'
 
 export interface CalendarEvent {
   id: string
@@ -621,6 +622,44 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 metadata: { task_id: id, status: newStatus, prev_status: oldStatus },
                 notify: watcherNotify,
               }).catch(() => {})
+            }
+
+            // Slack notification on completion. Skips silently when:
+            //   - the task has no project_id, or
+            //   - no slack channel is linked to that project
+            // The actor name is best-effort: we read the current auth user
+            // so the message says "cerrada por <name>". If lookup fails,
+            // just omits that line.
+            if (newStatus === 'done') {
+              ;(async () => {
+                let actorName: string | undefined
+                try {
+                  const { data: auth } = await supabase.auth.getUser()
+                  const uid = auth.user?.id
+                  if (uid) {
+                    const { data: prof } = await supabase
+                      .from('profiles')
+                      .select('name, email')
+                      .eq('id', uid)
+                      .maybeSingle()
+                    actorName = prof?.name || prof?.email || auth.user?.email
+                  }
+                } catch { /* ignore */ }
+                try {
+                  await notifyTaskCompletedToSlack({
+                    tenantId: tenantIdNotif,
+                    task: {
+                      id,
+                      title: normalized.title,
+                      project_id: normalized.project_id || null,
+                    },
+                    projectName: (normalized as any).project_name || null,
+                    completedByName: actorName,
+                  })
+                } catch (err) {
+                  errorLogger.warn('slack task-done notify failed', err)
+                }
+              })()
             }
           }
 

@@ -192,6 +192,86 @@ export async function setSlackNotifyChannel(
   if (error) throw error;
 }
 
+// ── Notify Slack when a task is completed ────────────────────────────────
+// Looks up every active monitored channel that's linked to the task's
+// project (slack_monitored_channels.project_id) and posts a one-line
+// "✅ Task done" message with a Block Kit context. Best-effort — never
+// throws to the caller, so a failed Slack post never blocks task save.
+//
+// When the task has no project_id, or no channel is linked to that
+// project, returns { posted: 0 } silently.
+export async function notifyTaskCompletedToSlack(args: {
+  tenantId: string;
+  task: { id: string; title: string; project_id?: string | null };
+  projectName?: string | null;
+  completedByName?: string;
+}): Promise<{ posted: number; errors: string[] }> {
+  const errors: string[] = [];
+  if (!args.task.project_id) return { posted: 0, errors };
+
+  const { data: links, error } = await supabase
+    .from('slack_monitored_channels')
+    .select('channel_id, channel_name, integration_token_id')
+    .eq('tenant_id', args.tenantId)
+    .eq('project_id', args.task.project_id)
+    .eq('is_active', true);
+  if (error) {
+    errors.push(error.message);
+    return { posted: 0, errors };
+  }
+  if (!links || links.length === 0) return { posted: 0, errors };
+
+  // Resolve project name for the Slack copy if the caller didn't pass one.
+  // Cheap lookup, scoped via RLS.
+  let projectName = args.projectName ?? null;
+  if (!projectName && args.task.project_id) {
+    try {
+      const { data: proj } = await supabase
+        .from('projects')
+        .select('title')
+        .eq('id', args.task.project_id)
+        .maybeSingle();
+      projectName = (proj as any)?.title || null;
+    } catch { /* ignore */ }
+  }
+
+  const projectLine = projectName ? `_${projectName}_` : '';
+  const byLine = args.completedByName ? ` · cerrada por *${args.completedByName}*` : '';
+  const text = `✅ Tarea completada — *${args.task.title}*${byLine}`;
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `✅ Tarea completada\n*${args.task.title}*${projectLine ? `\n${projectLine}` : ''}`,
+      },
+    },
+    ...(args.completedByName
+      ? [{
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: `Cerrada por ${args.completedByName}` }],
+        }]
+      : []),
+  ];
+
+  let posted = 0;
+  for (const link of links) {
+    try {
+      await postToSlack({
+        tenantId: args.tenantId,
+        channelId: link.channel_id,
+        text,
+        blocks,
+        integrationTokenId: link.integration_token_id || undefined,
+      });
+      posted++;
+    } catch (err: any) {
+      errors.push(`#${link.channel_name}: ${err?.message || 'failed'}`);
+    }
+  }
+  return { posted, errors };
+}
+
 // ── Pull recent messages from monitored channels ──────────────────────────
 // Edge fn: slack-sync — calls conversations.history on each channel listed
 // in slack_monitored_channels and inserts new messages into
