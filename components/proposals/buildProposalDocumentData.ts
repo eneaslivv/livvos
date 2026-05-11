@@ -216,9 +216,21 @@ export function buildProposalDocumentData(proposal: any, opts: BuildOptions = {}
     phasesHeading: doc.phasesHeading,
     phasesSubheading: doc.phasesSubheading,
     phasesBlurb: doc.phasesBlurb,
-    phases: Array.isArray(doc.phases) && doc.phases.length > 0
-      ? doc.phases
-      : phasesFromTimeline(proposal?.timeline),
+    // Always normalize so EVERY phase has the array fields the view
+    // expects. The AI sometimes omits 'deliverables' entirely, which
+    // used to crash <ProposalDocumentView> with "Cannot read properties
+    // of undefined (reading 'map')" and nuke the whole Docs page.
+    phases: ((): ProposalPhase[] => {
+      const src = Array.isArray(doc.phases) && doc.phases.length > 0
+        ? doc.phases
+        : phasesFromTimeline(proposal?.timeline);
+      return src.map((p: any, i: number) => ({
+        num: p.num || String(i + 1).padStart(2, '0'),
+        name: p.name || `Phase ${i + 1}`,
+        duration: p.duration || '—',
+        deliverables: Array.isArray(p.deliverables) ? p.deliverables : [],
+      }));
+    })(),
 
     tiers,
     addons: addonsFromDoc(doc),

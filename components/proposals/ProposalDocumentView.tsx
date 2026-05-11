@@ -340,7 +340,7 @@ export const ProposalDocumentView: React.FC<Props> = ({
 
           <div className="context-inline">
             <div className="lead">
-              {data.contextLead.map((p, i) => (
+              {(Array.isArray(data.contextLead) ? data.contextLead : []).map((p, i) => (
                 <p key={i} dangerouslySetInnerHTML={{ __html: p }} />
               ))}
             </div>
@@ -402,7 +402,7 @@ export const ProposalDocumentView: React.FC<Props> = ({
                     <span className="ph-wks">{ph.duration}</span>
                   </div>
                   <ul>
-                    {ph.deliverables.map((d, j) => <li key={j}>{d}</li>)}
+                    {(Array.isArray(ph.deliverables) ? ph.deliverables : []).map((d, j) => <li key={j}>{d}</li>)}
                   </ul>
                 </div>
               ))}
@@ -462,7 +462,7 @@ export const ProposalDocumentView: React.FC<Props> = ({
                   : 'repeat(3, 1fr)',
             } : undefined}
           >
-            {data.tiers.map(tier => {
+            {(Array.isArray(data.tiers) ? data.tiers : []).map(tier => {
               const isSelected = tier.id === selectedTier?.id;
               return (
                 <div
@@ -482,7 +482,7 @@ export const ProposalDocumentView: React.FC<Props> = ({
                     {tier.platform && <span className="tier-platform">{tier.platform}</span>}
                   </div>
                   <ul className="tier-features">
-                    {tier.features.map((f, i) => (
+                    {(Array.isArray(tier.features) ? tier.features : []).map((f, i) => (
                       <li key={i} className={f.included ? '' : 'muted'}>{f.label}</li>
                     ))}
                   </ul>
@@ -513,10 +513,10 @@ export const ProposalDocumentView: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.comparisonTable.rows.map((row, i) => (
+                  {(Array.isArray(data.comparisonTable.rows) ? data.comparisonTable.rows : []).map((row, i) => (
                     <tr key={i}>
                       <td>{row.label}</td>
-                      {row.values.map((v, j) => <td key={j}>{v}</td>)}
+                      {(Array.isArray(row.values) ? row.values : []).map((v, j) => <td key={j}>{v}</td>)}
                     </tr>
                   ))}
                 </tbody>
