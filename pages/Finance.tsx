@@ -128,6 +128,7 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
 export const Finance: React.FC = () => {
   const {
     incomes, incomesLoading, createIncome, updateIncome, updateInstallment, deleteIncome,
+    refreshIncomes,
     expenses, expensesLoading, createExpense, updateExpense, deleteExpense, refreshExpenses,
     budgets, budgetsLoading, createBudget, updateBudget, deleteBudget,
   } = useFinance();
@@ -2683,11 +2684,12 @@ export const Finance: React.FC = () => {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                    Installments{editingIncomeId ? ' (locked)' : ''}
+                    Installments{editingIncomeId ? ' (manage below)' : ''}
                   </label>
                   <input type="number" min="1" max="24" value={incomeForm.num_installments}
                     onChange={e => setIncomeForm(p => ({ ...p, num_installments: e.target.value }))}
                     disabled={!!editingIncomeId}
+                    title={editingIncomeId ? 'Add or remove milestones in the editor below' : 'Number of installments to split the total into'}
                     className={`w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 text-center ${editingIncomeId ? 'opacity-50 cursor-not-allowed' : ''}`} />
                 </div>
               </div>
@@ -2723,6 +2725,7 @@ export const Finance: React.FC = () => {
                   incomeId={editingIncomeId}
                   incomes={incomes}
                   updateInstallment={updateInstallment}
+                  refreshIncomes={refreshIncomes}
                 />
               )}
             </>
@@ -2920,31 +2923,30 @@ export default Finance;
 
 // ─── InlineInstallmentsEditor ─────────────────────────────────────────────
 // Lives inside the income edit modal. Lists every installment of the income
-// being edited and lets the user fix amount / due_date / paid_date inline.
-// Each field saves on blur. This is what makes retroactive correction of
-// past-month invoices actually work: if the date or split was wrong, you
-// can fix the specific installment without recreating the whole income.
+// being edited and lets the user fix amount / due_date / paid_date inline,
+// PLUS add new milestones and remove existing ones. Each field saves on
+// blur via updateInstallment; add/remove use direct supabase ops + then
+// call refreshIncomes so the parent re-renders with the new list.
+//
+// This is what makes retroactive correction of past-month invoices work
+// end-to-end: wrong split? add a row. Mis-typed amount? click into the
+// field. Dropped a milestone? trash the row.
 const InlineInstallmentsEditor: React.FC<{
   incomeId: string;
   incomes: IncomeEntry[];
   updateInstallment: (id: string, updates: Partial<Installment>) => Promise<void>;
-}> = ({ incomeId, incomes, updateInstallment }) => {
+  refreshIncomes: () => Promise<void>;
+}> = ({ incomeId, incomes, updateInstallment, refreshIncomes }) => {
   const income = incomes.find(i => i.id === incomeId);
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [errorId, setErrorId] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState(false);
 
-  if (!income || !income.installments || income.installments.length === 0) {
-    return null;
-  }
+  if (!income) return null;
+  const installments = income.installments || [];
+  const sorted = [...installments].sort((a, b) => (a.number || 0) - (b.number || 0));
 
-  const sorted = [...income.installments].sort(
-    (a, b) => (a.number || 0) - (b.number || 0)
-  );
-
-  const saveField = async (
-    instId: string,
-    patch: Partial<Installment>,
-  ) => {
+  const saveField = async (instId: string, patch: Partial<Installment>) => {
     setSavingId(instId);
     setErrorId(null);
     try {
@@ -2952,6 +2954,58 @@ const InlineInstallmentsEditor: React.FC<{
     } catch (err) {
       console.error('[Finance] inline installment update failed', err);
       setErrorId(instId);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Add a fresh pending milestone. Uses the average of remaining-to-cover
+  // as the default amount so the sum tends toward the income total without
+  // being prescriptive. Date defaults to one month after the latest
+  // installment so there's a sensible cadence.
+  const addMilestone = async () => {
+    setAdding(true);
+    try {
+      const nextNumber = sorted.length > 0
+        ? Math.max(...sorted.map(i => i.number || 0)) + 1
+        : 1;
+      const remaining = Math.max(0, income.total_amount - sorted.reduce((s, i) => s + (i.amount || 0), 0));
+      const suggestedAmount = remaining > 0 ? Math.round(remaining * 100) / 100 : 0;
+      const lastDate = sorted.length > 0
+        ? sorted[sorted.length - 1].due_date
+        : (income.due_date || new Date().toISOString().split('T')[0]);
+      const nextDate = new Date(lastDate + 'T12:00:00');
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      const { error } = await supabase.from('installments').insert({
+        income_id: income.id,
+        number: nextNumber,
+        amount: suggestedAmount,
+        due_date: nextDate.toISOString().split('T')[0],
+        status: 'pending',
+      });
+      if (error) throw error;
+      await refreshIncomes();
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo agregar el milestone');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeMilestone = async (inst: Installment) => {
+    const wasPaid = inst.status === 'paid';
+    const confirmMsg = wasPaid
+      ? 'Esta cuota está marcada como pagada. ¿Seguro que querés borrarla? El total cobrado se va a recalcular.'
+      : '¿Borrar este milestone? El total a cobrar se va a recalcular.';
+    if (!confirm(confirmMsg)) return;
+    setSavingId(inst.id);
+    try {
+      const { error } = await supabase.from('installments').delete().eq('id', inst.id);
+      if (error) throw error;
+      await refreshIncomes();
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo borrar');
+      setErrorId(inst.id);
     } finally {
       setSavingId(null);
     }
@@ -2977,78 +3031,104 @@ const InlineInstallmentsEditor: React.FC<{
           )}
         </span>
       </div>
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-        {sorted.map((inst, idx) => {
-          const isPaid = inst.status === 'paid';
-          const isSaving = savingId === inst.id;
-          const hasError = errorId === inst.id;
-          return (
-            <div
-              key={inst.id}
-              className={`grid grid-cols-[auto_1fr_1fr_auto_auto] items-center gap-2 px-3 py-2 ${
-                idx > 0 ? 'border-t border-zinc-100 dark:border-zinc-800/60' : ''
-              } ${isPaid ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : ''}`}
-            >
-              <span className="text-[10px] font-mono tabular-nums text-zinc-400 w-6">
-                #{inst.number}
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={inst.amount}
-                onBlur={(e) => {
-                  const next = parseFloat(e.target.value);
-                  if (!isNaN(next) && next !== inst.amount) {
-                    saveField(inst.id, { amount: next });
-                  }
-                }}
-                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[12px] tabular-nums text-zinc-900 dark:text-zinc-100"
-              />
-              <input
-                type="date"
-                defaultValue={inst.due_date || ''}
-                onBlur={(e) => {
-                  const next = e.target.value || null;
-                  if (next !== inst.due_date) {
-                    saveField(inst.id, { due_date: next as any });
-                  }
-                }}
-                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[11px] tabular-nums text-zinc-700 dark:text-zinc-300"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  saveField(inst.id, isPaid
-                    ? { status: 'pending', paid_date: null as any }
-                    : { status: 'paid', paid_date: todayStr as any });
-                }}
-                title={isPaid ? 'Marcar pendiente' : 'Marcar pagada'}
-                className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-md font-semibold ${
-                  isPaid
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
-                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-400 transition-colors'
-                }`}
+
+      {sorted.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 px-3 py-4 text-center text-[11px] text-zinc-400 italic">
+          Sin milestones todavía. Agregá uno con el botón de abajo.
+        </div>
+      ) : (
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+          {sorted.map((inst, idx) => {
+            const isPaid = inst.status === 'paid';
+            const isSaving = savingId === inst.id;
+            const hasError = errorId === inst.id;
+            return (
+              <div
+                key={inst.id}
+                className={`group/m grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-2 px-3 py-2 ${
+                  idx > 0 ? 'border-t border-zinc-100 dark:border-zinc-800/60' : ''
+                } ${isPaid ? 'bg-emerald-50/30 dark:bg-emerald-500/5' : ''}`}
               >
-                {isPaid ? 'paid' : 'pending'}
-              </button>
-              <span className="text-[10px] w-8 text-right">
-                {isSaving ? (
-                  <span className="text-amber-500">…</span>
-                ) : hasError ? (
-                  <span className="text-rose-500" title="Error">⚠</span>
-                ) : (
-                  <span className="text-emerald-500 opacity-0 transition-opacity">✓</span>
-                )}
-              </span>
-            </div>
-          );
-        })}
+                <span className="text-[10px] font-mono tabular-nums text-zinc-400 w-6">
+                  #{inst.number}
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={inst.amount}
+                  onBlur={(e) => {
+                    const next = parseFloat(e.target.value);
+                    if (!isNaN(next) && next !== inst.amount) {
+                      saveField(inst.id, { amount: next });
+                    }
+                  }}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[12px] tabular-nums text-zinc-900 dark:text-zinc-100"
+                />
+                <input
+                  type="date"
+                  defaultValue={inst.due_date || ''}
+                  onBlur={(e) => {
+                    const next = e.target.value || null;
+                    if (next !== inst.due_date) {
+                      saveField(inst.id, { due_date: next as any });
+                    }
+                  }}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-[11px] tabular-nums text-zinc-700 dark:text-zinc-300"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    saveField(inst.id, isPaid
+                      ? { status: 'pending', paid_date: null as any }
+                      : { status: 'paid', paid_date: todayStr as any });
+                  }}
+                  title={isPaid ? 'Marcar pendiente' : 'Marcar pagada'}
+                  className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-md font-semibold ${
+                    isPaid
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                      : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-400 transition-colors'
+                  }`}
+                >
+                  {isPaid ? 'paid' : 'pending'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeMilestone(inst)}
+                  title="Borrar este milestone"
+                  className="opacity-0 group-hover/m:opacity-100 p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all"
+                >
+                  <Trash2 size={11} />
+                </button>
+                <span className="text-[10px] w-6 text-right">
+                  {isSaving ? (
+                    <span className="text-amber-500">…</span>
+                  ) : hasError ? (
+                    <span className="text-rose-500" title="Error">⚠</span>
+                  ) : (
+                    <span className="text-emerald-500 opacity-0 transition-opacity">✓</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={addMilestone}
+          disabled={adding}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-zinc-50 px-2 py-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors disabled:opacity-50"
+        >
+          <Plus size={11} /> {adding ? 'Agregando…' : 'Agregar milestone'}
+        </button>
+        <p className="text-[10px] text-zinc-400 italic">
+          Cambios en milestones se guardan al toque · campos del total/fecha al tocar Save.
+        </p>
       </div>
-      <p className="text-[10px] text-zinc-400 italic">
-        Edits save automatically when you tab out of a field.
-      </p>
     </div>
   );
 };
