@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useCalendar } from '../context/CalendarContext';
 import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
+import { InlineTaskDetailHost } from '../components/calendar/InlineTaskDetailHost';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
 import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
@@ -485,6 +486,11 @@ export const Projects: React.FC<{
 
   // Subtask UI state
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  // When a task is clicked from the kanban / list / wherever inside
+  // this project, we open the full TaskDetailPanel INLINE here (via
+  // InlineTaskDetailHost) instead of routing to /calendar. Keeps the
+  // user in their project context.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   /* ─── Derive phase groups ─── */
@@ -1878,14 +1884,10 @@ export const Projects: React.FC<{
                         <TaskKanbanBoard
                           tasks={projectTasks.filter(t => !t.parent_task_id) as any}
                           onTaskClick={(t) => {
-                            // Open the full task drawer in Calendar (same UX
-                            // as anywhere else in the app). Calendar's
-                            // existing `?task=` reader auto-opens the panel.
-                            if (onNavigate) {
-                              onNavigate('calendar', { taskId: t.id });
-                            } else {
-                              setExpandedTaskId(t.id);
-                            }
+                            // Open the TaskDetailPanel INLINE here via
+                            // InlineTaskDetailHost — no more navigating to
+                            // /calendar. Keeps the user in the project context.
+                            setOpenTaskId(t.id);
                           }}
                           onStatusChange={async (id, status) => {
                             await updateTask(id, { status, completed: status === 'done' } as any);
@@ -1998,6 +2000,14 @@ export const Projects: React.FC<{
           onChanged={() => { void refreshAgencyShareCount(); }}
         />
       )}
+
+      {/* Task detail panel — same component Calendar uses, hosted INLINE
+          here so clicking a task in this project's kanban/list/timeline
+          slides the panel in without navigating away. */}
+      <InlineTaskDetailHost
+        taskId={openTaskId}
+        onClose={() => setOpenTaskId(null)}
+      />
     </div>
   );
 };
