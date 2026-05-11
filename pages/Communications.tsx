@@ -1268,21 +1268,38 @@ const SlackWorkspaceRow: React.FC<{
 }> = ({ tenantId, token, channels, onDisconnect, onChannelsChange }) => {
   const [expanded, setExpanded] = useState(false);
   const [available, setAvailable] = useState<AvailableSlackChannel[] | null>(null);
+  const [bot, setBot] = useState<{ handle: string | null; display_name: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const monitoredIds = useMemo(() => new Set(channels.map(c => c.channel_id)), [channels]);
 
   const loadAvailable = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await listAvailableSlackChannels(tenantId, token.id);
-      setAvailable(list);
+      const result = await listAvailableSlackChannels(tenantId, token.id);
+      setAvailable(result.channels);
+      setBot(result.bot);
     } catch (err) {
       errorLogger.error('slack channels load failed', err);
       setAvailable([]);
+      setBot(null);
     } finally {
       setLoading(false);
     }
   }, [tenantId, token.id]);
+
+  // Real handle from Slack (what /invite @<x> actually takes); fall back
+  // to the workspace name only when the API hasn't responded yet.
+  const botHandle = bot?.handle || token.slack_team_name?.toLowerCase().replace(/\s+/g, '-') || 'tu-bot';
+  const inviteCommand = `/invite @${botHandle}`;
+
+  const copyInviteCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (expanded && available === null) loadAvailable();
@@ -1367,12 +1384,50 @@ const SlackWorkspaceRow: React.FC<{
             </button>
           </div>
 
-          {/* Invite hint — only when bot is in fewer channels than typical */}
+          {/* Invite hint — uses the bot's REAL handle (from users.info via
+              slack-channels), not a guess from the workspace name. Copy
+              button puts the exact /invite command on the clipboard so the
+              user can paste it straight into Slack. */}
           {!loading && available && (
-            <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-2.5 py-1.5">
-              <span className="font-semibold text-amber-700 dark:text-amber-400">¿No ves un canal?</span>{' '}
-              En Slack, escribí <code className="font-mono px-1 rounded bg-amber-100/70 dark:bg-amber-500/10">/invite @{token.slack_team_name?.toLowerCase().replace(/\s+/g, '-') || 'tu-bot'}</code> dentro
-              del canal y volvé acá → <span className="font-semibold">Refrescar</span>. Para canales privados es obligatorio invitar al bot manualmente.
+            <div className="text-[10.5px] text-zinc-600 dark:text-zinc-300 bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200/60 dark:border-amber-500/20 rounded-md px-3 py-2 space-y-1.5">
+              <div className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <Icons.Bell size={11} />
+                Para sumar un canal
+              </div>
+              <ol className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400">
+                <li>
+                  En Slack, abrí el canal (público o privado).
+                </li>
+                <li>
+                  Pegá este comando y enter:
+                </li>
+              </ol>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="font-mono text-[11px] px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-amber-500/20 text-zinc-800 dark:text-zinc-200 select-all flex-1">
+                  {inviteCommand}
+                </code>
+                <button
+                  onClick={copyInviteCommand}
+                  className={`text-[10px] font-medium px-2 py-1 rounded transition-colors inline-flex items-center gap-1 ${
+                    copied
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'
+                  }`}
+                  title="Copiar al portapapeles"
+                >
+                  {copied ? <><Icons.Check size={10} /> Copiado</> : <><Icons.Copy size={10} /> Copiar</>}
+                </button>
+              </div>
+              <ol start={3} className="list-decimal list-inside space-y-0.5 text-[10.5px] text-zinc-600 dark:text-zinc-400 mt-1">
+                <li>
+                  Volvé acá y tocá <span className="font-semibold">Refrescar</span> — el canal aparece marcado <span className="text-zinc-500">· invitar</span> tildable.
+                </li>
+              </ol>
+              {bot?.display_name && bot.display_name !== bot.handle && (
+                <div className="text-[10px] text-zinc-400 italic mt-1">
+                  El bot aparece como <span className="font-medium">{bot.display_name}</span> en Slack — su handle real es <span className="font-mono">@{bot.handle}</span>.
+                </div>
+              )}
             </div>
           )}
 

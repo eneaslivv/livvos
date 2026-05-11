@@ -25,8 +25,11 @@ export async function getSlackConnectUrl(tenantId: string): Promise<string> {
 }
 
 // ── List Slack channels available for monitoring ──────────────────────────
-// Edge fn: slack-channels — lists channels the bot has access to. Frontend
-// uses this to populate the multi-select in IntegrationSettings.
+// Edge fn: slack-channels — lists channels the bot has access to AND
+// returns the bot's actual identity (so the UI can show the exact
+// `/invite @<handle>` command instead of guessing from the workspace name).
+// Frontend uses this to populate the multi-select in IntegrationSettings
+// + render the invite hint.
 export interface AvailableSlackChannel {
   id: string;
   name: string;
@@ -34,10 +37,24 @@ export interface AvailableSlackChannel {
   is_member: boolean;
   num_members: number | null;
 }
+
+export interface SlackBotIdentity {
+  user_id: string;
+  /** The legacy username — what /invite @<this> actually accepts. */
+  handle: string | null;
+  /** What Slack shows in messages/UI. */
+  display_name: string | null;
+}
+
+export interface SlackChannelsResult {
+  bot: SlackBotIdentity | null;
+  channels: AvailableSlackChannel[];
+}
+
 export async function listAvailableSlackChannels(
   tenantId: string,
   integrationTokenId: string,
-): Promise<AvailableSlackChannel[]> {
+): Promise<SlackChannelsResult> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) throw new Error('Not authenticated');
@@ -47,8 +64,11 @@ export async function listAvailableSlackChannels(
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`slack-channels failed: ${res.status}`);
-  const { channels } = await res.json();
-  return channels as AvailableSlackChannel[];
+  const data = await res.json() as Partial<SlackChannelsResult>;
+  return {
+    bot: data.bot || null,
+    channels: data.channels || [],
+  };
 }
 
 // ── Toggle which channels are monitored ───────────────────────────────────
