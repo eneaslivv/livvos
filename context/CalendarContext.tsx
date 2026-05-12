@@ -66,6 +66,13 @@ export interface CalendarTask {
   started_at?: string | null
   mirror_pair_id?: string | null
   mirror_origin_tenant_id?: string | null
+  /** When the task lives in another tenant but is visible here via a
+   *  shared project (project_agency_shares), this carries the owner
+   *  tenant's id and display name so the kanban card can render a
+   *  "Shared from X" badge. NULL for tasks that live in the active
+   *  tenant. */
+  shared_from_tenant_id?: string | null
+  shared_from_name?: string | null
 }
 
 export interface TaskAttachment {
@@ -162,6 +169,8 @@ const normalizeTask = (task: any): CalendarTask => ({
   started_at: task.started_at ?? null,
   mirror_pair_id: task.mirror_pair_id ?? null,
   mirror_origin_tenant_id: task.mirror_origin_tenant_id ?? null,
+  shared_from_tenant_id: task.shared_from_tenant_id ?? null,
+  shared_from_name: task.shared_from_name ?? null,
 })
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -181,6 +190,11 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const cachedTenantIdRef = useRef<string | null>(null)
   const tenantIdResolvedRef = useRef(false)
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null)
+  // Project IDs of projects shared INTO the active tenant. Used to open a
+  // per-project realtime channel for each, since postgres_changes filters
+  // don't support IN (...) — we open one channel per project (in practice
+  // 1-3 per tenant, so this stays cheap).
+  const [sharedInProjectIds, setSharedInProjectIds] = useState<string[]>([])
 
   // Resolve tenant_id once at startup (non-blocking for UI)
   const resolveTenantId = useCallback(async () => {
@@ -232,24 +246,43 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const tenantId = await resolveTenantId()
 
       const eventsQuery = supabase.from('calendar_events').select('*').order('start_date', { ascending: true })
-      const tasksQuery = supabase.from('tasks').select('*').order('created_at', { ascending: false })
       const labelsQuery = supabase.from('calendar_labels').select('*').order('name', { ascending: true })
 
       if (tenantId) {
         eventsQuery.eq('tenant_id', tenantId)
-        tasksQuery.eq('tenant_id', tenantId)
         labelsQuery.eq('tenant_id', tenantId)
       }
 
-      const [eventsResult, tasksResult, labelsResult] = await Promise.all([
+      // Tasks fetched via RPC `list_calendar_tasks_for_tenant` so the
+      // union (owned + shared-in via project_agency_shares) is computed
+      // server-side in one round-trip. Shared-in rows carry
+      // `shared_from_tenant_id` / `shared_from_name` for the UI badge.
+      const safeRpc = async (name: string, args: any): Promise<any[]> => {
+        try {
+          const { data } = await supabase.rpc(name, args)
+          return Array.isArray(data) ? data : []
+        } catch {
+          return []
+        }
+      }
+
+      const [eventsResult, tasksResult, labelsResult, sharedProjectsResult] = await Promise.all([
         safeQuery(eventsQuery),
-        safeQuery(tasksQuery),
+        tenantId ? safeRpc('list_calendar_tasks_for_tenant', { p_tenant_id: tenantId }) : Promise.resolve([] as any[]),
         safeQuery(labelsQuery),
+        tenantId ? safeRpc('list_shared_in_project_ids', { p_tenant_id: tenantId }) : Promise.resolve([] as any[]),
       ])
 
       setEvents(eventsResult as CalendarEvent[])
       setTasks((tasksResult as any[]).map(normalizeTask))
       setLabels(labelsResult as CalendarLabel[])
+      const sharedIds = (sharedProjectsResult as any[]).map(r => r.project_id).filter(Boolean)
+      setSharedInProjectIds(prev => {
+        // Only update state if the set actually changed — avoids
+        // unnecessary realtime channel teardowns on every refresh.
+        if (prev.length === sharedIds.length && prev.every((id, i) => id === sharedIds[i])) return prev
+        return sharedIds
+      })
       hasLoadedCalendarRef.current = true
       setIsInitialized(true)
 
@@ -331,6 +364,47 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       supabase.removeChannel(tasksChannel)
     }
   }, [resolvedTenantId])
+
+  // ─── Realtime: shared-in projects ───
+  // The main tasks channel above filters by `tenant_id=eq.<active>`, so
+  // tasks living in another tenant (via project_agency_shares) never reach
+  // it. We open one extra channel per shared-in project, filtered by
+  // project_id — postgres_changes accepts a simple equality filter, and
+  // RLS (via tasks_shared_project_select) gates whether the row is sent
+  // to this user. Keeps cross-tenant calendars in sync in real time.
+  useEffect(() => {
+    if (sharedInProjectIds.length === 0) return
+    const channels = sharedInProjectIds.map(projectId =>
+      supabase
+        .channel(`tasks-shared-rt-${projectId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, (payload) => {
+          // Tag the row so normalizeTask can render the badge. The full
+          // shared_from_name is added on the next refresh — for the
+          // optimistic display the tenant_id alone is enough to know it
+          // belongs to a partner.
+          const raw: any = payload.new
+          if (raw.tenant_id === cachedTenantIdRef.current) return // same tenant — already covered by main channel
+          const newTask = normalizeTask({ ...raw, shared_from_tenant_id: raw.tenant_id })
+          setTasks(prev => prev.some(t => t.id === newTask.id) ? prev : [...prev, newTask])
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, (payload) => {
+          const raw: any = payload.new
+          if (raw.tenant_id === cachedTenantIdRef.current) return
+          const updated = normalizeTask({ ...raw, shared_from_tenant_id: raw.tenant_id })
+          setTasks(prev => prev.map(t => t.id === updated.id ? { ...updated, shared_from_name: t.shared_from_name ?? null } : t))
+        })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, (payload) => {
+          const deletedId = payload.old?.id
+          if (deletedId) setTasks(prev => prev.filter(t => t.id !== deletedId))
+        })
+        .subscribe((status) => {
+          if (import.meta.env.DEV) console.log(`[realtime] tasks shared-${projectId} channel:`, status)
+        })
+    )
+    return () => {
+      channels.forEach(ch => supabase.removeChannel(ch))
+    }
+  }, [sharedInProjectIds.join(',')])
 
   const getMissingColumn = (message: string) => {
     // Match "column X does not exist" errors

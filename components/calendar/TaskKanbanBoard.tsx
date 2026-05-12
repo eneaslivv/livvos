@@ -144,6 +144,12 @@ export const TaskKanbanBoard: React.FC<Props> = ({ tasks, onTaskClick, onStatusC
                       {task.cover_url && (
                         <img src={task.cover_url} alt="" className="w-full h-20 object-cover rounded-md mb-2 -mt-0.5" />
                       )}
+                      {task.shared_from_tenant_id && (
+                        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 mb-1.5 rounded text-[9px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200/60 dark:border-indigo-500/20">
+                          <Icons.Briefcase size={8} />
+                          Shared from {task.shared_from_name || 'partner agency'}
+                        </div>
+                      )}
                       <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 leading-snug mb-1.5 line-clamp-2">{task.title}</div>
                       <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 dark:text-zinc-500">
                         <Icons.Calendar size={11} className="opacity-60" />
