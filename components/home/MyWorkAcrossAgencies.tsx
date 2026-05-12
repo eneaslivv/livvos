@@ -15,11 +15,12 @@
  *  - The user belongs to a single tenant (in which case the regular
  *    today/upcoming list on Home already covers everything).
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Icons } from '../ui/Icons';
 import { useCrossTenantTasks, type CrossTenantTask } from '../../hooks/useCrossTenantTasks';
 import { useTenant } from '../../context/TenantContext';
 import type { PageView } from '../../types';
+import { CrossTenantTaskQuickEdit } from './CrossTenantTaskQuickEdit';
 
 interface MyWorkAcrossAgenciesProps {
   /** App-level navigate. Calendar opens the task drawer when given taskId. */
@@ -55,7 +56,12 @@ interface TenantGroup {
 
 export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNavigate }) => {
   const { currentTenant, memberships, switchTenant } = useTenant();
-  const { tasks, loading, error } = useCrossTenantTasks();
+  const { tasks, loading, error, refresh } = useCrossTenantTasks();
+  // Cross-tenant task currently being edited inline. NULL = no modal open.
+  // Lets the user mark a task done / change priority / move due date
+  // WITHOUT switching tenants — the slow path (switchTenant) is reserved
+  // for when they explicitly click "Open in <workspace>".
+  const [quickEditTask, setQuickEditTask] = useState<CrossTenantTask | null>(null);
 
   // Group tasks by tenant, with the active tenant always first so the
   // user sees their current context's items at the top of the widget.
@@ -91,20 +97,27 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
     return null;
   }
 
-  const handleTaskClick = async (t: CrossTenantTask) => {
+  const handleTaskClick = (t: CrossTenantTask) => {
     if (t.tenant_id === currentTenant?.id) {
-      // Same tenant — just open the panel.
+      // Same tenant — just open the full panel inline via Calendar's
+      // existing taskId deep-link. No need for the slim quick-edit since
+      // the user already has CalendarContext + full TaskDetailPanel.
       onNavigate('calendar', { taskId: t.task_id });
       return;
     }
-    // Different tenant — switch first, then reload the page with the
-    // ?task= query param so Calendar's existing reader picks it up
-    // after the tenant context has refreshed.
+    // Cross-tenant — open the slim quick-edit modal IN PLACE. The user
+    // can flip status / priority / due date without leaving the LIVV
+    // dashboard. If they want the full experience, they click "Open in
+    // <workspace>" inside the modal which falls through to switchTenant.
+    setQuickEditTask(t);
+  };
+
+  // Slow path — called from the quick-edit modal's "Open in workspace"
+  // button. Switches tenants then deep-links to the task on calendar.
+  const handleOpenInWorkspace = async (t: CrossTenantTask) => {
     const ok = await switchTenant(t.tenant_id);
     if (ok) {
       const url = new URL(window.location.href);
-      url.searchParams.set('task', t.task_id);
-      // Land on calendar so the deep-link works without a second click.
       url.pathname = '/';
       window.location.href = `${url.origin}${url.pathname}?task=${t.task_id}#calendar`;
     }
@@ -188,6 +201,7 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
                 <ul>
                   {g.tasks.slice(0, 6).map(t => {
                     const priorityClass = PRIORITY_STYLES[t.priority] || PRIORITY_STYLES.medium;
+                    const isCrossTenant = t.tenant_id !== currentTenant?.id;
                     return (
                       <li key={t.task_id}>
                         <button
@@ -199,8 +213,28 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
                             {t.priority}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                              {t.title}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {/* Per-task tenant logo — small but unmissable.
+                                  Only renders for cross-tenant tasks so the
+                                  active tenant's tasks stay visually clean.
+                                  Tooltip carries the agency name for clarity. */}
+                              {isCrossTenant && (
+                                <span
+                                  className="w-3.5 h-3.5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-zinc-200 dark:ring-zinc-700"
+                                  title={t.tenant_name}
+                                >
+                                  {t.tenant_logo_url ? (
+                                    <img src={t.tenant_logo_url} alt={t.tenant_name} className="w-full h-full object-contain" />
+                                  ) : (
+                                    <span className="text-[7px] font-bold text-zinc-500">
+                                      {(t.tenant_name || '?').slice(0, 1).toUpperCase()}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                              <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                                {t.title}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-500">
                               {t.project_title && (
@@ -230,6 +264,26 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
             );
           })}
         </div>
+      )}
+
+      {/* Cross-tenant quick-edit modal — opens in place when the user
+          clicks a task from another workspace. Lets them flip status /
+          priority / due date without losing the LIVV dashboard context. */}
+      {quickEditTask && (
+        <CrossTenantTaskQuickEdit
+          task={quickEditTask}
+          onClose={() => setQuickEditTask(null)}
+          onSaved={() => {
+            // Refresh the list so the new status/priority is reflected
+            // immediately. Closing happens manually so the user sees the
+            // "Saved" confirmation before dismissing.
+            void refresh();
+          }}
+          onOpenInWorkspace={(t) => {
+            setQuickEditTask(null);
+            void handleOpenInWorkspace(t);
+          }}
+        />
       )}
     </section>
   );
