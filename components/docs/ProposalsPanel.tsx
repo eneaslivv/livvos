@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { errorLogger } from '../../lib/errorLogger';
+import { appUrl } from '../../lib/appUrl';
 import { Icons } from '../ui/Icons';
 import { Client } from '../../context/ClientsContext';
 import { useTenant } from '../../context/TenantContext';
@@ -560,7 +561,7 @@ export const ProposalsPanel: React.FC = () => {
   };
 
   const publicUrl = selectedProposal?.public_token
-    ? `${window.location.origin}?proposal=${selectedProposal.public_token}`
+    ? `${appUrl()}?proposal=${selectedProposal.public_token}`
     : null;
 
   return (
@@ -1142,7 +1143,7 @@ export const ProposalsPanel: React.FC = () => {
             <div className="flex items-center gap-3">
               {selectedProposal.public_token && (
                 <a
-                  href={`${window.location.origin}?proposal=${selectedProposal.public_token}`}
+                  href={`${appUrl()}?proposal=${selectedProposal.public_token}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-200"

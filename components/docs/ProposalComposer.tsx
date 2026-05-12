@@ -21,6 +21,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { SlidePanel } from '../ui/SlidePanel';
 import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
+import { appUrl } from '../../lib/appUrl';
 import { useTenant } from '../../context/TenantContext';
 import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { errorLogger } from '../../lib/errorLogger';
@@ -313,7 +314,7 @@ export const ProposalComposer: React.FC<Props> = ({
 
   // ── Share ────────────────────────────────────────────────────────
   const publicUrl = createdToken
-    ? `${window.location.origin}?proposal=${createdToken}`
+    ? `${appUrl()}?proposal=${createdToken}`
     : null;
 
   const handleShare = async () => {

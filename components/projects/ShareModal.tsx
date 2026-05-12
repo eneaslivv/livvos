@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { Project } from '../../context/ProjectsContext';
 import { supabase } from '../../lib/supabase';
+import { appUrl } from '../../lib/appUrl';
 
 export interface ShareModalProps {
   project: Project;
@@ -83,7 +84,7 @@ export const PortalLinkSection: React.FC<{ project: Project }> = ({ project }) =
 
   const handleCopy = () => {
     if (!token) return;
-    const url = `${window.location.origin}/?public_portal=${token}`;
+    const url = `${appUrl()}/?public_portal=${token}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -111,7 +112,7 @@ export const PortalLinkSection: React.FC<{ project: Project }> = ({ project }) =
     );
   }
 
-  const portalUrl = token ? `${window.location.origin}/?public_portal=${token}` : null;
+  const portalUrl = token ? `${appUrl()}/?public_portal=${token}` : null;
 
   return (
     <div className="space-y-3">

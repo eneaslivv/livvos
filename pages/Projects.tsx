@@ -7,6 +7,7 @@ import { useClients } from '../context/ClientsContext';
 import { errorLogger } from '../lib/errorLogger';
 import { logActivity } from '../lib/activity';
 import { supabase } from '../lib/supabase';
+import { appUrl } from '../lib/appUrl';
 import { useSupabase } from '../hooks/useSupabase';
 import PortalApp from '../components/portal/livv-client view-control/App';
 import type { DashboardData, Milestone, LogEntry, PaymentEntry } from '../components/portal/livv-client view-control/types';
@@ -673,7 +674,7 @@ export const Projects: React.FC<{
           client_id: clientData.id, created_by: currentUser?.id, type: 'client'
         }).select('token').single();
       if (inviteError) throw inviteError;
-      setClientInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+      setClientInviteLink(`${appUrl()}/accept-invite?token=${invite.token}&portal=client`);
     } catch (err: any) {
       setClientInviteError(err.message || 'Error creating client invite');
     } finally {
@@ -1128,7 +1129,7 @@ export const Projects: React.FC<{
         }
         return;
       }
-      const link = `${window.location.origin}/?shared_project=${data.token}`;
+      const link = `${appUrl()}/?shared_project=${data.token}`;
       setExternalShareLink(link);
       setExternalShareEmail('');
       await loadExistingShares();

@@ -19,6 +19,7 @@ import { SlashCommand, type SlashState } from './extensions/SlashCommand';
 import { SlashCommandMenu, type SlashItem, type SlashCommandMenuHandle } from './SlashCommandMenu';
 import { TaskCreatePopover } from './TaskCreatePopover';
 import { supabase } from '../../lib/supabase';
+import { appUrl } from '../../lib/appUrl';
 import { useDocuments } from '../../context/DocumentsContext';
 import { useTenant } from '../../context/TenantContext';
 import { useClients } from '../../context/ClientsContext';
@@ -588,7 +589,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
   };
 
   const shareUrl = useMemo(() => (
-    doc?.share_token ? `${window.location.origin}/#shared-doc/${doc.share_token}` : ''
+    doc?.share_token ? `${appUrl()}/#shared-doc/${doc.share_token}` : ''
   ), [doc?.share_token]);
 
   const handleCopyLink = () => {

@@ -5,6 +5,7 @@ import { useTenant } from './TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { sendEmail } from '../lib/sendEmail';
 import type { SendEmailParams } from '../lib/sendEmail';
+import { appUrl } from '../lib/appUrl';
 
 // Enhanced notification types
 export interface Notification {
@@ -233,7 +234,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
 
       const template = notificationTypeToTemplate[notification.type] || 'system_alert';
       const ctaUrl = notification.action_url || notification.link;
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      // Email goes to another user — must be the public prod URL.
+      const baseUrl = appUrl();
 
       await sendEmail({
         template,
@@ -393,7 +395,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                 recipientName: profile.name || undefined,
                 title: overdue.length > 0 ? 'Overdue Tasks' : 'Tasks Due Today',
                 message: lines.join('\n'),
-                ctaUrl: `${window.location.origin}/calendar`,
+                ctaUrl: `${appUrl()}/calendar`,
                 ctaText: 'View Calendar',
                 // Structured payload — triggers the rich wine-hero digest
                 // layout in the edge function.
@@ -460,7 +462,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
             recipientName: profile.name || undefined,
             title: `Welcome to ${brandName}`,
             message: 'Your workspace is ready. Manage projects, track tasks, schedule events, and collaborate with your team — all in one place.',
-            ctaUrl: window.location.origin,
+            ctaUrl: appUrl(),
             ctaText: 'Explore Your Dashboard',
           },
         });

@@ -332,7 +332,7 @@ export const UserManagement: React.FC = () => {
   };
 
   const copyInviteLink = (invite: Invitation) => {
-    const link = `${window.location.origin}/accept-invite?token=${invite.token}`;
+    const link = `${appUrl()}/accept-invite?token=${invite.token}`;
     navigator.clipboard.writeText(link);
     setCopiedInviteId(invite.id);
     setTimeout(() => setCopiedInviteId(null), 2000);
@@ -341,7 +341,7 @@ export const UserManagement: React.FC = () => {
   const resendInviteEmail = async (invite: Invitation) => {
     setResendingId(invite.id);
     try {
-      const link = `${window.location.origin}/accept-invite?token=${invite.token}`;
+      const link = `${appUrl()}/accept-invite?token=${invite.token}`;
       await sendInviteEmail({
         clientName: invite.email.split('@')[0],
         clientEmail: invite.email,

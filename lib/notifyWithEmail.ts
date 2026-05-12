@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { sendEmail } from './sendEmail'
 import type { SendEmailParams } from './sendEmail'
+import { appUrl } from './appUrl'
 
 /**
  * Creates an in-app notification AND sends an email (if user preferences allow).
@@ -76,7 +77,10 @@ export const notifyWithEmail = async (params: NotifyParams): Promise<void> => {
     if (!profile?.email) return
 
     const ctaUrl = params.actionUrl || params.link
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    // Email goes to ANOTHER user — must always be the public prod URL,
+    // never localhost. appUrl() locks this down regardless of the sender's
+    // browser context.
+    const baseUrl = appUrl()
 
     await sendEmail({
       template: typeToTemplate[params.type] || 'system_alert',

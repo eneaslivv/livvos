@@ -53,7 +53,7 @@ export const ConnectAgencyModal: React.FC<ConnectAgencyModalProps> = ({
     }, [isOpen, prefillEmail, prefillAgencyName]);
 
     const inviteLink = inviteToken
-        ? `${window.location.origin}/accept-connection?token=${inviteToken}`
+        ? `${appUrl()}/accept-connection?token=${inviteToken}`
         : '';
 
     const handleSubmit = useCallback(async (e: React.FormEvent) => {

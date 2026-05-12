@@ -11,6 +11,7 @@ import { useTeam } from '../context/TeamContext';
 import { useProjects } from '../context/ProjectsContext';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
+import { appUrl } from '../lib/appUrl';
 import { sendInviteEmail } from '../lib/sendInviteEmail';
 import { PageView, NavParams } from '../types';
 
@@ -361,7 +362,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
 
       if (invite) {
         setClientInviteStatus(invite.status === 'accepted' ? 'accepted' : 'pending');
-        setPortalInviteLink(`${window.location.origin}/accept-invite?token=${invite.token}&portal=client`);
+        setPortalInviteLink(`${appUrl()}/accept-invite?token=${invite.token}&portal=client`);
       } else {
         setClientInviteStatus('none');
         setPortalInviteLink(null);
@@ -626,7 +627,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
             .select('token').single();
 
           if (invite?.token) {
-            const inviteLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+            const inviteLink = `${appUrl()}/accept-invite?token=${invite.token}&portal=client`;
             sendInviteEmail({ clientName: client.name, clientEmail: client.email, inviteLink, tenantName: currentTenant.name, inviteType: 'client', logoUrl: currentTenant.logo_url || undefined, tenantId: currentTenant.id })
               .catch(err => { if (import.meta.env.DEV) console.warn('[auto-invite] Email failed:', err); });
             await addHistoryEntry({
@@ -812,7 +813,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
             8000, 'search existing invitation'
           );
           if (existing?.token) {
-            inviteLink = `${window.location.origin}/accept-invite?token=${existing.token}&portal=client`;
+            inviteLink = `${appUrl()}/accept-invite?token=${existing.token}&portal=client`;
           }
         } catch (existErr) {
           if (import.meta.env.DEV) console.warn('[handleInvitePortal] Check existing invite:', existErr);
@@ -838,9 +839,9 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
               supabase.from('invitations').insert(payload).select('token').single(),
               8000, 'create invitation (retry)'
             );
-            if (!invErr2 && invite2) inviteLink = `${window.location.origin}/accept-invite?token=${invite2.token}&portal=client`;
+            if (!invErr2 && invite2) inviteLink = `${appUrl()}/accept-invite?token=${invite2.token}&portal=client`;
           } else if (invite) {
-            inviteLink = `${window.location.origin}/accept-invite?token=${invite.token}&portal=client`;
+            inviteLink = `${appUrl()}/accept-invite?token=${invite.token}&portal=client`;
           }
         } catch (createErr) {
           if (import.meta.env.DEV) console.warn('[handleInvitePortal] Create invite:', createErr);
@@ -850,7 +851,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       // Fallback: generate a direct portal link if DB invitation failed
       if (!inviteLink) {
         const fallbackToken = btoa(JSON.stringify({ client_id: selectedClient.id, email: selectedClient.email, tenant_id: tenantId || 'none', ts: Date.now() }));
-        inviteLink = `${window.location.origin}/client-portal?token=${encodeURIComponent(fallbackToken)}`;
+        inviteLink = `${appUrl()}/client-portal?token=${encodeURIComponent(fallbackToken)}`;
         if (import.meta.env.DEV) console.log('[handleInvitePortal] Using fallback link (no DB invitation)');
       }
 
