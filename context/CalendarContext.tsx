@@ -73,6 +73,12 @@ export interface CalendarTask {
    *  tenant. */
   shared_from_tenant_id?: string | null
   shared_from_name?: string | null
+  /** When this task lives in a project that's been shared with a
+   *  partner agency, this flag controls whether the partner can actually
+   *  see/edit it. Default FALSE — owner must explicitly opt in per task
+   *  via the toggle in TaskDetailPanel. Tasks not in shared projects
+   *  ignore this flag entirely. */
+  shared_with_partner?: boolean
 }
 
 export interface TaskAttachment {
@@ -171,6 +177,7 @@ const normalizeTask = (task: any): CalendarTask => ({
   mirror_origin_tenant_id: task.mirror_origin_tenant_id ?? null,
   shared_from_tenant_id: task.shared_from_tenant_id ?? null,
   shared_from_name: task.shared_from_name ?? null,
+  shared_with_partner: !!task.shared_with_partner,
 })
 
 export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
