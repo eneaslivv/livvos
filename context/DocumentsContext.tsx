@@ -115,8 +115,20 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const filterProject = filter.projectId
       const filtering = !!(filterClient || filterProject)
 
+      // EXPLICIT tenant filter on every query. Previously we relied on
+      // RLS to scope, but `can_access_tenant()` returns true for any
+      // tenant the user is a member of — and a parent-agency owner is a
+      // member of every connected child. Result: viewing Docs inside a
+      // child tenant showed the parent's folders/docs/files too. We
+      // restrict here to the active tenant. Items tied to a project
+      // shared INTO this tenant still surface via the project_id
+      // filter when the user opens a shared project's detail view.
+      const scopeToTenant = <T extends { eq: (col: string, val: any) => T }>(q: T): T =>
+        tenantId ? q.eq('tenant_id', tenantId) : q
+
       // Load folders for the current level (or matching the filter)
       let foldersQuery = supabase.from('folders').select('*').order('name', { ascending: true })
+      foldersQuery = scopeToTenant(foldersQuery)
       if (filtering) {
         if (filterClient) foldersQuery = foldersQuery.eq('client_id', filterClient)
         if (filterProject) foldersQuery = foldersQuery.eq('project_id', filterProject)
@@ -128,6 +140,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // Load files for the current level (or matching the filter)
       let filesQuery = supabase.from('files').select('*').order('name', { ascending: true })
+      filesQuery = scopeToTenant(filesQuery)
       if (filtering) {
         if (filterClient) filesQuery = filesQuery.eq('client_id', filterClient)
         if (filterProject) filesQuery = filesQuery.eq('project_id', filterProject)
@@ -143,6 +156,7 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // so opening a folder feels like a real navigation, not a "this
       // folder shows the same as the root" mess.
       let docsQuery = supabase.from('documents').select('*').order('updated_at', { ascending: false })
+      docsQuery = scopeToTenant(docsQuery)
       if (filtering) {
         if (filterClient) docsQuery = docsQuery.eq('client_id', filterClient)
         if (filterProject) docsQuery = docsQuery.eq('project_id', filterProject)
@@ -202,7 +216,11 @@ export const DocumentsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false)
     }
-  }, [currentFolderId, filter.clientId, filter.projectId])
+    // tenantId must be in deps: when the active tenant changes (e.g.
+    // parent admin "viewing as" a child agency), we need to re-fetch the
+    // documents in the new tenant's context — otherwise the cached list
+    // from the previous tenant stays on screen.
+  }, [currentFolderId, filter.clientId, filter.projectId, tenantId])
 
   const setFilter = useCallback((next: DocsFilter) => {
     setFilterState(next)
