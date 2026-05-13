@@ -450,9 +450,9 @@ const ProtectedRoute: React.FC<{
         <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-4">
           <span className="text-2xl">~</span>
         </div>
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">No disponible</h2>
-        <p className="text-zinc-500 mt-2">Esta funcionalidad no esta incluida en tu plan actual.</p>
-        <p className="text-zinc-400 text-sm mt-1">Contacta al administrador para habilitarla.</p>
+        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Not available</h2>
+        <p className="text-zinc-500 mt-2">This feature isn't included in your current plan.</p>
+        <p className="text-zinc-400 text-sm mt-1">Contact your admin to enable it.</p>
       </div>
     );
   }
