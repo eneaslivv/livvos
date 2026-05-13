@@ -220,7 +220,11 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           .select('*')
           .eq('tenant_id', tenantId)
           .order('created_at', { ascending: false }),
-        supabase.rpc('list_projects_shared_to_me'),
+        // Pass the active tenant id so the RPC scopes shares to THIS
+        // tenant only (not every tenant the user is a member of). Without
+        // this, sitting in LIVV returns LIVV→CK Studio shares back, and
+        // ProjectsContext merges them with the native list — duplicates.
+        supabase.rpc('list_projects_shared_to_me', { p_tenant_id: tenantId }),
       ])
       const { data, error: err } = ownedRes
       const sharedMeta = (!sharedToMeRes.error && Array.isArray(sharedToMeRes.data))

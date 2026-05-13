@@ -101,7 +101,21 @@ export const ClientsSidebarTree: React.FC<Props> = ({
   const projectsByClient = useMemo(() => {
     const map = new Map<string, typeof projects>();
     const orphans: typeof projects = [];
+    // Shared-in projects bucketed by source agency name. We group them
+    // separately because their client_id points at a client row that
+    // lives in the OWNER tenant — invisible to us — so the regular
+    // "client → projects" tree wouldn't render them at all. Without this,
+    // a partner agency sees an empty tree even though they have shared
+    // projects.
+    const sharedByAgency = new Map<string, typeof projects>();
     for (const p of projects) {
+      if (p.sharedFromTenantId) {
+        const key = p.sharedFromName || 'Shared with you';
+        const arr = sharedByAgency.get(key) ?? [];
+        arr.push(p);
+        sharedByAgency.set(key, arr);
+        continue;
+      }
       if (p.client_id) {
         const arr = map.get(p.client_id) ?? [];
         arr.push(p);
@@ -110,7 +124,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
         orphans.push(p);
       }
     }
-    return { map, orphans };
+    return { map, orphans, sharedByAgency };
   }, [projects]);
 
   const sortedClients = useMemo(() => {
@@ -276,7 +290,9 @@ export const ClientsSidebarTree: React.FC<Props> = ({
         >
           <div className="overflow-hidden min-h-0">
             <div className="sidebar-thin-scroll w-[calc(100%-16px)] mx-2 max-h-[60vh] overflow-y-auto overscroll-contain pr-1 space-y-0">
-              {sortedClients.length === 0 && projectsByClient.orphans.length === 0 && (
+              {sortedClients.length === 0
+                && projectsByClient.orphans.length === 0
+                && projectsByClient.sharedByAgency.size === 0 && (
                 <p className="px-3 py-3 text-[11px] text-zinc-400 italic">
                   No clients or projects yet.
                 </p>
@@ -351,6 +367,32 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                   ))}
                 </div>
               )}
+
+              {/* Projects shared INTO this tenant from a connected agency.
+                  Their parent client lives in the OWNER tenant which the
+                  current tenant can't SEE, so we group them by source
+                  agency name to keep the tree readable. */}
+              {[...projectsByClient.sharedByAgency.entries()].map(([agencyName, projs]) => (
+                <div key={`shared-${agencyName}`} className="pt-1.5 space-y-0">
+                  <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-indigo-500 dark:text-indigo-400 inline-flex items-center gap-1">
+                    <Icons.Briefcase size={9} />
+                    Shared · {agencyName}
+                  </div>
+                  {projs.map(p => (
+                    <TreeRow
+                      key={p.id}
+                      label={p.title}
+                      color={p.color || '#6366f1'}
+                      avatarUrl={null}
+                      icon={p.icon || null}
+                      active={currentPage === 'projects' && currentProjectId === p.id}
+                      starred={isStarred('project', p.id)}
+                      onClick={() => goToProject(p.id)}
+                      onToggleStar={() => toggleStar('project', p.id)}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         </div>
