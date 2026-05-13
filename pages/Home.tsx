@@ -49,7 +49,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const isMobile = useIsMobile();
     const { user, roles } = useRBAC();
     const { incomes, expenses } = useFinance();
-    const { currentTenant, updateTenant } = useTenant();
+    const { currentTenant, updateTenant, isViewingAsTenant } = useTenant();
     const { events: calendarEvents, tasks: calendarTasks, createTask: calCreateTask, updateTask: calUpdateTask, deleteTask: calDeleteTask } = useCalendar();
     const { user: authUser } = useAuth();
     const { members: teamMembers } = useTeam();
@@ -557,10 +557,35 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         if (welcomeKey) { try { localStorage.setItem(welcomeKey, '1'); } catch {} }
         setWelcomeDismissed(true);
     };
-    const showWelcome = isFreshTenant && !welcomeDismissed && !!currentTenant;
+    // Only show the onboarding card to the actual tenant owner. When a
+    // parent-agency admin is "viewing as" the child tenant, OR is logged
+    // in but not the owner of this workspace, the 1/2/3 setup steps make
+    // no sense — they're not the one setting it up. Without this guard,
+    // the parent admin sees a "Welcome to CK Studio!" card greeting them
+    // by their own name inside someone else's workspace.
+    const isTenantOwner = !!authUser && !!currentTenant && currentTenant.owner_id === authUser.id;
+    const showWelcome = isFreshTenant && !welcomeDismissed && !!currentTenant && isTenantOwner && !isViewingAsTenant;
+
+    // When a parent-agency admin is viewing as another tenant (or just
+    // sitting inside a partner workspace they don't own), surface a
+    // discrete banner so the greeting "Good evening, <their name>"
+    // doesn't read as if they're in their own house.
+    const showViewingAsBanner =
+        !!currentTenant && !!authUser && currentTenant.owner_id !== authUser.id && (isViewingAsTenant || currentTenant.parent_tenant_id != null);
 
     return (
         <div className={`space-y-6 max-w-[1600px] mx-auto relative ${isMobile ? 'pb-6 pt-4' : 'pb-10 pt-6'}`}>
+
+            {/* Parent-admin "you are inside <X>'s workspace" reminder. Kept
+                small + dismissible-feeling so it doesn't crowd the page. */}
+            {showViewingAsBanner && (
+                <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-2.5 flex items-center gap-2.5 text-[12px]">
+                    <Icons.Shield size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-amber-900 dark:text-amber-200">
+                        You're inside <strong>{currentTenant?.name}</strong>'s workspace as parent admin. Any edits here happen in their tenant, not yours.
+                    </span>
+                </div>
+            )}
 
             {/* Welcome banner for brand-new workspaces */}
             {showWelcome && (
