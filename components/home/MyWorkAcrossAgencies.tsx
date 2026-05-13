@@ -55,8 +55,20 @@ interface TenantGroup {
 }
 
 export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNavigate }) => {
-  const { currentTenant, memberships, switchTenant } = useTenant();
+  const { currentTenant, memberships, switchTenant, isViewingAsTenant } = useTenant();
   const { tasks, loading, error, refresh } = useCrossTenantTasks();
+
+  // Hide entirely when the user is sitting INSIDE a partner / child agency
+  // tenant — either because they used "View as tenant" from the Master
+  // surface, or because they switched into a tenant that has a parent.
+  // The whole point of this widget is "your aggregate workload across
+  // workspaces", which makes sense ONLY from the user's home tenant.
+  // From inside a child agency, surfacing your unrelated tasks from
+  // Livv/payper/etc. confuses the partner-agency owner (looks like a
+  // data leak even though it's just YOUR data shown to YOU) and
+  // pollutes their focused view. So we just hide.
+  const isInChildOrPartnerView =
+    isViewingAsTenant || (currentTenant?.parent_tenant_id != null);
   // Cross-tenant task currently being edited inline. NULL = no modal open.
   // Lets the user mark a task done / change priority / move due date
   // WITHOUT switching tenants — the slow path (switchTenant) is reserved
@@ -125,6 +137,10 @@ export const MyWorkAcrossAgencies: React.FC<MyWorkAcrossAgenciesProps> = ({ onNa
 
   const totalCount = tasks.length;
   const overdueCount = tasks.filter(t => t.is_overdue).length;
+
+  // Bail out before any rendering when we're in a partner-agency view —
+  // see the comment on isInChildOrPartnerView above for the rationale.
+  if (isInChildOrPartnerView) return null;
 
   return (
     <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
