@@ -23,7 +23,7 @@ export const AcceptConnection: React.FC = () => {
 
     useEffect(() => {
         if (!token) {
-            setError('El link de invitación no tiene token.');
+            setError('The invitation link has no token.');
             setIsLoading(false);
             return;
         }
@@ -38,13 +38,16 @@ export const AcceptConnection: React.FC = () => {
                 if (rpcError) throw rpcError;
                 const row = Array.isArray(data) ? data[0] : data;
                 if (!row) {
-                    setError('Invitación no encontrada o expirada.');
+                    setError('Invitation not found or expired.');
                 } else if (row.status !== 'pending') {
-                    setError(
-                        row.status === 'accepted'
-                            ? 'Esta invitación ya fue aceptada.'
-                            : `Esta invitación ya no está pendiente (status: ${row.status}).`
-                    );
+                    // Already accepted (or revoked / rejected) — keep `info`
+                    // populated so the UI can render a friendly "your
+                    // workspace is ready, sign in" screen instead of a
+                    // generic red error. Only the failure modes (revoked/
+                    // rejected) need a hard error.
+                    if (row.status !== 'accepted') {
+                        setError(`This invitation is no longer pending (status: ${row.status}).`);
+                    }
                     setInfo(row as ConnectionInfo);
                 } else {
                     setInfo(row as ConnectionInfo);
@@ -67,7 +70,7 @@ export const AcceptConnection: React.FC = () => {
                 }
             } catch (err: any) {
                 errorLogger.error('verify_connection_token failed:', err);
-                setError(err?.message || 'No pude verificar la invitación.');
+                setError(err?.message || "Couldn't verify the invitation.");
             } finally {
                 setIsLoading(false);
             }
@@ -108,7 +111,7 @@ export const AcceptConnection: React.FC = () => {
             }
         } catch (err: any) {
             errorLogger.error('accept_connection failed:', err);
-            setError(err?.message || 'No pude aceptar la conexión.');
+            setError(err?.message || "Couldn't accept the connection.");
         } finally {
             setIsAccepting(false);
         }
@@ -269,7 +272,44 @@ export const AcceptConnection: React.FC = () => {
                     </div>
                 )}
 
-                {isAlreadyResolved ? (
+                {isAlreadyResolved && info.status === 'accepted' ? (
+                    // Already accepted — most common case for users who
+                    // bookmark/re-click the invite link after the workspace
+                    // was set up. Show a friendly "your workspace is ready"
+                    // screen with a clear sign-in CTA instead of a red
+                    // error. Forgot-password is a follow-up if they no
+                    // longer remember the credentials they used.
+                    <div className="space-y-3">
+                        <div className="p-3 rounded-xl text-xs bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                            <Icons.CheckCircle size={14} className="shrink-0 mt-0.5" />
+                            <span>
+                                Your workspace <strong>{info.invited_agency_name}</strong> is ready.
+                                Sign in with <strong>{info.invited_email}</strong> to enter.
+                            </span>
+                        </div>
+                        {isSignedIn && !wrongEmail ? (
+                            <button
+                                onClick={() => { window.location.href = '/'; }}
+                                className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
+                            >
+                                Enter my workspace
+                                <Icons.ChevronRight size={14} />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => { window.location.href = '/auth'; }}
+                                className="w-full py-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-2"
+                            >
+                                Sign in
+                                <Icons.ChevronRight size={14} />
+                            </button>
+                        )}
+                        <p className="text-[11px] text-zinc-400 text-center">
+                            Forgot your password? Use the "Forgot password" link on the sign-in page.
+                        </p>
+                    </div>
+                ) : isAlreadyResolved ? (
+                    // Revoked / rejected — keep the existing terse status.
                     <div className="text-center text-sm text-zinc-500">
                         Status: <span className="font-semibold uppercase tracking-wider">{info.status}</span>
                     </div>
