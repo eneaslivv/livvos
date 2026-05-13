@@ -134,8 +134,8 @@ BEGIN
   -- Caller must be a member of p_tenant_id — prevent fishing for other
   -- tenants' tasks by passing arbitrary p_tenant_id values.
   IF NOT EXISTS (
-    SELECT 1 FROM tenant_members
-    WHERE tenant_id = p_tenant_id AND user_id = v_caller
+    SELECT 1 FROM tenant_members tm
+    WHERE tm.tenant_id = p_tenant_id AND tm.user_id = v_caller
   ) THEN
     RAISE EXCEPTION 'Not a member of the given tenant';
   END IF;
@@ -228,7 +228,7 @@ BEGIN
     SELECT t.*
     FROM tasks t
     WHERE t.tenant_id IN (
-      SELECT tenant_id FROM tenant_members WHERE user_id = v_caller
+      SELECT tm.tenant_id FROM tenant_members tm WHERE tm.user_id = v_caller
     )
 
     UNION
@@ -241,10 +241,10 @@ BEGIN
     JOIN project_agency_shares pas
       ON pas.project_id = t.project_id
      AND pas.shared_with_tenant_id IN (
-       SELECT tenant_id FROM tenant_members WHERE user_id = v_caller
+       SELECT tm.tenant_id FROM tenant_members tm WHERE tm.user_id = v_caller
      )
     WHERE t.tenant_id NOT IN (
-      SELECT tenant_id FROM tenant_members WHERE user_id = v_caller
+      SELECT tm.tenant_id FROM tenant_members tm WHERE tm.user_id = v_caller
     )
   )
   SELECT
