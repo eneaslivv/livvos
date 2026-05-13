@@ -12,7 +12,11 @@
 // VITE_APP_URL is honoured ONLY when it's clearly a public URL (not
 // localhost, not 127.0.0.1) — gives us a knob for staging environments
 // without re-introducing the localhost footgun.
-const PRODUCTION_URL = 'https://app.livv.systems';
+// Vercel default deployment URL (confirmed live via curl: serves
+// <title>Eneas OS</title>). If you wire up a custom domain like
+// app.livv.systems, set VITE_APP_URL in the Vercel project env vars and
+// this fallback becomes irrelevant.
+const PRODUCTION_URL = 'https://livvos.vercel.app';
 
 const isPublicUrl = (url: string): boolean => {
   const u = url.trim().toLowerCase();
