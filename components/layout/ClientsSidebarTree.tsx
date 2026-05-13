@@ -332,7 +332,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                                 key={p.id}
                                 label={p.title}
                                 color={p.color || '#3b82f6'}
-                                avatarUrl={null}
+                                avatarUrl={p.logoUrl || null}
                                 icon={p.icon || null}
                                 active={currentPage === 'projects' && currentProjectId === p.id}
                                 starred={isStarred('project', p.id)}
@@ -357,7 +357,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                       key={p.id}
                       label={p.title}
                       color={p.color || '#3b82f6'}
-                      avatarUrl={null}
+                      avatarUrl={p.logoUrl || null}
                       icon={p.icon || null}
                       active={currentPage === 'projects' && currentProjectId === p.id}
                       starred={isStarred('project', p.id)}
@@ -383,7 +383,7 @@ export const ClientsSidebarTree: React.FC<Props> = ({
                       key={p.id}
                       label={p.title}
                       color={p.color || '#6366f1'}
-                      avatarUrl={null}
+                      avatarUrl={p.logoUrl || null}
                       icon={p.icon || null}
                       active={currentPage === 'projects' && currentProjectId === p.id}
                       starred={isStarred('project', p.id)}

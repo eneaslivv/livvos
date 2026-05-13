@@ -67,6 +67,9 @@ export interface Project {
   activity: ProjectActivity[]
   color: string
   icon?: string | null
+  /** Uploaded brand image for this project (stored in tenant-assets bucket).
+   *  Takes precedence over `icon` when rendering the avatar. */
+  logoUrl?: string | null
   budget: number
   currency: string
   /** When this project lives in another tenant and was shared with the
@@ -139,6 +142,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     activity: Array.isArray(p.activity) ? p.activity : [],
     color: p.color ?? '#3b82f6',
     icon: p.icon ?? null,
+    logoUrl: p.logo_url ?? p.logoUrl ?? null,
     budget: typeof p.budget === 'number' ? p.budget : 0,
     currency: p.currency ?? 'USD',
     // Cross-tenant share metadata. When non-null, this project is owned
@@ -172,6 +176,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.currency !== undefined) payload.currency = p.currency;
     if (p.color !== undefined) payload.color = p.color;
     if (p.icon !== undefined) payload.icon = p.icon;
+    if (p.logoUrl !== undefined) payload.logo_url = p.logoUrl;
     // updatedAt is handled automatically or by trigger, but we can send it
     payload.updated_at = new Date().toISOString();
     return payload;
@@ -332,6 +337,44 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       supabase.removeChannel(channel)
     }
   }, [fetchProjects, currentTenant?.id])
+
+  // ── Realtime for shared-IN projects ──
+  // The main channel above filters by `tenant_id = active`. Projects
+  // shared from another tenant into this one live with the OWNER's
+  // tenant_id, so UPDATE events on those (e.g. owner changes the icon
+  // or logo) wouldn't reach this side. Open one extra channel per
+  // shared-in project filtered by project_id, so edits sync in real
+  // time. RLS gates whether the row is delivered to this user.
+  // Separate effect so it can react when the shared-in list changes.
+  const sharedProjectIds = useMemo(
+    () => projects.filter(p => p.sharedFromTenantId).map(p => p.id),
+    [projects]
+  )
+  const sharedProjectIdsKey = sharedProjectIds.join(',')
+  useEffect(() => {
+    if (sharedProjectIds.length === 0) return
+    const channels = sharedProjectIds.map(pid =>
+      supabase
+        .channel(`projects-shared-rt-${pid}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${pid}` }, (payload) => {
+          const raw: any = payload.new
+          setProjects(prev => {
+            const existing = prev.find(p => p.id === raw.id)
+            if (!existing) return prev
+            // Preserve the shared_from_* badge fields when patching.
+            const merged = normalizeProject({
+              ...raw,
+              _shared_from_tenant_id: existing.sharedFromTenantId ?? null,
+              _shared_from_name: existing.sharedFromName ?? null,
+              _shared_from_logo_url: existing.sharedFromLogoUrl ?? null,
+            })
+            return prev.map(p => p.id === merged.id ? merged : p)
+          })
+        })
+        .subscribe()
+    )
+    return () => { channels.forEach(c => supabase.removeChannel(c)) }
+  }, [sharedProjectIdsKey])
 
   const createProject = async (projectData: Partial<Project>) => {
     if (!user) {

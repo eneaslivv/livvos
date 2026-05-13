@@ -1552,16 +1552,105 @@ export const Projects: React.FC<{
               )}
               <div className="flex items-center gap-2">
                 {selectedProject && (
-                  <IconPicker
-                    value={selectedProject.icon}
-                    onChange={async (icon) => {
-                      try {
-                        await updateProject(selectedProject.id, { icon });
-                      } catch (err) { errorLogger.error('Error updating project icon', err); }
-                    }}
-                    size={28}
-                    title="Pick an icon for this project"
-                  />
+                  selectedProject.logoUrl ? (
+                    // Logo present — render it as the avatar with hover
+                    // controls to replace or remove the image. Clicking
+                    // the X clears logoUrl so the IconPicker fallback
+                    // takes over.
+                    <div className="relative group/logo">
+                      <img
+                        src={selectedProject.logoUrl}
+                        alt={selectedProject.title}
+                        className="w-7 h-7 rounded-md object-cover border border-zinc-200 dark:border-zinc-700"
+                      />
+                      <label
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-md cursor-pointer opacity-0 group-hover/logo:opacity-100 transition-opacity"
+                        title="Change logo"
+                      >
+                        <Icons.Upload size={11} className="text-white" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !selectedProject) return;
+                            try {
+                              const ext = file.name.split('.').pop() || 'png';
+                              const path = `project-logos/${selectedProject.id}.${ext}`;
+                              const { error: upErr } = await supabase.storage
+                                .from('tenant-assets')
+                                .upload(path, file, { upsert: true, contentType: file.type });
+                              if (upErr) throw upErr;
+                              const { data: urlData } = supabase.storage
+                                .from('tenant-assets')
+                                .getPublicUrl(path);
+                              await updateProject(selectedProject.id, { logoUrl: urlData.publicUrl });
+                            } catch (err) {
+                              errorLogger.error('Project logo upload failed', err);
+                            } finally {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                      <button
+                        onClick={async () => {
+                          try { await updateProject(selectedProject.id, { logoUrl: null }); }
+                          catch (err) { errorLogger.error('Project logo clear failed', err); }
+                        }}
+                        title="Remove logo (falls back to icon)"
+                        className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[8px] font-bold flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity hover:bg-rose-500"
+                      >×</button>
+                    </div>
+                  ) : (
+                    // No logo — show the IconPicker plus a discrete
+                    // upload button next to it. Either path persists to
+                    // projects row, syncs cross-tenant via realtime.
+                    <div className="flex items-center gap-1">
+                      <IconPicker
+                        value={selectedProject.icon}
+                        onChange={async (icon) => {
+                          try {
+                            await updateProject(selectedProject.id, { icon });
+                          } catch (err) { errorLogger.error('Error updating project icon', err); }
+                        }}
+                        size={28}
+                        title="Pick an icon for this project"
+                      />
+                      <label
+                        className="w-5 h-5 rounded-md flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                        title="Upload a logo image"
+                      >
+                        <Icons.Upload size={10} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !selectedProject) return;
+                            try {
+                              const ext = file.name.split('.').pop() || 'png';
+                              const path = `project-logos/${selectedProject.id}.${ext}`;
+                              const { error: upErr } = await supabase.storage
+                                .from('tenant-assets')
+                                .upload(path, file, { upsert: true, contentType: file.type });
+                              if (upErr) throw upErr;
+                              const { data: urlData } = supabase.storage
+                                .from('tenant-assets')
+                                .getPublicUrl(path);
+                              await updateProject(selectedProject.id, { logoUrl: urlData.publicUrl });
+                            } catch (err) {
+                              errorLogger.error('Project logo upload failed', err);
+                            } finally {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )
                 )}
                 <h1 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
               </div>
