@@ -583,6 +583,18 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // the linked channel. Skips silently when project_id is null
             // or no channel subscribes to 'task_created'.
             if (data.project_id) {
+              // Resolve the assignee's name (best-effort) so the Slack
+              // message reads "Assigned to <Name>" — clearer than just
+              // showing who created the task.
+              let assigneeName: string | null = null;
+              const firstAssignee = (data.assignee_ids && data.assignee_ids[0]) || data.assigned_to;
+              if (firstAssignee && firstAssignee !== actor?.id) {
+                try {
+                  const { data: asn } = await supabase
+                    .from('profiles').select('name, email').eq('id', firstAssignee).maybeSingle()
+                  assigneeName = (asn as any)?.name || (asn as any)?.email?.split('@')[0] || null
+                } catch { /* ignore */ }
+              }
               notifySlackProjectEvent({
                 tenantId: tenantIdForNotify,
                 projectId: data.project_id,
@@ -590,6 +602,10 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 itemTitle: data.title,
                 actorName,
                 priority: data.priority || null,
+                // Pass due date so it shows "Due Aug 22" in the message —
+                // gives the team a live deadline log as tasks roll in.
+                dueDate: data.start_date || data.due_date || null,
+                assigneeName,
               }).catch((err) => errorLogger.warn('slack task-created notify failed', err))
             }
           }

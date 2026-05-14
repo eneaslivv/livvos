@@ -345,6 +345,122 @@ interface SidebarGroup {
   projects: Project[];
 }
 
+// ── Kickoff button ────────────────────────────────────────────────────────
+// Wraps the manual "🚀 Kickoff" trigger with intuitive feedback states:
+//   - idle             : compact button, hover state
+//   - sending          : spinner + "Sending…" label, disabled
+//   - sent (recent)    : green check + "Sent X ago" label, dimmed
+//   - error            : red dot + last-error tooltip
+// Persists kickoff_sent_at on the project after a successful post so the
+// "Sent X ago" survives reloads + reflects in the projects list.
+const KickoffButton: React.FC<{ project: Project; tenantId: string | null }> = ({ project, tenantId }) => {
+  const [state, setState] = React.useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [justSentMs, setJustSentMs] = React.useState<number | null>(null);
+  const { updateProject } = useProjects();
+
+  // Relative-time formatter — "just now / 5 min ago / 2h ago / 3d ago"
+  const formatAgo = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const sentAt = new Date(iso).getTime();
+    const now = Date.now();
+    const diff = now - sentAt;
+    if (diff < 0) return 'just now';
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return 'just now';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const days = Math.floor(hr / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+  };
+
+  // Reset the green check 4s after a fresh send so the button settles
+  // back into the "Sent X ago" idle state.
+  React.useEffect(() => {
+    if (state !== 'sent') return;
+    const t = setTimeout(() => setState('idle'), 4000);
+    return () => clearTimeout(t);
+  }, [state, justSentMs]);
+
+  const sentAgo = formatAgo(project.kickoffSentAt);
+
+  const handleClick = async () => {
+    if (!tenantId || state === 'sending') return;
+    setState('sending');
+    setErrorMsg(null);
+    try {
+      const result = await notifySlackProjectEvent({
+        tenantId,
+        projectId: project.id,
+        event: 'project_started',
+        itemTitle: project.title,
+        projectName: project.title,
+      });
+      if (result.posted > 0) {
+        const nowIso = new Date().toISOString();
+        try { await updateProject(project.id, { kickoffSentAt: nowIso }); } catch { /* ok */ }
+        setJustSentMs(Date.now());
+        setState('sent');
+      } else if (result.errors.length > 0) {
+        setErrorMsg(result.errors.join(' · '));
+        setState('error');
+      } else {
+        setErrorMsg('No Slack channels linked. Open Communications → channel settings to link a channel to this project.');
+        setState('error');
+      }
+    } catch (err: any) {
+      errorLogger.error('Manual kickoff Slack notify failed', err);
+      setErrorMsg(err?.message || 'Failed');
+      setState('error');
+    }
+  };
+
+  // Compose the visible label per state
+  let label: React.ReactNode;
+  let className = 'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors inline-flex items-center gap-1 ';
+  if (state === 'sending') {
+    label = (
+      <>
+        <span className="w-2.5 h-2.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+        Sending…
+      </>
+    );
+    className += 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 cursor-wait';
+  } else if (state === 'sent') {
+    label = <>✓ Sent now</>;
+    className += 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+  } else if (state === 'error') {
+    label = <>⚠ Couldn't send</>;
+    className += 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-100';
+  } else if (sentAgo) {
+    label = <>🚀 Kickoff · <span className="text-zinc-400">sent {sentAgo}</span></>;
+    className += 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800';
+  } else {
+    label = <>🚀 Kickoff</>;
+    className += 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800';
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={state === 'sending' || !tenantId}
+      title={
+        state === 'error'
+          ? errorMsg || 'Failed'
+          : sentAgo
+            ? `Last sent ${sentAgo}. Click to resend with the latest project data.`
+            : 'Send a kickoff digest (roadmap + milestones) to every Slack channel linked to this project'
+      }
+      className={className}
+    >
+      {label}
+    </button>
+  );
+};
+
 /* ════════════════════════════════════════════════════════════ */
 /*  MAIN COMPONENT                                             */
 /* ════════════════════════════════════════════════════════════ */
@@ -1712,39 +1828,7 @@ export const Projects: React.FC<{
                   className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
                   Share
                 </button>
-                {/* Manual kickoff trigger — re-sends the rich roadmap to
-                    every monitored Slack channel linked to this project.
-                    Useful when you want to share the digest again after
-                    adding more tasks, or when the auto-trigger (on
-                    status flip to Active) was already consumed. */}
-                <button
-                  onClick={async () => {
-                    if (!selectedProject || !currentTenant?.id) return;
-                    try {
-                      const result = await notifySlackProjectEvent({
-                        tenantId: currentTenant.id,
-                        projectId: selectedProject.id,
-                        event: 'project_started',
-                        itemTitle: selectedProject.title,
-                        projectName: selectedProject.title,
-                      });
-                      if (result.posted > 0) {
-                        alert(`Sent kickoff digest to ${result.posted} channel${result.posted === 1 ? '' : 's'}.`);
-                      } else if (result.errors.length > 0) {
-                        alert(`No channels received it. ${result.errors.join(' · ')}`);
-                      } else {
-                        alert('No Slack channels are linked to this project. Link a channel in Communications → channel settings first.');
-                      }
-                    } catch (err: any) {
-                      errorLogger.error('Manual kickoff Slack notify failed', err);
-                      alert('Could not send: ' + (err?.message || 'unknown error'));
-                    }
-                  }}
-                  title="Send a kickoff digest (roadmap + milestones) to every Slack channel linked to this project"
-                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors inline-flex items-center gap-1"
-                >
-                  🚀 Kickoff
-                </button>
+                <KickoffButton project={selectedProject} tenantId={currentTenant?.id || null} />
                 <button onClick={() => setIsClientPreviewMode(true)}
                   className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
                   Project View

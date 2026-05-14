@@ -243,6 +243,12 @@ export interface SlackProjectEventPayload {
   currency?: string | null;
   /** Optional priority — surfaced as a small badge for task_created. */
   priority?: string | null;
+  /** Optional ISO date for task_created — when present, surfaced as
+   *  "Due Aug 22" in the Slack message so the team can see deadlines
+   *  rolling into the channel as tasks get created. */
+  dueDate?: string | null;
+  /** Optional assignee display name for task_created. */
+  assigneeName?: string | null;
 }
 
 interface EventCopy { emoji: string; headline: string }
@@ -440,17 +446,30 @@ export async function notifySlackProjectEvent(payload: SlackProjectEventPayload)
     text = kickoff.text;
     blocks = kickoff.blocks;
   } else {
+    // Build the "Due Aug 22" line for task_created (and task_completed
+    // — useful as a log of "X was due on Y, marked done today").
+    let dueLine = '';
+    if (payload.dueDate) {
+      try {
+        const d = new Date(String(payload.dueDate).slice(0, 10) + 'T12:00:00');
+        if (!isNaN(d.getTime())) {
+          dueLine = `\n📅 Due ${d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+      } catch { /* ignore */ }
+    }
+
     text = `${copy.emoji} ${copy.headline} — ${payload.itemTitle}`;
     blocks = [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${copy.emoji} ${copy.headline}\n*${payload.itemTitle}*${amountLine}${projectLine ? `\n${projectLine}` : ''}`,
+          text: `${copy.emoji} ${copy.headline}\n*${payload.itemTitle}*${amountLine}${dueLine}${projectLine ? `\n${projectLine}` : ''}`,
         },
       },
     ];
     const contextLines: string[] = [];
+    if (payload.assigneeName) contextLines.push(`Assigned to *${payload.assigneeName}*`);
     if (payload.actorName) contextLines.push(`By ${payload.actorName}`);
     if (priorityBadge) contextLines.push(priorityBadge.replace(' · ', ''));
     if (contextLines.length > 0) {

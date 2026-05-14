@@ -70,6 +70,10 @@ export interface Project {
   /** Uploaded brand image for this project (stored in tenant-assets bucket).
    *  Takes precedence over `icon` when rendering the avatar. */
   logoUrl?: string | null
+  /** Last time the kickoff digest was posted to Slack. Used by the Kickoff
+   *  button to show "Sent X ago" so users don't re-click blindly. NULL
+   *  if it was never posted (or if Slack isn't connected). */
+  kickoffSentAt?: string | null
   budget: number
   currency: string
   /** When this project lives in another tenant and was shared with the
@@ -143,6 +147,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     color: p.color ?? '#3b82f6',
     icon: p.icon ?? null,
     logoUrl: p.logo_url ?? p.logoUrl ?? null,
+    kickoffSentAt: p.kickoff_sent_at ?? p.kickoffSentAt ?? null,
     budget: typeof p.budget === 'number' ? p.budget : 0,
     currency: p.currency ?? 'USD',
     // Cross-tenant share metadata. When non-null, this project is owned
@@ -177,6 +182,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (p.color !== undefined) payload.color = p.color;
     if (p.icon !== undefined) payload.icon = p.icon;
     if (p.logoUrl !== undefined) payload.logo_url = p.logoUrl;
+    if (p.kickoffSentAt !== undefined) payload.kickoff_sent_at = p.kickoffSentAt;
     // updatedAt is handled automatically or by trigger, but we can send it
     payload.updated_at = new Date().toISOString();
     return payload;
@@ -512,7 +518,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 actorName = (prof as any)?.name || (prof as any)?.email
               }
             } catch {}
-            await notifySlackProjectEvent({
+            const result = await notifySlackProjectEvent({
               tenantId,
               projectId: id,
               event: 'project_started',
@@ -520,6 +526,16 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               projectName: updatedProject.title,
               actorName: actorName || null,
             })
+            // Stamp the project so the UI button can show "Sent X ago"
+            // and skip the auto-trigger if status flips Active→other→Active
+            // later (auto only fires on the FIRST transition anyway, but
+            // the timestamp also feeds the manual button's "last sent"
+            // label).
+            if (result.posted > 0) {
+              const now = new Date().toISOString()
+              await supabase.from('projects').update({ kickoff_sent_at: now }).eq('id', id)
+              setProjects(prev => prev.map(p => p.id === id ? { ...p, kickoffSentAt: now } : p))
+            }
           } catch (e) {
             errorLogger.warn('slack project-started notify failed', e)
           }
