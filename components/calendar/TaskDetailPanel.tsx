@@ -445,32 +445,35 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               Created {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </p>
 
-            {/* ── Partner agency share toggle ──
-                Only shows when the task belongs to a project. Default OFF —
-                the owner agency opts in explicitly per task. When ON, the
-                partner agency on a shared project can see/edit this task;
-                when OFF, the task stays internal to the owner even though
-                the project itself is shared. */}
+            {/* ── Partner agency visibility toggle ──
+                Default ON — tasks in a shared project sync to the
+                partner by default. Uncheck to mark a task internal-only
+                (admin notes, sales prep, anything the partner shouldn't
+                see). Only renders when the task belongs to a project
+                AND the current user is the owner (not the partner). */}
             {selectedTask.project_id && !selectedTask.shared_from_tenant_id && (
               <div className="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-                <Icons.Users size={13} className="text-zinc-400 mt-0.5 shrink-0" />
+                <Icons.Lock size={13} className={`mt-0.5 shrink-0 ${selectedTask.shared_with_partner === false ? 'text-amber-500' : 'text-zinc-400'}`} />
                 <div className="flex-1 min-w-0">
                   <label className="flex items-center gap-2 cursor-pointer text-[11.5px] font-medium text-zinc-700 dark:text-zinc-200">
                     <input
                       type="checkbox"
-                      checked={!!selectedTask.shared_with_partner}
+                      checked={selectedTask.shared_with_partner === false}
                       onChange={async (e) => {
                         if (!onQuickUpdate || !selectedTask?.id) return;
-                        await onQuickUpdate(selectedTask.id, { shared_with_partner: e.target.checked });
+                        // Inverted semantics: the checkbox represents
+                        // "keep this internal", but the column we write
+                        // is shared_with_partner — flip the value.
+                        await onQuickUpdate(selectedTask.id, { shared_with_partner: !e.target.checked });
                       }}
-                      className="rounded border-zinc-300 dark:border-zinc-600 text-violet-600 focus:ring-violet-500"
+                      className="rounded border-zinc-300 dark:border-zinc-600 text-amber-600 focus:ring-amber-500"
                     />
-                    Visible to partner agencies
+                    Keep internal — hide from partner agencies
                   </label>
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 leading-snug">
-                    {selectedTask.shared_with_partner
-                      ? 'Connected agencies on this project can see and edit this task.'
-                      : 'Internal — only your agency sees this task, even if the project is shared.'}
+                    {selectedTask.shared_with_partner === false
+                      ? 'Hidden from connected agencies. Only your agency sees this task.'
+                      : 'Connected agencies on this project see and can edit this task. Tick to hide.'}
                   </p>
                 </div>
               </div>
