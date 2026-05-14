@@ -219,11 +219,13 @@ export async function setSlackNotifyChannel(
 //   - task_created       a new task was added under the project
 //   - task_completed     a task transitioned to status='done'
 //   - milestone_paid     an income installment was marked paid
+//   - project_started    project status flipped to 'Active' (kickoff digest)
 //   - project_completed  the project itself moved to status='Completed'
 export type SlackProjectEvent =
   | 'task_created'
   | 'task_completed'
   | 'milestone_paid'
+  | 'project_started'
   | 'project_completed';
 
 export interface SlackProjectEventPayload {
@@ -246,14 +248,143 @@ export interface SlackProjectEventPayload {
 interface EventCopy { emoji: string; headline: string }
 
 const EVENT_COPY: Record<SlackProjectEvent, EventCopy> = {
-  task_created:       { emoji: '🆕', headline: 'Nueva tarea' },
-  task_completed:     { emoji: '✅', headline: 'Tarea completada' },
-  milestone_paid:     { emoji: '💰', headline: 'Cuota cobrada' },
-  project_completed:  { emoji: '🏁', headline: 'Proyecto completado' },
+  task_created:       { emoji: '🆕', headline: 'New task' },
+  task_completed:     { emoji: '✅', headline: 'Task completed' },
+  milestone_paid:     { emoji: '💰', headline: 'Installment paid' },
+  project_started:    { emoji: '🚀', headline: 'Project started' },
+  project_completed:  { emoji: '🏁', headline: 'Project completed' },
 };
 
 const fmtMoney = (n: number, curr: string) =>
   `${curr} ${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+// ── Project kickoff digest ────────────────────────────────────────────────
+// Fetches the project row + open tasks + scheduled income milestones, then
+// groups tasks by timeframe relative to today. Output is Block Kit JSON
+// suitable for slack-notify. Designed to be readable in one screen on
+// mobile Slack — bucketed by date, not a 40-row dump.
+async function buildProjectKickoffBlocks(
+  payload: SlackProjectEventPayload,
+  projectName: string | null,
+): Promise<{ text: string; blocks: any[] }> {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const endOfWeek = new Date(today); endOfWeek.setDate(today.getDate() + (7 - today.getDay()));
+  const endOfNextWeek = new Date(endOfWeek); endOfNextWeek.setDate(endOfWeek.getDate() + 7);
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  // Pull everything we need in parallel — best-effort, any failure just
+  // means a less complete digest, never a thrown error.
+  const [projectRes, tasksRes, milestonesRes] = await Promise.all([
+    supabase.from('projects')
+      .select('title, deadline, budget, currency, description, client_id')
+      .eq('id', payload.projectId).maybeSingle(),
+    supabase.from('tasks')
+      .select('id, title, start_date, due_date, priority, status, parent_task_id, completed')
+      .eq('project_id', payload.projectId)
+      .neq('status', 'cancelled')
+      .order('start_date', { ascending: true, nullsFirst: false }),
+    supabase.from('income_installments')
+      .select('amount, currency, due_date, number, status, incomes!inner(project_id, currency, concept)')
+      .eq('incomes.project_id', payload.projectId)
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(10),
+  ]);
+
+  const project = (projectRes.data as any) || {};
+  const allTasks = (tasksRes.data as any[]) || [];
+  // Only parent tasks for the digest, and exclude already-done ones.
+  const tasks = allTasks.filter(t => !t.parent_task_id && !t.completed);
+
+  // Bucket tasks by upcoming timeframe.
+  const buckets: Record<string, any[]> = {
+    'This week':   [],
+    'Next week':   [],
+    'This month':  [],
+    'Later':       [],
+    'No date':     [],
+  };
+  for (const t of tasks) {
+    const dStr = t.start_date || t.due_date;
+    if (!dStr) { buckets['No date'].push(t); continue; }
+    const d = new Date(String(dStr).slice(0, 10) + 'T12:00:00');
+    if (d <= endOfWeek)      buckets['This week'].push(t);
+    else if (d <= endOfNextWeek) buckets['Next week'].push(t);
+    else if (d <= endOfMonth)    buckets['This month'].push(t);
+    else                          buckets['Later'].push(t);
+  }
+
+  const totalOpen = tasks.length;
+  const totalAll = allTasks.filter(t => !t.parent_task_id).length;
+  const subtasksCount = allTasks.filter(t => !!t.parent_task_id).length;
+
+  // Header
+  const headline = `🚀 Project started — *${projectName || project.title || 'Project'}*`;
+  const subBits: string[] = [];
+  if (project.budget) subBits.push(`Budget *${fmtMoney(Number(project.budget) || 0, project.currency || 'USD')}*`);
+  if (project.deadline) {
+    const dl = new Date(String(project.deadline).slice(0, 10) + 'T12:00:00');
+    subBits.push(`Deadline *${dl.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}*`);
+  }
+  subBits.push(`*${totalOpen}* open ${totalOpen === 1 ? 'task' : 'tasks'}${subtasksCount ? ` (+${subtasksCount} subtasks)` : ''}`);
+
+  const blocks: any[] = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `${headline}\n${subBits.join(' · ')}` },
+    },
+    { type: 'divider' },
+  ];
+
+  // Bucket sections — render only buckets that have content
+  const ORDER = ['This week', 'Next week', 'This month', 'Later', 'No date'] as const;
+  for (const key of ORDER) {
+    const items = buckets[key];
+    if (!items.length) continue;
+    const lines = items.slice(0, 6).map(t => {
+      const dateLabel = t.start_date || t.due_date;
+      const dateBit = dateLabel
+        ? ` _(${new Date(String(dateLabel).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })})_`
+        : '';
+      const priBit = (t.priority === 'urgent' || t.priority === 'high') ? ` *${t.priority.toUpperCase()}*` : '';
+      return `• ${t.title}${dateBit}${priBit}`;
+    });
+    if (items.length > 6) lines.push(`_…+${items.length - 6} more in this bucket_`);
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*${key}* — ${items.length} ${items.length === 1 ? 'task' : 'tasks'}\n${lines.join('\n')}` },
+    });
+  }
+
+  // Milestones strip
+  const installments = (milestonesRes.data as any[]) || [];
+  if (installments.length > 0) {
+    const lines = installments.slice(0, 5).map(inst => {
+      const dueStr = inst.due_date
+        ? new Date(String(inst.due_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+        : 'TBD';
+      const paidBadge = inst.status === 'paid' ? '✅' : '⏳';
+      return `${paidBadge} #${inst.number} · ${fmtMoney(Number(inst.amount) || 0, inst.currency || project.currency || 'USD')} · _${dueStr}_`;
+    });
+    if (installments.length > 5) lines.push(`_…+${installments.length - 5} more milestones_`);
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Billing milestones*\n${lines.join('\n')}` },
+    });
+  }
+
+  // Footer
+  const footerBits: string[] = [];
+  if (payload.actorName) footerBits.push(`Kicked off by *${payload.actorName}*`);
+  footerBits.push(`${totalAll} total ${totalAll === 1 ? 'task' : 'tasks'}`);
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: footerBits.join(' · ') }],
+  });
+
+  const text = `🚀 Project started — ${projectName || project.title || 'Project'} (${totalOpen} open tasks)`;
+  return { text, blocks };
+}
 
 export async function notifySlackProjectEvent(payload: SlackProjectEventPayload): Promise<{ posted: number; errors: string[] }> {
   const errors: string[] = [];
@@ -296,26 +427,38 @@ export async function notifySlackProjectEvent(payload: SlackProjectEventPayload)
     ? `\n*${fmtMoney(payload.amount, payload.currency || 'USD')}*`
     : '';
   const priorityBadge = payload.priority && payload.priority !== 'medium'
-    ? ` · prioridad ${payload.priority}` : '';
+    ? ` · priority ${payload.priority}` : '';
 
-  const text = `${copy.emoji} ${copy.headline} — ${payload.itemTitle}`;
-  const blocks: any[] = [
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `${copy.emoji} ${copy.headline}\n*${payload.itemTitle}*${amountLine}${projectLine ? `\n${projectLine}` : ''}`,
+  let text: string;
+  let blocks: any[];
+
+  if (payload.event === 'project_started') {
+    // Rich kickoff digest — pulls tasks + milestones + budget and groups
+    // tasks by upcoming timeframe ("This week / Next week / This month /
+    // Later / No date"). Tells the team what's coming and when.
+    const kickoff = await buildProjectKickoffBlocks(payload, projectName);
+    text = kickoff.text;
+    blocks = kickoff.blocks;
+  } else {
+    text = `${copy.emoji} ${copy.headline} — ${payload.itemTitle}`;
+    blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${copy.emoji} ${copy.headline}\n*${payload.itemTitle}*${amountLine}${projectLine ? `\n${projectLine}` : ''}`,
+        },
       },
-    },
-  ];
-  const contextLines: string[] = [];
-  if (payload.actorName) contextLines.push(`Por ${payload.actorName}`);
-  if (priorityBadge) contextLines.push(priorityBadge.replace(' · ', ''));
-  if (contextLines.length > 0) {
-    blocks.push({
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: contextLines.join(' · ') }],
-    });
+    ];
+    const contextLines: string[] = [];
+    if (payload.actorName) contextLines.push(`By ${payload.actorName}`);
+    if (priorityBadge) contextLines.push(priorityBadge.replace(' · ', ''));
+    if (contextLines.length > 0) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: contextLines.join(' · ') }],
+      });
+    }
   }
 
   // 5. Post to each subscribed channel.

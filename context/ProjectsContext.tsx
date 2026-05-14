@@ -486,10 +486,47 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       const updatedProject = normalizeProject(data)
 
-      // Slack notification on project completion. Best-effort; never
-      // throws to the caller. Fires only on the transition into
-      // 'Completed' (so re-saving a Completed project doesn't re-spam).
-      const wasCompleted = projects.find(p => p.id === id)?.status === ProjectStatus.Completed
+      // Slack notification on status transitions. Best-effort; never
+      // throws to the caller. Fires only on the FIRST transition into
+      // a given target status (so re-saving doesn't re-spam).
+      const previousStatus = projects.find(p => p.id === id)?.status
+      const wasCompleted = previousStatus === ProjectStatus.Completed
+      const wasActive = previousStatus === ProjectStatus.Active
+
+      // ── 1. Kickoff digest when status flips to Active ──
+      //   Sends a rich Block Kit message with the roadmap (tasks
+      //   grouped by timeframe + billing milestones + budget). Fires
+      //   on the very first time the project becomes Active in its
+      //   life — i.e. previousStatus was Pending, Review, or unset.
+      if (updates.status === ProjectStatus.Active && !wasActive) {
+        ;(async () => {
+          try {
+            const tenantId = await resolveTenantId()
+            if (!tenantId) return
+            let actorName: string | undefined
+            try {
+              const { data: { user: actor } } = await supabase.auth.getUser()
+              if (actor?.id) {
+                const { data: prof } = await supabase
+                  .from('profiles').select('name, email').eq('id', actor.id).maybeSingle()
+                actorName = (prof as any)?.name || (prof as any)?.email
+              }
+            } catch {}
+            await notifySlackProjectEvent({
+              tenantId,
+              projectId: id,
+              event: 'project_started',
+              itemTitle: updatedProject.title,
+              projectName: updatedProject.title,
+              actorName: actorName || null,
+            })
+          } catch (e) {
+            errorLogger.warn('slack project-started notify failed', e)
+          }
+        })()
+      }
+
+      // ── 2. Completion notification (existing behaviour) ──
       if (updates.status === ProjectStatus.Completed && !wasCompleted) {
         ;(async () => {
           try {

@@ -8,6 +8,7 @@ import { errorLogger } from '../lib/errorLogger';
 import { logActivity } from '../lib/activity';
 import { supabase } from '../lib/supabase';
 import { appUrl } from '../lib/appUrl';
+import { notifySlackProjectEvent } from '../lib/communications/slack';
 import { useSupabase } from '../hooks/useSupabase';
 import PortalApp from '../components/portal/livv-client view-control/App';
 import type { DashboardData, Milestone, LogEntry, PaymentEntry } from '../components/portal/livv-client view-control/types';
@@ -1710,6 +1711,39 @@ export const Projects: React.FC<{
                 <button onClick={() => setIsShareModalOpen(true)}
                   className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
                   Share
+                </button>
+                {/* Manual kickoff trigger — re-sends the rich roadmap to
+                    every monitored Slack channel linked to this project.
+                    Useful when you want to share the digest again after
+                    adding more tasks, or when the auto-trigger (on
+                    status flip to Active) was already consumed. */}
+                <button
+                  onClick={async () => {
+                    if (!selectedProject || !currentTenant?.id) return;
+                    try {
+                      const result = await notifySlackProjectEvent({
+                        tenantId: currentTenant.id,
+                        projectId: selectedProject.id,
+                        event: 'project_started',
+                        itemTitle: selectedProject.title,
+                        projectName: selectedProject.title,
+                      });
+                      if (result.posted > 0) {
+                        alert(`Sent kickoff digest to ${result.posted} channel${result.posted === 1 ? '' : 's'}.`);
+                      } else if (result.errors.length > 0) {
+                        alert(`No channels received it. ${result.errors.join(' · ')}`);
+                      } else {
+                        alert('No Slack channels are linked to this project. Link a channel in Communications → channel settings first.');
+                      }
+                    } catch (err: any) {
+                      errorLogger.error('Manual kickoff Slack notify failed', err);
+                      alert('Could not send: ' + (err?.message || 'unknown error'));
+                    }
+                  }}
+                  title="Send a kickoff digest (roadmap + milestones) to every Slack channel linked to this project"
+                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors inline-flex items-center gap-1"
+                >
+                  🚀 Kickoff
                 </button>
                 <button onClick={() => setIsClientPreviewMode(true)}
                   className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
