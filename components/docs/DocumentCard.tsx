@@ -10,9 +10,15 @@ interface DocumentCardProps {
   onToggleSelect?: () => void;
   onMore?: () => void;
   onDragStart?: (e: React.DragEvent) => void;
+  /** When this doc is linked to a task, show a small inline chip with
+   *  the task title. Clicking the chip unlinks. Renders inside the card
+   *  layout (not absolute-positioned) so it never overflows past the
+   *  card's bottom edge. */
+  linkedTaskTitle?: string | null;
+  onUnlinkTask?: () => void;
 }
 
-export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onClick, selected = false, onToggleSelect, onMore, onDragStart }) => {
+export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onClick, selected = false, onToggleSelect, onMore, onDragStart, linkedTaskTitle, onUnlinkTask }) => {
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -120,6 +126,18 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
           <Icons.Globe size={11} className="text-zinc-300 dark:text-zinc-600" />
         )}
       </div>
+      {linkedTaskTitle && (
+        // Inline (not absolute) so the chip stays inside the card bounds
+        // and the date row above stays readable. Click → unlinks.
+        <button
+          onClick={(e) => { e.stopPropagation(); onUnlinkTask?.(); }}
+          title={`Linked to task: ${linkedTaskTitle} — click to unlink`}
+          className="mt-2 inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
+        >
+          <Icons.CheckCircle size={9} />
+          <span className="truncate">{linkedTaskTitle}</span>
+        </button>
+      )}
     </div>
   );
 };

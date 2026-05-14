@@ -960,13 +960,17 @@ export const Docs: React.FC = () => {
           <PasswordsPanel />
         </motion.div>
       ) : (
-        /* Documents content area — with drag & drop */
+        /* Documents content area — drag & drop wrapper. No motion key
+           per folder: we don't want a full unmount/remount + fade-in
+           every time the user opens a folder. Items inside fade on
+           mount only (initial: false on the parent AnimatePresence
+           around this whole tab area means no entrance animation when
+           navigating between folders). */
         <motion.div
-          key={`docs-${currentFolderId || 'root'}`}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.12, ease: 'easeOut' }}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
@@ -1052,16 +1056,18 @@ export const Docs: React.FC = () => {
               <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-6">or drag and drop files here</p>
             </div>
           ) : (
-            /* Documents grid / list */
-            <motion.div
-              layout
+            /* Documents grid / list — plain div, no Framer layout.
+               Layout was causing per-item reflow + cascade animations
+               every time a folder opened. Google Drive uses a fixed
+               grid; we do the same. */
+            <div
               className={
                 view === 'grid'
                   ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
                   : 'space-y-1.5'
               }
             >
-              <AnimatePresence mode="popLayout" initial={false}>
+              {/* No AnimatePresence wrapper — items add/remove instantly. */}
               {/* Folders */}
               {folders.map((folder, i) => {
                 const sel = isSelected(folder.id);
@@ -1071,14 +1077,13 @@ export const Docs: React.FC = () => {
                 return view === 'grid' ? (
                   <motion.div
                     key={folder.id}
-                    layout
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{
                       opacity: isDragSource ? 0.4 : 1,
                       scale: isDropHover ? 1.04 : isDragSource ? 0.96 : 1,
                     }}
                     exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
-                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
+                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.12, ease: 'easeOut' }}
                     onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
@@ -1139,7 +1144,6 @@ export const Docs: React.FC = () => {
                 ) : (
                   <motion.div
                     key={folder.id}
-                    layout
                     initial={{ opacity: 0, x: -8 }}
                     animate={{
                       opacity: isDragSource ? 0.4 : 1,
@@ -1147,7 +1151,7 @@ export const Docs: React.FC = () => {
                       scale: isDropHover ? 1.015 : 1,
                     }}
                     exit={{ opacity: 0, x: -8, transition: { duration: 0.15 } }}
-                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.25, delay: i * 0.04, ease: 'easeOut' }}
+                    transition={isDropHover ? { type: 'spring', stiffness: 400, damping: 22 } : { duration: 0.12, ease: 'easeOut' }}
                     onClick={(e) => { if ((e as any).shiftKey) { toggleSelected(selItem); return; } setCurrentFolderId(folder.id); }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'folder', folder.id)}
@@ -1201,9 +1205,9 @@ export const Docs: React.FC = () => {
                 );
               })}
 
-              {/* Documents (rich-text). Wrapped so we can host the
-                  task-drop target + the linked-task pill without editing
-                  the shared DocumentCard component. */}
+              {/* Documents (rich-text). Wrapped only to host the task-drop
+                  target ring — the linked-task chip now lives INSIDE
+                  DocumentCard so it doesn't float past the card bounds. */}
               {documents.map((doc) => {
                 const isDocDropHover = dropTargetDocId === doc.id;
                 const linkedTask = doc.task_id ? taskById.get(doc.task_id) : null;
@@ -1213,7 +1217,7 @@ export const Docs: React.FC = () => {
                     onDragOver={onDocDropTarget.onDragOver}
                     onDragLeave={(e) => onDocDropTarget.onDragLeave(e, doc.id)}
                     onDrop={(e) => onDocDropTarget.onDrop(e, doc.id)}
-                    className={`relative rounded-xl transition-all ${isDocDropHover ? 'ring-2 ring-emerald-300/70 dark:ring-emerald-500/40 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900' : ''}`}>
+                    className={`rounded-xl transition-shadow ${isDocDropHover ? 'ring-2 ring-emerald-300/70 dark:ring-emerald-500/40 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900' : ''}`}>
                     <DocumentCard
                       document={doc}
                       view={view}
@@ -1224,16 +1228,9 @@ export const Docs: React.FC = () => {
                         if (confirm(`Delete document "${doc.title}"?`)) deleteDocument(doc.id);
                       }}
                       onDragStart={(e) => onCardDragStart(e, 'doc' as any, doc.id)}
+                      linkedTaskTitle={linkedTask ? (linkedTask as any).title : null}
+                      onUnlinkTask={() => unlinkDocTask(doc.id)}
                     />
-                    {linkedTask && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); unlinkDocTask(doc.id); }}
-                        title={`Vinculada: ${(linkedTask as any).title} — click para desvincular`}
-                        className="absolute bottom-2 left-2 inline-flex items-center gap-1 max-w-[calc(100%-16px)] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors z-10">
-                        <Icons.CheckCircle size={9} />
-                        <span className="truncate">{(linkedTask as any).title}</span>
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -1246,11 +1243,10 @@ export const Docs: React.FC = () => {
                 return view === 'grid' ? (
                   <motion.div
                     key={file.id}
-                    layout
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: fIsDragSource ? 0.4 : 1, scale: fIsDragSource ? 0.96 : 1 }}
                     exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
-                    transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
+                    transition={{ duration: 0.12, ease: 'easeOut' }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
                     onDragEnd={onCardDragEnd}
@@ -1343,11 +1339,10 @@ export const Docs: React.FC = () => {
                 ) : (
                   <motion.div
                     key={file.id}
-                    layout
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: fIsDragSource ? 0.4 : 1, x: 0 }}
                     exit={{ opacity: 0, x: -8, transition: { duration: 0.15 } }}
-                    transition={{ duration: 0.25, delay: (folders.length + i) * 0.04, ease: 'easeOut' }}
+                    transition={{ duration: 0.12, ease: 'easeOut' }}
                     draggable
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
                     onDragEnd={onCardDragEnd}
@@ -1405,8 +1400,7 @@ export const Docs: React.FC = () => {
                   </motion.div>
                 );
               })}
-              </AnimatePresence>
-            </motion.div>
+            </div>
           )}
         </motion.div>
       )}
