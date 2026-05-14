@@ -373,7 +373,7 @@ export const Projects: React.FC<{
   const { members } = useTeam();
   const { user: currentUser } = useAuth();
   const { currentTenant } = useTenant();
-  const { updateTask, createTask } = useCalendar();
+  const { updateTask, createTask, tasks: calendarTasks } = useCalendar();
   const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense, deleteExpense, timeEntries, createTimeEntry, deleteTimeEntry } = useFinance();
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
@@ -477,9 +477,25 @@ export const Projects: React.FC<{
     } catch { /* RLS may filter to 0 — fine */ }
   }, [selectedId]);
   React.useEffect(() => { void refreshAgencyShareCount(); }, [refreshAgencyShareCount]);
-  const allProjectTasks = selectedProject
-    ? syncedTasks.filter((task: any) => (task.project_id || task.projectId) === selectedProject.id)
-    : [];
+  // Merge tenant-scoped tasks (useSupabase) with CalendarContext's tasks
+  // — the latter includes cross-tenant shared-in tasks via the RPC
+  // list_calendar_tasks_for_tenant. Without this merge, when viewing a
+  // project shared FROM another agency, the kanban came up empty because
+  // useSupabase('tasks').eq('tenant_id', mine) excludes shared tasks.
+  // Dedupe by id; calendarTasks wins on conflict since it has the full
+  // shared-from metadata.
+  const allProjectTasks = (() => {
+    if (!selectedProject) return [];
+    const seen = new Map<string, any>();
+    for (const t of syncedTasks) {
+      const pid = (t as any).project_id || (t as any).projectId;
+      if (pid === selectedProject.id) seen.set((t as any).id, t);
+    }
+    for (const t of calendarTasks) {
+      if (t.project_id === selectedProject.id) seen.set(t.id, t);
+    }
+    return [...seen.values()];
+  })();
   // Separate parent tasks from subtasks
   const projectTasks = allProjectTasks.filter((t: any) => !t.parent_task_id);
   const projectSubtasks = allProjectTasks.filter((t: any) => !!t.parent_task_id);
