@@ -14,6 +14,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import { Icons } from '../ui/Icons';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import { DocumentToolbar } from './DocumentToolbar';
 import { SlashCommand, type SlashState } from './extensions/SlashCommand';
 import { SlashCommandMenu, type SlashItem, type SlashCommandMenuHandle } from './SlashCommandMenu';
@@ -1008,52 +1009,76 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
         {showSidebar && (
           <div className="w-72 border-l border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-y-auto shrink-0">
             <div className="p-5 space-y-5">
-              {/* Status */}
+              {/* Status — segmented control. Each option owns its color
+                  scheme so "Published" reads as emerald and "Draft" as
+                  neutral, with a soft fill on the active state. */}
               <div>
                 <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-2">Status</label>
-                <div className="flex gap-1.5">
-                  {(['draft', 'published'] as const).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => updateDocument(documentId, { status: s })}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        doc.status === s
-                          ? s === 'published'
-                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-                            : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300'
-                          : 'border-transparent text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      {s.charAt(0).toUpperCase() + s.slice(1)}
-                    </button>
-                  ))}
+                <div className="inline-flex p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-800">
+                  {(['draft', 'published'] as const).map(s => {
+                    const active = doc.status === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => updateDocument(documentId, { status: s })}
+                        className={`px-3 py-1 rounded-md text-[12px] font-semibold transition-all ${
+                          active
+                            ? s === 'published'
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 shadow-sm'
+                              : 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        {active && s === 'published' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 align-middle animate-pulse" />}
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Assign to Project */}
+              {/* Assign to Project — searchable popover with client hint */}
               <div>
                 <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5">Project</label>
-                <select
+                <SearchableSelect
                   value={projectId}
-                  onChange={e => handleAssign('project_id', e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-zinc-400"
-                >
-                  <option value="">None</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
+                  onChange={(next) => handleAssign('project_id', next)}
+                  options={projects.map(p => ({
+                    value: p.id,
+                    label: p.title,
+                    icon: (p as any).icon || '📁',
+                    avatarUrl: (p as any).logoUrl || (p as any).logo_url || null,
+                    hint: (() => {
+                      const cid = (p as any).client_id;
+                      if (!cid) return undefined;
+                      const c = clients.find((x: any) => x.id === cid);
+                      return c?.name || undefined;
+                    })(),
+                    searchValue: (p.title || '').toLowerCase(),
+                  }))}
+                  placeholder="Search project…"
+                  emptyOption={{ value: '', label: '— No project' }}
+                  popoverWidth={280}
+                />
               </div>
 
-              {/* Assign to Client */}
+              {/* Assign to Client — same component, with avatar/initials */}
               <div>
                 <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5">Client</label>
-                <select
+                <SearchableSelect
                   value={clientId}
-                  onChange={e => handleAssign('client_id', e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-zinc-400"
-                >
-                  <option value="">None</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                  onChange={(next) => handleAssign('client_id', next)}
+                  options={clients.map((c: any) => ({
+                    value: c.id,
+                    label: c.name || c.company || 'Unnamed',
+                    avatarUrl: c.avatar_url || null,
+                    hint: c.company && c.name !== c.company ? c.company : undefined,
+                    searchValue: ((c.name || '') + ' ' + (c.company || '') + ' ' + (c.email || '')).toLowerCase(),
+                  }))}
+                  placeholder="Search client…"
+                  emptyOption={{ value: '', label: '— No client' }}
+                  popoverWidth={280}
+                />
               </div>
 
               {/* Sharing */}
@@ -1115,16 +1140,23 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({ documentId, onCl
                           <p className={`text-[11px] leading-tight truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
                             {t.title}
                           </p>
-                          <select
-                            value={t.assignee_ids?.[0] || ''}
-                            onChange={e => handleAssignTask(t.id, e.target.value)}
-                            className="mt-1 w-full text-[10px] px-1.5 py-0.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded text-zinc-500 dark:text-zinc-400 outline-none"
-                          >
-                            <option value="">Unassigned</option>
-                            {members.filter(m => m.status === 'active').map(m => (
-                              <option key={m.id} value={m.id}>{m.name || m.email}</option>
-                            ))}
-                          </select>
+                          <div className="mt-1">
+                            <SearchableSelect
+                              value={t.assignee_ids?.[0] || ''}
+                              onChange={(next) => handleAssignTask(t.id, next)}
+                              options={members.filter(m => m.status === 'active').map((m: any) => ({
+                                value: m.id,
+                                label: m.name || m.email?.split('@')[0] || 'Member',
+                                avatarUrl: m.avatar_url || null,
+                                hint: m.email && (m.name || m.email).toLowerCase() !== m.email.toLowerCase() ? m.email : undefined,
+                                searchValue: ((m.name || '') + ' ' + (m.email || '')).toLowerCase(),
+                              }))}
+                              placeholder="Unassigned"
+                              emptyOption={{ value: '', label: '— Unassigned' }}
+                              popoverWidth={240}
+                              triggerClassName="inline-flex items-center justify-between gap-1 w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/60 transition-colors"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
