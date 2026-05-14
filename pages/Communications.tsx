@@ -1613,7 +1613,7 @@ const ChannelLinkRow: React.FC<{
   // for THIS channel. Default if column is null (legacy rows).
   const enabledEvents = useMemo<SlackProjectEvent[]>(() => {
     const arr = (monitored.notify_events as SlackProjectEvent[] | undefined);
-    return Array.isArray(arr) ? arr : ['task_completed', 'milestone_paid', 'project_completed', 'project_started'];
+    return Array.isArray(arr) ? arr : ['task_created', 'task_started', 'task_completed', 'milestone_paid', 'project_completed', 'project_started'];
   }, [monitored.notify_events]);
 
   const toggleEvent = async (ev: SlackProjectEvent) => {
@@ -1667,6 +1667,11 @@ const ChannelLinkRow: React.FC<{
             label="🆕 task new"
             enabled={enabledEvents.includes('task_created')}
             onToggle={() => toggleEvent('task_created')}
+          />
+          <EventToggleChip
+            label="▶️ task started"
+            enabled={enabledEvents.includes('task_started')}
+            onToggle={() => toggleEvent('task_started')}
           />
           <EventToggleChip
             label="✅ task done"

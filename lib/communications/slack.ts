@@ -217,12 +217,14 @@ export async function setSlackNotifyChannel(
 //
 // Supported events:
 //   - task_created       a new task was added under the project
+//   - task_started       a task transitioned to status='in-progress'
 //   - task_completed     a task transitioned to status='done'
 //   - milestone_paid     an income installment was marked paid
 //   - project_started    project status flipped to 'Active' (kickoff digest)
 //   - project_completed  the project itself moved to status='Completed'
 export type SlackProjectEvent =
   | 'task_created'
+  | 'task_started'
   | 'task_completed'
   | 'milestone_paid'
   | 'project_started'
@@ -249,12 +251,17 @@ export interface SlackProjectEventPayload {
   dueDate?: string | null;
   /** Optional assignee display name for task_created. */
   assigneeName?: string | null;
+  /** For task_started/task_completed events — the task's id so the
+   *  helper can fetch its subtasks + parent context to render a richer
+   *  message (subtasks checklist, parent breadcrumb). */
+  taskId?: string | null;
 }
 
 interface EventCopy { emoji: string; headline: string }
 
 const EVENT_COPY: Record<SlackProjectEvent, EventCopy> = {
   task_created:       { emoji: '🆕', headline: 'New task' },
+  task_started:       { emoji: '▶️', headline: 'Task started' },
   task_completed:     { emoji: '✅', headline: 'Task completed' },
   milestone_paid:     { emoji: '💰', headline: 'Installment paid' },
   project_started:    { emoji: '🚀', headline: 'Project started' },
@@ -392,6 +399,126 @@ async function buildProjectKickoffBlocks(
   return { text, blocks };
 }
 
+// ── Task transition (started / completed) digest ──────────────────────────
+// Pulls the task's subtasks + parent context so the channel sees the full
+// breakdown — not just the title. Renders a checklist of subtasks with
+// ✓ / ○ markers, the parent task as a breadcrumb, and progress count.
+async function buildTaskTransitionBlocks(
+  payload: SlackProjectEventPayload,
+  projectName: string | null,
+): Promise<{ text: string; blocks: any[] }> {
+  const isCompleted = payload.event === 'task_completed';
+  const emoji = isCompleted ? '✅' : '▶️';
+  const headline = isCompleted ? 'Task completed' : 'Task started';
+
+  // Pull the task itself so we have description/dates if the caller
+  // didn't provide them — and the parent task for breadcrumb context.
+  const [taskRes, subtasksRes] = await Promise.all([
+    supabase.from('tasks')
+      .select('id, title, description, status, priority, start_date, due_date, completed, completed_at, parent_task_id, started_at')
+      .eq('id', payload.taskId!)
+      .maybeSingle(),
+    supabase.from('tasks')
+      .select('id, title, status, completed, priority, due_date')
+      .eq('parent_task_id', payload.taskId!)
+      .order('order_index', { ascending: true }),
+  ]);
+  const task = (taskRes.data as any) || {};
+  const subtasks = (subtasksRes.data as any[]) || [];
+
+  let parent: any = null;
+  if (task.parent_task_id) {
+    const { data } = await supabase.from('tasks')
+      .select('title')
+      .eq('id', task.parent_task_id)
+      .maybeSingle();
+    parent = data || null;
+  }
+
+  // Counters for the subtask checklist
+  const doneSubs = subtasks.filter(s => s.completed || s.status === 'done').length;
+  const totalSubs = subtasks.length;
+
+  // Header line — task title + emoji + project + parent breadcrumb
+  const titleParts: string[] = [`${emoji} ${headline}`, `*${payload.itemTitle}*`];
+  if (projectName) titleParts.push(`_${projectName}_`);
+
+  const blocks: any[] = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: titleParts.join('\n') },
+    },
+  ];
+
+  // Breadcrumb context — "↳ part of <Parent Task>"
+  if (parent?.title) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `↳ part of *${parent.title}*` }],
+    });
+  }
+
+  // Optional description (truncated)
+  if (task.description) {
+    const desc = String(task.description).trim();
+    const trimmed = desc.length > 200 ? desc.slice(0, 197) + '…' : desc;
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `> ${trimmed.replace(/\n/g, '\n> ')}` },
+    });
+  }
+
+  // Subtasks checklist — only if there are any
+  if (totalSubs > 0) {
+    const lines = subtasks.slice(0, 12).map(s => {
+      const isDone = s.completed || s.status === 'done';
+      const mark = isDone ? '✓' : '○';
+      const dueBit = s.due_date
+        ? ` _(${new Date(String(s.due_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })})_`
+        : '';
+      const priBit = (s.priority === 'urgent' || s.priority === 'high') ? ` *${String(s.priority).toUpperCase()}*` : '';
+      const titleStr = isDone ? `~${s.title}~` : s.title;
+      return `${mark} ${titleStr}${dueBit}${priBit}`;
+    });
+    if (subtasks.length > 12) lines.push(`_…+${subtasks.length - 12} more subtasks_`);
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Subtasks · ${doneSubs}/${totalSubs} done*\n${lines.join('\n')}` },
+    });
+  }
+
+  // Footer context — actor, due date, duration if completed
+  const footerBits: string[] = [];
+  if (payload.actorName) footerBits.push(isCompleted ? `Closed by *${payload.actorName}*` : `Started by *${payload.actorName}*`);
+  if (payload.assigneeName) footerBits.push(`Assigned to *${payload.assigneeName}*`);
+  if (task.due_date) {
+    const d = new Date(String(task.due_date).slice(0, 10) + 'T12:00:00');
+    footerBits.push(`Due *${d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}*`);
+  }
+  if (task.priority && task.priority !== 'medium') {
+    footerBits.push(`priority *${task.priority}*`);
+  }
+  // Duration calc when completed (started_at → completed_at)
+  if (isCompleted && task.started_at && task.completed_at) {
+    const ms = new Date(task.completed_at).getTime() - new Date(task.started_at).getTime();
+    if (ms > 0) {
+      const h = Math.floor(ms / 3_600_000);
+      if (h < 24) footerBits.push(`took *${h}h*`);
+      else footerBits.push(`took *${Math.round(h / 24)}d*`);
+    }
+  }
+  if (footerBits.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: footerBits.join(' · ') }],
+    });
+  }
+
+  const text = `${emoji} ${headline} — ${payload.itemTitle}${totalSubs > 0 ? ` (${doneSubs}/${totalSubs} subtasks done)` : ''}`;
+  return { text, blocks };
+}
+
 export async function notifySlackProjectEvent(payload: SlackProjectEventPayload): Promise<{ posted: number; errors: string[] }> {
   const errors: string[] = [];
   if (!payload.projectId) return { posted: 0, errors };
@@ -445,6 +572,13 @@ export async function notifySlackProjectEvent(payload: SlackProjectEventPayload)
     const kickoff = await buildProjectKickoffBlocks(payload, projectName);
     text = kickoff.text;
     blocks = kickoff.blocks;
+  } else if ((payload.event === 'task_started' || payload.event === 'task_completed') && payload.taskId) {
+    // Rich task-transition message — pulls subtasks (with checkmarks for
+    // done ones) and the parent task as breadcrumb, so the channel sees
+    // exactly what's progressing and how much of the parent is left.
+    const transition = await buildTaskTransitionBlocks(payload, projectName);
+    text = transition.text;
+    blocks = transition.blocks;
   } else {
     // Build the "Due Aug 22" line for task_created (and task_completed
     // — useful as a log of "X was due on Y, marked done today").

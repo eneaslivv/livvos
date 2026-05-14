@@ -738,13 +738,13 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }).catch(() => {})
             }
 
-            // Slack notification on completion. Skips silently when:
+            // Slack notification on status transitions to in-progress
+            // OR done. Skips silently when:
             //   - the task has no project_id, or
-            //   - no slack channel is linked to that project
-            // The actor name is best-effort: we read the current auth user
-            // so the message says "cerrada por <name>". If lookup fails,
-            // just omits that line.
-            if (newStatus === 'done') {
+            //   - no slack channel is linked to that project, or
+            //   - the channel hasn't subscribed to this event.
+            // Resolves the actor name once and reuses it for either path.
+            if ((newStatus === 'in-progress' || newStatus === 'done') && normalized.project_id) {
               ;(async () => {
                 let actorName: string | undefined
                 try {
@@ -760,18 +760,17 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   }
                 } catch { /* ignore */ }
                 try {
-                  await notifyTaskCompletedToSlack({
+                  await notifySlackProjectEvent({
                     tenantId: tenantIdNotif,
-                    task: {
-                      id,
-                      title: normalized.title,
-                      project_id: normalized.project_id || null,
-                    },
+                    projectId: normalized.project_id!,
+                    event: newStatus === 'done' ? 'task_completed' : 'task_started',
+                    itemTitle: normalized.title,
                     projectName: (normalized as any).project_name || null,
-                    completedByName: actorName,
+                    actorName: actorName || null,
+                    taskId: id,  // enables subtasks lookup in the helper
                   })
                 } catch (err) {
-                  errorLogger.warn('slack task-done notify failed', err)
+                  errorLogger.warn(`slack task-${newStatus} notify failed`, err)
                 }
               })()
             }
