@@ -18,6 +18,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useCalendar } from '../context/CalendarContext';
 import { TaskKanbanBoard } from '../components/calendar/TaskKanbanBoard';
+import { EventTaskFormPanel } from '../components/calendar/EventTaskFormPanel';
+import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 import { InlineTaskDetailHost } from '../components/calendar/InlineTaskDetailHost';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
@@ -491,6 +493,35 @@ export const Projects: React.FC<{
   const { user: currentUser } = useAuth();
   const { currentTenant } = useTenant();
   const { updateTask, createTask, tasks: calendarTasks } = useCalendar();
+  const { agencies: connectedAgencies } = useConnectedAgencies();
+
+  // ── State for the unified task creation panel ──
+  // Same shape Calendar uses for newTaskData — so the panel renders
+  // identically here and there, just pre-filled with the project_id of
+  // whatever project the kanban "+ Add task" was clicked from. Result:
+  // a task created in a project's board appears in the calendar timeline
+  // as if it were loaded from Calendar directly (because it carries the
+  // start_date / start_time / duration the form captures).
+  const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [newTaskData, setNewTaskData] = useState<any>({
+    title: '', description: '',
+    start_date: '', start_time: '',
+    priority: 'medium', status: 'todo',
+    duration: 60,
+    project_id: '', client_id: '',
+    assignee_id: '', assignee_ids: [],
+    share_with_tenant_ids: [],
+  });
+  // EventTaskFormPanel requires event + content state too, even though we
+  // don't render those tabs from this page. Hold them as stubs.
+  const [newEventDataStub, setNewEventDataStub] = useState<any>({
+    title: '', description: '', start_date: '', start_time: '', duration: 60,
+    type: 'meeting', color: '#3b82f6', location: '',
+  });
+  const [newContentDataStub, setNewContentDataStub] = useState<any>({
+    title: '', description: '', start_date: '', start_time: '', duration: 60,
+    platform: '', channel: '', asset_type: '', status: 'draft',
+  });
   const { incomes, expenses, createIncome, updateInstallment, deleteIncome, createExpense, deleteExpense, timeEntries, createTimeEntry, deleteTimeEntry } = useFinance();
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
@@ -2117,23 +2148,25 @@ export const Projects: React.FC<{
                             await updateTask(id, { status, completed: status === 'done' } as any);
                           }}
                           onAddTask={(status) => {
-                            // Pre-fill: any task added via "+" inside a kanban
-                            // column lands in this project AND adopts the
-                            // column's status, so the user doesn't have to
-                            // re-pick either after the modal opens.
-                            setExpandedTaskId(null);
-                            setNewTaskTitle({ ...newTaskTitle, [-1]: '' });
-                            const title = window.prompt(`New ${status === 'done' ? 'completed' : status === 'in-progress' ? 'in-progress' : status === 'cancelled' ? 'cancelled' : 'pending'} task:`);
-                            if (!title?.trim()) return;
-                            createTask({
-                              title: title.trim(),
-                              owner_id: '',
+                            // Open the same EventTaskFormPanel that Calendar
+                            // uses — so the task gets full metadata
+                            // (start_date, start_time, duration, assignees,
+                            // priority, sharing) and appears in the calendar
+                            // timeline as if it were created there. We just
+                            // pre-fill the project_id + column's status so
+                            // the user doesn't have to re-pick either.
+                            const today = new Date().toISOString().slice(0, 10);
+                            setNewTaskData({
+                              title: '', description: '',
+                              start_date: today, start_time: '',
+                              priority: 'medium', status: status as any,
+                              duration: 60,
                               project_id: selectedProject.id,
-                              client_id: selectedProject.client_id || undefined,
-                              status: status as any,
-                              completed: status === 'done',
-                              priority: 'medium',
-                            } as any);
+                              client_id: selectedProject.client_id || '',
+                              assignee_id: '', assignee_ids: [],
+                              share_with_tenant_ids: [],
+                            });
+                            setShowNewTaskForm(true);
                           }}
                         />
                       </div>
@@ -2231,6 +2264,64 @@ export const Projects: React.FC<{
       <InlineTaskDetailHost
         taskId={openTaskId}
         onClose={() => setOpenTaskId(null)}
+      />
+
+      {/* Unified task creation panel — identical to the one Calendar
+          renders. Opens when the user clicks "+ Add task" on any kanban
+          column. Captures the rich set of fields (start date, time,
+          duration, priority, assignees, sharing) so the resulting task
+          shows up both here AND in the Calendar timeline. */}
+      <EventTaskFormPanel
+        isOpen={showNewTaskForm}
+        onClose={() => setShowNewTaskForm(false)}
+        showNewEventForm={false}
+        showNewTaskForm={showNewTaskForm}
+        calendarMode={'schedule'}
+        newEventData={newEventDataStub}
+        setNewEventData={setNewEventDataStub}
+        newContentData={newContentDataStub}
+        setNewContentData={setNewContentDataStub}
+        newTaskData={newTaskData}
+        setNewTaskData={setNewTaskData}
+        onCreateEvent={async () => { /* not used from this page */ }}
+        onCreateContent={async () => { /* not used from this page */ }}
+        onCreateTask={async () => {
+          if (!newTaskData.title?.trim()) return;
+          try {
+            await createTask({
+              title: newTaskData.title,
+              description: newTaskData.description || undefined,
+              completed: newTaskData.status === 'done',
+              priority: newTaskData.priority || 'medium',
+              status: newTaskData.status || 'todo',
+              start_date: newTaskData.start_date || undefined,
+              start_time: newTaskData.start_time || undefined,
+              duration: newTaskData.duration || 60,
+              owner_id: currentUser?.id || '',
+              project_id: newTaskData.project_id || selectedProject?.id || undefined,
+              client_id: newTaskData.client_id || selectedProject?.client_id || undefined,
+              assignee_id: newTaskData.assignee_ids?.[0] || newTaskData.assignee_id || undefined,
+              assignee_ids: newTaskData.assignee_ids || [],
+              order_index: 0,
+            } as any);
+            setShowNewTaskForm(false);
+          } catch (err) {
+            errorLogger.error('Project kanban task create failed', err);
+            alert('Could not create task: ' + ((err as any)?.message || 'error'));
+          }
+        }}
+        editingEventId={null}
+        onUpdateEvent={async () => {}}
+        onDeleteEvent={() => {}}
+        contentPlatforms={{}}
+        contentStatuses={[]}
+        projectOptions={projects.map((p: any) => ({ id: p.id, title: p.title, client_id: p.client_id }))}
+        clients={clients.map((c: any) => ({ id: c.id, name: c.name }))}
+        teamMembers={members.map((m: any) => ({
+          id: m.id, name: m.name, email: m.email, status: m.status, avatar_url: m.avatar_url || null,
+        }))}
+        userId={currentUser?.id}
+        connectedAgencies={connectedAgencies}
       />
     </div>
   );
