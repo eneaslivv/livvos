@@ -443,6 +443,29 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
 
             <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
               Created {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+              {selectedTask.owner_id && (() => {
+                const ownerName = getMemberName(selectedTask.owner_id);
+                return ownerName ? <> by <span className="text-zinc-600 dark:text-zinc-300 font-medium">{ownerName}</span></> : null;
+              })()}
+              {selectedTask.project_id && (() => {
+                // Surface the project + client right here so the user always
+                // knows what context the task belongs to — even when the
+                // dropdown below can't render the project (e.g. its client
+                // lives in another tenant we don't have visibility into).
+                const proj = projectOptions.find(p => p.id === selectedTask.project_id);
+                if (!proj) return null;
+                const cli = proj.client_id ? clients.find(c => c.id === proj.client_id) : null;
+                return (
+                  <>
+                    {' · '}
+                    <span className="inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-300">
+                      <Icons.Briefcase size={10} />
+                      {proj.title}
+                      {cli && <span className="text-zinc-400"> · {cli.name}</span>}
+                    </span>
+                  </>
+                );
+              })()}
             </p>
 
             {/* ── Partner agency visibility toggle ──
@@ -639,7 +662,11 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                     options={(() => {
                       // Group projects by their client so the popover shows
                       // "Acme Co · Project A / Project B" sections instead of
-                      // a flat soup of titles.
+                      // a flat soup of titles. Anything whose client lives
+                      // in another tenant (so isn't in our local `clients`
+                      // list) ends up under a generic "Other projects"
+                      // bucket — without this, those projects fell off the
+                      // dropdown entirely.
                       const byClient = new Map<string | null, typeof projectOptions>();
                       projectOptions.forEach(p => {
                         const k = p.client_id || null;
@@ -653,7 +680,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                         out.push({ value: '__h_internal', label: 'Internal · Livv', isHeader: true });
                         internal.forEach(p => out.push({ value: p.id, label: p.title }));
                       }
-                      // Then client-grouped.
+                      // Then client-grouped — the clients we DO have access to.
+                      const knownClientIds = new Set(clients.map(c => c.id));
                       const clientList = clients
                         .filter(c => byClient.has(c.id))
                         .sort((a, b) => a.name.localeCompare(b.name));
@@ -663,6 +691,19 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                           out.push({ value: p.id, label: p.title, searchValue: c.name, hint: c.name });
                         });
                       });
+                      // Finally — orphan bucket. Any project whose client_id
+                      // is set but the client itself isn't in our list
+                      // (typical case: project shared from another tenant
+                      // whose client lives over there). Without this, those
+                      // projects can't be picked OR even displayed.
+                      const orphanProjects: typeof projectOptions = [];
+                      byClient.forEach((projs, cid) => {
+                        if (cid && !knownClientIds.has(cid)) orphanProjects.push(...projs);
+                      });
+                      if (orphanProjects.length > 0) {
+                        out.push({ value: '__h_other', label: 'Other projects', isHeader: true });
+                        orphanProjects.forEach(p => out.push({ value: p.id, label: p.title }));
+                      }
                       return out;
                     })()}
                     onChange={(pid) => {
