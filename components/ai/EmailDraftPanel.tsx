@@ -16,13 +16,16 @@
  * If none, the Send button shows "Connect Gmail first" and links to
  * Communications.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from '../ui/Icons';
 import { useTenant } from '../../context/TenantContext';
+import { useProjects } from '../../context/ProjectsContext';
+import { useCalendar } from '../../context/CalendarContext';
 import { sendNewGmail } from '../../lib/communications/gmail';
 import { sendAdvisorChat } from '../../lib/ai';
 import { errorLogger } from '../../lib/errorLogger';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface Props {
   isOpen: boolean;
@@ -39,10 +42,45 @@ interface Props {
   onSent?: (result: { external_id: string; thread_id: string }) => void;
 }
 
+type Timeframe = 'this_week' | 'last_week' | 'past_7' | 'past_30';
+const TIMEFRAME_LABEL: Record<Timeframe, string> = {
+  this_week: 'This week',
+  last_week: 'Last week',
+  past_7:    'Past 7 days',
+  past_30:   'Past 30 days',
+};
+
+const timeframeRange = (tf: Timeframe): { start: Date; end: Date } => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const end = new Date(now); end.setHours(23, 59, 59, 999);
+  if (tf === 'past_7') {
+    const start = new Date(now); start.setDate(start.getDate() - 6);
+    return { start, end };
+  }
+  if (tf === 'past_30') {
+    const start = new Date(now); start.setDate(start.getDate() - 29);
+    return { start, end };
+  }
+  // this_week / last_week — Monday-anchored
+  const dayOfWeek = (now.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(now); monday.setDate(now.getDate() - dayOfWeek);
+  if (tf === 'this_week') {
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
+    return { start: monday, end: sunday };
+  }
+  // last_week
+  const lastMon = new Date(monday); lastMon.setDate(monday.getDate() - 7);
+  const lastSun = new Date(monday); lastSun.setDate(monday.getDate() - 1); lastSun.setHours(23, 59, 59, 999);
+  return { start: lastMon, end: lastSun };
+};
+
 export const EmailDraftPanel: React.FC<Props> = ({
   isOpen, onClose, initialTo = '', initialSubject = '', initialBrief = '', aiContext = '', onSent,
 }) => {
   const { currentTenant } = useTenant();
+  const { projects } = useProjects();
+  const { tasks: calendarTasks } = useCalendar();
   const [to, setTo] = useState(initialTo);
   const [subject, setSubject] = useState(initialSubject);
   const [brief, setBrief] = useState(initialBrief);
@@ -52,6 +90,18 @@ export const EmailDraftPanel: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [sentResult, setSentResult] = useState<{ external_id: string; thread_id: string } | null>(null);
 
+  // Task-summary picker state
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
+  const [taskPickerProject, setTaskPickerProject] = useState<string>('');
+  const [taskPickerTimeframe, setTaskPickerTimeframe] = useState<Timeframe>('this_week');
+  // Free-form context appended to the AI prompt — populated when user adds
+  // task summaries; fully editable so they can prune what gets sent.
+  const [contextNotes, setContextNotes] = useState('');
+
+  // Refinement loop state — visible once the body has been generated.
+  const [refineInstruction, setRefineInstruction] = useState('');
+  const [refining, setRefining] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setTo(initialTo);
@@ -60,6 +110,11 @@ export const EmailDraftPanel: React.FC<Props> = ({
       setBody('');
       setError(null);
       setSentResult(null);
+      setContextNotes('');
+      setTaskPickerOpen(false);
+      setTaskPickerProject('');
+      setTaskPickerTimeframe('this_week');
+      setRefineInstruction('');
     }
   }, [isOpen, initialTo, initialSubject, initialBrief]);
 
@@ -70,14 +125,52 @@ export const EmailDraftPanel: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, sending]);
 
+  // ── Pull completed tasks for project + timeframe → contextNotes ──
+  // Reads from CalendarContext.tasks (already cached + cross-tenant aware
+  // for shared projects). Filters by completed=true within the picked
+  // timeframe, optionally scoped to a project. Renders a bulleted list
+  // into contextNotes which the user can edit before generating.
+  const pullCompletedTasks = () => {
+    const { start, end } = timeframeRange(taskPickerTimeframe);
+    const picked = calendarTasks.filter(t => {
+      if (!t.completed) return false;
+      if (taskPickerProject && t.project_id !== taskPickerProject) return false;
+      const stamp = t.completed_at || t.start_date;
+      if (!stamp) return false;
+      const d = new Date(String(stamp).slice(0, 10) + 'T12:00:00');
+      return d >= start && d <= end;
+    });
+    if (picked.length === 0) {
+      setError(`No completed tasks found for ${TIMEFRAME_LABEL[taskPickerTimeframe]}${taskPickerProject ? ' on this project' : ''}.`);
+      return;
+    }
+    const projectName = taskPickerProject
+      ? (projects.find(p => p.id === taskPickerProject)?.title || 'this project')
+      : null;
+    const header = projectName
+      ? `Completed tasks on ${projectName} — ${TIMEFRAME_LABEL[taskPickerTimeframe]}:`
+      : `Completed tasks across all projects — ${TIMEFRAME_LABEL[taskPickerTimeframe]}:`;
+    const lines = picked.slice(0, 30).map(t => {
+      const stamp = t.completed_at || t.start_date;
+      const dateStr = stamp ? new Date(String(stamp).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : '';
+      const projBit = !taskPickerProject && t.project_id
+        ? ` _(${projects.find(p => p.id === t.project_id)?.title || 'project'})_`
+        : '';
+      return `• ${t.title}${dateStr ? ` — ${dateStr}` : ''}${projBit}`;
+    });
+    if (picked.length > 30) lines.push(`…+${picked.length - 30} more`);
+    const block = [header, ...lines].join('\n');
+    setContextNotes(prev => prev ? `${prev}\n\n${block}` : block);
+    setError(null);
+    setTaskPickerOpen(false);
+  };
+
   const generateBody = async () => {
     if (!brief.trim() || generating) return;
     setGenerating(true);
     setError(null);
     try {
-      // Use the existing advisor chat endpoint with a tightly-scoped
-      // system instruction so the reply comes back as just the email
-      // body — no JSON wrapping, no extra commentary.
+      const fullContext = [aiContext || '', contextNotes || ''].filter(Boolean).join('\n\n');
       const prompt = [
         'Draft a professional email body in plain text.',
         '',
@@ -85,13 +178,11 @@ export const EmailDraftPanel: React.FC<Props> = ({
         `Subject: ${subject || '(none yet)'}`,
         '',
         `What the email should say: ${brief}`,
-        aiContext ? `\nAdditional context:\n${aiContext}` : '',
+        fullContext ? `\nUse this context (real data — reference specific items naturally, do NOT just copy-paste the list):\n${fullContext}` : '',
         '',
-        'Return ONLY the email body. Start with a greeting (e.g. "Hi Christie,"), end with a sign-off (e.g. "Best,\\nEneas"). No subject line, no JSON, no markdown — just the text body as it should appear in the recipient\\u2019s inbox. Keep it concise (under 200 words unless the brief calls for more).',
+        'Return ONLY the email body. Start with a greeting (e.g. "Hi Christie,"), end with a sign-off (e.g. "Best,\\nEneas"). No subject line, no JSON, no markdown — just the text body as it should appear in the recipient\\u2019s inbox. Keep it concise (under 250 words unless the brief calls for more).',
       ].join('\n');
-      // sendAdvisorChat(context, history, question) — pass aiContext as
-      // the rolling context, empty history, and the prompt as the question.
-      const result = await sendAdvisorChat(aiContext || '', [], prompt);
+      const result = await sendAdvisorChat(fullContext, [], prompt);
       const reply = (result as any)?.reply || '';
       if (!reply.trim()) throw new Error('AI returned an empty draft');
       setBody(reply.trim());
@@ -102,6 +193,46 @@ export const EmailDraftPanel: React.FC<Props> = ({
       setGenerating(false);
     }
   };
+
+  // ── Refinement loop — takes current body + an instruction, returns
+  // an updated body. Lets the user iterate without rewriting from
+  // scratch ("make it more formal", "add a thank you", "shorter", etc).
+  const refineBody = async () => {
+    if (!body.trim() || !refineInstruction.trim() || refining) return;
+    setRefining(true);
+    setError(null);
+    try {
+      const prompt = [
+        'Refine the email body below according to the instruction.',
+        '',
+        `Instruction: ${refineInstruction}`,
+        '',
+        'Current email body:',
+        body,
+        '',
+        'Return ONLY the new email body (greeting + content + sign-off, plain text). No commentary, no markdown, no subject line.',
+      ].join('\n');
+      const result = await sendAdvisorChat('', [], prompt);
+      const reply = (result as any)?.reply || '';
+      if (!reply.trim()) throw new Error('AI returned an empty refinement');
+      setBody(reply.trim());
+      setRefineInstruction('');
+    } catch (e: any) {
+      errorLogger.error('email refine AI failed', e);
+      setError(e?.message || 'Could not refine the email');
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  // Project options for the SearchableSelect
+  const projectOptions = useMemo(() => projects.map(p => ({
+    value: p.id,
+    label: p.title,
+    icon: (p as any).icon || '📁',
+    avatarUrl: (p as any).logoUrl || null,
+    searchValue: (p.title || '').toLowerCase(),
+  })), [projects]);
 
   const send = async () => {
     if (!to.trim() || !body.trim() || !currentTenant?.id || sending) return;
@@ -209,23 +340,100 @@ export const EmailDraftPanel: React.FC<Props> = ({
                 rows={3}
                 className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[12px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-none"
               />
-              <button
-                onClick={generateBody}
-                disabled={!brief.trim() || generating}
-                className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {generating ? (
-                  <>
-                    <span className="w-2.5 h-2.5 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
-                    Drafting…
-                  </>
-                ) : (
-                  <>
-                    <Icons.Sparkles size={11} />
-                    {body ? 'Regenerate body' : '✨ Generate body with AI'}
-                  </>
-                )}
-              </button>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={generateBody}
+                  disabled={!brief.trim() || generating}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {generating ? (
+                    <>
+                      <span className="w-2.5 h-2.5 border-2 border-fuchsia-400 border-t-transparent rounded-full animate-spin" />
+                      Drafting…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Sparkles size={11} />
+                      {body ? 'Regenerate body' : '✨ Generate body with AI'}
+                    </>
+                  )}
+                </button>
+                {/* Pull tasks shortcut — opens the project + timeframe picker */}
+                <button
+                  onClick={() => setTaskPickerOpen(v => !v)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                    taskPickerOpen || contextNotes
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                      : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                  }`}
+                >
+                  <Icons.CheckCircle size={11} />
+                  {contextNotes ? 'Context attached' : '📋 Add completed tasks'}
+                </button>
+              </div>
+
+              {/* Inline picker — appears when user clicks "Add completed tasks" */}
+              {taskPickerOpen && (
+                <div className="mt-2 p-3 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-500/5 space-y-2">
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-medium">
+                    Pulls completed tasks for the picked project + timeframe and feeds them as context to the AI.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Project</label>
+                      <SearchableSelect
+                        value={taskPickerProject}
+                        onChange={(v) => setTaskPickerProject(v)}
+                        options={projectOptions}
+                        placeholder="Search project…"
+                        emptyOption={{ value: '', label: '— All projects' }}
+                        popoverWidth={260}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Timeframe</label>
+                      <select
+                        value={taskPickerTimeframe}
+                        onChange={e => setTaskPickerTimeframe(e.target.value as Timeframe)}
+                        className="w-full px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[12px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      >
+                        {(['this_week', 'last_week', 'past_7', 'past_30'] as Timeframe[]).map(tf => (
+                          <option key={tf} value={tf}>{TIMEFRAME_LABEL[tf]}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      onClick={() => setTaskPickerOpen(false)}
+                      className="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2 py-1"
+                    >Cancel</button>
+                    <button
+                      onClick={pullCompletedTasks}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700"
+                    >Add to context</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Context notes — visible whenever populated, fully editable */}
+              {contextNotes && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Context for AI</label>
+                    <button
+                      onClick={() => setContextNotes('')}
+                      className="text-[10px] text-zinc-400 hover:text-rose-500"
+                    >Clear</button>
+                  </div>
+                  <textarea
+                    value={contextNotes}
+                    onChange={e => setContextNotes(e.target.value)}
+                    rows={4}
+                    className="w-full px-2 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/40 text-[11px] text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-y font-mono leading-snug"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Body */}
@@ -238,6 +446,38 @@ export const EmailDraftPanel: React.FC<Props> = ({
                 rows={8}
                 className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[12.5px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-y leading-relaxed font-sans"
               />
+
+              {/* Refinement loop — appears once a body exists. Lets the
+                  user iterate ("more formal", "shorter", "add a thank
+                  you") without rewriting from scratch. */}
+              {body && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={refineInstruction}
+                    onChange={e => setRefineInstruction(e.target.value)}
+                    placeholder="Tell the AI how to improve this — e.g. more formal, shorter, add a thank you"
+                    onKeyDown={e => { if (e.key === 'Enter' && refineInstruction.trim()) { e.preventDefault(); refineBody(); } }}
+                    className="flex-1 px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[11.5px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-400"
+                  />
+                  <button
+                    onClick={refineBody}
+                    disabled={!refineInstruction.trim() || refining}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  >
+                    {refining ? (
+                      <>
+                        <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Refining…
+                      </>
+                    ) : (
+                      <>
+                        <Icons.Sparkles size={11} /> Refine
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {error && (
