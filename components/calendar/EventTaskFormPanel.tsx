@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Icons } from '../ui/Icons';
 import { SlidePanel } from '../ui/SlidePanel';
 import { MultiAssigneeSelect } from '../ui/MultiAssigneeSelect';
@@ -132,6 +132,26 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
   userId,
   connectedAgencies = [],
 }) => {
+  // Guard against double-clicking the Create buttons. Without this, a
+  // user could click "Create Task" twice before the parent's async
+  // createTask() resolved, producing duplicate rows (this happened to
+  // Christie on 2026-05-15 with "Define project scope" — 16s apart).
+  // We wrap each onCreate* handler so the button is disabled for the
+  // duration of the call AND any sync handler that closes the panel.
+  const [submitting, setSubmitting] = useState(false);
+  const guard = useCallback(async (fn: () => unknown) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await fn();
+    } finally {
+      // Brief delay before re-enabling — covers the case where the
+      // parent doesn't close the panel synchronously (the disable
+      // would otherwise flicker right back to enabled).
+      setTimeout(() => setSubmitting(false), 250);
+    }
+  }, [submitting]);
+
   return (
     <SlidePanel
       isOpen={isOpen}
@@ -146,17 +166,18 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
             const title = calendarMode === 'content' ? newContentData.title : newEventData.title;
             if (!title.trim()) return;
             e.preventDefault();
+            if (submitting) return;
             // When editing an existing event, the Enter key MUST route to
             // update — otherwise the form happily inserts a new row and
             // we end up with two "Call with Christie" cards on
             // consecutive days. Only the Save button used to do this
             // check; the Enter handler was missing it.
             if (calendarMode === 'content') {
-              onCreateContent();
+              void guard(onCreateContent);
             } else if (editingEventId && onUpdateEvent) {
-              onUpdateEvent();
+              void guard(onUpdateEvent);
             } else {
-              onCreateEvent();
+              void guard(onCreateEvent);
             }
           }}>
             {/* Title */}
@@ -344,24 +365,34 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={editingEventId && onUpdateEvent
-                    ? onUpdateEvent
-                    : (calendarMode === 'content' ? onCreateContent : onCreateEvent)
-                  }
-                  disabled={calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()}
+                  onClick={() => guard(
+                    editingEventId && onUpdateEvent
+                      ? onUpdateEvent
+                      : (calendarMode === 'content' ? onCreateContent : onCreateEvent)
+                  )}
+                  disabled={(calendarMode === 'content' ? !newContentData.title.trim() : !newEventData.title.trim()) || submitting}
                   className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
                 >
-                  <Icons.Calendar size={12} />
-                  {editingEventId
-                    ? (calendarMode === 'content' ? 'Update' : 'Update Event')
-                    : (calendarMode === 'content' ? 'Create' : 'Create Event')
-                  }
+                  {submitting ? (
+                    <>
+                      <span className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      {editingEventId ? 'Updating…' : 'Creating…'}
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Calendar size={12} />
+                      {editingEventId
+                        ? (calendarMode === 'content' ? 'Update' : 'Update Event')
+                        : (calendarMode === 'content' ? 'Create' : 'Create Event')
+                      }
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         ) : (
-          <div className="space-y-2.5" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTaskData.title.trim()) { e.preventDefault(); onCreateTask(); } }}>
+          <div className="space-y-2.5" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTaskData.title.trim() && !submitting) { e.preventDefault(); void guard(onCreateTask); } }}>
             {/* Title */}
             <input
               type="text"
@@ -592,12 +623,21 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={onCreateTask}
-                  disabled={!newTaskData.title.trim()}
+                  onClick={() => guard(onCreateTask)}
+                  disabled={!newTaskData.title.trim() || submitting}
                   className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-[11px] font-semibold disabled:opacity-40 transition-all active:scale-[0.97] flex items-center gap-1.5"
                 >
-                  <Icons.Check size={12} />
-                  Create Task
+                  {submitting ? (
+                    <>
+                      <span className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Creating…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Check size={12} />
+                      Create Task
+                    </>
+                  )}
                 </button>
               </div>
             </div>
