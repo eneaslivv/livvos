@@ -728,7 +728,37 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                   />
                 </div>
 
-                {/* Assignees */}
+                {/* Created by — read-only. Surfaces the original creator
+                    separate from the assignee, since they often diverge
+                    (e.g. PM creates the task, hands it off to a designer).
+                    Renders an avatar + name chip; not editable because the
+                    creator is set once at insert time. */}
+                {selectedTask.owner_id && (() => {
+                  const creatorName = getMemberName(selectedTask.owner_id);
+                  const creatorAvatar = getMemberAvatar(selectedTask.owner_id);
+                  if (!creatorName) return null;
+                  const isMe = selectedTask.owner_id === userId;
+                  return (
+                    <div className={rowCls}>
+                      <span className={labelCls}><Icons.Edit size={12} /> Created by</span>
+                      <div className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md border border-transparent text-[12.5px] text-zinc-700 dark:text-zinc-300">
+                        {creatorAvatar ? (
+                          <img src={creatorAvatar} alt={creatorName} className="w-5 h-5 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[9px] font-bold text-zinc-600 dark:text-zinc-300">
+                            {creatorName.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <span>{creatorName}{isMe && <span className="text-zinc-400 ml-1">(Me)</span>}</span>
+                        <span className="ml-auto text-[10px] text-zinc-400">
+                          {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Assignees — separate from creator. The two diverge often. */}
                 <div className={rowCls}>
                   <span className={labelCls}><Icons.User size={12} /> Assigned</span>
                   <MultiAssigneeSelect
