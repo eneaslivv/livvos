@@ -12,6 +12,7 @@ import {
   type AdvisorAction,
 } from '../lib/ai';
 import { AIFeedbackBar } from './ai/AIFeedbackBar';
+import { EmailDraftPanel } from './ai/EmailDraftPanel';
 import { supabase } from '../lib/supabase';
 import { useProjects } from '../context/ProjectsContext';
 import { useFinance } from '../context/FinanceContext';
@@ -426,6 +427,10 @@ export const AiAdvisor: React.FC = () => {
     return () => observer.disconnect();
   }, [isOpen]);
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Email draft modal state — opens via the "Draft email" shortcut.
+  // Holds optional pre-fills derived from the current chat context.
+  const [emailDraftOpen, setEmailDraftOpen] = useState(false);
+  const [emailDraftBrief, setEmailDraftBrief] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -1178,6 +1183,21 @@ export const AiAdvisor: React.FC = () => {
                         );
                       })}
                     </div>
+
+                    {/* Quick tools row — shortcuts that don't go through
+                        the chat. "Draft email" opens a slim composer with
+                        AI body generation + send via the connected Gmail
+                        account. Distinct row so it doesn't get lost
+                        among conversational prompts. */}
+                    <div className="pt-1">
+                      <button
+                        onClick={() => { setEmailDraftBrief(''); setEmailDraftOpen(true); }}
+                        className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-fuchsia-200 dark:border-fuchsia-500/30 bg-gradient-to-r from-fuchsia-50/60 to-indigo-50/40 dark:from-fuchsia-500/10 dark:to-indigo-500/10 hover:from-fuchsia-50 hover:to-indigo-50 dark:hover:from-fuchsia-500/15 dark:hover:to-indigo-500/15 transition-colors text-[11.5px] font-semibold text-fuchsia-700 dark:text-fuchsia-300"
+                      >
+                        <Icons.Mail size={12} />
+                        📧 Draft email with AI
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1333,6 +1353,16 @@ export const AiAdvisor: React.FC = () => {
         )}
       </AnimatePresence>,
       document.body)}
+
+      {/* Email draft modal — opened from the "Draft email with AI" shortcut.
+          The brief is empty by default; the user types what the email
+          should say and the panel calls Gemini to generate the body. */}
+      <EmailDraftPanel
+        isOpen={emailDraftOpen}
+        onClose={() => setEmailDraftOpen(false)}
+        initialBrief={emailDraftBrief}
+        onSent={() => setEmailDraftOpen(false)}
+      />
     </>
   );
 };

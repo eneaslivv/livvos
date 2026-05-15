@@ -126,6 +126,49 @@ export async function sendGmailReply(args: {
   return res.json();
 }
 
+// ── Send a NEW email (not a reply) ────────────────────────────────────────
+// Edge fn: gmail-send. For brand-new threads. Used by the AI Advisor's
+// `draft_email` action and any quick-action button that wants to fire off
+// a fresh email without an existing thread to attach to.
+export async function sendNewGmail(args: {
+  tenantId: string;
+  to: string;
+  subject: string;
+  body: string;
+  cc?: string;
+  bcc?: string;
+  integrationTokenId?: string;
+}): Promise<{ ok: true; external_id: string; thread_id: string; communication_message_id: string | null; warning?: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-send`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenant_id: args.tenantId,
+        to: args.to,
+        subject: args.subject,
+        body: args.body,
+        cc: args.cc,
+        bcc: args.bcc,
+        integration_token_id: args.integrationTokenId,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `gmail-send failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── Body parsing (used by both frontend display + edge fn ingestion) ──────
 // Gmail returns body as a base64url-encoded string inside a MIME part tree.
 // This lives here so both sides can use it; the edge function imports
