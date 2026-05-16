@@ -42,7 +42,7 @@ import {
 } from '../lib/communications/slack';
 
 type Tab = 'inbox' | 'settings';
-type Filter = 'all' | 'pending' | 'high' | 'gmail' | 'slack';
+type Filter = 'all' | 'pending' | 'high' | 'requests' | 'gmail' | 'slack';
 
 // Compact "5s ago" / "12m ago" / "3h ago" formatter for the inline last-sync
 // indicator. We don't need an i18n library for one ephemeral piece of text.
@@ -311,6 +311,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
     let list = messages.slice();
     if (filter === 'pending') list = list.filter(m => m.status === 'pending');
     else if (filter === 'high') list = list.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent');
+    else if (filter === 'requests') list = list.filter(m => m.ai_classification?.should_create_task === true && m.status !== 'task_created');
     else if (filter === 'gmail') list = list.filter(m => m.platform === 'gmail');
     else if (filter === 'slack') list = list.filter(m => m.platform === 'slack');
     if (clientFilter === '__unmatched__') list = list.filter(m => m.ai_processed && !m.matched_client_id);
@@ -346,6 +347,10 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
               { id: 'pending' as const, label: 'Pending', count: messages.filter(m => m.status === 'pending').length },
               { id: 'all' as const, label: 'All', count: messages.length },
               { id: 'high' as const, label: 'Urgent', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
+              // "Requests" chip — surfaces every inbound message the AI flagged as
+              // should_create_task that hasn't been converted yet. One-glance way to
+              // find "people asking us to do stuff" across Gmail + Slack channels.
+              { id: 'requests' as const, label: '📋 Requests', count: messages.filter(m => m.ai_classification?.should_create_task === true && m.status !== 'task_created').length },
               { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
               { id: 'slack' as const, label: 'Slack', count: messages.filter(m => m.platform === 'slack').length },
             ]).map(f => (
@@ -466,6 +471,8 @@ const MessageCard: React.FC<{
   const priority = msg.ai_classification?.priority;
   const isUrgent = priority === 'high' || intent === 'urgent';
   const isPending = msg.status === 'pending';
+  const isRequest = msg.ai_classification?.should_create_task === true && msg.status !== 'task_created';
+  const wasConverted = msg.status === 'task_created';
   const preview = msg.platform === 'gmail'
     ? previewFromBody(msg.body_text || '')
     : slackTextToPreview(msg.body_text || '');
@@ -522,6 +529,20 @@ const MessageCard: React.FC<{
           {intentMeta && (
             <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${intentMeta.color}`}>
               {intentMeta.label}
+            </span>
+          )}
+          {/* Request chip — most actionable signal in the list. Means
+              the AI thinks the sender is asking for something we should
+              turn into a task. Green when not yet converted, gray once
+              the user clicked "Create task" in the detail panel. */}
+          {isRequest && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
+              📋 Request
+            </span>
+          )}
+          {wasConverted && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 inline-flex items-center gap-1">
+              ✓ Task created
             </span>
           )}
           {isUrgent && (
