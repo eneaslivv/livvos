@@ -19,6 +19,12 @@ export interface Client {
   timezone?: string | null
   color?: string | null
   icon?: string | null
+  /** Free-form notes the user maintains about how to communicate with
+   *  this client over email. Fed as system context to the AI when
+   *  drafting emails — covers tone (formal/casual), preferred phrasing,
+   *  recurring CC list, history of past discussions. NOT shown to the
+   *  recipient. Stored in clients.email_context_notes. */
+  email_context_notes?: string | null
   created_at: string
   updated_at: string
 }

@@ -18,6 +18,7 @@ import { PageView, NavParams } from '../types';
 import { ClientListSidebar } from '../components/clients/ClientListSidebar';
 import { NewClientPanel } from '../components/clients/NewClientPanel';
 import { ConnectAgencyModal } from '../components/layout/ConnectAgencyModal';
+import { EmailDraftPanel } from '../components/ai/EmailDraftPanel';
 import { IconPicker } from '../components/ui/IconPicker';
 
 /* ─── Helpers ─── */
@@ -247,6 +248,22 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   // can adapt ("Invite as partner agency" vs "Already connected").
   const [agencyModalOpen, setAgencyModalOpen] = useState(false);
   const [partnerStatus, setPartnerStatus] = useState<'none' | 'pending' | 'accepted'>('none');
+
+  // ── AI Email shortcuts ──
+  // Email draft panel state — opens with pre-filled To + AI context
+  // pulled from the selected client's email_context_notes. Two flavors
+  // of pre-fill: "blank" (just To + context, user types brief) and
+  // "weekly update" (auto-builds a brief from this client's projects'
+  // completed tasks for the past week).
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [emailPrefill, setEmailPrefill] = useState<{
+    to: string; subject: string; brief: string; aiContext: string;
+  }>({ to: '', subject: '', brief: '', aiContext: '' });
+
+  // Per-client editable context notes. Keep a local draft so we can save
+  // explicitly via blur/save, not on every keystroke.
+  const [emailContextDraft, setEmailContextDraft] = useState('');
+  const [emailContextSaving, setEmailContextSaving] = useState(false);
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [history, setHistory] = useState<ClientHistory[]>([]);
@@ -438,6 +455,72 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedClient?.id]);
+
+  /* ─── Sync email_context_notes draft when the selected client changes ─── */
+  useEffect(() => {
+    setEmailContextDraft(selectedClient?.email_context_notes || '');
+  }, [selectedClient?.id, selectedClient?.email_context_notes]);
+
+  // Persist email_context_notes to DB on blur (or explicit Save).
+  // Direct supabase update — no local cache to sync since the field is
+  // only used as input to the AI; nothing else reads it in real time.
+  const saveEmailContext = useCallback(async () => {
+    if (!selectedClient) return;
+    if ((emailContextDraft || '') === (selectedClient.email_context_notes || '')) return;
+    setEmailContextSaving(true);
+    try {
+      await supabase.from('clients').update({ email_context_notes: emailContextDraft || null }).eq('id', selectedClient.id);
+    } catch (err) {
+      errorLogger.error('Failed to save email context notes', err);
+    } finally {
+      setEmailContextSaving(false);
+    }
+  }, [selectedClient?.id, emailContextDraft, selectedClient?.email_context_notes]);
+
+  // ── Email shortcut launchers ──
+  // Each one builds a different pre-fill payload and opens the panel.
+  const openBlankEmail = useCallback(() => {
+    if (!selectedClient?.email) return;
+    setEmailPrefill({
+      to: selectedClient.email,
+      subject: '',
+      brief: '',
+      aiContext: [
+        `Recipient: ${selectedClient.name}${selectedClient.company ? ` (${selectedClient.company})` : ''}`,
+        emailContextDraft ? `\nClient comms notes:\n${emailContextDraft}` : '',
+      ].filter(Boolean).join('\n'),
+    });
+    setEmailPanelOpen(true);
+  }, [selectedClient?.email, selectedClient?.name, selectedClient?.company, emailContextDraft]);
+
+  const openWeeklyUpdateEmail = useCallback(() => {
+    if (!selectedClient?.email) return;
+    // Find tasks completed in the past 7 days for any of this client's projects
+    const projectIds = assignedProjects.map(p => p.id);
+    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recent = projectTasks.filter((t: any) => {
+      if (!t.completed) return false;
+      if (!projectIds.includes(t.project_id)) return false;
+      const stamp = t.completed_at || t.start_date;
+      if (!stamp) return false;
+      return new Date(String(stamp).slice(0, 10) + 'T12:00:00') >= sevenDaysAgo;
+    });
+    const tasksBlock = recent.length > 0
+      ? `Completed tasks for ${selectedClient.name} this past week:\n${recent.slice(0, 30).map((t: any) => `• ${t.title}${t.project_name ? ` (${t.project_name})` : ''}`).join('\n')}`
+      : `No tasks completed for ${selectedClient.name} this past week — frame the email as a status check-in instead.`;
+    setEmailPrefill({
+      to: selectedClient.email,
+      subject: `Weekly update — ${selectedClient.name}`,
+      brief: 'Send a friendly weekly progress update. Lead with what we wrapped up, mention what is upcoming, and invite any feedback.',
+      aiContext: [
+        `Recipient: ${selectedClient.name}${selectedClient.company ? ` (${selectedClient.company})` : ''}`,
+        emailContextDraft ? `\nClient comms notes:\n${emailContextDraft}` : '',
+        '',
+        tasksBlock,
+      ].filter(Boolean).join('\n'),
+    });
+    setEmailPanelOpen(true);
+  }, [selectedClient?.email, selectedClient?.name, selectedClient?.company, assignedProjects, projectTasks, emailContextDraft]);
 
   /* ─── Realtime: tasks sync (client_id direct + project-linked) ─── */
   useEffect(() => {
@@ -1369,6 +1452,74 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                 </div>
               )}
 
+              {/* ── AI Email shortcuts ── */}
+              {selectedClient.email && (
+                <div className="px-5 pt-5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">AI Email</h3>
+                    {emailContextSaving && (
+                      <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
+                        <span className="w-2 h-2 border border-zinc-300 border-t-zinc-500 rounded-full animate-spin" />
+                        Saving context…
+                      </span>
+                    )}
+                  </div>
+                  {/* Shortcut buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={openBlankEmail}
+                      className="flex items-center gap-2 p-2.5 rounded-lg bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/15 transition-colors text-left group"
+                    >
+                      <div className="w-7 h-7 rounded-md bg-fuchsia-100 dark:bg-fuchsia-500/20 flex items-center justify-center shrink-0">
+                        <Icons.Mail size={13} className="text-fuchsia-600 dark:text-fuchsia-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-fuchsia-800 dark:text-fuchsia-300">
+                          Send AI email
+                        </div>
+                        <div className="text-[10px] text-fuchsia-700/80 dark:text-fuchsia-400/80 mt-0.5 truncate">
+                          Blank — you tell the AI the brief
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={openWeeklyUpdateEmail}
+                      className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors text-left group"
+                    >
+                      <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                        <Icons.CheckCircle size={13} className="text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
+                          Weekly update
+                        </div>
+                        <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 truncate">
+                          Auto-pulls last week's wins
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Per-client context notes — fed to the AI on every draft */}
+                  <div>
+                    <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">
+                      Context for AI <span className="normal-case font-normal text-zinc-300">— how to write to {selectedClient.name?.split(' ')[0] || 'this client'}</span>
+                    </label>
+                    <textarea
+                      value={emailContextDraft}
+                      onChange={(e) => setEmailContextDraft(e.target.value)}
+                      onBlur={saveEmailContext}
+                      rows={3}
+                      placeholder="e.g. Christie prefers concise emails, signs off as 'Chris'. CC bob@ckstudio.biz on anything finance-related. Past projects: Sunnyside, Lucky."
+                      className="mt-1 w-full px-2.5 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 text-[11.5px] text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-none leading-snug"
+                    />
+                    <p className="text-[10px] text-zinc-400 mt-1">
+                      The AI uses this every time you draft an email here. Saved on blur.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* ── Projects list ── */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -1472,6 +1623,17 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         }}
         prefillEmail={selectedClient?.email || undefined}
         prefillAgencyName={selectedClient?.company || selectedClient?.name || undefined}
+      />
+
+      {/* AI-assisted email composer — pre-filled with the selected
+          client's email + the per-client context notes. */}
+      <EmailDraftPanel
+        isOpen={emailPanelOpen}
+        onClose={() => setEmailPanelOpen(false)}
+        initialTo={emailPrefill.to}
+        initialSubject={emailPrefill.subject}
+        initialBrief={emailPrefill.brief}
+        aiContext={emailPrefill.aiContext}
       />
     </div>
   );
