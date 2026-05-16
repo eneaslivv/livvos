@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { inboxSkills } from '../skills/inbox';
 
 export const inboxAgent: AgentDefinition = {
@@ -25,5 +25,6 @@ export const inboxAgent: AgentDefinition = {
     'You can recommend the user open the Inbox tab, but you cannot reply on their behalf — replying is a separate action that requires explicit user confirmation.',
     '',
     NON_INVENTION_RULES,
+    buildActionProtocol('inbox'),
   ].join('\n'),
 };

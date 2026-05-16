@@ -145,34 +145,96 @@ export const NON_INVENTION_RULES = [
 // reply. The orchestrator parses these out and surfaces them as
 // approval cards in the UI. The agent NEVER executes writes itself.
 
-export const ACTION_PROTOCOL_INSTRUCTIONS = [
+/** Universal action protocol header — shared across all agents. */
+const ACTION_PROTOCOL_HEADER = [
   '',
-  'ACTION PROTOCOL — when the user asks you to DO something (mark a task done, reschedule it, change priority, create a task), do NOT claim to have done it. Instead emit a structured proposal at the END of your reply, on its own line, in this exact format:',
+  'ACTION PROTOCOL — when the user asks you to DO something (write to the DB, send a message, change state), do NOT claim to have done it. Instead emit a structured proposal at the END of your reply, on its own line, in this exact format:',
   '',
   '<action kind="ACTION_KIND" param1="value1" param2="value2">Human-readable label</action>',
   '',
   'You may emit MULTIPLE actions (one per line) if the user asked for several things.',
+  'All ids (task_id, event_id, installment_id, message_id, project_id, client_id) MUST come from the SKILL RESULTS block above. Never invent. If you cannot find a matching id, ASK the user to clarify instead of guessing.',
   '',
-  'Supported actions and their params (only use these — do not invent kinds):',
-  '  complete_task        task_id="<uuid>"                         → "Mark <title> as done"',
-  '  reopen_task          task_id="<uuid>"                         → "Reopen <title>"',
-  '  start_task           task_id="<uuid>"                         → "Move <title> to in-progress"',
-  '  update_task_priority task_id="<uuid>" priority="urgent|high|medium|low"',
-  '  update_task_due_date task_id="<uuid>" due_date="YYYY-MM-DD"',
-  '  create_task          title="..." project_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
-  '',
-  'IMPORTANT — task_id and project_id MUST come from the SKILL RESULTS block above. Never invent ids. If the user references a task by name and you cannot find a matching task_id in the skill results, ASK the user to clarify instead of guessing.',
 ].join('\n');
 
+/** Per-domain action menu — appended to each agent's prompt. Tells the
+ *  agent which action kinds it can emit + their param contract. */
+const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
+  tasks: [
+    'Supported actions for this agent:',
+    '  complete_task          task_id="<uuid>"',
+    '  reopen_task            task_id="<uuid>"',
+    '  start_task             task_id="<uuid>"',
+    '  update_task_priority   task_id="<uuid>" priority="urgent|high|medium|low"',
+    '  update_task_due_date   task_id="<uuid>" due_date="YYYY-MM-DD"',
+    '  create_task            title="..." project_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
+  ].join('\n'),
+  finance: [
+    'Supported actions for this agent:',
+    '  mark_installment_paid  installment_id="<uuid>" paid_date="YYYY-MM-DD?"',
+    '  mark_installment_pending installment_id="<uuid>"',
+    '  create_expense         concept="..." amount="123.45" date="YYYY-MM-DD" category="..." status="paid|pending"',
+    '  create_income          concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?"',
+  ].join('\n'),
+  calendar: [
+    'Supported actions for this agent:',
+    '  reschedule_event       event_id="<uuid>" new_date="YYYY-MM-DD" new_time="HH:MM?"',
+    '  cancel_event           event_id="<uuid>"',
+    '  create_event           title="..." start_date="YYYY-MM-DD" start_time="HH:MM?" duration="60" type="meeting|call|work-block|deadline|note"',
+  ].join('\n'),
+  inbox: [
+    'Supported actions for this agent:',
+    '  mark_message_done      message_id="<uuid>"',
+    '  convert_to_task        message_id="<uuid>" task_title="..."',
+    '  draft_reply            message_id="<uuid>" reply_body="..."',
+  ].join('\n'),
+  clients: [
+    'Supported actions for this agent:',
+    '  update_client_notes    client_id="<uuid>" notes="..."',
+    '  create_client          name="..." email="..." company="..."',
+  ].join('\n'),
+  projects: [
+    'Supported actions for this agent:',
+    '  set_project_status     project_id="<uuid>" status="Active|Pending|Review|Completed|Archived"',
+    '  set_project_deadline   project_id="<uuid>" deadline="YYYY-MM-DD"',
+    '  create_project         title="..." client_id="<uuid>?" deadline="YYYY-MM-DD?"',
+  ].join('\n'),
+};
+
+/** Compose the action protocol prompt for a specific agent. Returns the
+ *  shared header + the per-domain menu. Agents include this at the end
+ *  of their systemPrompt via:
+ *      buildActionProtocol('tasks')
+ */
+export function buildActionProtocol(domain: string): string {
+  const menu = ACTION_MENU_BY_DOMAIN[domain] || '';
+  if (!menu) return '';
+  return `${ACTION_PROTOCOL_HEADER}${menu}`;
+}
+
+/** Legacy export for back-compat with tasks-agent.ts. New agents should
+ *  use buildActionProtocol(domain) so they get the right menu. */
+export const ACTION_PROTOCOL_INSTRUCTIONS = buildActionProtocol('tasks');
+
 /** Concrete action shape the orchestrator returns to the UI. */
+export type ActionKind =
+  // Tasks
+  | 'complete_task' | 'reopen_task' | 'start_task'
+  | 'update_task_priority' | 'update_task_due_date' | 'create_task'
+  // Finance
+  | 'mark_installment_paid' | 'mark_installment_pending'
+  | 'create_expense' | 'create_income'
+  // Calendar
+  | 'reschedule_event' | 'cancel_event' | 'create_event'
+  // Inbox
+  | 'mark_message_done' | 'convert_to_task' | 'draft_reply'
+  // Clients
+  | 'update_client_notes' | 'create_client'
+  // Projects
+  | 'set_project_status' | 'set_project_deadline' | 'create_project';
+
 export interface ProposedAction {
-  kind:
-    | 'complete_task'
-    | 'reopen_task'
-    | 'start_task'
-    | 'update_task_priority'
-    | 'update_task_due_date'
-    | 'create_task';
+  kind: ActionKind;
   label: string;
   params: Record<string, string>;
 }

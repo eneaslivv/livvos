@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES, ACTION_PROTOCOL_INSTRUCTIONS } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { taskSkills } from '../skills/tasks';
 
 export const tasksAgent: AgentDefinition = {
@@ -26,6 +26,6 @@ export const tasksAgent: AgentDefinition = {
     '- Keep replies under 150 words unless the user explicitly asks for more.',
     '',
     NON_INVENTION_RULES,
-    ACTION_PROTOCOL_INSTRUCTIONS,
+    buildActionProtocol('tasks'),
   ].join('\n'),
 };

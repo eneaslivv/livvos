@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { projectSkills } from '../skills/projects';
 
 export const projectsAgent: AgentDefinition = {
@@ -24,5 +24,6 @@ export const projectsAgent: AgentDefinition = {
     'If multiple projects could match a name, ask the user to disambiguate. Do NOT pick one and pretend.',
     '',
     NON_INVENTION_RULES,
+    buildActionProtocol('projects'),
   ].join('\n'),
 };

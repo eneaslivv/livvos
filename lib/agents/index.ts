@@ -56,3 +56,7 @@ export type {
 
 // Critique layer — offline analysis of recent conversations
 export { runCritique } from './critique/critique-agent';
+
+// Action executor — single dispatcher for every ProposedAction kind
+export { executeProposedAction } from './execute';
+export type { ExecuteResult, ExecutorHelpers } from './execute';

@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { calendarSkills } from '../skills/calendar';
 
 export const calendarAgent: AgentDefinition = {
@@ -22,5 +22,6 @@ export const calendarAgent: AgentDefinition = {
     '- Keep replies tight; the user is checking their day, not reading.',
     '',
     NON_INVENTION_RULES,
+    buildActionProtocol('calendar'),
   ].join('\n'),
 };

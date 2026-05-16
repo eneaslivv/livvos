@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { financeSkills } from '../skills/finance';
 
 export const financeAgent: AgentDefinition = {
@@ -27,5 +27,6 @@ export const financeAgent: AgentDefinition = {
     '- Keep replies under 200 words.',
     '',
     NON_INVENTION_RULES,
+    buildActionProtocol('finance'),
   ].join('\n'),
 };

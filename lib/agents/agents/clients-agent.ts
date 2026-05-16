@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../types';
-import { NON_INVENTION_RULES } from '../types';
+import { NON_INVENTION_RULES, buildActionProtocol } from '../types';
 import { clientSkills } from '../skills/clients';
 
 export const clientsAgent: AgentDefinition = {
@@ -20,5 +20,6 @@ export const clientsAgent: AgentDefinition = {
     'Always respect privacy: do not surface email addresses unsolicited. Only include them when the user explicitly asks for the email or for "how to reach X".',
     '',
     NON_INVENTION_RULES,
+    buildActionProtocol('clients'),
   ].join('\n'),
 };

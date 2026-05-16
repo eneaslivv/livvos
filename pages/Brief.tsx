@@ -24,7 +24,7 @@ import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
-import { runOrchestrator, recordFeedback, type ProposedAction } from '../lib/agents';
+import { runOrchestrator, recordFeedback, executeProposedAction, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import type { PageView, NavParams } from '../types';
@@ -80,7 +80,7 @@ const formatRelative = (dateStr: string | undefined): string => {
 export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
-  const { tasks: allTasks, events, updateTask, createTask } = useCalendar();
+  const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent } = useCalendar();
   const [rightTab, setRightTab] = useState<RightTab>('tasks');
   const [pendingMessages, setPendingMessages] = useState<any[]>([]);
   const { projects } = useProjects();
@@ -265,37 +265,20 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       return next;
     });
     try {
-      switch (action.kind) {
-        case 'complete_task':
-          await updateTask(action.params.task_id, { status: 'done', completed: true } as any);
-          break;
-        case 'reopen_task':
-          await updateTask(action.params.task_id, { status: 'todo', completed: false } as any);
-          break;
-        case 'start_task':
-          await updateTask(action.params.task_id, { status: 'in-progress', completed: false } as any);
-          break;
-        case 'update_task_priority':
-          await updateTask(action.params.task_id, { priority: action.params.priority as any });
-          break;
-        case 'update_task_due_date':
-          await updateTask(action.params.task_id, { start_date: action.params.due_date, end_date: action.params.due_date } as any);
-          break;
-        case 'create_task':
-          await createTask({
-            title: action.params.title,
-            description: action.params.description,
-            priority: (action.params.priority as any) || 'medium',
-            status: 'todo',
-            completed: false,
-            owner_id: user?.id || '',
-            project_id: action.params.project_id,
-            start_date: action.params.due_date,
-            assignee_ids: [],
-            order_index: 0,
-          } as any);
-          break;
-      }
+      // Centralized dispatcher in lib/agents/execute.ts handles every
+      // ActionKind — adding a new action means editing one switch.
+      const result = await executeProposedAction(
+        action,
+        { db: supabase as any, tenantId: currentTenant!.id, userId: user!.id, now: new Date() },
+        {
+          updateTask: (id, patch) => updateTask(id, patch as any),
+          createTask: (data) => createTask(data as any),
+          updateEvent: (id, patch) => updateEvent(id, patch as any),
+          createEvent: (data) => createEvent(data as any),
+          deleteEvent: (id) => deleteEvent(id),
+        },
+      );
+      if (!result.ok) throw new Error(result.error || result.summary);
       setMessages(prev => {
         const next = [...prev];
         const m = { ...next[msgIdx] };

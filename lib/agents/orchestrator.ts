@@ -44,8 +44,20 @@ const ACTION_REGEX = /<action\s+([^>]+)>([\s\S]*?)<\/action>/g;
 const ATTR_REGEX = /(\w+)="([^"]*)"/g;
 
 const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
+  // Tasks
   'complete_task', 'reopen_task', 'start_task',
   'update_task_priority', 'update_task_due_date', 'create_task',
+  // Finance
+  'mark_installment_paid', 'mark_installment_pending',
+  'create_expense', 'create_income',
+  // Calendar
+  'reschedule_event', 'cancel_event', 'create_event',
+  // Inbox
+  'mark_message_done', 'convert_to_task', 'draft_reply',
+  // Clients
+  'update_client_notes', 'create_client',
+  // Projects
+  'set_project_status', 'set_project_deadline', 'create_project',
 ]);
 
 const parseActionsFromReply = (reply: string): { cleanReply: string; actions: ProposedAction[] } => {
