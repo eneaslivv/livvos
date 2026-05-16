@@ -19,11 +19,48 @@ import type {
   ExecutionContext,
   OrchestratorInput,
   OrchestratorOutput,
+  ProposedAction,
   Skill,
   SkillResult,
 } from './types';
 import { AGENTS, AGENT_BY_ID } from './registry';
 import { sendAdvisorChat } from '../ai';
+
+// ── Action parser ────────────────────────────────────────────────────
+// The LLM emits actions in <action kind="..." param="..." ...>label</action>
+// format (see ACTION_PROTOCOL_INSTRUCTIONS in types.ts). Pull them out
+// of the reply and return them as structured ProposedAction items the
+// UI can render as approval cards. Also strip the raw <action> markup
+// from the user-facing reply text so they don't see XML in the chat.
+const ACTION_REGEX = /<action\s+([^>]+)>([\s\S]*?)<\/action>/g;
+const ATTR_REGEX = /(\w+)="([^"]*)"/g;
+
+const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
+  'complete_task', 'reopen_task', 'start_task',
+  'update_task_priority', 'update_task_due_date', 'create_task',
+]);
+
+const parseActionsFromReply = (reply: string): { cleanReply: string; actions: ProposedAction[] } => {
+  const actions: ProposedAction[] = [];
+  const cleanReply = reply.replace(ACTION_REGEX, (_full, attrsRaw, labelRaw) => {
+    const attrs: Record<string, string> = {};
+    let m: RegExpExecArray | null;
+    const re = new RegExp(ATTR_REGEX.source, 'g');
+    while ((m = re.exec(attrsRaw)) !== null) {
+      attrs[m[1]] = m[2];
+    }
+    const kind = attrs.kind as ProposedAction['kind'];
+    if (!SUPPORTED_KINDS.has(kind)) return ''; // drop unknown actions silently
+    const { kind: _, ...params } = attrs;
+    actions.push({
+      kind,
+      label: (labelRaw || '').trim() || kind.replace(/_/g, ' '),
+      params,
+    });
+    return ''; // strip from user-facing text
+  }).replace(/\n{3,}/g, '\n\n').trim();
+  return { cleanReply, actions };
+};
 
 // ── 1. Auto-route a query to an agent by keyword matching ────────────
 const routeAgent = (query: string): AgentDefinition => {
@@ -146,10 +183,11 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     skillContextBlock,
   ].join('\n');
   const history = (input.history || []).slice(-8) as any;
-  const reply = await sendAdvisorChat(aiContext, history, input.query).then(r => (r as any)?.reply || '');
+  const rawReply = await sendAdvisorChat(aiContext, history, input.query).then(r => (r as any)?.reply || '');
+  const { cleanReply, actions } = parseActionsFromReply(rawReply);
 
   return {
-    reply: reply || 'I could not produce a reply.',
+    reply: cleanReply || 'I could not produce a reply.',
     agentId: agent.id,
     skillTrace: trace.map(({ skill, result }) => ({
       skillId: skill.id,
@@ -159,7 +197,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
         : `${skill.id} → ${result.reason || 'no data'}`,
       ms: result.ms,
     })),
-    proposedActions: [],
+    proposedActions: actions,
   };
 }
 

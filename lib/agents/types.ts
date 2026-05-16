@@ -121,12 +121,8 @@ export interface OrchestratorOutput {
     ms?: number;
   }>;
   /** Write actions the agent proposed but did NOT execute (user must
-   *  approve). Same shape as AiAdvisor's ProposedAction. */
-  proposedActions?: Array<{
-    kind: string;
-    label: string;
-    params: any;
-  }>;
+   *  approve). Parsed out of <action> tags in the LLM reply. */
+  proposedActions?: ProposedAction[];
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -140,3 +136,43 @@ export const NON_INVENTION_RULES = [
   'When citing a number (count, amount, percentage), reference where it came from when relevant ("based on 12 open tasks").',
   'Never claim to have taken an action you did not take. Write operations require a ProposedAction the user approves separately.',
 ].join('\n');
+
+// ──────────────────────────────────────────────────────────────────────
+//  Action proposal protocol
+// ──────────────────────────────────────────────────────────────────────
+// When the user asks the agent to DO something (mark done, snooze,
+// create, update), the agent emits an <action> tag at the end of its
+// reply. The orchestrator parses these out and surfaces them as
+// approval cards in the UI. The agent NEVER executes writes itself.
+
+export const ACTION_PROTOCOL_INSTRUCTIONS = [
+  '',
+  'ACTION PROTOCOL — when the user asks you to DO something (mark a task done, reschedule it, change priority, create a task), do NOT claim to have done it. Instead emit a structured proposal at the END of your reply, on its own line, in this exact format:',
+  '',
+  '<action kind="ACTION_KIND" param1="value1" param2="value2">Human-readable label</action>',
+  '',
+  'You may emit MULTIPLE actions (one per line) if the user asked for several things.',
+  '',
+  'Supported actions and their params (only use these — do not invent kinds):',
+  '  complete_task        task_id="<uuid>"                         → "Mark <title> as done"',
+  '  reopen_task          task_id="<uuid>"                         → "Reopen <title>"',
+  '  start_task           task_id="<uuid>"                         → "Move <title> to in-progress"',
+  '  update_task_priority task_id="<uuid>" priority="urgent|high|medium|low"',
+  '  update_task_due_date task_id="<uuid>" due_date="YYYY-MM-DD"',
+  '  create_task          title="..." project_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
+  '',
+  'IMPORTANT — task_id and project_id MUST come from the SKILL RESULTS block above. Never invent ids. If the user references a task by name and you cannot find a matching task_id in the skill results, ASK the user to clarify instead of guessing.',
+].join('\n');
+
+/** Concrete action shape the orchestrator returns to the UI. */
+export interface ProposedAction {
+  kind:
+    | 'complete_task'
+    | 'reopen_task'
+    | 'start_task'
+    | 'update_task_priority'
+    | 'update_task_due_date'
+    | 'create_task';
+  label: string;
+  params: Record<string, string>;
+}

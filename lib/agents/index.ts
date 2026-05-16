@@ -35,4 +35,5 @@ export type {
   ExecutionContext,
   OrchestratorInput,
   OrchestratorOutput,
+  ProposedAction,
 } from './types';
