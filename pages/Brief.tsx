@@ -24,7 +24,7 @@ import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
-import { sendAdvisorChat } from '../lib/ai';
+import { runOrchestrator } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import type { PageView, NavParams } from '../types';
@@ -37,6 +37,11 @@ type ChatMsg = {
   role: 'user' | 'assistant';
   content: string;
   ts: number;
+  /** When an assistant message was produced by the orchestrator, the
+   *  skill trace gets rendered as small "✓ ran X skill" chips beneath
+   *  the reply so the user sees what data the AI actually pulled. */
+  skillTrace?: Array<{ skillId: string; ok: boolean; summary: string }>;
+  agentId?: string;
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -165,35 +170,35 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages.length]);
 
-  // ── Send a question ──────────────────────────────────────────────
+  // ── Send a question via the orchestrator ─────────────────────────
+  // The orchestrator routes to the right domain agent (tasks / finance
+  // / calendar / clients / projects / inbox), runs that agent's
+  // read-only skills against the user's actual DB rows, and feeds the
+  // results into the LLM with a strict non-invention rule. We surface
+  // the skill trace as small "✓ ran X" chips beneath the reply.
   const handleSend = async () => {
     const q = input.trim();
-    if (!q || sending) return;
+    if (!q || sending || !currentTenant?.id || !user?.id) return;
     setInput('');
     const userMsg: ChatMsg = { role: 'user', content: q, ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setSending(true);
     try {
-      // Build a compact context bundle for the AI
-      const ctx = [
-        `User: ${(user as any)?.user_metadata?.name || user?.email || 'user'}`,
-        `Tenant: ${currentTenant?.name || 'unknown'}`,
-        `Date: ${today.toDateString()}`,
-        '',
-        `Tasks assigned to me / I own (${myTasks.length} open):`,
-        ...overdue.slice(0, 10).map(t => `  [OVERDUE ${formatRelative(t.start_date)}] ${t.title}${t.priority ? ` (${t.priority})` : ''}`),
-        ...dueToday.slice(0, 10).map(t => `  [TODAY] ${t.title}${t.priority ? ` (${t.priority})` : ''}`),
-        ...dueSoon.slice(0, 10).map(t => `  [${formatRelative(t.start_date)}] ${t.title}${t.priority ? ` (${t.priority})` : ''}`),
-        '',
-        `Today's events (${todayEvents.length}):`,
-        ...todayEvents.slice(0, 10).map(e => `  ${e.start_time || ''} ${e.title}`),
-      ].join('\n');
       const history = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
-      const result = await sendAdvisorChat(ctx, history as any, q);
-      const reply = (result as any)?.reply || "I couldn't generate a response — try rephrasing?";
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }]);
+      const out = await runOrchestrator({
+        query: q,
+        history,
+        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+      });
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: out.reply,
+        ts: Date.now(),
+        skillTrace: out.skillTrace,
+        agentId: out.agentId,
+      }]);
     } catch (e: any) {
-      errorLogger.error('brief chat failed', e);
+      errorLogger.error('brief orchestrator failed', e);
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e?.message || 'unknown'}`, ts: Date.now() }]);
     } finally {
       setSending(false);
@@ -235,11 +240,40 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {messages.map((m, i) => (
             <div key={`${m.ts}-${i}`} className={m.role === 'user' ? 'flex justify-end' : ''}>
-              <div className={`text-[13px] leading-relaxed whitespace-pre-wrap ${
-                m.role === 'user'
-                  ? 'max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2'
-                  : 'text-zinc-800 dark:text-zinc-100'
-              }`}>{m.content}</div>
+              <div className="max-w-full">
+                <div className={`text-[13px] leading-relaxed whitespace-pre-wrap ${
+                  m.role === 'user'
+                    ? 'max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2 ml-auto'
+                    : 'text-zinc-800 dark:text-zinc-100'
+                }`}>{m.content}</div>
+                {/* Skill trace — surfaces which agent + which DB queries
+                    produced this reply. Builds trust by showing the
+                    actual data path (not just "AI said X"). */}
+                {m.role === 'assistant' && m.skillTrace && m.skillTrace.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {m.agentId && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
+                        <Icons.Sparkles size={9} />
+                        {m.agentId.replace('-agent', '')}
+                      </span>
+                    )}
+                    {m.skillTrace.map((s, k) => (
+                      <span
+                        key={k}
+                        title={s.summary}
+                        className={`text-[9px] px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${
+                          s.ok
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-zinc-100 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400'
+                        }`}
+                      >
+                        {s.ok ? <Icons.Check size={9} /> : <Icons.AlertCircle size={9} />}
+                        {s.skillId.split('.').pop()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {sending && (
