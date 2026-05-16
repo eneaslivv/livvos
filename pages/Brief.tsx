@@ -24,7 +24,7 @@ import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
-import { runOrchestrator, type ProposedAction } from '../lib/agents';
+import { runOrchestrator, recordFeedback, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import type { PageView, NavParams } from '../types';
@@ -49,6 +49,10 @@ type ChatMsg = {
    *  Rendered as approval cards under the message — Confirm executes
    *  the corresponding CalendarContext method; Skip dismisses. */
   actions?: ChatAction[];
+  /** Server-persisted conversation row id. Required for thumbs feedback. */
+  conversationId?: string | null;
+  /** Local thumbs state so we don't double-submit. */
+  thumbs?: 'up' | 'down' | null;
 };
 
 type RightTab = 'tasks' | 'calendar' | 'inbox';
@@ -196,17 +200,21 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     setSending(true);
     try {
       const history = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
-      const out = await runOrchestrator({
-        query: q,
-        history,
-        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
-      });
+      const out = await runOrchestrator(
+        {
+          query: q,
+          history,
+          ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        },
+        { surface: 'brief' },
+      );
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: out.reply,
         ts: Date.now(),
         skillTrace: out.skillTrace,
         agentId: out.agentId,
+        conversationId: (out as any).conversationId || null,
         actions: (out.proposedActions || []).map(a => ({ ...a, state: 'pending' as const })),
       }]);
     } catch (e: any) {
@@ -219,6 +227,25 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
   const handleTaskClick = (t: CalendarTask) => {
     onNavigate('calendar', { taskId: t.id });
+  };
+
+  // ── Thumbs feedback ─────────────────────────────────────────────
+  const handleThumbs = async (msgIdx: number, value: 'up' | 'down') => {
+    const msg = messages[msgIdx];
+    if (!msg?.conversationId || msg.thumbs || !currentTenant?.id || !user?.id) return;
+    setMessages(prev => {
+      const next = [...prev];
+      next[msgIdx] = { ...next[msgIdx], thumbs: value };
+      return next;
+    });
+    try {
+      await recordFeedback({
+        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        conversationId: msg.conversationId,
+        agentId: msg.agentId || 'unknown',
+        signal: value === 'up' ? 'thumbs_up' : 'thumbs_down',
+      });
+    } catch { /* best effort */ }
   };
 
   // ── Execute a proposed action ───────────────────────────────────
@@ -277,6 +304,17 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         next[msgIdx] = m;
         return next;
       });
+      // Log the confirmation as a positive feedback signal — feeds the
+      // learning loop that this style of proposal was useful.
+      const conv = msg.conversationId;
+      if (conv && currentTenant?.id && user?.id) {
+        recordFeedback({
+          ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+          conversationId: conv,
+          agentId: msg.agentId || 'unknown',
+          signal: 'action_confirmed',
+        }).catch(() => {});
+      }
     } catch (e: any) {
       errorLogger.error('action execute failed', e);
       setMessages(prev => {
@@ -291,6 +329,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   };
 
   const skipAction = (msgIdx: number, actionIdx: number) => {
+    const msg = messages[msgIdx];
     setMessages(prev => {
       const next = [...prev];
       const m = { ...next[msgIdx] };
@@ -299,6 +338,14 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       next[msgIdx] = m;
       return next;
     });
+    if (msg?.conversationId && currentTenant?.id && user?.id) {
+      recordFeedback({
+        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        conversationId: msg.conversationId,
+        agentId: msg.agentId || 'unknown',
+        signal: 'action_skipped',
+      }).catch(() => {});
+    }
   };
 
   // ── Load pending inbox messages for the Inbox tab ───────────────
@@ -377,7 +424,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                     produced this reply. Builds trust by showing the
                     actual data path (not just "AI said X"). */}
                 {m.role === 'assistant' && m.skillTrace && m.skillTrace.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="mt-2 flex flex-wrap gap-1.5 items-center">
                     {m.agentId && (
                       <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
                         <Icons.Sparkles size={9} />
@@ -398,6 +445,37 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                         {s.skillId.split('.').pop()}
                       </span>
                     ))}
+                    {/* Thumbs feedback — explicit signal that the AI was useful
+                        or not. Disabled once clicked so we don't double-count
+                        in agent_metrics. */}
+                    {m.conversationId && (
+                      <div className="ml-auto flex items-center gap-0.5">
+                        <button
+                          onClick={() => handleThumbs(i, 'up')}
+                          disabled={!!m.thumbs}
+                          title="Useful reply"
+                          className={`p-1 rounded transition-colors ${
+                            m.thumbs === 'up'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-zinc-300 hover:text-emerald-500 disabled:opacity-50'
+                          }`}
+                        >
+                          <Icons.ThumbsUp size={11} />
+                        </button>
+                        <button
+                          onClick={() => handleThumbs(i, 'down')}
+                          disabled={!!m.thumbs}
+                          title="Not useful"
+                          className={`p-1 rounded transition-colors ${
+                            m.thumbs === 'down'
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : 'text-zinc-300 hover:text-rose-500 disabled:opacity-50'
+                          }`}
+                        >
+                          <Icons.ThumbsDown size={11} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

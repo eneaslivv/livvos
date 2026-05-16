@@ -37,3 +37,22 @@ export type {
   OrchestratorOutput,
   ProposedAction,
 } from './types';
+
+// Memory layer — conversation log, feedback signals, user profile
+export {
+  recordFeedback,
+  fetchFeedbackStats,
+  detectReAsk,
+  detectRephrase,
+  getUserProfile,
+  saveUserProfile,
+  formatProfileForPrompt,
+  fetchRecentTurns,
+} from './memory';
+export type {
+  FeedbackSignal,
+  UserProfile,
+} from './memory';
+
+// Critique layer — offline analysis of recent conversations
+export { runCritique } from './critique/critique-agent';

@@ -25,6 +25,14 @@ import type {
 } from './types';
 import { AGENTS, AGENT_BY_ID } from './registry';
 import { sendAdvisorChat } from '../ai';
+import {
+  logConversationTurn,
+  getUserProfile,
+  formatProfileForPrompt,
+  recordFeedback,
+  detectReAsk,
+  detectRephrase,
+} from './memory';
 
 // ── Action parser ────────────────────────────────────────────────────
 // The LLM emits actions in <action kind="..." param="..." ...>label</action>
@@ -164,29 +172,52 @@ const formatSkillResultsForPrompt = (
 };
 
 // ── 4. Main entry ────────────────────────────────────────────────────
-export async function runOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
+export interface OrchestratorRunOptions {
+  /** Surface tag for logging — 'brief' | 'advisor' | 'finance' | ... */
+  surface?: string;
+  /** Optional thread id grouping consecutive turns in the same session. */
+  threadId?: string;
+  /** Disable conversation logging (rare — used in dry-run / tests). */
+  noLog?: boolean;
+}
+
+export async function runOrchestrator(
+  input: OrchestratorInput,
+  options: OrchestratorRunOptions = {},
+): Promise<OrchestratorOutput & { conversationId?: string | null }> {
+  const t0 = Date.now();
   const agent = input.forcedAgentId
     ? AGENT_BY_ID.get(input.forcedAgentId) || routeAgent(input.query)
     : routeAgent(input.query);
 
+  // Run skills (read-only) + record per-skill timing
+  const skillT0 = Date.now();
   const trace = await runAgentSkills(agent, input.query, input.ctx);
+  const msSkills = Date.now() - skillT0;
   const skillContextBlock = formatSkillResultsForPrompt(trace);
 
-  // Hand off to Gemini with the agent persona + real data. The
-  // sendAdvisorChat helper takes (context, history, question) — we pack
-  // the agent prompt + skill data into the context.
+  // Pull the user's learned profile to adapt tone/style to them
+  const profile = await getUserProfile(input.ctx.db, {
+    userId: input.ctx.userId, tenantId: input.ctx.tenantId,
+  });
+  const profileBlock = formatProfileForPrompt(profile);
+
+  // Hand off to Gemini with the agent persona + profile + real data
   const aiContext = [
     `AGENT: ${agent.name} (${agent.id})`,
     '',
     agent.systemPrompt,
     '',
+    profileBlock,
     skillContextBlock,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   const history = (input.history || []).slice(-8) as any;
+  const llmT0 = Date.now();
   const rawReply = await sendAdvisorChat(aiContext, history, input.query).then(r => (r as any)?.reply || '');
+  const msLlm = Date.now() - llmT0;
   const { cleanReply, actions } = parseActionsFromReply(rawReply);
 
-  return {
+  const output: OrchestratorOutput = {
     reply: cleanReply || 'I could not produce a reply.',
     agentId: agent.id,
     skillTrace: trace.map(({ skill, result }) => ({
@@ -199,6 +230,49 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     })),
     proposedActions: actions,
   };
+
+  const msTotal = Date.now() - t0;
+
+  // Log + auto-detect implicit feedback signals (re-ask, rephrase) from
+  // the previous turn in the history. Fire-and-forget.
+  let conversationId: string | null = null;
+  if (!options.noLog) {
+    conversationId = await logConversationTurn({
+      ctx: input.ctx,
+      surface: options.surface || 'unknown',
+      query: input.query,
+      output,
+      msTotal, msSkills, msLlm,
+      threadId: options.threadId,
+    });
+    // Look at the previous user turn in history for re-ask detection.
+    // The most recent user turn in history === their PREVIOUS query
+    // (since current query isn't in history yet).
+    const lastUserTurn = [...(input.history || [])].reverse().find(h => h.role === 'user');
+    if (lastUserTurn) {
+      if (detectReAsk(input.query, lastUserTurn.content)) {
+        // The previous conversation row was bad — but we don't have its
+        // id here without an extra fetch. The Brief UI can correlate by
+        // recency + record the feedback signal with the previous turn.
+        // For now we log against the CURRENT turn as a "re-asked" mark.
+        if (conversationId) {
+          recordFeedback({
+            ctx: input.ctx, conversationId, agentId: agent.id,
+            signal: 're_asked_same_thing',
+          }).catch(() => {});
+        }
+      } else if (detectRephrase(input.query, lastUserTurn.content)) {
+        if (conversationId) {
+          recordFeedback({
+            ctx: input.ctx, conversationId, agentId: agent.id,
+            signal: 'rephrased',
+          }).catch(() => {});
+        }
+      }
+    }
+  }
+
+  return { ...output, conversationId };
 }
 
 // Convenience re-exports for direct skill access from non-LLM call sites
