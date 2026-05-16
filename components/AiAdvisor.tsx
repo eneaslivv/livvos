@@ -21,8 +21,20 @@ import { useCalendar } from '../context/CalendarContext';
 import { useClients } from '../hooks/useClients';
 import { useAuth } from '../hooks/useAuth';
 import { useRBAC } from '../context/RBACContext';
+import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { LinkifiedText } from './ui/LinkifiedText';
+// Memory layer — every AiAdvisor turn lands in agent_conversations so
+// the critique loop sees it alongside Brief/orchestrator turns. The
+// user profile is injected into context so style/length preferences
+// learned elsewhere also apply here.
+import {
+  getUserProfile,
+  formatProfileForPrompt,
+  recordFeedback,
+  logConversationTurn,
+  type UserProfile,
+} from '../lib/agents';
 
 const AREA_CONFIG: Record<string, { gradient: string; iconBg: string; border: string }> = {
   projects: { gradient: 'from-blue-500/8 to-transparent', iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', border: 'border-blue-500/10' },
@@ -77,10 +89,14 @@ export type ProposedAction = AdvisorAction & {
   errorMsg?: string;
 };
 
+// `conversationId` (when present) points at the agent_conversations row
+// for this turn — used by the thumbs UI + action-feedback signals to
+// feed the same learning loop the orchestrator uses. `thumbs` caches
+// the user's vote so the buttons don't re-fire on re-render.
 type ChatMsg =
   | { role: 'user'; content: string; ts?: number }
-  | { role: 'assistant'; content: string; outputId?: string | null; actions?: ProposedAction[]; ts?: number }
-  | { role: 'assistant'; kind: 'insights'; greeting: string; insights: AdvisorInsight[]; outputId?: string | null; ts?: number };
+  | { role: 'assistant'; content: string; outputId?: string | null; actions?: ProposedAction[]; ts?: number; conversationId?: string | null; thumbs?: 'up' | 'down' }
+  | { role: 'assistant'; kind: 'insights'; greeting: string; insights: AdvisorInsight[]; outputId?: string | null; ts?: number; conversationId?: string | null; thumbs?: 'up' | 'down' };
 
 // localStorage key — one bucket per user per day. Keeps the current day
 // available across reopens without polluting older days.
@@ -365,6 +381,7 @@ const ActionCard: React.FC<{
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
   const { user: profile } = useRBAC();
+  const { currentTenant } = useTenant();
   const { projects, createProject, updateProject } = useProjects();
   const { incomes, expenses, budgets, createIncome, createExpense, createBudget, updateBudget, updateExpense, updateInstallment, updateIncome } = useFinance();
   const { members } = useTeam();
@@ -376,6 +393,21 @@ export const AiAdvisor: React.FC = () => {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
+
+  // ── Learned user profile (preferred tone/length/manual notes/learned
+  // traits from the critique loop). Injected into every context summary
+  // so AiAdvisor adapts to the same preferences Brief learns. Lazy: only
+  // fetched once the chat opens for the first time so closed-state cost
+  // is zero.
+  const [aiProfile, setAiProfile] = useState<UserProfile | null>(null);
+  useEffect(() => {
+    if (!isOpen || !user?.id || !currentTenant?.id || aiProfile) return;
+    let cancelled = false;
+    getUserProfile(supabase as any, { userId: user.id, tenantId: currentTenant.id })
+      .then(p => { if (!cancelled) setAiProfile(p); })
+      .catch(() => { /* default profile is fine */ });
+    return () => { cancelled = true; };
+  }, [isOpen, user?.id, currentTenant?.id, aiProfile]);
 
   // ── Daily persistence: load on mount, save on every change ────────
   // Keyed per user + per day. Older days quietly stay in localStorage —
@@ -736,8 +768,16 @@ export const AiAdvisor: React.FC = () => {
     // Bumped from 5000 to 7500 to fit the per-member TEAM breakdown.
     // Gemini handles ~30K tokens of context comfortably; this is well under.
     if (result.length > 7500) result = result.slice(0, 7500);
+
+    // Prepend the learned user profile so the model adapts tone, length,
+    // language, and follows any style rules the critique loop noticed.
+    // Goes at the TOP because Gemini weighs early tokens more for style.
+    if (aiProfile) {
+      const profileBlock = formatProfileForPrompt(aiProfile);
+      if (profileBlock) result = `${profileBlock}\n${result}`;
+    }
     return result;
-  }, [projects, clients, incomes, expenses, budgets, members, allTasks, user?.id, user?.email, profile?.name]);
+  }, [projects, clients, incomes, expenses, budgets, members, allTasks, user?.id, user?.email, profile?.name, aiProfile]);
 
   // History formatted for the chat endpoint (only plain user/assistant text).
   const chatHistoryForApi = useMemo(() => {
@@ -757,6 +797,7 @@ export const AiAdvisor: React.FC = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setSending(true);
+    const t0 = Date.now();
     try {
       const context = buildContextSummary();
       const replyResult = await sendAdvisorChatWithActions(context, chatHistoryForApi, question.trim());
@@ -766,12 +807,39 @@ export const AiAdvisor: React.FC = () => {
         id: crypto.randomUUID(),
         status: 'pending' as const,
       }));
+      // Persist this turn to agent_conversations so the critique loop
+      // and feedback UI can attach to it later. AiAdvisor doesn't route
+      // through the orchestrator, so we synthesize the same shape the
+      // orchestrator would produce — agentId='advisor', skill trace is
+      // empty (no structured skills were called), proposed_actions are
+      // the raw advisor actions (different kinds than orchestrator's
+      // catalog — that's fine, the table is jsonb).
+      let conversationId: string | null = null;
+      if (currentTenant?.id) {
+        try {
+          conversationId = await logConversationTurn({
+            ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+            surface: 'advisor',
+            query: question.trim(),
+            output: {
+              reply,
+              agentId: 'advisor',
+              skillTrace: [],
+              proposedActions: actions as any,
+            } as any,
+            msTotal: Date.now() - t0,
+            msSkills: 0,
+            msLlm: Date.now() - t0,
+          });
+        } catch { /* best-effort log; never break the chat */ }
+      }
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: reply,
         outputId: getOutputId(replyResult),
         actions: actions.length > 0 ? actions : undefined,
         ts: Date.now(),
+        conversationId,
       }]);
       setSessionExpired(false);
     } catch (err: any) {
@@ -784,7 +852,7 @@ export const AiAdvisor: React.FC = () => {
     } finally {
       setSending(false);
     }
-  }, [sending, user, buildContextSummary, chatHistoryForApi]);
+  }, [sending, user, currentTenant?.id, buildContextSummary, chatHistoryForApi]);
 
   // ── Action approval / rejection ────────────────────────────────────
   // Updates the message in-place with the new status. The actual mutation
@@ -981,15 +1049,59 @@ export const AiAdvisor: React.FC = () => {
         } as any);
       }
       updateActionStatus(msgIdx, action.id, { status: 'approved' });
+      // Approval is a positive feedback signal — feeds the same metrics
+      // rollup the orchestrator uses. Best-effort: a failed feedback
+      // write must not unwind the action that already succeeded.
+      const msg = messages[msgIdx] as any;
+      if (msg?.conversationId && currentTenant?.id && user?.id) {
+        recordFeedback({
+          ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+          conversationId: msg.conversationId,
+          agentId: 'advisor',
+          signal: 'action_confirmed',
+        }).catch(() => {});
+      }
     } catch (err: any) {
       errorLogger.error('advisor action failed', err);
       updateActionStatus(msgIdx, action.id, { status: 'failed', errorMsg: err?.message || 'No se pudo aplicar.' });
     }
-  }, [createTask, updateTask, createProject, updateProject, createExpense, updateExpense, createIncome, updateIncome, createBudget, updateBudget, updateInstallment, user?.id, updateActionStatus]);
+  }, [createTask, updateTask, createProject, updateProject, createExpense, updateExpense, createIncome, updateIncome, createBudget, updateBudget, updateInstallment, user?.id, updateActionStatus, messages, currentTenant?.id]);
 
   const handleRejectAction = useCallback((msgIdx: number, actionId: string) => {
     updateActionStatus(msgIdx, actionId, { status: 'rejected' });
-  }, [updateActionStatus]);
+    // Rejection = negative signal. Same channel as approve so the
+    // critique loop can compute approve/reject ratio per agent.
+    const msg = messages[msgIdx] as any;
+    if (msg?.conversationId && currentTenant?.id && user?.id) {
+      recordFeedback({
+        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        conversationId: msg.conversationId,
+        agentId: 'advisor',
+        signal: 'action_skipped',
+      }).catch(() => {});
+    }
+  }, [updateActionStatus, messages, currentTenant?.id, user?.id]);
+
+  // ── Thumbs feedback on assistant replies ────────────────────────────
+  // Mirrors the Brief UI: one click per message, opt-in, never blocks.
+  // The conversation_id is the row we logged above; without it we don't
+  // render the buttons at all (no place to attach the signal).
+  const handleThumbs = useCallback(async (msgIdx: number, value: 'up' | 'down') => {
+    const msg = messages[msgIdx] as any;
+    if (!msg?.conversationId || msg.thumbs || !currentTenant?.id || !user?.id) return;
+    setMessages(prev => prev.map((m, i): ChatMsg => {
+      if (i !== msgIdx) return m;
+      return { ...m, thumbs: value } as ChatMsg;
+    }));
+    try {
+      await recordFeedback({
+        ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        conversationId: msg.conversationId,
+        agentId: 'advisor',
+        signal: value === 'up' ? 'thumbs_up' : 'thumbs_down',
+      });
+    } catch { /* best effort — keep the UI marked locally */ }
+  }, [messages, currentTenant?.id, user?.id]);
 
   // ── Generate full insights overview as an assistant message ──────
   const generateInsights = useCallback(async (forceRefresh = false) => {
@@ -1215,6 +1327,8 @@ export const AiAdvisor: React.FC = () => {
                   // Assistant
                   const isInsightsMsg = 'kind' in msg && msg.kind === 'insights';
                   const outputId = (msg as any).outputId as string | null | undefined;
+                  const conversationId = (msg as any).conversationId as string | null | undefined;
+                  const currentThumbs = (msg as any).thumbs as 'up' | 'down' | undefined;
                   const msgActions = (msg as any).actions as ProposedAction[] | undefined;
                   return (
                     <div key={idx} className="flex items-start gap-2.5">
@@ -1230,6 +1344,47 @@ export const AiAdvisor: React.FC = () => {
                           )}
                           {outputId && (
                             <AIFeedbackBar outputId={outputId} className="mt-2" compact />
+                          )}
+                          {/* Thumbs row — appears for any message we
+                              successfully logged to agent_conversations.
+                              One click, locked after. Sits below the
+                              legacy AIFeedbackBar so power-users can
+                              also use the existing comment/refine
+                              flow. */}
+                          {conversationId && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={!!currentThumbs}
+                                onClick={() => handleThumbs(idx, 'up')}
+                                aria-label="Helpful"
+                                title="Helpful"
+                                className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
+                                  currentThumbs === 'up'
+                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                    : 'text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 disabled:hover:bg-transparent'
+                                }`}
+                              >
+                                <Icons.ThumbsUp size={11} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!!currentThumbs}
+                                onClick={() => handleThumbs(idx, 'down')}
+                                aria-label="Not helpful"
+                                title="Not helpful"
+                                className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
+                                  currentThumbs === 'down'
+                                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                                    : 'text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-40 disabled:hover:bg-transparent'
+                                }`}
+                              >
+                                <Icons.ThumbsDown size={11} />
+                              </button>
+                              {currentThumbs && (
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Thanks — feedback recorded</span>
+                              )}
+                            </div>
                           )}
                         </div>
                         {/* Action proposals — rendered as confirm cards

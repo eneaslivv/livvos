@@ -48,6 +48,7 @@ export {
   saveUserProfile,
   formatProfileForPrompt,
   fetchRecentTurns,
+  logConversationTurn,
 } from './memory';
 export type {
   FeedbackSignal,
