@@ -1452,53 +1452,64 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                 </div>
               )}
 
-              {/* ── AI Email shortcuts ── */}
-              {selectedClient.email && (
-                <div className="px-5 pt-5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">AI Email</h3>
-                    {emailContextSaving && (
-                      <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
-                        <span className="w-2 h-2 border border-zinc-300 border-t-zinc-500 rounded-full animate-spin" />
-                        Saving context…
-                      </span>
-                    )}
+              {/* ── AI Email + Slack shortcuts ──
+                  Always rendered for any selected client. The buttons
+                  themselves enable/disable per-channel: email needs an
+                  email-on-file, Slack falls back to a channel picker
+                  inside the EmailDraftPanel.  */}
+              <div className="px-5 pt-5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">AI Outreach</h3>
+                  {emailContextSaving && (
+                    <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
+                      <span className="w-2 h-2 border border-zinc-300 border-t-zinc-500 rounded-full animate-spin" />
+                      Saving context…
+                    </span>
+                  )}
+                </div>
+                {!selectedClient.email && (
+                  <div className="flex items-start gap-1.5 p-2 rounded-md text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                    <Icons.AlertCircle size={11} className="shrink-0 mt-0.5" />
+                    <span>
+                      No email on file — the buttons will open the panel where you can pick a recipient. Add an email to {selectedClient.name?.split(' ')[0] || 'this client'} above to skip this step.
+                    </span>
                   </div>
-                  {/* Shortcut buttons */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={openBlankEmail}
-                      className="flex items-center gap-2 p-2.5 rounded-lg bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/15 transition-colors text-left group"
-                    >
-                      <div className="w-7 h-7 rounded-md bg-fuchsia-100 dark:bg-fuchsia-500/20 flex items-center justify-center shrink-0">
-                        <Icons.Mail size={13} className="text-fuchsia-600 dark:text-fuchsia-400" />
+                )}
+                {/* Shortcut buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={openBlankEmail}
+                    className="flex items-center gap-2 p-2.5 rounded-lg bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/15 transition-colors text-left group"
+                  >
+                    <div className="w-7 h-7 rounded-md bg-fuchsia-100 dark:bg-fuchsia-500/20 flex items-center justify-center shrink-0">
+                      <Icons.Mail size={13} className="text-fuchsia-600 dark:text-fuchsia-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-fuchsia-800 dark:text-fuchsia-300">
+                        Compose with AI
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-fuchsia-800 dark:text-fuchsia-300">
-                          Send AI email
-                        </div>
-                        <div className="text-[10px] text-fuchsia-700/80 dark:text-fuchsia-400/80 mt-0.5 truncate">
-                          Blank — you tell the AI the brief
-                        </div>
+                      <div className="text-[10px] text-fuchsia-700/80 dark:text-fuchsia-400/80 mt-0.5 truncate">
+                        Email or Slack — you pick
                       </div>
-                    </button>
-                    <button
-                      onClick={openWeeklyUpdateEmail}
-                      className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors text-left group"
-                    >
-                      <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                        <Icons.CheckCircle size={13} className="text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                  </button>
+                  <button
+                    onClick={openWeeklyUpdateEmail}
+                    className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors text-left group"
+                  >
+                    <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <Icons.CheckCircle size={13} className="text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
+                        Weekly update
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
-                          Weekly update
-                        </div>
-                        <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 truncate">
-                          Auto-pulls last week's wins
-                        </div>
+                      <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 truncate">
+                        Auto-pulls last week's wins
                       </div>
-                    </button>
-                  </div>
+                    </div>
+                  </button>
+                </div>
 
                   {/* Per-client context notes — fed to the AI on every draft */}
                   <div>
@@ -1518,7 +1529,6 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                     </p>
                   </div>
                 </div>
-              )}
 
               {/* ── Projects list ── */}
               <div className="p-5">

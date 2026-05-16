@@ -23,8 +23,10 @@ import { useTenant } from '../../context/TenantContext';
 import { useProjects } from '../../context/ProjectsContext';
 import { useCalendar } from '../../context/CalendarContext';
 import { sendNewGmail } from '../../lib/communications/gmail';
+import { postToSlack } from '../../lib/communications/slack';
 import { sendAdvisorChat } from '../../lib/ai';
 import { errorLogger } from '../../lib/errorLogger';
+import { supabase } from '../../lib/supabase';
 import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface Props {
@@ -102,6 +104,18 @@ export const EmailDraftPanel: React.FC<Props> = ({
   const [refineInstruction, setRefineInstruction] = useState('');
   const [refining, setRefining] = useState(false);
 
+  // ── Destination + preview ──
+  // The same body can be routed to either Gmail (sent to `to` address)
+  // or to a Slack channel the user picks. Toggling the destination
+  // swaps the relevant input ("To" vs "Channel") and the Send button
+  // routes through the right edge function.
+  const [destination, setDestination] = useState<'email' | 'slack'>('email');
+  const [slackChannelId, setSlackChannelId] = useState<string>('');
+  const [slackChannels, setSlackChannels] = useState<Array<{ id: string; name: string }>>([]);
+  // Preview/confirm step — instead of sending immediately on click, we
+  // first show a summary so the user can double-check what's going out.
+  const [previewing, setPreviewing] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setTo(initialTo);
@@ -115,8 +129,31 @@ export const EmailDraftPanel: React.FC<Props> = ({
       setTaskPickerProject('');
       setTaskPickerTimeframe('this_week');
       setRefineInstruction('');
+      setDestination('email');
+      setSlackChannelId('');
+      setPreviewing(false);
     }
   }, [isOpen, initialTo, initialSubject, initialBrief]);
+
+  // Load the tenant's Slack monitored channels so the user can pick one
+  // when destination = 'slack'. Cheap query, runs once when the panel opens.
+  useEffect(() => {
+    if (!isOpen || !currentTenant?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('slack_monitored_channels')
+          .select('channel_id, channel_name')
+          .eq('tenant_id', currentTenant.id)
+          .eq('is_active', true)
+          .order('channel_name');
+        if (cancelled) return;
+        setSlackChannels((data || []).map((c: any) => ({ id: c.channel_id, name: c.channel_name })));
+      } catch { /* ignore — Slack just won't be selectable */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, currentTenant?.id]);
 
   // Esc closes
   useEffect(() => {
@@ -234,22 +271,44 @@ export const EmailDraftPanel: React.FC<Props> = ({
     searchValue: (p.title || '').toLowerCase(),
   })), [projects]);
 
+  // Validations vary by destination. Used both to gate the Preview/Send
+  // button and to decide what to render in the preview step.
+  const canSend = body.trim() && currentTenant?.id && (
+    destination === 'email' ? to.trim() : slackChannelId
+  );
+
   const send = async () => {
-    if (!to.trim() || !body.trim() || !currentTenant?.id || sending) return;
+    if (!canSend || sending) return;
     setSending(true);
     setError(null);
     try {
-      const result = await sendNewGmail({
-        tenantId: currentTenant.id,
-        to: to.trim(),
-        subject: subject.trim() || '(no subject)',
-        body: body,
-      });
-      setSentResult({ external_id: result.external_id, thread_id: result.thread_id });
-      onSent?.({ external_id: result.external_id, thread_id: result.thread_id });
+      if (destination === 'email') {
+        const result = await sendNewGmail({
+          tenantId: currentTenant!.id,
+          to: to.trim(),
+          subject: subject.trim() || '(no subject)',
+          body: body,
+        });
+        setSentResult({ external_id: result.external_id, thread_id: result.thread_id });
+        onSent?.({ external_id: result.external_id, thread_id: result.thread_id });
+      } else {
+        // Slack — assemble a clean message: optional subject as bold
+        // header, then body. No Block Kit blocks; the AI body is
+        // already structured prose, posting as plain text reads better.
+        const text = subject.trim()
+          ? `*${subject.trim()}*\n${body}`
+          : body;
+        const result = await postToSlack({
+          tenantId: currentTenant!.id,
+          channelId: slackChannelId,
+          text,
+        });
+        setSentResult({ external_id: result.ts, thread_id: result.channel });
+        onSent?.({ external_id: result.ts, thread_id: result.channel });
+      }
     } catch (e: any) {
-      errorLogger.error('email send failed', e);
-      setError(e?.message || 'Could not send the email');
+      errorLogger.error(`${destination} send failed`, e);
+      setError(e?.message || `Could not send via ${destination}`);
     } finally {
       setSending(false);
     }
@@ -304,17 +363,67 @@ export const EmailDraftPanel: React.FC<Props> = ({
         ) : (
           /* Compose state */
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
-            {/* To */}
+            {/* Destination toggle — Email vs Slack channel.
+                Switches the input below (To address vs channel picker)
+                and changes which API the Send button hits. */}
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">To</label>
-              <input
-                type="email"
-                value={to}
-                onChange={e => setTo(e.target.value)}
-                placeholder="recipient@example.com"
-                className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[13px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-400"
-              />
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Send via</label>
+              <div className="inline-flex p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-800">
+                {([
+                  { v: 'email' as const, label: 'Email', icon: 'Mail' as const },
+                  { v: 'slack' as const, label: 'Slack', icon: 'MessageSquare' as const },
+                ]).map(opt => {
+                  const active = destination === opt.v;
+                  const IconCmp = (Icons as any)[opt.icon] || Icons.Mail;
+                  return (
+                    <button
+                      key={opt.v}
+                      onClick={() => setDestination(opt.v)}
+                      className={`px-3 py-1 rounded-md text-[12px] font-semibold transition-all inline-flex items-center gap-1.5 ${
+                        active
+                          ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                      }`}
+                    >
+                      <IconCmp size={11} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Recipient input — switches between Email and Slack */}
+            {destination === 'email' ? (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">To</label>
+                <input
+                  type="email"
+                  value={to}
+                  onChange={e => setTo(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-[13px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-fuchsia-400"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Channel</label>
+                {slackChannels.length > 0 ? (
+                  <SearchableSelect
+                    value={slackChannelId}
+                    onChange={setSlackChannelId}
+                    options={slackChannels.map(c => ({ value: c.id, label: `#${c.name}`, searchValue: c.name }))}
+                    placeholder="Search channel…"
+                    emptyOption={{ value: '', label: 'Pick a channel' }}
+                    popoverWidth={280}
+                  />
+                ) : (
+                  <div className="text-[11.5px] text-zinc-500 px-3 py-2 rounded-md border border-dashed border-zinc-200 dark:border-zinc-800">
+                    No Slack channels are monitored. Configure them in Inbox → channels.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Subject */}
             <div>
@@ -489,33 +598,80 @@ export const EmailDraftPanel: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Preview banner — appears when previewing=true. Renders the
+            email/slack message exactly as it'll go out, with the
+            recipient + subject + body laid out in a clean read-only
+            block. The user can hit "Back to edit" or "Confirm send". */}
+        {!sentResult && previewing && (
+          <div className="mx-5 mb-2 p-3 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/5">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-2">
+              <Icons.AlertCircle size={11} />
+              Final review — this will be sent
+            </div>
+            <div className="text-[11px] text-zinc-600 dark:text-zinc-300 space-y-1">
+              <div><strong>Sending via:</strong> {destination === 'email' ? 'Email (Gmail)' : 'Slack'}</div>
+              {destination === 'email' ? (
+                <div><strong>To:</strong> {to || <em className="text-rose-500">missing</em>}</div>
+              ) : (
+                <div><strong>Channel:</strong> {slackChannelId ? `#${slackChannels.find(c => c.id === slackChannelId)?.name || slackChannelId}` : <em className="text-rose-500">missing</em>}</div>
+              )}
+              {subject && <div><strong>Subject:</strong> {subject}</div>}
+              <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-500/20">
+                <div className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Body</div>
+                <div className="whitespace-pre-wrap text-zinc-700 dark:text-zinc-200 leading-relaxed max-h-48 overflow-y-auto">{body}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         {!sentResult && (
           <footer className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-2">
             <span className="text-[10px] text-zinc-400 flex-1 truncate">
-              Sends from your connected Gmail account.
+              {destination === 'email' ? 'Sends from your connected Gmail.' : 'Posts via your Slack bot.'}
             </span>
-            <button
-              onClick={onClose}
-              disabled={sending}
-              className="text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2.5 py-1.5 disabled:opacity-30"
-            >Cancel</button>
-            <button
-              onClick={send}
-              disabled={!to.trim() || !body.trim() || sending}
-              className="px-3 py-1.5 rounded-md text-[11px] font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
-            >
-              {sending ? (
-                <>
-                  <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                <>
-                  <Icons.Send size={11} /> Send
-                </>
-              )}
-            </button>
+            {previewing ? (
+              <>
+                <button
+                  onClick={() => setPreviewing(false)}
+                  disabled={sending}
+                  className="text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2.5 py-1.5 disabled:opacity-30 inline-flex items-center gap-1"
+                >
+                  <Icons.ChevronLeft size={11} /> Back to edit
+                </button>
+                <button
+                  onClick={send}
+                  disabled={!canSend || sending}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity inline-flex items-center gap-1.5"
+                >
+                  {sending ? (
+                    <>
+                      <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Check size={11} /> Confirm send
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={onClose}
+                  disabled={sending}
+                  className="text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2.5 py-1.5 disabled:opacity-30"
+                >Cancel</button>
+                <button
+                  onClick={() => setPreviewing(true)}
+                  disabled={!canSend || sending}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-semibold text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
+                >
+                  <Icons.Eye size={11} /> Review &amp; send
+                </button>
+              </>
+            )}
           </footer>
         )}
       </div>
