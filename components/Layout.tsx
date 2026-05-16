@@ -594,6 +594,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const osNavGroups: NavItemDef[][] = [
     [
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
+      // Brief — chat-with-AI + structured tasks/calendar panel on the side
+      { id: 'brief', label: 'Brief', icon: <Icons.Sparkles /> },
       { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
     ],
     [

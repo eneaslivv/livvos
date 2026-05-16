@@ -25,6 +25,7 @@ import { NotificationToaster } from './components/NotificationToaster';
 import { retryDynamicImport, isChunkLoadError, clearChunkReloadFlag } from './lib/lazyWithRetry';
 
 const loadHome = () => retryDynamicImport(() => import('./pages/Home').then(m => ({ default: m.Home })), 'Home');
+const loadBrief = () => retryDynamicImport(() => import('./pages/Brief').then(m => ({ default: m.Brief })), 'Brief');
 const loadProjects = () => retryDynamicImport(() => import('./pages/Projects').then(m => ({ default: m.Projects })), 'Projects');
 const loadDocs = () => retryDynamicImport(() => import('./pages/Docs').then(m => ({ default: m.Docs })), 'Docs');
 const loadCalendar = () => retryDynamicImport(() => import('./pages/Calendar').then(m => ({ default: m.Calendar })), 'Calendar');
@@ -54,6 +55,7 @@ const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/Plat
 const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
 
 const Home = React.lazy(loadHome);
+const Brief = React.lazy(loadBrief);
 const Projects = React.lazy(loadProjects);
 const Docs = React.lazy(loadDocs);
 const Calendar = React.lazy(loadCalendar);
@@ -383,6 +385,10 @@ const getSkeletonForPage = (page: PageView): React.ReactNode => {
   switch (page) {
     case 'home':
       return <ContentSkeleton />;
+    case 'brief':
+      // Brief uses the same generic content skeleton — split layout
+      // doesn't warrant its own.
+      return <ContentSkeleton />;
     case 'projects':
       return <ProjectsSkeleton />;
     case 'docs':
@@ -710,6 +716,13 @@ const AppContent: React.FC<{
           {visitedPages.has('home') && (
             <KeepAlivePage page="home" active={currentPage === 'home'}>
               <Home onNavigate={handleNavigate} />
+            </KeepAlivePage>
+          )}
+
+          {/* Brief — split-view AI chat + structured tasks panel */}
+          {visitedPages.has('brief') && (
+            <KeepAlivePage page="brief" active={currentPage === 'brief'}>
+              <Brief onNavigate={handleNavigate} />
             </KeepAlivePage>
           )}
 
