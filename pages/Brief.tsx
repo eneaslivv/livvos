@@ -164,17 +164,18 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     const now = new Date();
     const hour = now.getHours();
     const greeting = hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
-    const bits: string[] = [];
-    if (overdue.length > 0) bits.push(`${overdue.length} overdue task${overdue.length === 1 ? '' : 's'}`);
-    if (dueToday.length > 0) bits.push(`${dueToday.length} due today`);
-    if (todayEvents.length > 0) bits.push(`${todayEvents.length} event${todayEvents.length === 1 ? '' : 's'} on the calendar`);
-    if (pendingRequestsCount > 0) bits.push(`${pendingRequestsCount} pending message${pendingRequestsCount === 1 ? '' : 's'}`);
-    const summary = bits.length === 0
-      ? "You're clear — nothing overdue, no meetings, inbox at zero. Take the win."
-      : `You've got ${bits.join(', ')}.`;
+    // Single-line greeting. The numbers live in the stat cards above
+    // the chat — duplicating them in the message just adds noise.
+    // When everything's clear we say so explicitly so the user gets the
+    // "take the win" beat.
+    const allClear = overdue.length === 0 && dueToday.length === 0
+      && todayEvents.length === 0 && pendingRequestsCount === 0;
+    const tail = allClear
+      ? "You're clear today. Take the win — or ask me what to set up for tomorrow."
+      : "What do you want to do first?";
     setMessages([{
       role: 'assistant',
-      content: `${greeting}, ${name}.\n\n${summary}`,
+      content: `${greeting}, ${name}. ${tail}`,
       ts: Date.now(),
     }]);
   }, [user, overdue.length, dueToday.length, todayEvents.length, pendingRequestsCount]);
@@ -191,10 +192,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   // read-only skills against the user's actual DB rows, and feeds the
   // results into the LLM with a strict non-invention rule. We surface
   // the skill trace as small "✓ ran X" chips beneath the reply.
-  const handleSend = async () => {
-    const q = input.trim();
+  const handleSend = async (override?: string) => {
+    // `override` lets action chips fire a prompt without going through
+    // the input box. The user still SEES their question in the chat —
+    // it just doesn't have to type it.
+    const q = (override ?? input).trim();
     if (!q || sending || !currentTenant?.id || !user?.id) return;
-    setInput('');
+    if (!override) setInput('');
     const userMsg: ChatMsg = { role: 'user', content: q, ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setSending(true);
@@ -339,7 +343,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       try {
         const { data } = await supabase
           .from('communication_messages')
-          .select('id, platform, from_name, subject, body_text, channel_name, received_at, ai_classification')
+          .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, ai_classification')
           .eq('tenant_id', currentTenant.id)
           .eq('status', 'pending')
           .order('received_at', { ascending: false })
@@ -350,35 +354,92 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     return () => { cancelled = true; };
   }, [currentTenant?.id, rightTab]);
 
+  // ── Inline "Convert to task" from the Inbox card ────────────────
+  // Routes through the same executor Brief already uses for AI-proposed
+  // actions, so success/error handling + activity logging stay
+  // consistent. On success: drop the message from the local list (it
+  // moves to status='task_created' server-side and won't come back in
+  // the pending query).
+  const handleConvertToTask = async (msg: any) => {
+    if (!currentTenant?.id || !user?.id) return;
+    const taskTitle = (msg.subject || msg.body_text?.slice(0, 60) || 'Task from inbox').trim();
+    const result = await executeProposedAction(
+      {
+        kind: 'convert_to_task',
+        label: `Convert "${taskTitle.slice(0, 40)}…" to a task`,
+        params: { message_id: msg.id, task_title: taskTitle },
+      },
+      { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+      { createTask: (data) => createTask(data as any) },
+    );
+    if (result.ok) {
+      setPendingMessages(prev => prev.filter(m => m.id !== msg.id));
+      setPendingRequestsCount(c => Math.max(0, c - 1));
+    } else {
+      errorLogger.warn('convert_to_task failed', { error: result.error });
+    }
+  };
+
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
   const clientsById = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
 
   return (
     <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] gap-4 max-w-[1600px] mx-auto py-4">
       {/* ── LEFT: chat column ── */}
-      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-2.5">
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
+        {/* Header — minimal: meeting status + date. No tabs, no clutter. */}
+        <header className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-2.5">
           {nextMeeting ? (
             <>
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">
-                in {nextMeeting.minutesUntil}m: <span className="font-semibold">{nextMeeting.event.title}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-[11px] text-zinc-700 dark:text-zinc-200">
+                in {nextMeeting.minutesUntil}m · <span className="font-medium">{nextMeeting.event.title}</span>
               </span>
             </>
           ) : (
             <>
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">No meetings ahead</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-[11px] text-zinc-400">No meetings ahead</span>
             </>
           )}
-          <span className="ml-auto text-[11px] text-zinc-400">
-            {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          <span className="ml-auto text-[11px] text-zinc-400 tabular-nums">
+            {today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
           </span>
         </header>
 
+        {/* Stat cards — 2x2 grid of the 4 things that actually need
+            attention. Zen minimal: thin borders, no fills, color only
+            on the number. Click anywhere on a card to jump to the
+            corresponding section (tasks tab, inbox, calendar). */}
+        <div className="px-5 pt-4 pb-3 grid grid-cols-2 gap-2">
+          <StatCard
+            value={overdue.length}
+            label="Overdue"
+            tone="rose"
+            onClick={() => setRightTab('tasks')}
+          />
+          <StatCard
+            value={dueToday.length}
+            label="Due today"
+            tone="amber"
+            onClick={() => setRightTab('tasks')}
+          />
+          <StatCard
+            value={todayEvents.length}
+            label="Events today"
+            tone="emerald"
+            onClick={() => setRightTab('calendar')}
+          />
+          <StatCard
+            value={pendingRequestsCount}
+            label="Pending msgs"
+            tone="violet"
+            onClick={() => setRightTab('inbox')}
+          />
+        </div>
+
         {/* Chat messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pt-2 pb-4 space-y-4">
           {messages.map((m, i) => (
             <div key={`${m.ts}-${i}`} className={m.role === 'user' ? 'flex justify-end' : ''}>
               <div className="max-w-full">
@@ -472,8 +533,28 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           )}
         </div>
 
-        {/* Input */}
-        <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800/60">
+        {/* Input + action chips. Chips fire prompts directly (one-tap)
+            so the user doesn't have to type the common stuff. Adapted
+            to context: empty chat → broad questions; ongoing chat →
+            sharper follow-ups. */}
+        <div className="px-4 pt-2.5 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {[
+              { label: 'Plan my week',       prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
+              { label: 'What’s blocked?', prompt: 'What’s blocked or waiting on someone else right now?' },
+              { label: 'Follow-ups',         prompt: 'Show me pending follow-ups across clients + inbox I haven’t replied to.' },
+              { label: 'Catch me up',        prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+            ].map(c => (
+              <button
+                key={c.label}
+                onClick={() => handleSend(c.prompt)}
+                disabled={sending}
+                className="px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
           <div className="flex items-end gap-2">
             <textarea
               value={input}
@@ -481,13 +562,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
               }}
-              placeholder="Ask anything — 'what should I tackle first?', 'reschedule the overdue stuff', 'draft a recap for Christie'"
+              placeholder="Ask anything…"
               rows={1}
-              className="flex-1 resize-none px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 max-h-32"
+              className="flex-1 resize-none px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors"
               style={{ minHeight: '36px' }}
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!input.trim() || sending}
               className="p-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
               aria-label="Send"
@@ -499,7 +580,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       </section>
 
       {/* ── RIGHT: structured panel with tabs ── */}
-      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
         {/* Tab strip */}
         <header className="border-b border-zinc-100 dark:border-zinc-800/60 px-3 pt-3 flex items-center gap-1">
           {([
@@ -623,38 +704,16 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               {pendingMessages.length === 0 ? (
                 <p className="text-[11px] text-zinc-400 italic pl-4">Inbox empty.</p>
               ) : (
-                <ul className="space-y-1">
-                  {pendingMessages.map(m => {
-                    const isRequest = m.ai_classification?.should_create_task === true;
-                    const isUrgent = m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent';
-                    return (
-                      <li key={m.id}
-                          className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
-                          onClick={() => onNavigate('communications')}>
-                        <div className={`w-5 h-5 rounded shrink-0 flex items-center justify-center ${
-                          m.platform === 'gmail' ? 'bg-rose-50 dark:bg-rose-500/10' : 'bg-violet-50 dark:bg-violet-500/10'
-                        }`}>
-                          {m.platform === 'gmail'
-                            ? <Icons.Mail size={10} className="text-rose-500" />
-                            : <Icons.Message size={10} className="text-violet-500" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 truncate">
-                              {m.from_name || m.from_email || 'Anonymous'}
-                            </span>
-                            {isUrgent && <span className="text-[8px] px-1 py-0.5 rounded bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold uppercase">Urgent</span>}
-                            {isRequest && <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold uppercase">Request</span>}
-                          </div>
-                          <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                            {m.subject || m.channel_name || '(no subject)'}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div className="space-y-2">
+                  {pendingMessages.map(m => (
+                    <InboxCard
+                      key={m.id}
+                      message={m}
+                      onOpen={() => onNavigate('communications')}
+                      onConvert={() => handleConvertToTask(m)}
+                    />
+                  ))}
+                </div>
               )}
             </section>
           )}
@@ -812,6 +871,147 @@ const ActionCard: React.FC<{
           </button>
         </>
       )}
+    </div>
+  );
+};
+
+// ── Stat card ─────────────────────────────────────────────────────
+// 2x2 grid above the chat. Zen minimal: thin border, white bg, color
+// ONLY on the number (and only when > 0 — when zero it goes muted so
+// "0 overdue" reads as "ok" instead of as a red alarm). Clicking
+// jumps to the relevant section of the right panel.
+const STAT_TONE: Record<string, { text: string; mute: string }> = {
+  rose:    { text: 'text-rose-600 dark:text-rose-400',       mute: 'text-zinc-400 dark:text-zinc-600' },
+  amber:   { text: 'text-amber-600 dark:text-amber-400',     mute: 'text-zinc-400 dark:text-zinc-600' },
+  emerald: { text: 'text-emerald-600 dark:text-emerald-400', mute: 'text-zinc-400 dark:text-zinc-600' },
+  violet:  { text: 'text-violet-600 dark:text-violet-400',   mute: 'text-zinc-400 dark:text-zinc-600' },
+};
+
+const StatCard: React.FC<{
+  value: number;
+  label: string;
+  tone: keyof typeof STAT_TONE;
+  onClick?: () => void;
+}> = ({ value, label, tone, onClick }) => {
+  const t = STAT_TONE[tone];
+  const isAlert = value > 0;
+  return (
+    <button
+      onClick={onClick}
+      className="group text-left px-3 py-2.5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors"
+    >
+      <div className={`text-[20px] leading-none font-semibold tabular-nums ${isAlert ? t.text : t.mute}`}>
+        {value}
+      </div>
+      <div className="text-[10.5px] mt-1 text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
+        {label}
+      </div>
+    </button>
+  );
+};
+
+// ── Inbox card ───────────────────────────────────────────────────
+// Replaces the old flat-list row. Top: AI classification badge +
+// sender + relative time. Middle: subject (or first body line) in
+// medium weight + truncated body preview. Bottom: inline actions
+// — Convert to task (1-click via the executor) and Reply (jumps to
+// the full Inbox page with the message focused). The whole card is
+// clickable as a fallback to open the message.
+type InboxClassification = {
+  should_create_task?: boolean;
+  priority?: string;
+  intent?: string;
+  category?: string;
+};
+
+const formatMsgTime = (iso: string | undefined): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d`;
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+};
+
+const InboxCard: React.FC<{
+  message: any;
+  onOpen: () => void;
+  onConvert: () => void;
+}> = ({ message, onOpen, onConvert }) => {
+  const cls: InboxClassification = message.ai_classification || {};
+  const isRequest = cls.should_create_task === true;
+  const isUrgent = cls.priority === 'high' || cls.intent === 'urgent';
+
+  // Badge: pick the most informative one. Urgent wins, then Request,
+  // then a generic FYI. Kept TINY (8px) so it never overwhelms the
+  // card — the zen-minimal vibe wants info hierarchy, not a sticker
+  // explosion.
+  const badge = isUrgent
+    ? { text: 'URGENT',  bg: 'bg-rose-50 dark:bg-rose-500/10',     fg: 'text-rose-700 dark:text-rose-300' }
+    : isRequest
+      ? { text: 'REQUEST', bg: 'bg-emerald-50 dark:bg-emerald-500/10', fg: 'text-emerald-700 dark:text-emerald-300' }
+      : { text: 'FYI',     bg: 'bg-zinc-100 dark:bg-zinc-800',         fg: 'text-zinc-500 dark:text-zinc-400' };
+
+  const sender = message.from_name || message.from_email || message.channel_name || 'Anonymous';
+  const subject = message.subject || message.body_text?.split('\n')[0]?.slice(0, 80) || '(no subject)';
+  const preview = (message.body_text || '').replace(/\s+/g, ' ').slice(0, 120);
+  const time = formatMsgTime(message.received_at);
+
+  const isGmail = message.platform === 'gmail';
+
+  return (
+    <div className="group rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors overflow-hidden">
+      {/* Top: classification + sender + time. Clickable to open. */}
+      <button
+        onClick={onOpen}
+        className="w-full text-left px-3 pt-2.5 pb-2"
+      >
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className={`text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.bg} ${badge.fg}`}>
+            {badge.text}
+          </span>
+          {isGmail
+            ? <Icons.Mail size={10} className="text-zinc-400" />
+            : <Icons.Message size={10} className="text-zinc-400" />}
+          <span className="text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 truncate">
+            {sender}
+          </span>
+          <span className="ml-auto text-[10px] text-zinc-400 tabular-nums shrink-0">{time}</span>
+        </div>
+        <div className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200 truncate">
+          {subject}
+        </div>
+        {preview && preview !== subject && (
+          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+            {preview}
+          </div>
+        )}
+      </button>
+      {/* Inline actions — only render Convert when the AI flagged this
+          as a real request, so we don't tempt the user into a flood of
+          spurious task creation on FYI messages. */}
+      <div className="px-3 pb-2 flex items-center gap-1">
+        {isRequest && (
+          <button
+            onClick={onConvert}
+            className="text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1 transition-colors"
+          >
+            <Icons.Plus size={10} /> Convert to task
+          </button>
+        )}
+        <button
+          onClick={onOpen}
+          className="text-[10.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md inline-flex items-center gap-1 transition-colors"
+        >
+          <Icons.Mail size={10} /> Draft reply
+        </button>
+      </div>
     </div>
   );
 };
