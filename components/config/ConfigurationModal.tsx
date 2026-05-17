@@ -8,6 +8,7 @@ import { PaymentSettings } from './PaymentSettings';
 import { UserManagement } from './UserManagement';
 import { EmailPreferences } from './EmailPreferences';
 import { AIPreferencesPanel } from './AIPreferencesPanel';
+import { UserAIProfilePanel } from './UserAIProfilePanel';
 import { useRBAC } from '../../context/RBACContext';
 import { supabase } from '../../lib/supabase';
 import type { PageView } from '../../types';
@@ -140,7 +141,21 @@ export const ConfigurationModal: React.FC<ConfigurationModalProps> = ({ isOpen, 
 
                         {activeTab === 'roles' && <RoleManagement />}
                         {activeTab === 'email' && <EmailPreferences />}
-                        {activeTab === 'ai' && <AIPreferencesPanel />}
+                        {activeTab === 'ai' && (
+                            // Two-section AI tab: tenant-wide preferences
+                            // (business voice, goals — affects everyone),
+                            // then this user's personal profile (tone,
+                            // length, manual notes, learned traits from
+                            // the critique loop). The divider in
+                            // UserAIProfilePanel itself sets the visual
+                            // separation; this fragment just stacks them.
+                            <div className="space-y-10">
+                                <AIPreferencesPanel />
+                                <div className="border-t border-zinc-200 dark:border-zinc-800 pt-8">
+                                    <UserAIProfilePanel />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
