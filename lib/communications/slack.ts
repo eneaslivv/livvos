@@ -413,18 +413,61 @@ async function buildTaskTransitionBlocks(
 
   // Pull the task itself so we have description/dates if the caller
   // didn't provide them — and the parent task for breadcrumb context.
+  //
+  // Race condition we're guarding against:
+  //   When a user completes a subtask AND the parent transitions to
+  //   in-progress / done at roughly the same time (either via a manual
+  //   click chain or a cascade), the two updateTask() calls run their
+  //   notification IIFEs in parallel. The parent's read of subtasks
+  //   can land BEFORE the subtask UPDATE commits, producing "0/3 done"
+  //   right above a "Task completed" message for one of those subtasks.
+  //
+  //   Mitigation: small upfront delay so any in-flight subtask write
+  //   has time to commit (Postgres typically commits in <10ms; 300ms
+  //   is plenty), AND a follow-up re-query if the first read shows
+  //   the parent in a "looks-in-progress" state but no subtasks are
+  //   marked done — that's the exact shape of the staleness bug. We
+  //   take whichever read shows more progress (max done count) so
+  //   under-reporting is impossible.
+  await new Promise(r => setTimeout(r, 300));
   const [taskRes, subtasksRes] = await Promise.all([
     supabase.from('tasks')
       .select('id, title, description, status, priority, start_date, due_date, completed, completed_at, parent_task_id, started_at')
       .eq('id', payload.taskId!)
       .maybeSingle(),
     supabase.from('tasks')
-      .select('id, title, status, completed, priority, due_date')
+      .select('id, title, status, completed, priority, due_date, order_index, updated_at')
       .eq('parent_task_id', payload.taskId!)
       .order('order_index', { ascending: true }),
   ]);
   const task = (taskRes.data as any) || {};
-  const subtasks = (subtasksRes.data as any[]) || [];
+  let subtasks = (subtasksRes.data as any[]) || [];
+
+  // Re-read once if the shape smells stale: the parent is in-progress
+  // / done but no subtask is marked done AND at least one was touched
+  // in the last 2 seconds (i.e. likely a write that just landed).
+  // This catches the exact race in the original bug report without
+  // adding latency for the common case.
+  if (subtasks.length > 0) {
+    const recentlyTouched = subtasks.some(s => {
+      if (!s.updated_at) return false;
+      return Date.now() - new Date(s.updated_at).getTime() < 2000;
+    });
+    const noneDone = !subtasks.some(s => s.completed || s.status === 'done');
+    const parentLooksAdvanced = task.status === 'in-progress' || task.status === 'done' || task.completed;
+    if (recentlyTouched && noneDone && parentLooksAdvanced) {
+      await new Promise(r => setTimeout(r, 250));
+      const { data: refreshed } = await supabase.from('tasks')
+        .select('id, title, status, completed, priority, due_date, order_index, updated_at')
+        .eq('parent_task_id', payload.taskId!)
+        .order('order_index', { ascending: true });
+      if (refreshed) {
+        const newDone = (refreshed as any[]).filter(s => s.completed || s.status === 'done').length;
+        const oldDone = subtasks.filter(s => s.completed || s.status === 'done').length;
+        if (newDone > oldDone) subtasks = refreshed as any[];
+      }
+    }
+  }
 
   let parent: any = null;
   if (task.parent_task_id) {
