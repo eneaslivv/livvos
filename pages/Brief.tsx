@@ -57,13 +57,6 @@ type ChatMsg = {
 
 type RightTab = 'tasks' | 'calendar' | 'inbox';
 
-const PRIORITY_DOT: Record<string, string> = {
-  urgent: 'bg-rose-500',
-  high:   'bg-amber-500',
-  medium: 'bg-indigo-400',
-  low:    'bg-zinc-400',
-};
-
 const formatRelative = (dateStr: string | undefined): string => {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T12:00:00');
@@ -231,6 +224,29 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
   const handleTaskClick = (t: CalendarTask) => {
     onNavigate('calendar', { taskId: t.id });
+  };
+
+  // ── Inline task actions on the cards ─────────────────────────────
+  // Done = mark complete. Snooze = push start_date forward by 1 day
+  // (idempotent — calling twice moves it +2). Both go through the
+  // same CalendarContext mutations the action executor uses, so
+  // realtime + optimistic updates kick in automatically.
+  const handleTaskComplete = async (t: CalendarTask) => {
+    try {
+      await updateTask(t.id, { status: 'done', completed: true } as any);
+    } catch (e) {
+      errorLogger.warn('task complete failed', { taskId: t.id, error: e });
+    }
+  };
+  const handleTaskSnooze = async (t: CalendarTask) => {
+    try {
+      const base = t.start_date ? new Date(t.start_date + 'T12:00:00') : new Date();
+      base.setDate(base.getDate() + 1);
+      const iso = base.toISOString().slice(0, 10);
+      await updateTask(t.id, { start_date: iso, end_date: iso } as any);
+    } catch (e) {
+      errorLogger.warn('task snooze failed', { taskId: t.id, error: e });
+    }
   };
 
   // ── Thumbs feedback ─────────────────────────────────────────────
@@ -631,6 +647,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
+                onComplete={handleTaskComplete}
+                onSnooze={handleTaskSnooze}
                 emptyText="Nothing slipped — good."
               />
               <TaskSection
@@ -641,6 +659,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
+                onComplete={handleTaskComplete}
+                onSnooze={handleTaskSnooze}
                 emptyText="Nothing on today's list."
               />
               <TaskSection
@@ -651,6 +671,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
+                onComplete={handleTaskComplete}
+                onSnooze={handleTaskSnooze}
                 emptyText="Nothing scheduled this week."
               />
             </>
@@ -724,6 +746,19 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 };
 
 // ── Task section renderer ──────────────────────────────────────────
+// Card style matching InboxCard: thin border, more padding, priority
+// surfaced as a colored left edge (4px bar) instead of a tiny dot.
+// Hover surfaces inline Done / Snooze actions so the user can clear
+// items without opening the full task panel. The whole card click
+// still opens the task panel as the canonical "I want to edit this"
+// path.
+const PRIORITY_EDGE: Record<string, string> = {
+  urgent: 'bg-rose-500',
+  high:   'bg-amber-500',
+  medium: 'bg-indigo-400',
+  low:    'bg-zinc-300 dark:bg-zinc-700',
+};
+
 const TaskSection: React.FC<{
   title: string;
   icon: React.ReactNode;
@@ -732,8 +767,10 @@ const TaskSection: React.FC<{
   projectsById: Map<string, any>;
   clientsById: Map<string, any>;
   onTaskClick: (t: CalendarTask) => void;
+  onComplete: (t: CalendarTask) => void;
+  onSnooze: (t: CalendarTask) => void;
   emptyText: string;
-}> = ({ title, icon, tasks, tone, projectsById, clientsById, onTaskClick, emptyText }) => {
+}> = ({ title, icon, tasks, tone, projectsById, clientsById, onTaskClick, onComplete, onSnooze, emptyText }) => {
   const [open, setOpen] = useState(true);
   if (tasks.length === 0) {
     return (
@@ -758,56 +795,79 @@ const TaskSection: React.FC<{
         <Icons.ChevronDown size={11} className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`} />
       </header>
       {open && (
-        <ul className="space-y-1">
+        <div className="space-y-2">
           {tasks.slice(0, 12).map(t => {
             const proj = t.project_id ? projectsById.get(t.project_id) : null;
             const cli  = t.client_id ? clientsById.get(t.client_id) : (proj?.client_id ? clientsById.get(proj.client_id) : null);
             const due = formatRelative(t.start_date);
+            const edge = PRIORITY_EDGE[t.priority || 'medium'];
             return (
-              <li key={t.id}>
+              <div
+                key={t.id}
+                className="group relative rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors overflow-hidden"
+              >
+                {/* Left priority edge — 4px colored bar absolute-positioned
+                    so the rest of the card stays a clean rectangle. */}
+                <span className={`absolute left-0 top-0 bottom-0 w-1 ${edge}`} aria-hidden />
                 <button
                   onClick={() => onTaskClick(t)}
-                  className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors group"
+                  className="w-full text-left pl-4 pr-3 pt-2.5 pb-2"
                 >
-                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[t.priority || 'medium']}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                      {t.title}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500">
-                      {due && (
-                        <span className={`inline-flex items-center gap-0.5 ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
-                          {tone === 'rose' && <Icons.Clock size={9} />}
-                          {due}
-                        </span>
-                      )}
-                      {t.duration && (
-                        <span className="inline-flex items-center gap-0.5">
-                          ⏱ {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
-                        </span>
-                      )}
-                      {proj && (
-                        <span className="inline-flex items-center gap-0.5 truncate max-w-[120px]">
-                          <Icons.Briefcase size={9} />
-                          {proj.title}
-                        </span>
-                      )}
-                      {cli && !proj && (
-                        <span className="inline-flex items-center gap-0.5 truncate max-w-[100px]">
-                          <Icons.Users size={9} />
-                          {cli.name}
-                        </span>
-                      )}
-                    </div>
+                  <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                    {t.title}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
+                    {due && (
+                      <span className={`inline-flex items-center gap-0.5 ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
+                        {tone === 'rose' && <Icons.Clock size={9} />}
+                        {due}
+                      </span>
+                    )}
+                    {t.duration && (
+                      <span className="inline-flex items-center gap-0.5">
+                        ⏱ {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
+                      </span>
+                    )}
+                    {proj && (
+                      <span className="inline-flex items-center gap-0.5 truncate max-w-[120px]">
+                        <Icons.Briefcase size={9} />
+                        {proj.title}
+                      </span>
+                    )}
+                    {cli && !proj && (
+                      <span className="inline-flex items-center gap-0.5 truncate max-w-[100px]">
+                        <Icons.Users size={9} />
+                        {cli.name}
+                      </span>
+                    )}
                   </div>
                 </button>
-              </li>
+                {/* Hover-revealed inline actions. stopPropagation so the
+                    button clicks don't ALSO trigger onTaskClick (would
+                    open the panel right after completing/snoozing). */}
+                <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-zinc-900 rounded-md">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onComplete(t); }}
+                    title="Mark done"
+                    className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+                  >
+                    <Icons.Check size={11} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
+                    title="Snooze +1 day"
+                    className="p-1.5 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                  >
+                    <Icons.Clock size={11} />
+                  </button>
+                </div>
+              </div>
             );
           })}
           {tasks.length > 12 && (
-            <li className="px-3 py-1 text-[10px] text-zinc-400">+{tasks.length - 12} more</li>
+            <div className="px-3 py-1 text-[10px] text-zinc-400">+{tasks.length - 12} more</div>
           )}
-        </ul>
+        </div>
       )}
     </section>
   );
