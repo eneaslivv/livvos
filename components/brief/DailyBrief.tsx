@@ -69,9 +69,13 @@ interface DailyBriefProps {
   /** Allows the parent (Brief chat column) to surface a "What's next?"
    *  CTA that prefills the chat. Optional. */
   onAskFollowUp?: (prompt: string) => void;
+  /** Click on any category card jumps to its owning page (e.g.
+   *  Cashflow → /finance, Pipeline → /sales_pipeline). Without
+   *  this, cards still render but become read-only. */
+  onNavigate?: (page: string) => void;
 }
 
-export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp }) => {
+export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigate }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -294,7 +298,14 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp }) => {
               if (!meta) return null;
               const aiTag = synthesis?.per_card?.[c.id];
               return (
-                <CategoryCard key={c.id} meta={meta} data={c} aiTag={aiTag} idx={idx} />
+                <CategoryCard
+                  key={c.id}
+                  meta={meta}
+                  data={c}
+                  aiTag={aiTag}
+                  idx={idx}
+                  onOpen={onNavigate ? () => onNavigate(meta.navigateTo) : undefined}
+                />
               );
             })}
           </AnimatePresence>
@@ -315,18 +326,29 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp }) => {
 };
 
 // ── CategoryCard ──────────────────────────────────────────────────
-const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: string; idx: number }> = ({ meta, data, aiTag, idx }) => {
+const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: string; idx: number; onOpen?: () => void }> = ({ meta, data, aiTag, idx, onOpen }) => {
   const tint = TONE_TINT[meta.tone] || TONE_TINT.zinc;
   const IconCmp = (Icons as any)[meta.icon] || Icons.Sparkles;
   const attention = data.status === 'attention';
+  // When onOpen is supplied, the whole card becomes a clickable drill-
+  // down to the owning page. Use motion.button for tap feedback +
+  // accessibility; the resting visuals stay the same as the read-only
+  // version so adding navigation doesn't change the page's tone.
+  const Component: any = onOpen ? motion.button : motion.div;
+  const extraProps = onOpen ? {
+    onClick: onOpen,
+    whileTap: { scale: 0.99, transition: SPRING_TAP },
+    whileHover: { y: -1, transition: SPRING_TAP },
+  } : {};
   return (
-    <motion.div
+    <Component
       layout
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, transition: { duration: 0.15 } }}
       transition={{ ...SPRING_ENTER, delay: idx * 0.04 }}
-      className={`rounded-xl border ${tint.card} bg-white dark:bg-zinc-900 p-3`}
+      {...extraProps}
+      className={`group w-full text-left rounded-xl border ${tint.card} bg-white dark:bg-zinc-900 p-3 ${onOpen ? 'hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer' : ''} transition-colors`}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <span className={`w-5 h-5 rounded-md flex items-center justify-center ${tint.pill}`}>
@@ -334,6 +356,9 @@ const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: s
         </span>
         <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100">{data.title}</span>
         {attention && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 ml-1" title="Needs attention" />}
+        {onOpen && (
+          <Icons.ArrowLeft size={10} className="ml-auto rotate-180 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+        )}
       </div>
       {/* Highlights */}
       {data.highlights.length > 0 && (
@@ -352,6 +377,40 @@ const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: s
           ↳ {aiTag}
         </div>
       )}
+      {/* Gauges — per-channel compliance bars (and similar). When a
+          loader sets data.gauges, each entry renders as a tiny bar
+          with label + current/target + color tone. */}
+      {data.gauges && data.gauges.length > 0 && (
+        <div className="space-y-1 mb-1.5">
+          {data.gauges.map((g, i) => {
+            const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+            const barCls = g.tone === 'emerald' ? 'bg-emerald-500'
+              : g.tone === 'amber' ? 'bg-amber-500'
+              : g.tone === 'violet' ? 'bg-violet-500'
+              : 'bg-rose-500';
+            const textCls = g.tone === 'emerald' ? 'text-emerald-600 dark:text-emerald-400'
+              : g.tone === 'amber' ? 'text-amber-600 dark:text-amber-400'
+              : g.tone === 'violet' ? 'text-violet-600 dark:text-violet-400'
+              : 'text-rose-600 dark:text-rose-400';
+            return (
+              <div key={i}>
+                <div className="flex items-center justify-between text-[10px] mb-0.5">
+                  <span className="text-zinc-600 dark:text-zinc-300 truncate">{g.label}</span>
+                  <span className={`tabular-nums font-semibold ${textCls}`}>{g.current}/{g.target}</span>
+                </div>
+                <div className="h-1 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ ...SPRING_ENTER, delay: 0.1 + i * 0.04 }}
+                    className={`h-full rounded-full ${barCls}`}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {/* Bullets — raw data */}
       {data.bullets.length > 0 && (
         <ul className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-0.5 leading-snug">
@@ -360,6 +419,6 @@ const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: s
           ))}
         </ul>
       )}
-    </motion.div>
+    </Component>
   );
 };

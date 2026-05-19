@@ -33,3 +33,9 @@ DROP TRIGGER IF EXISTS brief_preferences_touch_updated_at ON public.brief_prefer
 CREATE TRIGGER brief_preferences_touch_updated_at
   BEFORE UPDATE ON public.brief_preferences
   FOR EACH ROW EXECUTE FUNCTION public.touch_brief_preferences_updated_at();
+
+-- 2026-06-04: home_mode added so the user's Home workspace mode
+-- (Thoughts / Vision / Deep work) survives reloads.
+ALTER TABLE public.brief_preferences
+  ADD COLUMN IF NOT EXISTS home_mode TEXT NOT NULL DEFAULT 'deep'
+    CHECK (home_mode IN ('thoughts', 'vision', 'deep'));

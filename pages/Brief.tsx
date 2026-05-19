@@ -500,7 +500,10 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             DailyBrief pulls from Finance, Sales pipeline, Content,
             Team KPIs, Strategy signals, and Upcoming too, with an
             AI narrative on top biased toward the user's strategy. */}
-        <DailyBrief onAskFollowUp={(prompt) => handleSend(prompt)} />
+        <DailyBrief
+          onAskFollowUp={(prompt) => handleSend(prompt)}
+          onNavigate={(page) => onNavigate(page as PageView)}
+        />
 
         {/* Chat messages — each one slides up + fades in with spring
             physics. User msgs originate slightly from the right,

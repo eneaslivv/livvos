@@ -119,6 +119,36 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { clients } = useClients();
   const { projects } = useProjects();
   const [mode, setMode] = useState<Mode>('deep');
+  // Persist mode in brief_preferences.home_mode so the user's
+  // workspace context survives reloads. Load once on mount; save
+  // optimistically + persist in background on every change.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('brief_preferences')
+          .select('home_mode')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const persisted = (data as any)?.home_mode as Mode | undefined;
+        if (!cancelled && persisted) setMode(persisted);
+      } catch { /* default 'deep' is fine */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+  const persistMode = useCallback(async (next: Mode) => {
+    setMode(next);  // optimistic
+    if (!user?.id || !currentTenant?.id) return;
+    try {
+      await supabase.from('brief_preferences').upsert({
+        user_id: user.id,
+        tenant_id: currentTenant.id,
+        home_mode: next,
+      });
+    } catch { /* non-fatal */ }
+  }, [user?.id, currentTenant?.id]);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -190,20 +220,22 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const profitDelta = currentMonthProfit - lastMonthProfit;
 
   // ── Insights — quick auto-derived bullets ───────────────────────
-  const insights = useMemo(() => {
-    const out: Array<{ label: string; tone: 'rose' | 'amber' | 'emerald' | 'violet' | 'blue' }> = [];
-    // Pending receivables this month
+  // Each insight carries a `navigateTo` page so clicking the pill
+  // jumps to the relevant module. Filtering happens inside the
+  // component — pills with zero values are dropped before render.
+  type Insight = { label: string; tone: 'rose' | 'amber' | 'emerald' | 'violet' | 'blue'; navigateTo: PageView };
+  const insights = useMemo<Insight[]>(() => {
+    const out: Insight[] = [];
     const monthIso = todayIso.slice(0, 7);
     const monthPending = incomes.reduce((s, inc) => s + (inc.installments || [])
       .filter(i => i.status === 'pending' && i.due_date?.startsWith(monthIso))
       .reduce((ss, i) => ss + (i.amount || 0), 0), 0);
-    if (monthPending > 0) out.push({ label: `$${monthPending.toLocaleString()} pending`, tone: 'amber' });
-    if (currentMonthProfit > 0) out.push({ label: `+$${currentMonthProfit.toLocaleString()} profit`, tone: 'emerald' });
-    if (overdueCount > 0) out.push({ label: `${overdueCount} overdue`, tone: 'rose' });
+    if (monthPending > 0)        out.push({ label: `$${monthPending.toLocaleString()} pending`,       tone: 'amber',   navigateTo: 'finance' });
+    if (currentMonthProfit > 0)  out.push({ label: `+$${currentMonthProfit.toLocaleString()} profit`, tone: 'emerald', navigateTo: 'finance' });
+    if (overdueCount > 0)        out.push({ label: `${overdueCount} overdue`,                          tone: 'rose',    navigateTo: 'brief' });
     const activeProjects = projects.filter((p: any) => p.status === 'Active' || p.status === 'Pending').length;
-    if (activeProjects > 0) out.push({ label: `${activeProjects} active projects`, tone: 'blue' });
-    const activeClients = clients.length;
-    if (activeClients > 0) out.push({ label: `${activeClients} clients`, tone: 'violet' });
+    if (activeProjects > 0)      out.push({ label: `${activeProjects} active projects`,                tone: 'blue',    navigateTo: 'projects' });
+    if (clients.length > 0)      out.push({ label: `${clients.length} clients`,                        tone: 'violet',  navigateTo: 'clients' });
     return out;
   }, [currentMonthProfit, overdueCount, incomes, projects, clients, todayIso]);
 
@@ -309,7 +341,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <h1 className="text-[28px] md:text-[34px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight">
                 {partOfDay}, <span className="capitalize">{userFirstName}</span>.
               </h1>
-              <ModeTabs mode={mode} onChange={setMode} />
+              <ModeTabs mode={mode} onChange={persistMode} />
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3 text-[10.5px] text-zinc-400 uppercase tracking-wider">
               <Icons.Sparkles size={11} className="text-zinc-300 dark:text-zinc-700" />
@@ -487,7 +519,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               chat block so the chat is the immediate focal point but
               the deeper breakdown is one scroll away. */}
           <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-            <DailyBrief onAskFollowUp={(p) => handleSend(p)} />
+            <DailyBrief
+              onAskFollowUp={(p) => handleSend(p)}
+              onNavigate={(page) => onNavigate(page as PageView)}
+            />
           </section>
 
           {/* Bottom link to Brief for the full tabs */}
@@ -520,7 +555,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           />
 
           {/* Insights — colored pills + bullets */}
-          <InsightsCard insights={insights} overdueCount={overdueCount} pendingMsgs={pendingMsgs} />
+          <InsightsCard
+            insights={insights}
+            overdueCount={overdueCount}
+            pendingMsgs={pendingMsgs}
+            onNavigate={(page) => onNavigate(page)}
+          />
 
           {/* Workspace shortcut — opens the legacy detailed dashboard */}
           <button
@@ -693,10 +733,11 @@ const INSIGHT_TONE: Record<string, string> = {
   blue:    'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300',
 };
 const InsightsCard: React.FC<{
-  insights: Array<{ label: string; tone: keyof typeof INSIGHT_TONE }>;
+  insights: Array<{ label: string; tone: keyof typeof INSIGHT_TONE; navigateTo?: PageView }>;
   overdueCount: number;
   pendingMsgs: number;
-}> = ({ insights, overdueCount, pendingMsgs }) => {
+  onNavigate?: (page: PageView) => void;
+}> = ({ insights, overdueCount, pendingMsgs, onNavigate }) => {
   // Synthetic bullet copy at the bottom — quick narrative based on
   // the same data the pills come from.
   const bullets: string[] = [];
@@ -719,7 +760,16 @@ const InsightsCard: React.FC<{
         {insights.length === 0 ? (
           <span className="text-[10.5px] text-zinc-400 italic">Nothing to flag yet.</span>
         ) : insights.map((i, idx) => (
-          <span key={idx} className={`text-[10.5px] px-2 py-0.5 rounded-full ${INSIGHT_TONE[i.tone]}`}>{i.label}</span>
+          i.navigateTo && onNavigate ? (
+            <motion.button
+              key={idx}
+              onClick={() => onNavigate(i.navigateTo!)}
+              whileTap={{ scale: 0.94, transition: SPRING_TAP }}
+              className={`text-[10.5px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-80 ${INSIGHT_TONE[i.tone]}`}
+            >{i.label}</motion.button>
+          ) : (
+            <span key={idx} className={`text-[10.5px] px-2 py-0.5 rounded-full ${INSIGHT_TONE[i.tone]}`}>{i.label}</span>
+          )
         ))}
       </div>
       {bullets.length > 0 && (

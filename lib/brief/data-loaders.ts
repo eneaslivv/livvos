@@ -27,17 +27,21 @@ export interface CategoryMeta {
   // One-line description shown in the settings toggle list so the user
   // understands what this category surfaces.
   describe: string;
+  // PageView id the card drill-down navigates to when clicked.
+  // Keeps the brief from being a dead-end — every card is also a
+  // door into the module that owns its data.
+  navigateTo: string;
 }
 
 export const CATEGORY_REGISTRY: CategoryMeta[] = [
-  { id: 'today_load', label: "Today's load",     icon: 'Clock',     tone: 'rose',    describe: 'Overdue + due-today task count + most urgent items.' },
-  { id: 'cashflow',   label: 'Cashflow',         icon: 'DollarSign', tone: 'emerald', describe: 'Installments paid + pending this week + overdue.' },
-  { id: 'pipeline',   label: 'Sales pipeline',   icon: 'Target',    tone: 'violet',  describe: 'Lead counts by stage + actions due today + at-risk deals.' },
-  { id: 'content',    label: 'Content',          icon: 'Sparkles',  tone: 'fuchsia', describe: 'Published this week vs target + drafts in the pipeline.' },
-  { id: 'inbox',      label: 'Inbox signals',    icon: 'Mail',      tone: 'amber',   describe: 'Pending messages count + urgent flags + AI-detected requests.' },
-  { id: 'team_kpis',  label: 'Team KPIs',        icon: 'Users',     tone: 'blue',    describe: 'KPI logs below target this period — who needs help.' },
-  { id: 'strategy',   label: 'Strategy signals', icon: 'Flag',      tone: 'indigo',  describe: 'ICPs with no recent activity + packages with no leads.' },
-  { id: 'upcoming',   label: "What's coming",    icon: 'Calendar',  tone: 'zinc',    describe: 'Events + deadlines in the next 7 days.' },
+  { id: 'today_load', label: "Today's load",     icon: 'Clock',     tone: 'rose',    describe: 'Overdue + due-today task count + most urgent items.',           navigateTo: 'calendar' },
+  { id: 'cashflow',   label: 'Cashflow',         icon: 'DollarSign', tone: 'emerald', describe: 'Installments paid + pending this week + overdue.',               navigateTo: 'finance' },
+  { id: 'pipeline',   label: 'Sales pipeline',   icon: 'Target',    tone: 'violet',  describe: 'Lead counts by stage + actions due today + at-risk deals.',    navigateTo: 'sales_pipeline' },
+  { id: 'content',    label: 'Content',          icon: 'Sparkles',  tone: 'fuchsia', describe: 'Published this week vs target + drafts in the pipeline.',         navigateTo: 'content_engine' },
+  { id: 'inbox',      label: 'Inbox signals',    icon: 'Mail',      tone: 'amber',   describe: 'Pending messages count + urgent flags + AI-detected requests.',  navigateTo: 'communications' },
+  { id: 'team_kpis',  label: 'Team KPIs',        icon: 'Users',     tone: 'blue',    describe: 'KPI logs below target this period — who needs help.',             navigateTo: 'team_scaling' },
+  { id: 'strategy',   label: 'Strategy signals', icon: 'Flag',      tone: 'indigo',  describe: 'ICPs with no recent activity + packages with no leads.',          navigateTo: 'strategy_hub' },
+  { id: 'upcoming',   label: "What's coming",    icon: 'Calendar',  tone: 'zinc',    describe: 'Events + deadlines in the next 7 days.',                          navigateTo: 'calendar' },
 ];
 
 export interface CategoryData {
@@ -56,6 +60,10 @@ export interface CategoryData {
   // Free-form context the synthesis layer can use but the UI doesn't
   // render. E.g. raw counts for the AI to compose its narrative.
   context?: Record<string, any>;
+  // Optional inline gauges — surfaced as small progress bars inside
+  // the card body. Currently only used by `content` for per-channel
+  // frequency compliance, but the shape is general.
+  gauges?: Array<{ label: string; current: number; target: number; tone?: 'rose' | 'amber' | 'emerald' | 'violet' }>;
 }
 
 export interface LoaderCtx {
@@ -210,6 +218,22 @@ async function loadContent(ctx: LoaderCtx): Promise<CategoryData | null> {
       const count = publishedThisWeek.filter(p => p.channel_id === c.id).length;
       return count < c.frequency_posts_per_week;
     });
+    // Per-channel compliance gauges — one bar per channel with a
+    // frequency target. Behind = rose, on track = emerald, no target
+    // set = skipped entirely. Sorted by % attainment ascending so
+    // problem channels surface first.
+    const gauges = ch
+      .filter(c => c.frequency_posts_per_week && c.frequency_posts_per_week > 0)
+      .map(c => {
+        const current = publishedThisWeek.filter(p => p.channel_id === c.id).length;
+        const target = c.frequency_posts_per_week;
+        const tone: 'rose' | 'amber' | 'emerald' = current >= target ? 'emerald'
+          : (current / target) >= 0.5 ? 'amber'
+          : 'rose';
+        return { label: c.name, current, target, tone };
+      })
+      .sort((a, b) => (a.current / a.target) - (b.current / b.target))
+      .slice(0, 5);
     return {
       id: 'content',
       title: 'Content',
@@ -218,13 +242,8 @@ async function loadContent(ctx: LoaderCtx): Promise<CategoryData | null> {
         { label: 'In pipeline',   value: String(inPipeline),                tone: 'violet' },
         { label: 'Channels behind', value: String(behindChannels.length),   tone: behindChannels.length > 0 ? 'rose' : 'emerald' },
       ],
-      bullets: [
-        ...behindChannels.slice(0, 3).map((c: any) => {
-          const count = publishedThisWeek.filter(p => p.channel_id === c.id).length;
-          return `⚠ ${c.name}: ${count}/${c.frequency_posts_per_week} this week`;
-        }),
-        ...scheduledThisWeek.slice(0, 3).map((p: any) => `📅 "${p.title}" — ${p.scheduled_date?.slice(5)}`),
-      ],
+      bullets: scheduledThisWeek.slice(0, 3).map((p: any) => `📅 "${p.title}" — ${p.scheduled_date?.slice(5)}`),
+      gauges,
       status: behindChannels.length > 0 ? 'attention' : (publishedThisWeek.length > 0 ? 'ok' : 'empty'),
       context: { published_this_week: publishedThisWeek.length, in_pipeline: inPipeline, channels_behind: behindChannels.length, total_channels: ch.length },
     };
