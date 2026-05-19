@@ -10,6 +10,7 @@ import { BlogPanel } from '../components/docs/BlogPanel';
 import { PasswordsPanel } from '../components/docs/PasswordsPanel';
 import { DocumentEditor } from '../components/docs/DocumentEditor';
 import { DocumentCard } from '../components/docs/DocumentCard';
+import '../components/docs/DocsDesign.css';
 
 export const Docs: React.FC = () => {
   const {
@@ -620,7 +621,7 @@ export const Docs: React.FC = () => {
                   <Icons.ChevronLeft size={16} />
                 </button>
               )}
-              <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
+              <h1 className="dxd-title">
                 {activeTab === 'documents' && currentFolderId ? currentFolderName : 'Documents'}
               </h1>
             </div>
@@ -654,21 +655,21 @@ export const Docs: React.FC = () => {
                 folder. Highlighted with a soft amber background while a
                 drag is hovering. */}
             {activeTab === 'documents' && !isFiltering && breadcrumbs.length > 0 && (
-              <div className="flex items-center gap-1 text-sm mt-2 ml-0.5 flex-wrap">
+              <div className="dxd-breadcrumb mt-2 ml-0.5 flex-wrap">
                 <button
                   onClick={() => setCurrentFolderId(null)}
                   onDragEnter={(e) => onCrumbDropTarget.onDragEnter(e, null)}
                   onDragOver={onCrumbDropTarget.onDragOver}
                   onDragLeave={onCrumbDropTarget.onDragLeave}
                   onDrop={(e) => onCrumbDropTarget.onDrop(e, null)}
-                  className={`px-2 py-1 rounded-md transition-all font-medium ${
+                  className={`dxd-breadcrumb-step ${
                     dropTargetCrumbId === null && draggedItemId
-                      ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40'
-                      : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40'
+                      ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40 rounded-md px-2 py-1'
+                      : ''
                   }`}
                 >
                   <span className="inline-flex items-center gap-1">
-                    <Icons.Home size={12} />Home
+                    <Icons.Home size={11} />HOME
                   </span>
                 </button>
                 {breadcrumbs.map((folder, i) => {
@@ -676,19 +677,17 @@ export const Docs: React.FC = () => {
                   const isCrumbDropHover = dropTargetCrumbId === folder.id && draggedItemId !== null && !isActive;
                   return (
                     <React.Fragment key={folder.id}>
-                      <Icons.ChevronRight size={13} className="text-zinc-300 dark:text-zinc-600" />
+                      <span className="opacity-40">/</span>
                       <button
                         onClick={() => setCurrentFolderId(folder.id)}
                         onDragEnter={(e) => !isActive && onCrumbDropTarget.onDragEnter(e, folder.id)}
                         onDragOver={(e) => !isActive && onCrumbDropTarget.onDragOver(e)}
                         onDragLeave={onCrumbDropTarget.onDragLeave}
                         onDrop={(e) => !isActive && onCrumbDropTarget.onDrop(e, folder.id)}
-                        className={`px-2 py-1 rounded-md transition-all ${
+                        className={`dxd-breadcrumb-step ${
                           isCrumbDropHover
-                            ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40'
-                            : isActive
-                              ? 'text-zinc-900 dark:text-zinc-100 font-semibold'
-                              : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40'
+                            ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-300/40 rounded-md px-2 py-1'
+                            : isActive ? 'active' : ''
                         }`}
                       >
                         {folder.name}
@@ -710,9 +709,9 @@ export const Docs: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setShowNewFolderInput(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
+                className="dxd-action"
               >
-                <Icons.Folder size={15} />
+                <Icons.Folder size={14} />
                 <span className="hidden sm:inline">New Folder</span>
               </button>
 
@@ -725,14 +724,14 @@ export const Docs: React.FC = () => {
                     alert(err.message);
                   }
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
+                className="dxd-action"
               >
-                <Icons.Docs size={15} />
+                <Icons.Docs size={14} />
                 <span className="hidden sm:inline">New Doc</span>
               </button>
 
-              <label className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
-                <Icons.Upload size={15} />
+              <label className="dxd-action primary cursor-pointer">
+                <Icons.Upload size={14} />
                 {isUploading ? `Uploading${uploadProgress > 0 ? ` ${uploadProgress}%` : '...'}` : 'Upload'}
                 <input
                   ref={fileInputRef}
@@ -749,27 +748,15 @@ export const Docs: React.FC = () => {
 
         {/* Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex bg-zinc-100/80 dark:bg-zinc-800/60 rounded-xl p-1 w-fit">
+          <div className="dxd-tabs">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
-                    ? 'text-zinc-900 dark:text-zinc-100'
-                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
-                  }`}
+                className={`dxd-tab ${activeTab === tab.id ? 'active' : ''}`}
               >
-                {activeTab === tab.id && (
-                  <motion.div
-                    layoutId="docsActiveTab"
-                    className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-lg shadow-sm"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center gap-1.5">
-                  <tab.icon size={14} />
-                  {tab.label}
-                </span>
+                <tab.icon size={13} />
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -838,38 +825,20 @@ export const Docs: React.FC = () => {
               </button>
 
               {/* View toggle */}
-              <div className="flex bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg p-0.5">
+              <div className="dxd-view-toggle">
                 <button
                   onClick={() => setView('grid')}
-                  className={`relative p-1.5 rounded-md transition-colors duration-200 ${view === 'grid'
-                      ? 'text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
-                    }`}
+                  className={`dxd-view-btn ${view === 'grid' ? 'active' : ''}`}
+                  aria-label="Grid view"
                 >
-                  {view === 'grid' && (
-                    <motion.div
-                      layoutId="docsViewToggle"
-                      className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-md shadow-sm"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <Icons.Grid size={15} className="relative z-10" />
+                  <Icons.Grid size={14} />
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`relative p-1.5 rounded-md transition-colors duration-200 ${view === 'list'
-                      ? 'text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
-                    }`}
+                  className={`dxd-view-btn ${view === 'list' ? 'active' : ''}`}
+                  aria-label="List view"
                 >
-                  {view === 'list' && (
-                    <motion.div
-                      layoutId="docsViewToggle"
-                      className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-md shadow-sm"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <Icons.List size={15} className="relative z-10" />
+                  <Icons.List size={14} />
                 </button>
               </div>
             </div>
@@ -1034,8 +1003,8 @@ export const Docs: React.FC = () => {
                   : 'Start by uploading a file or creating a folder.'}
               </p>
               <div className="flex items-center gap-3 justify-center">
-                <label className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-sm">
-                  <Icons.Upload size={15} />
+                <label className="dxd-action primary cursor-pointer">
+                  <Icons.Upload size={14} />
                   Upload Files
                   <input
                     type="file"
@@ -1047,9 +1016,9 @@ export const Docs: React.FC = () => {
                 </label>
                 <button
                   onClick={() => setShowNewFolderInput(true)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border border-zinc-200 dark:border-zinc-700 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-zinc-700 dark:text-zinc-300"
+                  className="dxd-action"
                 >
-                  <Icons.Folder size={15} />
+                  <Icons.Folder size={14} />
                   New Folder
                 </button>
               </div>
