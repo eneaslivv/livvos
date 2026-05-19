@@ -28,6 +28,9 @@ import { supabase } from '../lib/supabase';
 import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
+import { usePartners } from '../hooks/usePartners';
+import { PartnerDetailPanel } from '../components/partner/PartnerDetailPanel';
+import type { Partner } from '../types';
 
 interface Phase {
   id: string;
@@ -92,6 +95,10 @@ export const GrowthDashboard: React.FC = () => {
   const [recomputing, setRecomputing] = useState(false);
   const [editingPhase, setEditingPhase] = useState<Phase | 'new' | null>(null);
   const [editingKpi, setEditingKpi] = useState<Kpi | 'new' | null>(null);
+  // Partners section state — lives in this page so the partner panel
+  // can drop in alongside the rest of the growth sections.
+  const { partners, widgets } = usePartners();
+  const [editingPartner, setEditingPartner] = useState<Partner | 'new' | null>(null);
   const weekStart = lastMonday();
 
   const refetch = useCallback(async () => {
@@ -189,6 +196,15 @@ export const GrowthDashboard: React.FC = () => {
             cta={<motion.button onClick={() => setEditingPhase('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Add phase</motion.button>}>
             <PhasesList phases={phases} onEdit={p => setEditingPhase(p)} />
           </Section>
+
+          {/* Partners — external referrers / affiliates / agencies.
+              Click a card to open the detail panel (referral link,
+              commission, widgets, payouts). The /portal/[code] route
+              is publicly accessible (no auth) for partners themselves. */}
+          <Section title="Partners"
+            cta={<motion.button onClick={() => setEditingPartner('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Invite partner</motion.button>}>
+            <PartnersGrid partners={partners} widgetsCount={widgets.length} onOpen={p => setEditingPartner(p)} onNew={() => setEditingPartner('new')} />
+          </Section>
         </>
       )}
 
@@ -200,6 +216,84 @@ export const GrowthDashboard: React.FC = () => {
           <KpiModal value={editingKpi === 'new' ? null : editingKpi} onClose={() => setEditingKpi(null)} onSaved={() => { setEditingKpi(null); refetch(); }} />
         )}
       </AnimatePresence>
+
+      {/* Partner detail slide-over (lives outside <AnimatePresence>
+          because the panel handles its own enter/exit). */}
+      {editingPartner !== null && (
+        <PartnerDetailPanel
+          partner={editingPartner === 'new' ? null : editingPartner}
+          isOpen
+          onClose={() => setEditingPartner(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Partners grid ─────────────────────────────────────────────────
+const PartnersGrid: React.FC<{
+  partners: Partner[];
+  widgetsCount: number;
+  onOpen: (p: Partner) => void;
+  onNew: () => void;
+}> = ({ partners, widgetsCount, onOpen, onNew }) => {
+  if (partners.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-8 text-center">
+        <Icons.Users size={18} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+        <div className="text-[12.5px] font-medium text-zinc-700 dark:text-zinc-200">No partners yet</div>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
+          Invite agencies, affiliates, or creators to refer leads. They get a unique referral code and you track conversions + commissions automatically.
+        </p>
+        <button onClick={onNew} className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900">
+          <Icons.Plus size={11} /> Invite a partner
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      {partners.map(p => (
+        <motion.button
+          key={p.id}
+          onClick={() => onOpen(p)}
+          whileTap={{ scale: 0.99, transition: SPRING_TAP }}
+          whileHover={{ y: -1, transition: SPRING_TAP }}
+          className="text-left p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+        >
+          <div className="flex items-start gap-3 mb-2">
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-[10px] font-semibold shrink-0 text-white"
+              style={{ background: p.brand_color || '#3f3f46' }}
+            >
+              {p.avatar_url
+                ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                : p.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate tracking-[-0.012em]">{p.name}</div>
+              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate font-mono">{p.referral_code} · {p.type}</div>
+            </div>
+            <span className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+              p.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+              : p.status === 'invited' ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+              : p.status === 'paused' ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'
+            }`}>{p.status}</span>
+          </div>
+          <div className="flex items-center gap-3 text-[10.5px] text-zinc-500 dark:text-zinc-400 font-mono">
+            <span>{p.commission_model.kind === 'percent' ? `${p.commission_model.amount}%` : `$${p.commission_model.amount}${p.commission_model.kind === 'recurring' ? '/mo' : ''}`}</span>
+            <span className="text-zinc-300 dark:text-zinc-700">·</span>
+            <span>{p.attribution_days}d window</span>
+            {widgetsCount > 0 && (
+              <>
+                <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                <span>{widgetsCount} widgets</span>
+              </>
+            )}
+          </div>
+        </motion.button>
+      ))}
     </div>
   );
 };

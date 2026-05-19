@@ -42,6 +42,7 @@ const loadAcceptConnection = () => retryDynamicImport(() => import('./pages/Acce
 const loadTenantSettings = () => retryDynamicImport(() => import('./pages/TenantSettings').then(m => ({ default: m.TenantSettings })), 'TenantSettings');
 const loadProposalPublic = () => retryDynamicImport(() => import('./pages/ProposalPublic').then(m => ({ default: m.ProposalPublic })), 'ProposalPublic');
 const loadClientPortal = () => retryDynamicImport(() => import('./pages/ClientPortal').then(m => ({ default: m.ClientPortal })), 'ClientPortal');
+const loadPartnerPortal = () => retryDynamicImport(() => import('./pages/PartnerPortal').then(m => ({ default: m.PartnerPortal })), 'PartnerPortal');
 const loadGoogleCallback = () => retryDynamicImport(() => import('./pages/GoogleCallback').then(m => ({ default: m.GoogleCallback })), 'GoogleCallback');
 const loadAcceptProjectShare = () => retryDynamicImport(() => import('./pages/AcceptProjectShare').then(m => ({ default: m.AcceptProjectShare })), 'AcceptProjectShare');
 const loadSharedProjectView = () => retryDynamicImport(() => import('./pages/SharedProjectView').then(m => ({ default: m.SharedProjectView })), 'SharedProjectView');
@@ -76,6 +77,7 @@ const AcceptConnection = React.lazy(loadAcceptConnection);
 const TenantSettings = React.lazy(loadTenantSettings);
 const ProposalPublic = React.lazy(loadProposalPublic);
 const ClientPortal = React.lazy(loadClientPortal);
+const PartnerPortal = React.lazy(loadPartnerPortal);
 const GoogleCallback = React.lazy(loadGoogleCallback);
 const AcceptProjectShare = React.lazy(loadAcceptProjectShare);
 const SharedProjectView = React.lazy(loadSharedProjectView);
@@ -948,6 +950,12 @@ const App: React.FC = () => {
   // Check for invite URL
   const isInvite = window.location.pathname === '/accept-invite';
   const isAcceptConnection = window.location.pathname === '/accept-connection';
+  // Partner public portal — path is /portal/<referral_code>.
+  // This is anonymous (no auth), so we short-circuit early before any
+  // auth/tenant context spins up. The code is uppercase-alphanumeric;
+  // anything else falls through to the normal app.
+  const partnerPortalMatch = window.location.pathname.match(/^\/portal\/([A-Z0-9]+)\/?$/);
+  const partnerPortalCode = partnerPortalMatch ? partnerPortalMatch[1] : null;
   const proposalToken = new URLSearchParams(window.location.search).get('proposal');
   const portalFlag = new URLSearchParams(window.location.search).get('portal');
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
@@ -1122,6 +1130,15 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <AcceptInvite />
+      </Suspense>
+    );
+  }
+
+  if (partnerPortalCode) {
+    // Anonymous public portal — no auth, no layout.
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <PartnerPortal code={partnerPortalCode} />
       </Suspense>
     );
   }
