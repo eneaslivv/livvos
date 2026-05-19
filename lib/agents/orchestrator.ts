@@ -33,6 +33,13 @@ import {
   detectReAsk,
   detectRephrase,
 } from './memory';
+import {
+  fetchActiveOverrides,
+  overridesByAgent,
+  effectiveRoutingHints,
+  effectiveSystemPrompt,
+  type ActiveOverride,
+} from './overrides';
 
 // ── Action parser ────────────────────────────────────────────────────
 // The LLM emits actions in <action kind="..." param="..." ...>label</action>
@@ -87,15 +94,21 @@ const parseActionsFromReply = (reply: string): { cleanReply: string; actions: Pr
 };
 
 // ── 1. Auto-route a query to an agent by keyword matching ────────────
-const routeAgent = (query: string): AgentDefinition => {
+// Considers per-agent overrides — added hints can promote an agent
+// the defaults wouldn't have matched, removed hints demote agents
+// that were misrouting on certain words.
+const routeAgent = (
+  query: string,
+  overridesMap?: Map<string, ActiveOverride>,
+): AgentDefinition => {
   const lowered = query.toLowerCase();
-  // Score each agent by how many of its routing hints appear in the
-  // query. Tie-break: first registered agent wins (so order in
-  // registry.ts matters — put the most "common" agents first).
   let best = AGENTS[0];
   let bestScore = 0;
   for (const a of AGENTS) {
-    const score = a.routingHints.filter(h => lowered.includes(h.toLowerCase())).length;
+    const hints = overridesMap
+      ? effectiveRoutingHints(a, overridesMap.get(a.id))
+      : a.routingHints;
+    const score = hints.filter(h => lowered.includes(h.toLowerCase())).length;
     if (score > bestScore) {
       best = a;
       bestScore = score;
@@ -202,9 +215,17 @@ export async function runOrchestrator(
   options: OrchestratorRunOptions = {},
 ): Promise<OrchestratorOutput & { conversationId?: string | null }> {
   const t0 = Date.now();
+
+  // Fetch active per-tenant agent overrides FIRST so routing sees the
+  // tuned routing hints, not just the defaults. Cached for 5 min so
+  // the per-turn cost is one cache lookup in steady state.
+  const overrideRows = await fetchActiveOverrides(input.ctx.db, input.ctx.tenantId);
+  const overridesMap = overridesByAgent(overrideRows);
+
   const agent = input.forcedAgentId
-    ? AGENT_BY_ID.get(input.forcedAgentId) || routeAgent(input.query)
-    : routeAgent(input.query);
+    ? AGENT_BY_ID.get(input.forcedAgentId) || routeAgent(input.query, overridesMap)
+    : routeAgent(input.query, overridesMap);
+  const agentOverride = overridesMap.get(agent.id);
 
   // Run skills (read-only) + record per-skill timing
   const skillT0 = Date.now();
@@ -218,11 +239,14 @@ export async function runOrchestrator(
   });
   const profileBlock = formatProfileForPrompt(profile);
 
-  // Hand off to Gemini with the agent persona + profile + real data
+  // Hand off to Gemini with the agent persona + profile + real data.
+  // The agent's system prompt is composed: defaults + tenant-specific
+  // override suffix (if any) — additive, never replaces the base.
+  const promptForAgent = effectiveSystemPrompt(agent, agentOverride);
   const aiContext = [
     `AGENT: ${agent.name} (${agent.id})`,
     '',
-    agent.systemPrompt,
+    promptForAgent,
     '',
     profileBlock,
     skillContextBlock,

@@ -58,6 +58,15 @@ export type {
 // Critique layer — offline analysis of recent conversations
 export { runCritique } from './critique/critique-agent';
 
+// Prompt-tuner — proposes per-tenant tweaks to routing hints +
+// system prompts based on actual agent performance.
+export { runPromptTuner } from './critique/prompt-tuner';
+export type { PromptTunerProposal, RunPromptTunerArgs, RunPromptTunerResult } from './critique/prompt-tuner';
+
+// Runtime overrides — applied by the orchestrator on every turn.
+export { invalidateOverridesCache } from './overrides';
+export type { ActiveOverride } from './overrides';
+
 // Action executor — single dispatcher for every ProposedAction kind
 export { executeProposedAction } from './execute';
 export type { ExecuteResult, ExecutorHelpers } from './execute';

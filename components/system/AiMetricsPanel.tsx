@@ -25,13 +25,15 @@
  * underlying surface hasn't produced that signal yet.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
 import { SPRING_ENTER, SPRING_TAP } from '../../lib/ui/motion';
+import { runPromptTuner } from '../../lib/agents';
+import { PromptTunerReviewModal, type TunerModalState } from './PromptTunerReviewModal';
 
 interface MetricRow {
   tenant_id: string;
@@ -67,6 +69,62 @@ export const AiMetricsPanel: React.FC = () => {
   const [rows, setRows] = useState<MetricRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Per-agent active override map — used to show a badge on agents
+  // that already have a tuned override applied + bumped after the
+  // approval modal closes.
+  const [activeOverrides, setActiveOverrides] = useState<Record<string, { id: string }>>({});
+  const [tunerState, setTunerState] = useState<TunerModalState | null>(null);
+
+  // Refetch active overrides — runs at mount + after any approve/reject.
+  const refetchActive = useCallback(async () => {
+    if (!currentTenant?.id) return;
+    try {
+      const { data } = await supabase
+        .from('agent_overrides')
+        .select('id, agent_id')
+        .eq('tenant_id', currentTenant.id)
+        .eq('status', 'active');
+      const map: Record<string, { id: string }> = {};
+      for (const r of (data || []) as any[]) {
+        map[r.agent_id] = { id: r.id };
+      }
+      setActiveOverrides(map);
+    } catch { /* non-fatal */ }
+  }, [currentTenant?.id]);
+
+  useEffect(() => { refetchActive(); }, [refetchActive]);
+
+  // Kick off the tuner for one agent. Opens the modal in 'loading'
+  // mode immediately so the admin sees progress; result swaps in
+  // when the meta-model returns.
+  const handleTune = useCallback(async (agentId: string) => {
+    if (!currentTenant?.id) return;
+    setTunerState({ mode: 'loading', agentId });
+    try {
+      const result = await runPromptTuner({
+        db: supabase as any,
+        tenantId: currentTenant.id,
+        agentId,
+        sinceDays: PERIOD_DAYS[period],
+      });
+      if (result.ok && result.proposal) {
+        setTunerState({
+          mode: 'proposal',
+          agentId,
+          proposal: result.proposal,
+          currentHints: [],
+        });
+      } else {
+        setTunerState({
+          mode: 'no-change',
+          agentId,
+          reason: result.reason || 'No actionable changes proposed.',
+        });
+      }
+    } catch (e: any) {
+      setTunerState({ mode: 'error', agentId, error: e?.message || 'Tuner failed' });
+    }
+  }, [currentTenant?.id, period]);
 
   useEffect(() => {
     if (!currentTenant?.id) return;
@@ -238,7 +296,14 @@ export const AiMetricsPanel: React.FC = () => {
               <div className="space-y-2">
                 <AnimatePresence initial={false}>
                   {byAgent.map((a, idx) => (
-                    <AgentCard key={a.agentId} agentId={a.agentId} rows={a.rows} idx={idx} />
+                    <AgentCard
+                      key={a.agentId}
+                      agentId={a.agentId}
+                      rows={a.rows}
+                      idx={idx}
+                      hasActiveOverride={!!activeOverrides[a.agentId]}
+                      onTune={() => handleTune(a.agentId)}
+                    />
                   ))}
                 </AnimatePresence>
               </div>
@@ -246,6 +311,12 @@ export const AiMetricsPanel: React.FC = () => {
           )}
         </>
       )}
+
+      <PromptTunerReviewModal
+        state={tunerState}
+        onClose={() => setTunerState(null)}
+        onChanged={refetchActive}
+      />
     </div>
   );
 };
@@ -277,7 +348,13 @@ const StatCard: React.FC<{ label: string; value: string | number; hint?: string;
 // One row per agent_id. Sparkline of turns/day on the right + key
 // numbers on the left. Color-codes the approve-rate and skill_no_data
 // pill so issues stand out at a glance.
-const AgentCard: React.FC<{ agentId: string; rows: MetricRow[]; idx: number }> = ({ agentId, rows, idx }) => {
+const AgentCard: React.FC<{
+  agentId: string;
+  rows: MetricRow[];
+  idx: number;
+  hasActiveOverride: boolean;
+  onTune: () => void;
+}> = ({ agentId, rows, idx, hasActiveOverride, onTune }) => {
   // Pre-compute per-day series for the sparkline + per-agent totals.
   const sum = rows.reduce((s, r) => ({
     turns:             s.turns + (r.turns || 0),
@@ -323,6 +400,25 @@ const AgentCard: React.FC<{ agentId: string; rows: MetricRow[]; idx: number }> =
             <span className="text-[10px] text-zinc-400 tabular-nums">
               {sum.turns} turn{sum.turns === 1 ? '' : 's'}
             </span>
+            {hasActiveOverride && (
+              <span
+                title="An active prompt-tuner override is applied to this agent"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-500/30"
+              >
+                <Icons.Sparkles size={8} />
+                Tuned
+              </span>
+            )}
+            <motion.button
+              onClick={onTune}
+              whileTap={{ scale: 0.96, transition: SPRING_TAP }}
+              whileHover={{ y: -1, transition: SPRING_TAP }}
+              className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+              title="Ask the meta-model to propose tweaks to this agent's routing + prompt"
+            >
+              <Icons.Sparkles size={10} />
+              Suggest improvements
+            </motion.button>
           </div>
           {/* Inline pills row */}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">

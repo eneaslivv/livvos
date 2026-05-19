@@ -1078,7 +1078,7 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
     >
       {menuPos && (
         <ContextMenu
-          position={menuPos}
+          position={{ x: menuPos.clientX, y: menuPos.clientY }}
           onClose={() => setMenuPos(null)}
           header={t.title}
           items={[
@@ -1531,7 +1531,7 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
     >
       {menuPos && (
         <ContextMenu
-          position={menuPos}
+          position={{ x: menuPos.clientX, y: menuPos.clientY }}
           onClose={() => setMenuPos(null)}
           header={senderForHeader}
           items={[
