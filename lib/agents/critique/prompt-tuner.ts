@@ -34,13 +34,28 @@ import { sendAdvisorChat } from '../../ai';
 import type { AgentDefinition } from '../types';
 
 export interface PromptTunerProposal {
-  /** Inserted as new agent_overrides row with status='proposed'. */
+  /** Inserted as new agent_overrides row. Status is normally
+   *  'proposed' (awaits admin review); the tuner promotes to
+   *  'active' immediately when the change is low-risk (see
+   *  isAutoApplicable below) and sets autoApplied=true so the
+   *  UI can flag it. */
   id?: string;
   agent_id: string;
   routing_hints_add: string[];
   routing_hints_remove: string[];
   prompt_suffix: string | null;
+  /** Per-skill description tweaks. Map of skill_id → new description.
+   *  Keys MUST match an existing skill id on the agent (filtered in
+   *  sanitizeSkillOverrides). */
+  skill_overrides: Record<string, string>;
   rationale: string;
+  /** Meta-model's confidence in its own proposal. Drives auto-apply
+   *  decisions + surfaces in the UI. */
+  confidence: 'low' | 'medium' | 'high';
+  /** Set TRUE when the proposal was activated without admin review.
+   *  Only happens for low-risk additive changes — see the
+   *  AUTO_APPLY_RULES comment in tryAutoApply for the criteria. */
+  autoApplied: boolean;
   evidence: {
     stats: {
       turns: number;
@@ -186,7 +201,8 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
   // ── 4. Build the meta-prompt ─────────────────────────────────────
   // The model is asked for STRICT JSON to make parsing reliable. We
   // also feed the agent's CURRENT routing hints + a one-line summary
-  // of what it does so suggestions are concrete vs hand-wavy.
+  // of what it does + the list of its skills so suggestions are
+  // concrete vs hand-wavy.
   const currentPromptOneLiner = agent.systemPrompt.split('\n')[0].slice(0, 200);
   const otherAgentsList = Array.from(AGENT_BY_ID.values())
     .filter(a => a.id !== agent.id)
@@ -197,12 +213,21 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
     `[${c.agent_id}] "${(c.query || '').slice(0, 120)}"`
   ).join('\n');
 
+  // Skill catalogue — used both to ask for skill tweaks and to clamp
+  // the model's proposals to skills that actually exist.
+  const skillsList = agent.skills.map(s =>
+    `  - ${s.id} (${s.kind}): ${s.description}`
+  ).join('\n');
+
   const prompt = [
     `You are a meta-analyzer reviewing how the "${agent.id}" agent is performing for one tenant.`,
     '',
     `AGENT DOMAIN: ${agent.domain}`,
     `AGENT PERSONA (first line): ${currentPromptOneLiner}`,
     `CURRENT ROUTING HINTS (${agent.routingHints.length}): ${agent.routingHints.join(', ')}`,
+    '',
+    `AGENT SKILLS (${agent.skills.length}):`,
+    skillsList,
     '',
     'STATS OVER THE LAST 30 DAYS:',
     `  - Turns: ${stats.turns}`,
@@ -229,14 +254,16 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
     '  "keywords_to_add":    [string],   // routing hints to add (NEW words this agent should match)',
     '  "keywords_to_remove": [string],   // routing hints to remove (words causing wrong matches)',
     '  "prompt_addition":    "string",   // ≤200 chars of new system-prompt guidance, or empty if no change needed',
+    '  "skill_descriptions": { skill_id: "new description ≤180 chars", ... },  // optional: clarify when each skill applies. Only include skills you actually want to retune; use EXACT skill ids from AGENT SKILLS above.',
     '  "rationale":          "string",   // 1-3 sentences explaining WHY, citing the data above',
     '  "confidence":         "low|medium|high"',
     '}',
     '',
     'Rules:',
-    '  - Be CONSERVATIVE. If the stats look healthy (low no_data, low re-asks, high approve), output empty arrays + empty prompt_addition.',
+    '  - Be CONSERVATIVE. If the stats look healthy (low no_data, low re-asks, high approve), output empty arrays + empty prompt_addition + empty skill_descriptions.',
     '  - Don\'t propose keywords that already exist in CURRENT ROUTING HINTS.',
     '  - Don\'t propose keywords that obviously belong to another agent\'s domain (e.g. "invoice" for tasks-agent).',
+    '  - skill_descriptions: only retune a skill description when no_data % is high AND the description itself looks vague. Don\'t rewrite descriptions cosmetically.',
     '  - If you see no actionable signal, set confidence=low and explain why.',
     '  - Output ONLY the JSON object — no preamble, no markdown fence.',
   ].join('\n');
@@ -261,6 +288,10 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
 
   // Normalize + safety-clamp the proposal so a malformed model output
   // doesn't poison the override table.
+  const confidence: 'low' | 'medium' | 'high' =
+    parsed.confidence === 'high' ? 'high'
+    : parsed.confidence === 'medium' ? 'medium'
+    : 'low';
   const proposal: PromptTunerProposal = {
     agent_id: agent.id,
     routing_hints_add: sanitizeKeywords(parsed.keywords_to_add, agent),
@@ -268,9 +299,12 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
     prompt_suffix: typeof parsed.prompt_addition === 'string' && parsed.prompt_addition.trim()
       ? parsed.prompt_addition.trim().slice(0, 400)
       : null,
+    skill_overrides: sanitizeSkillOverrides(parsed.skill_descriptions, agent),
     rationale: typeof parsed.rationale === 'string'
       ? parsed.rationale.trim().slice(0, 800)
       : '(no rationale)',
+    confidence,
+    autoApplied: false, // flipped by tryAutoApply below if eligible
     evidence: {
       stats,
       sample_conversations: sample.slice(0, 6),
@@ -281,12 +315,13 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
   // Skip the insert if the proposal is empty.
   const isEmpty = proposal.routing_hints_add.length === 0
     && proposal.routing_hints_remove.length === 0
-    && !proposal.prompt_suffix;
+    && !proposal.prompt_suffix
+    && Object.keys(proposal.skill_overrides).length === 0;
   if (isEmpty) {
     return {
       ok: false,
       proposal,
-      reason: parsed.confidence === 'low'
+      reason: confidence === 'low'
         ? `Tuner says ${agent.id} looks fine: "${proposal.rationale}"`
         : 'Tuner returned no actionable changes.',
     };
@@ -296,28 +331,85 @@ export async function runPromptTuner(args: RunPromptTunerArgs): Promise<RunPromp
     return { ok: true, proposal };
   }
 
-  // ── 6. Persist as 'proposed' ─────────────────────────────────────
+  // ── 6. Decide: auto-apply OR propose for review ───────────────────
+  // AUTO_APPLY_RULES — a proposal is low-risk enough to skip the
+  // admin review modal when ALL of these are true:
+  //   • confidence === 'low' (the model itself isn't sure — but
+  //     "additive only" is hard to break things with)
+  //   • only routing_hints_add, no removes (removing a keyword can
+  //     misroute existing user phrasing)
+  //   • routing_hints_add.length <= 2 (more than 2 = bigger blast)
+  //   • no prompt_suffix (free-form text needs human eyes)
+  //   • no skill_overrides (description changes affect every turn)
+  // Auto-applied overrides bypass the 'proposed' state and land
+  // directly as 'active'. The "Tuned" badge in the UI + the
+  // auto_applied flag let the admin spot + audit them.
+  const autoApplicable =
+    proposal.confidence === 'low'
+    && proposal.routing_hints_add.length > 0
+    && proposal.routing_hints_add.length <= 2
+    && proposal.routing_hints_remove.length === 0
+    && !proposal.prompt_suffix
+    && Object.keys(proposal.skill_overrides).length === 0;
+
   try {
+    // Both paths: first supersede any prior active row (so auto-apply
+    // doesn't trip the unique partial index, and proposed rows for
+    // an already-tuned agent don't pile up).
+    if (autoApplicable) {
+      await args.db
+        .from('agent_overrides')
+        .update({ status: 'superseded', superseded_at: new Date().toISOString() })
+        .eq('tenant_id', args.tenantId)
+        .eq('agent_id', agent.id)
+        .eq('status', 'active');
+    }
+
     const { data, error } = await args.db
       .from('agent_overrides')
       .insert({
         tenant_id: args.tenantId,
         agent_id: agent.id,
-        status: 'proposed',
+        status: autoApplicable ? 'active' : 'proposed',
         routing_hints_add: proposal.routing_hints_add,
         routing_hints_remove: proposal.routing_hints_remove,
         prompt_suffix: proposal.prompt_suffix,
+        skill_overrides: proposal.skill_overrides,
         rationale: proposal.rationale,
+        confidence: proposal.confidence,
+        auto_applied: autoApplicable,
+        applied_at: autoApplicable ? new Date().toISOString() : null,
         evidence: proposal.evidence,
       })
       .select('id')
       .single();
     if (error) throw error;
     proposal.id = (data as any).id;
+    proposal.autoApplied = autoApplicable;
     return { ok: true, proposal, insertedId: proposal.id };
   } catch (e: any) {
     return { ok: false, proposal, reason: `Could not save proposal: ${e?.message}` };
   }
+}
+
+/** Defensive cleanup for skill_descriptions map returned by the
+ *  model. Drops entries whose key isn't a real skill on this agent,
+ *  clamps descriptions to 180 chars, dedupes, caps at 5 entries. */
+function sanitizeSkillOverrides(input: unknown, agent: AgentDefinition): Record<string, string> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const valid = new Set(agent.skills.map(s => s.id));
+  const out: Record<string, string> = {};
+  let count = 0;
+  for (const [skillId, desc] of Object.entries(input as Record<string, unknown>)) {
+    if (!valid.has(skillId)) continue;
+    if (typeof desc !== 'string') continue;
+    const clean = desc.trim().slice(0, 180);
+    if (!clean) continue;
+    out[skillId] = clean;
+    count++;
+    if (count >= 5) break;
+  }
+  return out;
 }
 
 /** Defensive cleanup for keyword arrays returned by the model.

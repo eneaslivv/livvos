@@ -31,9 +31,34 @@ import { errorLogger } from '../../lib/errorLogger';
 
 export type TunerModalState =
   | { mode: 'loading'; agentId: string }
-  | { mode: 'proposal'; agentId: string; proposal: PromptTunerProposal; currentHints: string[] }
+  | { mode: 'proposal'; agentId: string; proposal: PromptTunerProposal; currentHints: string[]; autoApplied?: boolean }
   | { mode: 'no-change'; agentId: string; reason: string }
-  | { mode: 'error'; agentId: string; error: string };
+  | { mode: 'error'; agentId: string; error: string }
+  /** View the currently-active override for an agent — shows what's in
+   *  effect, before/after metrics around the applied_at date, and a
+   *  Rollback button that flips status to 'superseded'. */
+  | { mode: 'view-active'; agentId: string; override: ActiveOverrideView };
+
+export interface ActiveOverrideView {
+  id: string;
+  agent_id: string;
+  routing_hints_add: string[];
+  routing_hints_remove: string[];
+  prompt_suffix: string | null;
+  skill_overrides: Record<string, string>;
+  rationale: string | null;
+  confidence: string | null;
+  auto_applied: boolean;
+  applied_at: string | null;
+  before_metrics?: {
+    turns: number; approve_rate: number | null; thumbs_up: number; thumbs_down: number;
+    re_asks: number; no_data_rate: number; avg_ms_llm: number;
+  };
+  after_metrics?: {
+    turns: number; approve_rate: number | null; thumbs_up: number; thumbs_down: number;
+    re_asks: number; no_data_rate: number; avg_ms_llm: number;
+  };
+}
 
 interface Props {
   state: TunerModalState | null;
@@ -90,6 +115,26 @@ export const PromptTunerReviewModal: React.FC<Props> = ({ state, onClose, onChan
     } catch (e: any) {
       errorLogger.warn('reject_agent_override failed', e);
       setError(e?.message || 'Could not reject.');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleRollback = async () => {
+    if (state.mode !== 'view-active') return;
+    setActing('reject'); // re-use the "reject" busy slot — only one action runs at a time
+    setError(null);
+    try {
+      const { error: err } = await supabase.rpc('rollback_agent_override', {
+        p_override_id: state.override.id,
+      });
+      if (err) throw err;
+      if (currentTenant?.id) invalidateOverridesCache(currentTenant.id);
+      onChanged?.();
+      onClose();
+    } catch (e: any) {
+      errorLogger.warn('rollback_agent_override failed', e);
+      setError(e?.message || 'Could not roll back.');
     } finally {
       setActing(null);
     }
@@ -179,103 +224,16 @@ export const PromptTunerReviewModal: React.FC<Props> = ({ state, onClose, onChan
             )}
 
             {state.mode === 'proposal' && (
-              <div className="space-y-4">
-                {/* Rationale */}
-                <Section title="Why">
-                  <p className="text-[12px] leading-relaxed text-zinc-700 dark:text-zinc-200">
-                    {state.proposal.rationale}
-                  </p>
-                </Section>
+              <ProposalView proposal={state.proposal} autoApplied={!!state.autoApplied} error={error} />
+            )}
 
-                {/* Routing hints diff */}
-                {(state.proposal.routing_hints_add.length > 0 || state.proposal.routing_hints_remove.length > 0) && (
-                  <Section title="Routing keywords">
-                    {state.proposal.routing_hints_add.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-1.5">
-                        {state.proposal.routing_hints_add.map(k => (
-                          <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-500/30 inline-flex items-center gap-1">
-                            <Icons.Plus size={9} />
-                            {k}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {state.proposal.routing_hints_remove.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {state.proposal.routing_hints_remove.map(k => (
-                          <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-500/30 line-through inline-flex items-center gap-1">
-                            <Icons.X size={9} />
-                            {k}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </Section>
-                )}
-
-                {/* Prompt suffix */}
-                {state.proposal.prompt_suffix && (
-                  <Section title="System prompt addition">
-                    <div className="text-[11.5px] text-zinc-700 dark:text-zinc-200 italic bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2.5 border border-zinc-200/60 dark:border-zinc-700/60">
-                      “{state.proposal.prompt_suffix}”
-                    </div>
-                    <div className="text-[10px] text-zinc-400 mt-1">
-                      Will be appended under "TENANT-SPECIFIC GUIDANCE" in the
-                      agent's prompt. Does NOT replace the default prompt or
-                      action protocol.
-                    </div>
-                  </Section>
-                )}
-
-                {/* Evidence stats */}
-                <Section title="Stats this was based on">
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <Stat label="Turns" value={state.proposal.evidence.stats.turns} />
-                    <Stat label="Thumbs" value={`${state.proposal.evidence.stats.thumbs_up}↑ ${state.proposal.evidence.stats.thumbs_down}↓`} />
-                    <Stat label="Re-asks" value={state.proposal.evidence.stats.re_asks} />
-                    <Stat
-                      label="Approve rate"
-                      value={state.proposal.evidence.stats.approve_rate != null
-                        ? `${Math.round(state.proposal.evidence.stats.approve_rate * 100)}%`
-                        : '—'}
-                    />
-                    <Stat label="No-data %" value={`${Math.round(state.proposal.evidence.stats.avg_no_data_rate * 100)}%`} />
-                    <Stat label="Avg LLM" value={`${Math.round(state.proposal.evidence.stats.avg_ms_llm)}ms`} />
-                  </div>
-                </Section>
-
-                {/* Sample conversations */}
-                {state.proposal.evidence.sample_conversations.length > 0 && (
-                  <Section title="Recent conversations">
-                    <div className="space-y-1.5">
-                      {state.proposal.evidence.sample_conversations.slice(0, 4).map(c => (
-                        <div key={c.id} className="text-[11px] bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2 border border-zinc-200/40 dark:border-zinc-700/40">
-                          {c.skill_no_data && (
-                            <span className="text-[9px] font-bold uppercase text-rose-500 mr-1.5">No data</span>
-                          )}
-                          <div className="text-zinc-700 dark:text-zinc-200 truncate">
-                            <span className="text-zinc-400">→</span> {c.query}
-                          </div>
-                          <div className="text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                            <span className="text-zinc-400">←</span> {c.reply}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Section>
-                )}
-
-                {error && (
-                  <div className="p-2 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px]">
-                    {error}
-                  </div>
-                )}
-              </div>
+            {state.mode === 'view-active' && (
+              <ActiveOverrideViewBody view={state.override} error={error} />
             )}
           </div>
 
-          {/* Footer (only for actionable proposals) */}
-          {state.mode === 'proposal' && (
+          {/* Footer */}
+          {state.mode === 'proposal' && !state.autoApplied && (
             <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-end gap-2">
               <motion.button
                 onClick={handleReject}
@@ -305,6 +263,46 @@ export const PromptTunerReviewModal: React.FC<Props> = ({ state, onClose, onChan
               </motion.button>
             </div>
           )}
+          {state.mode === 'proposal' && state.autoApplied && (
+            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-end gap-2">
+              <span className="mr-auto text-[10.5px] text-zinc-500 dark:text-zinc-400">
+                Already live — no action needed.
+              </span>
+              <motion.button
+                onClick={onClose}
+                whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+                className="px-3 py-1.5 text-[11.5px] font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              >Close</motion.button>
+            </div>
+          )}
+          {state.mode === 'view-active' && (
+            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-end gap-2">
+              <motion.button
+                onClick={onClose}
+                whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+                className="px-3 py-1.5 text-[11.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors mr-auto"
+              >Close</motion.button>
+              <motion.button
+                onClick={handleRollback}
+                disabled={acting !== null}
+                whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+                className="px-3 py-1.5 text-[11.5px] font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200/60 dark:border-rose-500/30 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5 transition-colors"
+                title="Revert this agent to the TypeScript defaults"
+              >
+                {acting === 'reject' ? (
+                  <>
+                    <Icons.Loader size={12} className="animate-spin" />
+                    Rolling back…
+                  </>
+                ) : (
+                  <>
+                    <Icons.X size={12} />
+                    Roll back to defaults
+                  </>
+                )}
+              </motion.button>
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>,
@@ -319,9 +317,293 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </div>
 );
 
-const Stat: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-  <div className="px-2 py-1.5 rounded-md bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/40 dark:border-zinc-700/40">
+const Stat: React.FC<{ label: string; value: string | number; deltaTone?: 'good' | 'bad' | 'neutral' }> = ({ label, value, deltaTone }) => (
+  <div className={`px-2 py-1.5 rounded-md border ${
+    deltaTone === 'good' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200/60 dark:border-emerald-500/30' :
+    deltaTone === 'bad'  ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200/60 dark:border-rose-500/30' :
+                           'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200/40 dark:border-zinc-700/40'
+  }`}>
     <div className="text-[9px] font-medium uppercase tracking-wider text-zinc-400">{label}</div>
-    <div className="text-[12px] font-semibold tabular-nums text-zinc-800 dark:text-zinc-200 mt-0.5">{value}</div>
+    <div className={`text-[12px] font-semibold tabular-nums mt-0.5 ${
+      deltaTone === 'good' ? 'text-emerald-700 dark:text-emerald-300' :
+      deltaTone === 'bad'  ? 'text-rose-700 dark:text-rose-300' :
+                             'text-zinc-800 dark:text-zinc-200'
+    }`}>{value}</div>
   </div>
 );
+
+// ── ProposalView ────────────────────────────────────────────────
+// Renders a freshly-returned tuner proposal. When autoApplied, leads
+// with a "live now" banner so the admin understands they're looking
+// at an already-active change for visibility (not approval).
+const ProposalView: React.FC<{
+  proposal: PromptTunerProposal;
+  autoApplied: boolean;
+  error: string | null;
+}> = ({ proposal, autoApplied, error }) => {
+  const skillTweakEntries = Object.entries(proposal.skill_overrides || {});
+  return (
+    <div className="space-y-4">
+      {autoApplied && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200/60 dark:border-violet-500/30">
+          <Icons.Sparkles size={12} className="text-violet-500 shrink-0 mt-0.5" />
+          <div className="text-[11px]">
+            <div className="font-semibold text-violet-700 dark:text-violet-300">Auto-applied — already live</div>
+            <div className="text-violet-600/80 dark:text-violet-300/70 mt-0.5">
+              Low-risk additive change. You can roll it back from the agent card if it's not working.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Section title="Why">
+        <p className="text-[12px] leading-relaxed text-zinc-700 dark:text-zinc-200">
+          {proposal.rationale}
+        </p>
+        <div className="flex items-center gap-1.5 mt-2">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Confidence</span>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+            proposal.confidence === 'high'   ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' :
+            proposal.confidence === 'medium' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300' :
+                                               'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+          }`}>{proposal.confidence}</span>
+        </div>
+      </Section>
+
+      {(proposal.routing_hints_add.length > 0 || proposal.routing_hints_remove.length > 0) && (
+        <Section title="Routing keywords">
+          {proposal.routing_hints_add.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {proposal.routing_hints_add.map(k => (
+                <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-500/30 inline-flex items-center gap-1">
+                  <Icons.Plus size={9} />
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+          {proposal.routing_hints_remove.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {proposal.routing_hints_remove.map(k => (
+                <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-500/30 line-through inline-flex items-center gap-1">
+                  <Icons.X size={9} />
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {proposal.prompt_suffix && (
+        <Section title="System prompt addition">
+          <div className="text-[11.5px] text-zinc-700 dark:text-zinc-200 italic bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2.5 border border-zinc-200/60 dark:border-zinc-700/60">
+            “{proposal.prompt_suffix}”
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">
+            Appended under "TENANT-SPECIFIC GUIDANCE" in the agent's prompt. Does NOT replace the default prompt or action protocol.
+          </div>
+        </Section>
+      )}
+
+      {skillTweakEntries.length > 0 && (
+        <Section title="Skill description tweaks">
+          <div className="space-y-1.5">
+            {skillTweakEntries.map(([skillId, desc]) => (
+              <div key={skillId} className="text-[11.5px] bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2 border border-zinc-200/60 dark:border-zinc-700/60">
+                <div className="text-[10px] font-mono text-violet-600 dark:text-violet-400">{skillId}</div>
+                <div className="text-zinc-700 dark:text-zinc-200 italic mt-0.5">“{desc}”</div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">
+            Replaces these skill descriptions in the agent's prompt block when the LLM is choosing what data to pull.
+          </div>
+        </Section>
+      )}
+
+      <Section title="Stats this was based on">
+        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+          <Stat label="Turns" value={proposal.evidence.stats.turns} />
+          <Stat label="Thumbs" value={`${proposal.evidence.stats.thumbs_up}↑ ${proposal.evidence.stats.thumbs_down}↓`} />
+          <Stat label="Re-asks" value={proposal.evidence.stats.re_asks} />
+          <Stat label="Approve rate" value={proposal.evidence.stats.approve_rate != null ? `${Math.round(proposal.evidence.stats.approve_rate * 100)}%` : '—'} />
+          <Stat label="No-data %" value={`${Math.round(proposal.evidence.stats.avg_no_data_rate * 100)}%`} />
+          <Stat label="Avg LLM" value={`${Math.round(proposal.evidence.stats.avg_ms_llm)}ms`} />
+        </div>
+      </Section>
+
+      {proposal.evidence.sample_conversations.length > 0 && (
+        <Section title="Recent conversations">
+          <div className="space-y-1.5">
+            {proposal.evidence.sample_conversations.slice(0, 4).map(c => (
+              <div key={c.id} className="text-[11px] bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2 border border-zinc-200/40 dark:border-zinc-700/40">
+                {c.skill_no_data && (
+                  <span className="text-[9px] font-bold uppercase text-rose-500 mr-1.5">No data</span>
+                )}
+                <div className="text-zinc-700 dark:text-zinc-200 truncate">
+                  <span className="text-zinc-400">→</span> {c.query}
+                </div>
+                <div className="text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                  <span className="text-zinc-400">←</span> {c.reply}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {error && (
+        <div className="p-2 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px]">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── ActiveOverrideViewBody ──────────────────────────────────────
+// Shows what's currently in effect for an agent + before/after metrics
+// computed around the override's applied_at timestamp. Lets the admin
+// answer "is this actually helping?" with a real comparison.
+const ActiveOverrideViewBody: React.FC<{
+  view: ActiveOverrideView;
+  error: string | null;
+}> = ({ view, error }) => {
+  const skillTweakEntries = Object.entries(view.skill_overrides || {});
+  const before = view.before_metrics;
+  const after = view.after_metrics;
+  // Deltas — for the "is this helping?" read. Higher approve / thumbs
+  // = good; higher re-asks / no_data / latency = bad. Color codes the
+  // after-cell based on the direction of change.
+  const tone = (key: 'approve_rate' | 'thumbs' | 're_asks' | 'no_data' | 'latency'): 'good' | 'bad' | 'neutral' => {
+    if (!before || !after) return 'neutral';
+    if (key === 'approve_rate') {
+      if (before.approve_rate == null || after.approve_rate == null) return 'neutral';
+      return after.approve_rate > before.approve_rate + 0.05 ? 'good'
+        : after.approve_rate < before.approve_rate - 0.05 ? 'bad' : 'neutral';
+    }
+    if (key === 'thumbs') {
+      const b = before.thumbs_up - before.thumbs_down;
+      const a = after.thumbs_up - after.thumbs_down;
+      return a > b ? 'good' : a < b ? 'bad' : 'neutral';
+    }
+    if (key === 're_asks') {
+      return after.re_asks < before.re_asks ? 'good' : after.re_asks > before.re_asks ? 'bad' : 'neutral';
+    }
+    if (key === 'no_data') {
+      return after.no_data_rate < before.no_data_rate - 0.05 ? 'good'
+        : after.no_data_rate > before.no_data_rate + 0.05 ? 'bad' : 'neutral';
+    }
+    if (key === 'latency') {
+      return after.avg_ms_llm < before.avg_ms_llm - 200 ? 'good'
+        : after.avg_ms_llm > before.avg_ms_llm + 200 ? 'bad' : 'neutral';
+    }
+    return 'neutral';
+  };
+
+  return (
+    <div className="space-y-4">
+      {view.auto_applied && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200/60 dark:border-violet-500/30">
+          <Icons.Sparkles size={12} className="text-violet-500 shrink-0 mt-0.5" />
+          <div className="text-[11px]">
+            <span className="font-semibold text-violet-700 dark:text-violet-300">Auto-applied</span>
+            <span className="text-violet-600/80 dark:text-violet-300/70 ml-1.5">
+              {view.applied_at ? `since ${new Date(view.applied_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}` : ''}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {view.rationale && (
+        <Section title="Why this was suggested">
+          <p className="text-[12px] leading-relaxed text-zinc-700 dark:text-zinc-200">{view.rationale}</p>
+        </Section>
+      )}
+
+      {(view.routing_hints_add.length > 0 || view.routing_hints_remove.length > 0) && (
+        <Section title="Active routing changes">
+          {view.routing_hints_add.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {view.routing_hints_add.map(k => (
+                <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-500/30 inline-flex items-center gap-1">
+                  <Icons.Plus size={9} />
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+          {view.routing_hints_remove.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {view.routing_hints_remove.map(k => (
+                <span key={k} className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-500/30 line-through inline-flex items-center gap-1">
+                  <Icons.X size={9} />
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {view.prompt_suffix && (
+        <Section title="Active prompt addition">
+          <div className="text-[11.5px] text-zinc-700 dark:text-zinc-200 italic bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2.5 border border-zinc-200/60 dark:border-zinc-700/60">
+            “{view.prompt_suffix}”
+          </div>
+        </Section>
+      )}
+
+      {skillTweakEntries.length > 0 && (
+        <Section title="Active skill tweaks">
+          <div className="space-y-1.5">
+            {skillTweakEntries.map(([skillId, desc]) => (
+              <div key={skillId} className="text-[11.5px] bg-zinc-50 dark:bg-zinc-800/50 rounded-md p-2 border border-zinc-200/60 dark:border-zinc-700/60">
+                <div className="text-[10px] font-mono text-violet-600 dark:text-violet-400">{skillId}</div>
+                <div className="text-zinc-700 dark:text-zinc-200 italic mt-0.5">“{desc}”</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {before && after && (
+        <Section title="Before vs. after — is it helping?">
+          {(after.turns < 5) ? (
+            <div className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+              Only {after.turns} turn{after.turns === 1 ? '' : 's'} since this went live. Give it a few more days for a meaningful comparison.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                <Stat label="Before — turns" value={before.turns} />
+                <Stat label="After — turns"  value={after.turns} />
+                <Stat label="Approve Δ" deltaTone={tone('approve_rate')}
+                  value={(before.approve_rate != null && after.approve_rate != null)
+                    ? `${Math.round(before.approve_rate * 100)}% → ${Math.round(after.approve_rate * 100)}%`
+                    : '—'} />
+                <Stat label="Thumbs Δ" deltaTone={tone('thumbs')}
+                  value={`${before.thumbs_up - before.thumbs_down >= 0 ? '+' : ''}${before.thumbs_up - before.thumbs_down} → ${after.thumbs_up - after.thumbs_down >= 0 ? '+' : ''}${after.thumbs_up - after.thumbs_down}`} />
+                <Stat label="Re-asks Δ" deltaTone={tone('re_asks')} value={`${before.re_asks} → ${after.re_asks}`} />
+                <Stat label="No-data %" deltaTone={tone('no_data')}
+                  value={`${Math.round(before.no_data_rate * 100)}% → ${Math.round(after.no_data_rate * 100)}%`} />
+                <Stat label="LLM ms" deltaTone={tone('latency')}
+                  value={`${Math.round(before.avg_ms_llm)} → ${Math.round(after.avg_ms_llm)}`} />
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                Green = improved since the override went live. Red = worsened. Use the Rollback button below if the deltas are bad.
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {error && (
+        <div className="p-2 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px]">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+};

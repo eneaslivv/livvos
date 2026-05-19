@@ -26,6 +26,10 @@ export interface ActiveOverride {
   routing_hints_add: string[];
   routing_hints_remove: string[];
   prompt_suffix: string | null;
+  /** Per-skill description tweaks: { skill_id: new_description }.
+   *  Applied at agent-prompt-build time to swap the TS-default
+   *  description with a tenant-tuned one. */
+  skill_overrides: Record<string, string>;
 }
 
 // Cache active overrides per-tenant for 5 minutes. Overrides change
@@ -52,7 +56,7 @@ export async function fetchActiveOverrides(
   }
   try {
     const { data } = await db.from('agent_overrides')
-      .select('id, tenant_id, agent_id, routing_hints_add, routing_hints_remove, prompt_suffix')
+      .select('id, tenant_id, agent_id, routing_hints_add, routing_hints_remove, prompt_suffix, skill_overrides')
       .eq('tenant_id', tenantId)
       .eq('status', 'active');
     const rows = (data || []).map((r: any) => ({
@@ -62,12 +66,27 @@ export async function fetchActiveOverrides(
       routing_hints_add: Array.isArray(r.routing_hints_add) ? r.routing_hints_add : [],
       routing_hints_remove: Array.isArray(r.routing_hints_remove) ? r.routing_hints_remove : [],
       prompt_suffix: r.prompt_suffix || null,
+      skill_overrides: (r.skill_overrides && typeof r.skill_overrides === 'object')
+        ? r.skill_overrides as Record<string, string>
+        : {},
     })) as ActiveOverride[];
     cache.set(tenantId, { rows, fetchedAt: Date.now() });
     return rows;
   } catch {
     return [];
   }
+}
+
+/** Resolve the effective description for a skill — falls back to the
+ *  TS default if no override exists. Used at agent-prompt-build
+ *  time when listing what each skill does. */
+export function effectiveSkillDescription(
+  skillId: string,
+  defaultDescription: string,
+  override?: ActiveOverride,
+): string {
+  const tweaked = override?.skill_overrides?.[skillId];
+  return (tweaked && typeof tweaked === 'string') ? tweaked : defaultDescription;
 }
 
 /** Returns a Map<agentId, ActiveOverride> for easy lookup. */
@@ -98,19 +117,36 @@ export function effectiveRoutingHints(
   });
 }
 
-/** Compose an agent's effective systemPrompt with the override
- *  suffix appended. The suffix is wrapped in a "TENANT-SPECIFIC
- *  GUIDANCE" block so the model knows it's an override of the
- *  default behavior. */
+/** Compose an agent's effective systemPrompt with override content
+ *  appended. Two layers can be added:
+ *    1. Skill description tweaks — surfaced as a "SKILL DESCRIPTIONS
+ *       (TUNED)" block so the model uses the tenant-specific verbiage
+ *       when reasoning about which skill applies.
+ *    2. Free-form prompt_suffix — appended under "TENANT-SPECIFIC
+ *       GUIDANCE". Higher in priority than defaults for ambiguous
+ *       calls.
+ *  Both layers are ADDITIVE — never replaces the base. */
 export function effectiveSystemPrompt(
   agent: AgentDefinition,
   override?: ActiveOverride,
 ): string {
-  if (!override || !override.prompt_suffix) return agent.systemPrompt;
-  return [
-    agent.systemPrompt,
-    '',
-    '── TENANT-SPECIFIC GUIDANCE (from learned overrides) ──',
-    override.prompt_suffix,
-  ].join('\n');
+  if (!override) return agent.systemPrompt;
+  const blocks: string[] = [agent.systemPrompt];
+  // Skill description tweaks — only render the block when at least
+  // one of the agent's skills has an override.
+  const tweaks = override.skill_overrides || {};
+  const tweakedSkills = agent.skills.filter(s => tweaks[s.id]);
+  if (tweakedSkills.length > 0) {
+    blocks.push('');
+    blocks.push('── SKILL DESCRIPTIONS (TUNED for this tenant) ──');
+    for (const s of tweakedSkills) {
+      blocks.push(`• ${s.id}: ${tweaks[s.id]}`);
+    }
+  }
+  if (override.prompt_suffix) {
+    blocks.push('');
+    blocks.push('── TENANT-SPECIFIC GUIDANCE (from learned overrides) ──');
+    blocks.push(override.prompt_suffix);
+  }
+  return blocks.join('\n');
 }

@@ -33,7 +33,7 @@ import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
 import { SPRING_ENTER, SPRING_TAP } from '../../lib/ui/motion';
 import { runPromptTuner } from '../../lib/agents';
-import { PromptTunerReviewModal, type TunerModalState } from './PromptTunerReviewModal';
+import { PromptTunerReviewModal, type TunerModalState, type ActiveOverrideView } from './PromptTunerReviewModal';
 
 interface MetricRow {
   tenant_id: string;
@@ -113,7 +113,12 @@ export const AiMetricsPanel: React.FC = () => {
           agentId,
           proposal: result.proposal,
           currentHints: [],
+          autoApplied: result.proposal.autoApplied,
         });
+        // Auto-applied → refresh the active-override badge state
+        // immediately so the agent card shows "Tuned" without a
+        // page reload.
+        if (result.proposal.autoApplied) refetchActive();
       } else {
         setTunerState({
           mode: 'no-change',
@@ -124,7 +129,97 @@ export const AiMetricsPanel: React.FC = () => {
     } catch (e: any) {
       setTunerState({ mode: 'error', agentId, error: e?.message || 'Tuner failed' });
     }
-  }, [currentTenant?.id, period]);
+  }, [currentTenant?.id, period, refetchActive]);
+
+  // Open the "View active" modal — fetches the active override + the
+  // before/after metrics around its applied_at so the admin can see
+  // whether the override is actually helping.
+  const handleViewActive = useCallback(async (agentId: string) => {
+    if (!currentTenant?.id) return;
+    setTunerState({ mode: 'loading', agentId });
+    try {
+      const { data: ovr, error: ovErr } = await supabase
+        .from('agent_overrides')
+        .select('id, agent_id, routing_hints_add, routing_hints_remove, prompt_suffix, skill_overrides, rationale, confidence, auto_applied, applied_at')
+        .eq('tenant_id', currentTenant.id)
+        .eq('agent_id', agentId)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (ovErr) throw ovErr;
+      if (!ovr) throw new Error('No active override found.');
+
+      // Compute before/after metric aggregates from agent_metrics rows
+      // around applied_at. Window: 7 days each side (or however much
+      // of the "after" window has elapsed if it's been < 7 days).
+      const before: ActiveOverrideView['before_metrics'] = { turns: 0, approve_rate: null, thumbs_up: 0, thumbs_down: 0, re_asks: 0, no_data_rate: 0, avg_ms_llm: 0 };
+      const after: ActiveOverrideView['after_metrics']   = { turns: 0, approve_rate: null, thumbs_up: 0, thumbs_down: 0, re_asks: 0, no_data_rate: 0, avg_ms_llm: 0 };
+      if ((ovr as any).applied_at) {
+        const appliedDate = new Date((ovr as any).applied_at);
+        const beforeStart = new Date(appliedDate.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+        const beforeEnd   = new Date(appliedDate.getTime() - 1 * 86400000).toISOString().slice(0, 10);
+        const afterStart  = appliedDate.toISOString().slice(0, 10);
+        const afterEnd    = new Date(Math.min(appliedDate.getTime() + 7 * 86400000, Date.now())).toISOString().slice(0, 10);
+
+        const fetchWindow = async (from: string, to: string) => {
+          const { data } = await supabase
+            .from('agent_metrics')
+            .select('*')
+            .eq('tenant_id', currentTenant.id)
+            .eq('agent_id', agentId)
+            .gte('day', from)
+            .lte('day', to);
+          return (data || []) as MetricRow[];
+        };
+        const [bRows, aRows] = await Promise.all([
+          fetchWindow(beforeStart, beforeEnd),
+          fetchWindow(afterStart, afterEnd),
+        ]);
+        const agg = (rs: MetricRow[]) => {
+          const r = rs.reduce((s, x) => ({
+            turns: s.turns + (x.turns || 0),
+            thumbs_up: s.thumbs_up + (x.thumbs_up || 0),
+            thumbs_down: s.thumbs_down + (x.thumbs_down || 0),
+            re_asks: s.re_asks + (x.re_asks || 0),
+            actions_confirmed: s.actions_confirmed + (x.actions_confirmed || 0),
+            actions_skipped: s.actions_skipped + (x.actions_skipped || 0),
+            ms_llm_sum: s.ms_llm_sum + Number(x.avg_ms_llm || 0) * (x.turns || 0),
+            no_data_sum: s.no_data_sum + Number(x.skill_no_data_rate || 0) * (x.turns || 0),
+            weight: s.weight + (x.turns || 0),
+          }), { turns: 0, thumbs_up: 0, thumbs_down: 0, re_asks: 0, actions_confirmed: 0, actions_skipped: 0, ms_llm_sum: 0, no_data_sum: 0, weight: 0 });
+          return {
+            turns: r.turns,
+            thumbs_up: r.thumbs_up,
+            thumbs_down: r.thumbs_down,
+            re_asks: r.re_asks,
+            approve_rate: (r.actions_confirmed + r.actions_skipped) > 0
+              ? r.actions_confirmed / (r.actions_confirmed + r.actions_skipped) : null,
+            no_data_rate: r.weight > 0 ? r.no_data_sum / r.weight : 0,
+            avg_ms_llm: r.weight > 0 ? r.ms_llm_sum / r.weight : 0,
+          };
+        };
+        Object.assign(before, agg(bRows));
+        Object.assign(after, agg(aRows));
+      }
+
+      const view: ActiveOverrideView = {
+        id: (ovr as any).id,
+        agent_id: (ovr as any).agent_id,
+        routing_hints_add: (ovr as any).routing_hints_add || [],
+        routing_hints_remove: (ovr as any).routing_hints_remove || [],
+        prompt_suffix: (ovr as any).prompt_suffix || null,
+        skill_overrides: (ovr as any).skill_overrides || {},
+        rationale: (ovr as any).rationale || null,
+        confidence: (ovr as any).confidence || null,
+        auto_applied: !!(ovr as any).auto_applied,
+        applied_at: (ovr as any).applied_at || null,
+        before_metrics: before,
+        after_metrics: after,
+      };
+      setTunerState({ mode: 'view-active', agentId, override: view });
+    } catch (e: any) {
+      setTunerState({ mode: 'error', agentId, error: e?.message || 'Could not load active override' });
+    }
+  }, [currentTenant?.id]);
 
   useEffect(() => {
     if (!currentTenant?.id) return;
@@ -303,6 +398,7 @@ export const AiMetricsPanel: React.FC = () => {
                       idx={idx}
                       hasActiveOverride={!!activeOverrides[a.agentId]}
                       onTune={() => handleTune(a.agentId)}
+                      onViewActive={() => handleViewActive(a.agentId)}
                     />
                   ))}
                 </AnimatePresence>
@@ -354,7 +450,8 @@ const AgentCard: React.FC<{
   idx: number;
   hasActiveOverride: boolean;
   onTune: () => void;
-}> = ({ agentId, rows, idx, hasActiveOverride, onTune }) => {
+  onViewActive: () => void;
+}> = ({ agentId, rows, idx, hasActiveOverride, onTune, onViewActive }) => {
   // Pre-compute per-day series for the sparkline + per-agent totals.
   const sum = rows.reduce((s, r) => ({
     turns:             s.turns + (r.turns || 0),
@@ -401,13 +498,15 @@ const AgentCard: React.FC<{
               {sum.turns} turn{sum.turns === 1 ? '' : 's'}
             </span>
             {hasActiveOverride && (
-              <span
-                title="An active prompt-tuner override is applied to this agent"
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-500/30"
+              <motion.button
+                onClick={onViewActive}
+                whileTap={{ scale: 0.94, transition: SPRING_TAP }}
+                title="View the active override + before/after metrics"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-500/30 hover:bg-violet-100 dark:hover:bg-violet-500/25 transition-colors"
               >
                 <Icons.Sparkles size={8} />
                 Tuned
-              </span>
+              </motion.button>
             )}
             <motion.button
               onClick={onTune}
