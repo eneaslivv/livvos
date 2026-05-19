@@ -475,30 +475,73 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] gap-4 max-w-[1600px] mx-auto py-4">
       {/* ── LEFT: chat column ── */}
       <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-        {/* Header — LIVV OS design: breathing dot (amber if meeting,
-           sage if clear) + mono uppercase status + date on the right.
-           Same visual recipe as the LIVE pill in Activity. */}
-        <header className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3">
-          {nextMeeting ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="bd-dot-meet" aria-hidden />
-              <span className="bd-eyebrow !text-zinc-700 dark:!text-zinc-200">
-                in {nextMeeting.minutesUntil}m
+        {/* Date strip + Today's brief eyebrow + Aphorism — bundle pattern */}
+        <div className="px-4 pt-4 pb-2 flex flex-col gap-2.5 border-b border-zinc-100 dark:border-zinc-800/60">
+          {/* Date strip */}
+          <div className="bd-date-strip">
+            {nextMeeting ? (
+              <span className="bd-date-meet">
+                <span className="bd-dot-meet" aria-hidden />
+                <span className="font-medium tracking-[-0.003em] truncate max-w-[180px]">
+                  in {nextMeeting.minutesUntil}m · {nextMeeting.event.title}
+                </span>
               </span>
-              <span className="text-[11.5px] text-zinc-600 dark:text-zinc-300 font-medium tracking-[-0.003em] truncate max-w-[220px]">
-                {nextMeeting.event.title}
+            ) : (
+              <span className="bd-date-meet">
+                <span className="bd-dot-ok" aria-hidden />
+                No meetings ahead
               </span>
+            )}
+            <span className="bd-date">
+              {today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
             </span>
-          ) : (
-            <span className="inline-flex items-center gap-2">
-              <span className="bd-dot-ok" aria-hidden />
-              <span className="bd-eyebrow">No meetings ahead</span>
+          </div>
+
+          {/* Today's brief eyebrow */}
+          <div className="flex items-center gap-2 pt-1">
+            <span className="bd-eyebrow">
+              <span className="bd-pulse" aria-hidden />
+              Today's brief
             </span>
-          )}
-          <span className="ml-auto bd-eyebrow tabular-nums">
-            {today.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </span>
-        </header>
+            <div className="ml-auto inline-flex gap-1">
+              <button
+                onClick={() => onNavigate('activity')}
+                className="w-6 h-6 rounded-md text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors inline-flex items-center justify-center"
+                title="Open Activity"
+              >
+                <Icons.Activity size={11} />
+              </button>
+              <button
+                onClick={() => onNavigate('settings' as PageView)}
+                className="w-6 h-6 rounded-md text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors inline-flex items-center justify-center"
+                title="Brief settings"
+              >
+                <Icons.Settings size={11} />
+              </button>
+            </div>
+          </div>
+
+          {/* Aphorism — gold-left-border italic quote (rotates daily based on date) */}
+          {(() => {
+            const aphorisms = [
+              { line: 'La calidad del input determina la calidad del output.', em: 'Cuidá tu dieta de info.' },
+              { line: 'El sistema no es el branding.', em: 'El branding es lo que mostrás del sistema.' },
+              { line: 'Velocidad sin cadencia es ruido.', em: 'La cadencia compone con repetición.' },
+              { line: 'El precio comunica posicionamiento.', em: 'Cobrá lo que vale; no lo que pesa.' },
+              { line: 'Lo importante no es el plan, son los rituales.', em: 'Los rituales sobreviven al caos.' },
+              { line: 'Tu calendario es tu estrategia.', em: 'Si no está bloqueado, no va a pasar.' },
+              { line: 'Comprometete con menos, ejecutá con más profundidad.', em: 'Foco es la palanca.' },
+            ];
+            const day = new Date().getDay();
+            const a = aphorisms[day % aphorisms.length];
+            return (
+              <div className="bd-aphorism">
+                {a.line}
+                <em>{a.em}</em>
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Single scroll surface: DailyBrief + chat messages flow
             together. Putting them in one scroll lets DailyBrief's
@@ -659,12 +702,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             cream + gold-hover, frosted input shell with focus halo,
             send button that scales 1.04 on hover and tints to wine. */}
         <div className="px-4 pt-3 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
-          <div className="flex flex-wrap gap-1.5 mb-2.5">
+          <div className="bd-chips mb-2.5">
             {[
-              { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
-              { label: 'What’s blocked?', prompt: 'What’s blocked or waiting on someone else right now?' },
-              { label: 'Follow-ups',      prompt: 'Show me pending follow-ups across clients + inbox I haven’t replied to.' },
-              { label: 'Catch me up',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+              { label: 'Plan my week',    cat: 'cat-tasks',   prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
+              { label: "What's blocked?", cat: 'cat-tasks',   prompt: "What's blocked or waiting on someone else right now?" },
+              { label: 'Follow-ups',      cat: 'cat-mail',    prompt: "Show me pending follow-ups across clients + inbox I haven't replied to." },
+              { label: 'Catch me up',     cat: 'cat-cal',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+              { label: 'Cash flow',       cat: 'cat-finance', prompt: 'Show me cash flow snapshot — pending invoices and projected collection.' },
             ].map((c, idx) => (
               <motion.button
                 key={c.label}
@@ -673,7 +717,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 initial={reduceMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...SPRING_ENTER, delay: 0.05 + idx * 0.03 }}
-                className="bd-chip disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`bd-chip ${c.cat} disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 {c.label}
               </motion.button>
@@ -723,11 +767,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       </section>
 
       {/* ── RIGHT: structured panel with tabs ── */}
-      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-        {/* Tab strip — LIVV OS design: gradient underline accent for the
-           active tab (gold→sage gradient like the section labels on
-           the design's section dividers). */}
-        <header className="border-b border-zinc-100 dark:border-zinc-800/60 px-3 pt-3 flex items-center gap-1">
+      <section className="flex flex-col overflow-hidden">
+        {/* Tab bar — bundle's bd-tabs-bar with count pills */}
+        <div className="bd-tabs-bar">
           {([
             { id: 'tasks' as const,    label: 'Tasks',    icon: 'Check' as const,    count: overdue.length + dueToday.length + dueSoon.length },
             { id: 'calendar' as const, label: 'Calendar', icon: 'Calendar' as const, count: todayEvents.length },
@@ -739,28 +781,24 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               <button
                 key={t.id}
                 onClick={() => setRightTab(t.id)}
-                className={`relative px-3 py-2 text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors ${
-                  active ? 'bd-tab-active' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-                }`}
+                className={`bd-tab ${active ? 'active' : ''}`}
               >
                 <IconCmp size={12} />
                 {t.label}
-                {t.count > 0 && (
-                  <span className={`text-[9px] tabular-nums font-mono px-1 py-0.5 rounded ${
-                    active ? 'bg-zinc-900/10 dark:bg-zinc-100/10' : 'bg-zinc-100 dark:bg-zinc-800'
-                  }`}>{t.count}</span>
-                )}
+                {t.count > 0 && <span className="count">{t.count}</span>}
               </button>
             );
           })}
-          <button
-            onClick={() => onNavigate(rightTab === 'inbox' ? 'communications' : 'calendar')}
-            className="ml-auto bd-eyebrow hover:!text-zinc-700 dark:hover:!text-zinc-200 inline-flex items-center gap-1 py-2 px-2"
-            title="Open full page"
-          >
-            Open full →
-          </button>
-        </header>
+          <div className="bd-tabs-right">
+            <button
+              onClick={() => onNavigate(rightTab === 'inbox' ? 'communications' : 'calendar')}
+              className="bd-open-full"
+              title="Open full page"
+            >
+              Open full →
+            </button>
+          </div>
+        </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
           {rightTab === 'tasks' && (
