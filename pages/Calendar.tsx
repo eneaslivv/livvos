@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SPRING_ENTER, SPRING_TAP, TAP_SCALE } from '../lib/ui/motion';
 import { useCalendar, CalendarEvent, CalendarTask } from '../hooks/useCalendar';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
@@ -221,6 +223,28 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
   useEffect(() => { try { localStorage.setItem('calendar:list-status', listStatusFilter); } catch {} }, [listStatusFilter]);
   useEffect(() => { try { localStorage.setItem('calendar:list-priority', listPriorityFilter); } catch {} }, [listPriorityFilter]);
   useEffect(() => { try { localStorage.setItem('calendar:list-sort', listSort); } catch {} }, [listSort]);
+
+  // ─── List view UX preferences (mockup-aligned redesign) ────
+  // These power the AI card visibility, row density, the "smart"
+  // grouping switch, and the quick filter pills sitting above the
+  // task list. They live in localStorage so the user's setup is
+  // remembered across sessions — same pattern as the rest.
+  const [listAiCardOn, setListAiCardOn] = useState<boolean>(
+    () => (typeof window !== 'undefined' && localStorage.getItem('calendar:list-ai-card')) !== '0'
+  );
+  const [listDensity, setListDensity] = useState<'compact' | 'comfy'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-density') as any)) || 'comfy'
+  );
+  const [listQuickFilter, setListQuickFilter] = useState<'all' | 'mine' | 'overdue' | 'high'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-quick') as any)) || 'all'
+  );
+  const [showTweaksPanel, setShowTweaksPanel] = useState<boolean>(
+    () => (typeof window !== 'undefined' && localStorage.getItem('calendar:list-tweaks')) !== '0'
+  );
+  useEffect(() => { try { localStorage.setItem('calendar:list-ai-card', listAiCardOn ? '1' : '0'); } catch {} }, [listAiCardOn]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-density', listDensity); } catch {} }, [listDensity]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-quick', listQuickFilter); } catch {} }, [listQuickFilter]);
+  useEffect(() => { try { localStorage.setItem('calendar:list-tweaks', showTweaksPanel ? '1' : '0'); } catch {} }, [showTweaksPanel]);
 
   const [newEventData, setNewEventData] = useState({
     title: '',
@@ -1665,19 +1689,52 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         </div>
       )}
 
-      {/* List view — flat-or-grouped list with status / priority filters
-          and a sort selector. Honors the TeamFilterBar like Board view.
-          Group-by lives in localStorage so the user's preferred slice
-          (by date / by project / by priority…) survives reloads.
-
-          Default group is "date" so the experience starts familiar
-          (the old behavior was a flat sort by date). The controls bar
-          right above the list lets the user pivot in 1 click. */}
+      {/* List view — Notion/Linear-style task list with quick filter pills,
+          an AI weekly summary card, restyled task cards, and a sidebar
+          with a mini calendar + a Tweaks panel for density / grouping /
+          AI card toggle. Honors the TeamFilterBar like Board view.
+          Default group is "date" so groups feel chronological. */}
       {view === 'list' && calendarMode === 'schedule' && (() => {
-        // Phase 1: filter by status / priority on top of TeamFilterBar.
+        // ─── Base set ──────────────────────────────────────────
         const baseTasks = applyTaskFilter(tasks.filter(t => !t.parent_task_id));
-        const filtered = baseTasks.filter(t => {
-          // status: 'open' is a meta-filter that excludes done & cancelled
+
+        // Useful date references (computed once per render).
+        const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0);
+        const todayKey  = todayDate.toISOString().split('T')[0];
+        const weekDay   = todayDate.getDay();           // 0=Sun…6=Sat
+        const weekStartDate = new Date(todayDate);
+        weekStartDate.setDate(todayDate.getDate() - (weekDay === 0 ? 6 : weekDay - 1));
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekStartDate.getDate() + 6);
+        const weekStartKey = weekStartDate.toISOString().split('T')[0];
+        const weekEndKey   = weekEndDate.toISOString().split('T')[0];
+
+        // ─── Quick filter pill predicates (counts run on the
+        //     pre-pill baseTasks set so totals stay honest). ───
+        const isOverdue = (t: any) =>
+          !t.completed && t.status !== 'done' && t.status !== 'cancelled' &&
+          t.start_date && t.start_date.slice(0, 10) < todayKey;
+        const isMineThisWeek = (t: any) => {
+          if (!user?.id) return false;
+          if (t.assignee_id !== user.id && t.owner_id !== user.id) return false;
+          const d = (t.start_date || '').slice(0, 10);
+          return d >= weekStartKey && d <= weekEndKey;
+        };
+        const isHighOrUrgent = (t: any) => t.priority === 'high' || t.priority === 'urgent';
+
+        const allWorkCount   = baseTasks.length;
+        const mineWeekCount  = baseTasks.filter(isMineThisWeek).length;
+        const overdueCount   = baseTasks.filter(isOverdue).length;
+        const highUrgentCount = baseTasks.filter(isHighOrUrgent).length;
+
+        // Apply the active quick pill to narrow the list.
+        let quickFiltered = baseTasks;
+        if (listQuickFilter === 'mine')    quickFiltered = baseTasks.filter(isMineThisWeek);
+        if (listQuickFilter === 'overdue') quickFiltered = baseTasks.filter(isOverdue);
+        if (listQuickFilter === 'high')    quickFiltered = baseTasks.filter(isHighOrUrgent);
+
+        // ─── Status + priority filters (Tweaks panel) ──────────
+        const filtered = quickFiltered.filter(t => {
           if (listStatusFilter === 'open') {
             if (t.status === 'done' || t.status === 'cancelled' || t.completed) return false;
           } else if (listStatusFilter !== 'all') {
@@ -1691,7 +1748,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
           return true;
         });
 
-        // Phase 2: sort the filtered set.
+        // ─── Sort ──────────────────────────────────────────────
         const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
         const sortFns: Record<typeof listSort, (a: any, b: any) => number> = {
           due:      (a, b) => (((a as any).due_date as string) || a.start_date || '￿').localeCompare(((b as any).due_date as string) || b.start_date || '￿'),
@@ -1701,14 +1758,21 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         };
         const sorted = [...filtered].sort(sortFns[listSort]);
 
-        // Phase 3: build groups for the chosen group-by axis. We use a
-        // Map to preserve insertion order — important for "date" so the
-        // sections come out chronologically.
-        const groups = new Map<string, typeof sorted>();
+        // ─── Grouping ──────────────────────────────────────────
+        // "Smart" grouping = surface overdue first, then today / this week /
+        // later. Falls back to listGroupBy for everything else.
+        const isSmart = listGroupBy === 'date';
         const groupKeyOf = (t: any): string => {
+          if (isSmart) {
+            if (isOverdue(t)) return '__overdue__';
+            const d = (t.start_date || '').slice(0, 10);
+            if (!d) return '__no_date__';
+            if (d === todayKey) return '__today__';
+            if (d >= weekStartKey && d <= weekEndKey) return d;
+            return d;
+          }
           switch (listGroupBy) {
             case 'project':  return getProjectLabel(t);
-            case 'date':     return ((t as any).due_date as string) || t.start_date || '— No date';
             case 'status':   return t.completed ? 'done' : (t.status || 'todo');
             case 'priority': return t.priority || 'medium';
             case 'assignee': return t.assignee_id ? (getMemberName(t.assignee_id) || 'Unknown') : 'Unassigned';
@@ -1716,23 +1780,30 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
             default:         return '__all__';
           }
         };
+
+        // Use a Map to preserve insertion order. For Smart grouping we
+        // pre-seed Overdue at the top so it always appears first.
+        const groups = new Map<string, typeof sorted>();
+        if (isSmart) groups.set('__overdue__', []);
         for (const t of sorted) {
           const k = groupKeyOf(t);
           const arr = groups.get(k) || [];
           arr.push(t);
           groups.set(k, arr);
         }
+        // Drop the seeded overdue bucket if it ended up empty.
+        if (isSmart && groups.get('__overdue__')!.length === 0) groups.delete('__overdue__');
 
-        // Pretty group label — most cases pass through, but date-keyed
-        // groups get a friendlier rendering.
+        // ─── Group label + accent ──────────────────────────────
         const labelFor = (key: string): string => {
-          if (listGroupBy === 'date') {
-            if (key === '— No date') return 'No date';
+          if (key === '__overdue__') return 'Overdue';
+          if (key === '__today__')   return 'Today';
+          if (key === '__no_date__') return 'No date';
+          if (key === '__all__')     return '';
+          if (isSmart) {
             const d = new Date(key + 'T12:00:00');
-            const today = new Date(); today.setHours(0,0,0,0);
-            const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-            if (diff === 0) return 'Today';
-            if (diff === 1) return 'Tomorrow';
+            const diff = Math.round((d.getTime() - todayDate.getTime()) / 86400000);
+            if (diff === 1)  return 'Tomorrow';
             if (diff === -1) return 'Yesterday';
             if (diff > 1 && diff <= 7) return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
             return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: diff > 365 || diff < -365 ? 'numeric' : undefined });
@@ -1743,8 +1814,9 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
           return key;
         };
 
-        // Color accent for group headers (subtle, just to read fast).
         const accentFor = (key: string): string => {
+          if (key === '__overdue__') return 'bg-rose-500';
+          if (key === '__today__')   return 'bg-indigo-500';
           if (listGroupBy === 'priority') {
             if (key === 'urgent') return 'bg-rose-500';
             if (key === 'high')   return 'bg-amber-500';
@@ -1759,157 +1831,613 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
           return 'bg-zinc-300 dark:bg-zinc-600';
         };
 
-        const totalShown = filtered.length;
-        const totalAll = baseTasks.length;
+        // ─── Hero counters (events / tasks / done / month) ─────
+        const eventsToday = events.filter(e => e.start_date?.slice(0, 10) === todayKey).length;
+        const tasksMonth  = baseTasks.filter(t => (t.start_date || '').slice(0, 7) === todayKey.slice(0, 7)).length;
+        const doneMonth   = baseTasks.filter(t => (t.completed || t.status === 'done') && (t.completed_at?.slice(0, 7) || (t.start_date || '').slice(0, 7)) === todayKey.slice(0, 7)).length;
+        const monthLabel  = todayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
+
+        // ─── AI insight (deterministic, calendar-scoped) ───────
+        const insightParts: string[] = [];
+        if (overdueCount > 0) {
+          // Top 2 projects with overdue tasks for a more concrete hook.
+          const projCounts = new Map<string, number>();
+          for (const t of baseTasks) {
+            if (!isOverdue(t)) continue;
+            const p = getProjectLabel(t);
+            projCounts.set(p, (projCounts.get(p) || 0) + 1);
+          }
+          const topProjects = Array.from(projCounts.entries())
+            .filter(([p]) => p !== 'No project')
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 2)
+            .map(([p]) => p);
+          const projHook = topProjects.length > 0 ? ` blocking momentum on ${topProjects.join(' and ')}` : '';
+          insightParts.push(`You have ${overdueCount} overdue ${overdueCount === 1 ? 'task' : 'tasks'}${projHook}.`);
+        }
+        if (eventsToday > 0) {
+          insightParts.push(`${eventsToday} ${eventsToday === 1 ? 'event' : 'events'} today.`);
+        }
+        if (overdueCount > 0) {
+          insightParts.push(`Want me to redistribute the overdue ones across the rest of the week?`);
+        } else if (mineWeekCount === 0) {
+          insightParts.push(`Your week looks light — want me to draft a plan from open work?`);
+        } else {
+          insightParts.push(`You're on track for this week.`);
+        }
+        const aiInsight = insightParts.join(' ');
+
+        // ─── Snooze overdue handler ────────────────────────────
+        const handleSnoozeOverdue = async () => {
+          const overdueTasks = baseTasks.filter(isOverdue);
+          if (overdueTasks.length === 0) return;
+          if (!confirm(`Snooze ${overdueTasks.length} overdue ${overdueTasks.length === 1 ? 'task' : 'tasks'} to tomorrow?`)) return;
+          const tomorrow = new Date(todayDate);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowKey = tomorrow.toISOString().split('T')[0];
+          try {
+            await Promise.all(overdueTasks.map(t => updateTask(t.id, { start_date: tomorrowKey } as any)));
+          } catch (err) {
+            errorLogger.error('Error snoozing overdue tasks', err);
+          }
+        };
+
+        // ─── Visible team avatars (for the stack on the toolbar) ─
+        // Only show members that own at least one task in the current
+        // base set — keeps the stack tied to who's actually working.
+        const owningMembers = teamMembers.filter(m =>
+          baseTasks.some(t => t.assignee_id === m.id || t.owner_id === m.id)
+        ).slice(0, 4);
+        const moreOwners = Math.max(0, teamMembers.filter(m =>
+          baseTasks.some(t => t.assignee_id === m.id || t.owner_id === m.id)
+        ).length - owningMembers.length);
+
+        // ─── Quick pill definitions ────────────────────────────
+        const QUICK_PILLS = [
+          { id: 'all',     label: 'All work',       count: allWorkCount },
+          { id: 'mine',    label: 'Mine this week', count: mineWeekCount },
+          { id: 'overdue', label: 'Overdue only',   count: overdueCount },
+          { id: 'high',    label: 'High & urgent',  count: highUrgentCount },
+        ] as const;
+
+        // ─── Toggle complete handler (checkbox in the row) ─────
+        const toggleTaskCompleteInline = async (t: any, e: React.MouseEvent | React.ChangeEvent) => {
+          e.stopPropagation();
+          try {
+            const nowDone = !(t.completed || t.status === 'done');
+            await updateTask(t.id, { completed: nowDone, status: nowDone ? 'done' : 'todo' } as any);
+          } catch (err) {
+            errorLogger.error('Error toggling task complete', err);
+          }
+        };
+
+        // ─── Mini calendar data for the right sidebar ──────────
+        const miniMonth   = todayDate.getMonth();
+        const miniYear    = todayDate.getFullYear();
+        const miniFirst   = new Date(miniYear, miniMonth, 1);
+        const miniLast    = new Date(miniYear, miniMonth + 1, 0);
+        const miniStartDow = miniFirst.getDay(); // 0 = Sun
+        const miniLeading  = miniStartDow === 0 ? 6 : miniStartDow - 1; // Monday-start
+        const miniDaysInMonth = miniLast.getDate();
+        const miniCells: Array<{ key: string; day: number | null; iso: string | null }> = [];
+        for (let i = 0; i < miniLeading; i++) miniCells.push({ key: `lead-${i}`, day: null, iso: null });
+        for (let d = 1; d <= miniDaysInMonth; d++) {
+          const iso = `${miniYear}-${String(miniMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          miniCells.push({ key: iso, day: d, iso });
+        }
+        // Top-up to a complete grid (6 rows × 7 = 42).
+        while (miniCells.length % 7 !== 0) miniCells.push({ key: `tail-${miniCells.length}`, day: null, iso: null });
+        const daysWithContent = new Set<string>();
+        for (const t of baseTasks) {
+          const d = (t.start_date || '').slice(0, 10);
+          if (d && d.startsWith(`${miniYear}-${String(miniMonth + 1).padStart(2, '0')}`)) daysWithContent.add(d);
+        }
+        for (const e of events) {
+          const d = (e.start_date || '').slice(0, 10);
+          if (d && d.startsWith(`${miniYear}-${String(miniMonth + 1).padStart(2, '0')}`)) daysWithContent.add(d);
+        }
+
+        // Density-aware row paddings.
+        const rowPad     = listDensity === 'compact' ? 'px-3 py-2'   : 'px-3.5 py-2.5';
+        const rowGap     = listDensity === 'compact' ? 'space-y-1'   : 'space-y-1.5';
+        const rowTitleSz = listDensity === 'compact' ? 'text-[12.5px]' : 'text-[13.5px]';
 
         return (
-          <div className="space-y-3">
-            {/* ─── Controls toolbar ───────────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-2 px-1">
-              {/* Group by */}
-              <div className="flex items-center gap-1.5 text-[11px]">
-                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Group</span>
-                <select
-                  value={listGroupBy}
-                  onChange={e => setListGroupBy(e.target.value as any)}
-                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
-                >
-                  <option value="date">Date</option>
-                  <option value="project">Project</option>
-                  <option value="status">Status</option>
-                  <option value="priority">Priority</option>
-                  <option value="assignee">Assignee</option>
-                  <option value="none">No grouping</option>
-                </select>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+            {/* ─── MAIN COLUMN ─────────────────────────────────── */}
+            <div className="space-y-4 min-w-0">
+              {/* Hero ribbon */}
+              <div>
+                <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">Calendar</h2>
+                <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <span>{eventsToday} EVENTS</span>
+                  <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                  <span>{tasksMonth} TASKS</span>
+                  <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                  <span>{doneMonth} DONE</span>
+                  <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                  <span>{monthLabel}</span>
+                </div>
               </div>
 
-              {/* Sort */}
-              <div className="flex items-center gap-1.5 text-[11px]">
-                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Sort</span>
-                <select
-                  value={listSort}
-                  onChange={e => setListSort(e.target.value as any)}
-                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
-                >
-                  <option value="due">Due date</option>
-                  <option value="priority">Priority</option>
-                  <option value="created">Recently created</option>
-                  <option value="project">Project name</option>
-                </select>
-              </div>
+              {/* AI weekly summary card */}
+              <AnimatePresence initial={false}>
+                {listAiCardOn && (
+                  <motion.div
+                    key="ai-card"
+                    initial={{ opacity: 0, y: 8, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -4, height: 0 }}
+                    transition={SPRING_ENTER}
+                    className="relative overflow-hidden rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-violet-50/80 via-white to-rose-50/60 dark:from-violet-950/30 dark:via-zinc-900 dark:to-rose-950/30"
+                  >
+                    <div className="flex items-start gap-3 p-4">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-rose-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+                        <Icons.Sparkles size={15} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed">
+                          {aiInsight}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: TAP_SCALE }}
+                            transition={SPRING_TAP}
+                            onClick={handleGenerateAiPlan}
+                            disabled={aiPlanLoading}
+                            className="px-3 py-1.5 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-semibold disabled:opacity-50"
+                          >
+                            {aiPlanLoading ? 'Planning…' : 'Plan this week'}
+                          </motion.button>
+                          {overdueCount > 0 && (
+                            <motion.button
+                              type="button"
+                              whileTap={{ scale: TAP_SCALE }}
+                              transition={SPRING_TAP}
+                              onClick={handleSnoozeOverdue}
+                              className="px-3 py-1.5 rounded-md bg-white/80 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 text-[11px] font-semibold border border-zinc-200 dark:border-zinc-700 backdrop-blur"
+                            >
+                              Snooze overdue
+                            </motion.button>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setListAiCardOn(false)}
+                        className="text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                        aria-label="Dismiss AI card"
+                      >
+                        <Icons.X size={14} />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              <span className="w-px h-5 bg-zinc-200 dark:bg-zinc-800 mx-1" />
-
-              {/* Status filter pills */}
-              <div className="flex items-center gap-1">
-                {([
-                  { id: 'open',        label: 'Open' },
-                  { id: 'todo',        label: 'Todo' },
-                  { id: 'in-progress', label: 'In progress' },
-                  { id: 'done',        label: 'Done' },
-                  { id: 'all',         label: 'All' },
-                ] as Array<{ id: typeof listStatusFilter; label: string }>).map(opt => (
-                  <button
-                    key={opt.id}
-                    onClick={() => setListStatusFilter(opt.id)}
-                    className={`px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-colors ${
-                      listStatusFilter === opt.id
+              {/* Quick filter pills + avatar stack + group/sort */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {QUICK_PILLS.map(pill => (
+                  <motion.button
+                    type="button"
+                    key={pill.id}
+                    whileTap={{ scale: TAP_SCALE }}
+                    transition={SPRING_TAP}
+                    onClick={() => setListQuickFilter(pill.id as any)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
+                      listQuickFilter === pill.id
                         ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                        : 'bg-zinc-100/80 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    {opt.label}
-                  </button>
+                    {pill.label}
+                    <span className={`text-[10.5px] font-mono ${
+                      listQuickFilter === pill.id ? 'text-white/70 dark:text-zinc-900/60' : 'text-zinc-400'
+                    }`}>{pill.count}</span>
+                  </motion.button>
                 ))}
+
+                <div className="ml-auto flex items-center gap-2">
+                  {/* Avatar stack */}
+                  {owningMembers.length > 0 && (
+                    <div className="flex -space-x-1.5">
+                      {owningMembers.map(m => {
+                        const avatar = getMemberAvatar(m.id);
+                        return avatar ? (
+                          <img
+                            key={m.id}
+                            src={avatar}
+                            alt={m.name || 'Member'}
+                            className="w-6 h-6 rounded-full border-2 border-white dark:border-zinc-950 object-cover"
+                          />
+                        ) : (
+                          <div
+                            key={m.id}
+                            className="w-6 h-6 rounded-full border-2 border-white dark:border-zinc-950 bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-800 flex items-center justify-center text-[9px] font-semibold text-zinc-600 dark:text-zinc-300"
+                            title={m.name || 'Member'}
+                          >
+                            {(m.name || m.email || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        );
+                      })}
+                      {moreOwners > 0 && (
+                        <div className="w-6 h-6 rounded-full border-2 border-white dark:border-zinc-950 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[9px] font-semibold text-zinc-500">
+                          +{moreOwners}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Inline Group + Sort dropdowns (compact) */}
+                  <div className="hidden sm:flex items-center gap-1.5 text-[11px]">
+                    <span className="text-zinc-400">Group:</span>
+                    <select
+                      value={listGroupBy}
+                      onChange={e => setListGroupBy(e.target.value as any)}
+                      className="bg-transparent text-zinc-700 dark:text-zinc-300 font-medium outline-none"
+                    >
+                      <option value="date">Smart</option>
+                      <option value="project">Project</option>
+                      <option value="status">Status</option>
+                      <option value="priority">Priority</option>
+                      <option value="assignee">Assignee</option>
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-1.5 text-[11px]">
+                    <span className="text-zinc-400">Sort:</span>
+                    <select
+                      value={listSort}
+                      onChange={e => setListSort(e.target.value as any)}
+                      className="bg-transparent text-zinc-700 dark:text-zinc-300 font-medium outline-none"
+                    >
+                      <option value="due">Due</option>
+                      <option value="priority">Priority</option>
+                      <option value="created">Recent</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              {/* Priority filter (compact dropdown to keep the bar short) */}
-              <div className="flex items-center gap-1.5 text-[11px]">
-                <span className="text-zinc-400 font-semibold uppercase tracking-wider">Priority</span>
-                <select
-                  value={listPriorityFilter}
-                  onChange={e => setListPriorityFilter(e.target.value as any)}
-                  className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-200 dark:focus:ring-zinc-700"
-                >
-                  <option value="all">All</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </div>
-
-              <span className="ml-auto text-[10px] text-zinc-400 font-mono tabular-nums">
-                {totalShown} of {totalAll}
-              </span>
-            </div>
-
-            {/* ─── Grouped list ────────────────────────────────────── */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+              {/* Grouped task list */}
               {filtered.length === 0 ? (
-                <div className="p-8 text-center text-xs text-zinc-400">
-                  {totalAll === 0 ? 'No tasks yet.' : 'No tasks match the current filters.'}
+                <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
+                  <div className="text-xs text-zinc-400">
+                    {baseTasks.length === 0 ? 'No tasks yet.' : 'No tasks match the current filters.'}
+                  </div>
+                  {baseTasks.length > 0 && listQuickFilter !== 'all' && (
+                    <button
+                      onClick={() => setListQuickFilter('all')}
+                      className="mt-3 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 underline underline-offset-4"
+                    >
+                      Show all work
+                    </button>
+                  )}
                 </div>
               ) : (
-                Array.from(groups.entries()).map(([key, items], gIdx) => (
-                  <div key={key} className={gIdx > 0 ? 'border-t border-zinc-100 dark:border-zinc-800/60' : ''}>
-                    {listGroupBy !== 'none' && (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-zinc-50/70 dark:bg-zinc-800/40 sticky top-0 z-[1] backdrop-blur">
-                        <span className={`w-2 h-2 rounded-full ${accentFor(key)}`} />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                          {labelFor(key)}
-                        </span>
-                        <span className="text-[10px] text-zinc-400 font-mono">{items.length}</span>
-                      </div>
-                    )}
-                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                      {items.map(t => (
-                        <button
-                          key={t.id}
-                          onClick={() => handleOpenTaskDetail(t)}
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
-                        >
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${
-                            t.status === 'done' || t.completed ? 'bg-emerald-500'
+                <div className="space-y-5">
+                  {Array.from(groups.entries()).map(([key, items]) => (
+                    <div key={key}>
+                      {listGroupBy !== 'none' && (
+                        <div className="flex items-center justify-between mb-2 px-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-1.5 h-1.5 rounded-full ${accentFor(key)}`} />
+                            <span className="text-[12px] font-semibold text-zinc-800 dark:text-zinc-100">
+                              {labelFor(key)}
+                            </span>
+                            <span className="text-[11px] text-zinc-400 font-mono">{items.length}</span>
+                          </div>
+                          {key === '__overdue__' && (
+                            <motion.button
+                              type="button"
+                              whileTap={{ scale: TAP_SCALE }}
+                              transition={SPRING_TAP}
+                              onClick={handleSnoozeOverdue}
+                              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:underline underline-offset-4"
+                            >
+                              <Icons.Sparkles size={10} />
+                              Redistribute
+                            </motion.button>
+                          )}
+                        </div>
+                      )}
+                      <div className={rowGap}>
+                        {items.map(t => {
+                          const done = t.completed || t.status === 'done';
+                          const priorityPillCls =
+                            t.priority === 'urgent' ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                            : t.priority === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                            : t.priority === 'low'  ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                            : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300';
+                          const statusDot =
+                            done ? 'bg-emerald-500'
                             : t.status === 'in-progress' ? 'bg-amber-500'
                             : t.status === 'cancelled' ? 'bg-rose-400'
-                            : 'bg-zinc-400'
-                          }`} />
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-[13px] font-medium truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{t.title}</div>
-                            <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5 flex-wrap">
-                              {/* Inline meta — depends on what's NOT the current group axis */}
-                              {listGroupBy !== 'date' && ((t as any).due_date || t.start_date) && (
-                                <span className="font-mono">{(t as any).due_date || t.start_date}</span>
-                              )}
-                              {listGroupBy !== 'project' && getProjectLabel(t) !== 'No project' && (
-                                <span className="inline-flex items-center gap-1 truncate max-w-[140px]">
-                                  <Icons.Briefcase size={9} />
-                                  {getProjectLabel(t)}
-                                </span>
-                              )}
-                              {listGroupBy !== 'assignee' && t.assignee_id && (
-                                <span className="inline-flex items-center gap-1 truncate max-w-[120px]">
-                                  <Icons.User size={9} />
-                                  {getMemberName(t.assignee_id) || 'Unknown'}
-                                </span>
-                              )}
-                              {listGroupBy !== 'priority' && t.priority && t.priority !== 'medium' && (
-                                <span className={`px-1 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                  t.priority === 'urgent' ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
-                                  : t.priority === 'high' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
-                                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
-                                }`}>{t.priority}</span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-[10px] text-zinc-400 uppercase tracking-wider shrink-0">{t.completed ? 'done' : (t.status || 'todo')}</span>
-                        </button>
-                      ))}
+                            : 'bg-zinc-300 dark:bg-zinc-600';
+                          const assigneeAvatar = t.assignee_id ? getMemberAvatar(t.assignee_id) : null;
+                          const assigneeName   = t.assignee_id ? getMemberName(t.assignee_id) : null;
+                          const dueIso = ((t as any).due_date as string) || t.start_date || null;
+                          const dueLabel = dueIso
+                            ? (() => {
+                                const d = new Date(dueIso.slice(0, 10) + 'T12:00:00');
+                                const diff = Math.round((d.getTime() - todayDate.getTime()) / 86400000);
+                                if (diff === 0) return 'Today';
+                                if (diff === -1) return 'Yesterday';
+                                if (diff === 1) return 'Tomorrow';
+                                if (diff > 1 && diff <= 6) return d.toLocaleDateString('en-US', { weekday: 'short' });
+                                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              })()
+                            : null;
+                          const projectLabel = getProjectLabel(t);
+                          const showProject  = projectLabel && projectLabel !== 'No project';
+                          return (
+                            <motion.button
+                              key={t.id}
+                              type="button"
+                              whileTap={{ scale: 0.995 }}
+                              transition={SPRING_TAP}
+                              onClick={() => handleOpenTaskDetail(t)}
+                              className={`w-full flex items-center gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors text-left ${rowPad}`}
+                            >
+                              {/* Checkbox */}
+                              <span
+                                role="checkbox"
+                                aria-checked={done}
+                                onClick={(e) => toggleTaskCompleteInline(t, e)}
+                                className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors cursor-pointer ${
+                                  done
+                                    ? 'bg-emerald-500 border-emerald-500'
+                                    : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-500 dark:hover:border-zinc-400'
+                                }`}
+                              >
+                                {done && <Icons.Tick size={9} className="text-white" />}
+                              </span>
+
+                              {/* Title + subtitle */}
+                              <div className="flex-1 min-w-0">
+                                <div className={`${rowTitleSz} font-medium truncate ${done ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>
+                                  {t.title}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-400 mt-0.5">
+                                  {dueLabel && <span className={isOverdue(t) ? 'text-rose-500 font-medium' : ''}>{dueLabel}</span>}
+                                  {dueLabel && showProject && <span className="text-zinc-300 dark:text-zinc-700">·</span>}
+                                  {showProject && (
+                                    <span className="truncate max-w-[180px]">{projectLabel}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Right cluster */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {t.priority && t.priority !== 'medium' && (
+                                  <span className={`hidden md:inline-flex px-2 py-0.5 rounded-full text-[9.5px] font-semibold uppercase tracking-wider ${priorityPillCls}`}>
+                                    {t.priority}
+                                  </span>
+                                )}
+                                {assigneeAvatar ? (
+                                  <img
+                                    src={assigneeAvatar}
+                                    alt={assigneeName || 'Assignee'}
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                ) : t.assignee_id ? (
+                                  <div
+                                    className="w-5 h-5 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-800 flex items-center justify-center text-[9px] font-semibold text-zinc-600 dark:text-zinc-300"
+                                    title={assigneeName || 'Member'}
+                                  >
+                                    {(assigneeName || '?').slice(0, 1).toUpperCase()}
+                                  </div>
+                                ) : null}
+                                <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                              </div>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
+            </div>
+
+            {/* ─── RIGHT SIDEBAR ───────────────────────────────── */}
+            <div className="space-y-4 lg:sticky lg:top-4 self-start">
+              {/* Mini calendar */}
+              <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <div className="text-[12px] font-semibold text-zinc-800 dark:text-zinc-100">
+                    {todayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(currentDate);
+                        d.setMonth(d.getMonth() - 1);
+                        setCurrentDate(d);
+                      }}
+                      className="w-5 h-5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center text-zinc-400"
+                    >
+                      <Icons.ChevronLeft size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(currentDate);
+                        d.setMonth(d.getMonth() + 1);
+                        setCurrentDate(d);
+                      }}
+                      className="w-5 h-5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center text-zinc-400"
+                    >
+                      <Icons.ChevronRight size={11} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-0.5 mb-1">
+                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                    <div key={i} className="text-[9px] font-semibold text-zinc-400 text-center">{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5">
+                  {miniCells.map(cell => {
+                    if (cell.day == null) return <div key={cell.key} />;
+                    const isToday = cell.iso === todayKey;
+                    const isSelected = cell.iso === selectedDate;
+                    const hasDot = cell.iso ? daysWithContent.has(cell.iso) : false;
+                    return (
+                      <button
+                        key={cell.key}
+                        type="button"
+                        onClick={() => cell.iso && setSelectedDate(cell.iso)}
+                        className={`relative h-7 rounded-md text-[10.5px] font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                            : isToday
+                              ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+                              : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        {cell.day}
+                        {hasDot && !isSelected && (
+                          <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 w-1 h-1 rounded-full bg-violet-500" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Tweaks panel */}
+              <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <button
+                  type="button"
+                  onClick={() => setShowTweaksPanel(prev => !prev)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tweaks</span>
+                  <Icons.ChevronDown
+                    size={12}
+                    className={`text-zinc-400 transition-transform ${showTweaksPanel ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                <AnimatePresence initial={false}>
+                  {showTweaksPanel && (
+                    <motion.div
+                      key="tweaks-body"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={SPRING_ENTER}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-3 space-y-3 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                        {/* AI weekly card toggle */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11.5px] text-zinc-600 dark:text-zinc-300">AI weekly card</span>
+                          <button
+                            type="button"
+                            onClick={() => setListAiCardOn(prev => !prev)}
+                            className={`relative w-8 h-4 rounded-full transition-colors ${
+                              listAiCardOn ? 'bg-violet-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                            }`}
+                            aria-pressed={listAiCardOn}
+                          >
+                            <span
+                              className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                                listAiCardOn ? 'translate-x-4' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Density */}
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Density</div>
+                          <div className="flex p-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800">
+                            {(['compact', 'comfy'] as const).map(d => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => setListDensity(d)}
+                                className={`flex-1 text-[11px] font-medium py-1 rounded transition-colors capitalize ${
+                                  listDensity === d
+                                    ? 'bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 shadow-sm'
+                                    : 'text-zinc-500'
+                                }`}
+                              >
+                                {d}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Grouping */}
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Grouping</div>
+                          <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800">
+                            {([
+                              { id: 'date', label: 'Smart' },
+                              { id: 'project', label: 'Project' },
+                              { id: 'priority', label: 'Priority' },
+                            ] as const).map(g => (
+                              <button
+                                key={g.id}
+                                type="button"
+                                onClick={() => setListGroupBy(g.id)}
+                                className={`text-[11px] font-medium py-1 rounded transition-colors ${
+                                  listGroupBy === g.id
+                                    ? 'bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 shadow-sm'
+                                    : 'text-zinc-500'
+                                }`}
+                              >
+                                {g.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Advanced filters (collapsible peek) */}
+                        <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800/60 space-y-2">
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Status</div>
+                            <select
+                              value={listStatusFilter}
+                              onChange={e => setListStatusFilter(e.target.value as any)}
+                              className="w-full px-2 py-1.5 rounded-md bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700 text-[11px] text-zinc-700 dark:text-zinc-200 outline-none"
+                            >
+                              <option value="open">Open</option>
+                              <option value="todo">Todo</option>
+                              <option value="in-progress">In progress</option>
+                              <option value="done">Done</option>
+                              <option value="all">All</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Priority</div>
+                            <select
+                              value={listPriorityFilter}
+                              onChange={e => setListPriorityFilter(e.target.value as any)}
+                              className="w-full px-2 py-1.5 rounded-md bg-zinc-50 dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700 text-[11px] text-zinc-700 dark:text-zinc-200 outline-none"
+                            >
+                              <option value="all">All</option>
+                              <option value="urgent">Urgent</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="pt-1 text-[10px] text-zinc-400 font-mono text-center">
+                          {filtered.length} of {baseTasks.length} shown
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         );
