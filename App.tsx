@@ -56,6 +56,7 @@ const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/Platfor
 const loadStrategyHub = () => retryDynamicImport(() => import('./pages/StrategyHub').then(m => ({ default: m.StrategyHub })), 'StrategyHub');
 const loadContentEngine = () => retryDynamicImport(() => import('./pages/ContentEngine').then(m => ({ default: m.ContentEngine })), 'ContentEngine');
 const loadSalesPipeline = () => retryDynamicImport(() => import('./pages/SalesPipeline').then(m => ({ default: m.SalesPipeline })), 'SalesPipeline');
+const loadTeamScaling = () => retryDynamicImport(() => import('./pages/TeamScaling').then(m => ({ default: m.TeamScaling })), 'TeamScaling');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -87,6 +88,7 @@ const PlatformAudit = React.lazy(loadPlatformAudit);
 const StrategyHub = React.lazy(loadStrategyHub);
 const ContentEngine = React.lazy(loadContentEngine);
 const SalesPipeline = React.lazy(loadSalesPipeline);
+const TeamScaling = React.lazy(loadTeamScaling);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -877,6 +879,13 @@ const AppContent: React.FC<{
               <SalesPipeline />
             </KeepAlivePage>
           )}
+
+          {/* Team & Scaling — role definitions + people profiles + KPI logs */}
+          {visitedPages.has('team_scaling') && (
+            <KeepAlivePage page="team_scaling" active={currentPage === 'team_scaling'}>
+              <TeamScaling />
+            </KeepAlivePage>
+          )}
         </>
       )}
     </Layout>
@@ -893,7 +902,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
-  'strategy_hub', 'content_engine', 'sales_pipeline',
+  'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling',
 ]);
 
 const readLastPage = (): PageView => {

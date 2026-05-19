@@ -602,13 +602,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
       { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
     ],
-    // Growth engine — strategy hub + content production. Per the
-    // strategy spec, these are the foundation for everything sales
-    // + marketing related; they live in OS mode because they're
-    // internal work surfaces (vs Sales mode which is pipeline-only).
+    // Growth engine — strategy hub + content production + team
+    // planning. Per the strategy spec, these are the foundation for
+    // everything sales + marketing + scaling related; they live in OS
+    // mode because they're internal work surfaces (vs Sales mode
+    // which is pipeline-only).
     [
       { id: 'strategy_hub',   label: 'Strategy',  icon: <Icons.Target /> },
       { id: 'content_engine', label: 'Content',   icon: <Icons.Sparkles /> },
+      { id: 'team_scaling',   label: 'Scaling',   icon: <Icons.Users /> },
     ],
   ];
   // Inbox (Communications Hub — unified Gmail + Slack + leads inbox) was
