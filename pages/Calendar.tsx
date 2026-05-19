@@ -741,6 +741,30 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
     }
   };
 
+  // Reschedule an event by N days. Used by the long-press context
+  // menu in SelectedDatePanel — adds daysOffset to start_date and
+  // shifts end_date by the same amount when present, preserving
+  // duration. Fails silently to a toast-less console warning; the
+  // user can also drag-and-drop the event in the main view as a
+  // fallback if this misfires.
+  const handleRescheduleEvent = async (event: CalendarEvent, daysOffset: number) => {
+    if (!event.start_date) return;
+    try {
+      const base = new Date(event.start_date + 'T12:00:00');
+      base.setDate(base.getDate() + daysOffset);
+      const newStart = base.toISOString().slice(0, 10);
+      const patch: any = { start_date: newStart };
+      if (event.end_date) {
+        const end = new Date(event.end_date + 'T12:00:00');
+        end.setDate(end.getDate() + daysOffset);
+        patch.end_date = end.toISOString().slice(0, 10);
+      }
+      await updateEvent(event.id, patch);
+    } catch (err) {
+      errorLogger.warn('Error rescheduling event', err);
+    }
+  };
+
   // Create task
   const handleCreateTask = async () => {
     if (!newTaskData.title.trim()) return;
@@ -1903,6 +1927,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         periodLabel={viewStats.periodLabel}
         onEditEvent={handleEditEvent}
         onDeleteEvent={(id) => handleDeleteEvent(id)}
+        onRescheduleEvent={handleRescheduleEvent}
         toggleTaskComplete={toggleTaskComplete}
         onOpenTaskDetail={handleOpenTaskDetail}
         getMemberName={getMemberName}

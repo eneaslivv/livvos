@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Icons } from '../ui/Icons';
 import { Card } from '../ui/Card';
 import { CalendarEvent, CalendarTask } from '../../hooks/useCalendar';
+// iOS context menu for long-press / right-click on event rows.
+// Lets the user reach Reschedule / Edit / Delete without the hover
+// buttons (which don't work on touch).
+import { useLongPress, type LongPressPosition } from '../../hooks/useLongPress';
+import { ContextMenu } from '../ui/ContextMenu';
 
 interface ContentPlatformConfig {
   label: string;
@@ -28,6 +33,9 @@ export interface SelectedDatePanelProps {
   // Event actions
   onEditEvent?: (event: CalendarEvent) => void;
   onDeleteEvent?: (eventId: string) => void;
+  /** Optional: long-press / right-click → "Reschedule +1 day" in
+   *  the context menu. When omitted, the menu item is hidden. */
+  onRescheduleEvent?: (event: CalendarEvent, daysOffset: number) => void;
   // Task actions
   toggleTaskComplete: (taskId: string, completed: boolean) => void;
   onOpenTaskDetail: (task: CalendarTask) => void;
@@ -54,6 +62,80 @@ const PriorityDot: React.FC<{ priority?: CalendarTask['priority'] }> = ({ priori
 
 // Subtle chip used for project / client / status. Single neutral palette so
 // the eye reads the title first, badges second.
+// ── EventRow ─────────────────────────────────────────────────────
+// One row in the day's event list. Adds long-press / right-click
+// context menu (Reschedule +1d / Edit / Delete) on top of the
+// existing hover buttons + click-to-edit behavior. Hover buttons
+// stay for mouse users; long-press is the equivalent for touch.
+const EventRow: React.FC<{
+  event: CalendarEvent & { content_status?: string };
+  contentPlatforms: Record<string, ContentPlatformConfig>;
+  onEdit?: (e: CalendarEvent) => void;
+  onDelete?: (eventId: string) => void;
+  onReschedule?: (e: CalendarEvent, daysOffset: number) => void;
+}> = ({ event, contentPlatforms, onEdit, onDelete, onReschedule }) => {
+  const [menuPos, setMenuPos] = useState<LongPressPosition | null>(null);
+  const longPress = useLongPress<HTMLDivElement>(pos => setMenuPos(pos));
+  const isGoogle = event.source === 'google';
+  return (
+    <div
+      {...longPress}
+      onClick={() => onEdit?.(event)}
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+      className="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors relative"
+    >
+      {menuPos && (
+        <ContextMenu
+          position={{ x: menuPos.clientX, y: menuPos.clientY }}
+          onClose={() => setMenuPos(null)}
+          header={event.title}
+          items={[
+            { icon: <Icons.Edit size={13} />, label: 'Edit event', onSelect: () => onEdit?.(event), disabled: !onEdit },
+            // Reschedule only when the parent supplied a handler AND
+            // the event isn't a Google-sourced one (we don't write to
+            // Google calendars from here).
+            ...(onReschedule && !isGoogle ? [
+              { icon: <Icons.Clock size={13} />, label: 'Reschedule +1 day', onSelect: () => onReschedule(event, 1) },
+              { icon: <Icons.Clock size={13} />, label: 'Reschedule +7 days', onSelect: () => onReschedule(event, 7) },
+            ] : []),
+            ...(!isGoogle && onDelete ? [
+              { icon: <Icons.Trash size={13} />, label: 'Delete event', onSelect: () => onDelete(event.id), destructive: true },
+            ] : []),
+          ]}
+        />
+      )}
+      <div className="w-1 h-9 rounded-full shrink-0" style={{ backgroundColor: event.color || '#3b82f6' }} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 truncate">{event.title}</span>
+          {isGoogle && <Chip tone="info">Google</Chip>}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-zinc-400 font-mono">
+          {event.start_time && <span>{event.start_time} · {event.duration || 60}m</span>}
+          {event.location && <span className="truncate">{event.location}</span>}
+        </div>
+      </div>
+      <span className="text-[10px] text-zinc-400 capitalize shrink-0 hidden sm:inline">
+        {event.type === 'content'
+          ? (contentPlatforms[event.location || '']?.label || 'content')
+          : event.type}
+      </span>
+      {!isGoogle && (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={(e) => { e.stopPropagation(); onEdit?.(event); }}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
+            <Icons.Edit size={11} />
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete?.(event.id); }}
+            className="p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+            <Icons.Trash size={11} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Chip: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info' }> = ({ children, tone = 'neutral' }) => {
   const cls = tone === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
     : tone === 'warning' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
@@ -99,6 +181,7 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
   periodLabel,
   onEditEvent,
   onDeleteEvent,
+  onRescheduleEvent,
   toggleTaskComplete,
   onOpenTaskDetail,
   getMemberName,
@@ -149,40 +232,14 @@ export const SelectedDatePanel: React.FC<SelectedDatePanelProps> = ({
                 </div>
                 <div className="space-y-0.5">
                   {dayEvents.map((event) => (
-                    <div
+                    <EventRow
                       key={event.id}
-                      onClick={() => onEditEvent?.(event)}
-                      className="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors"
-                    >
-                      <div className="w-1 h-9 rounded-full shrink-0" style={{ backgroundColor: event.color || '#3b82f6' }} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 truncate">{event.title}</span>
-                          {event.source === 'google' && <Chip tone="info">Google</Chip>}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-zinc-400 font-mono">
-                          {event.start_time && <span>{event.start_time} · {event.duration || 60}m</span>}
-                          {event.location && <span className="truncate">{event.location}</span>}
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-zinc-400 capitalize shrink-0 hidden sm:inline">
-                        {event.type === 'content'
-                          ? (contentPlatforms[event.location || '']?.label || 'content')
-                          : event.type}
-                      </span>
-                      {event.source !== 'google' && (
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); onEditEvent?.(event); }}
-                            className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
-                            <Icons.Edit size={11} />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); onDeleteEvent?.(event.id); }}
-                            className="p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10">
-                            <Icons.Trash size={11} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                      event={event}
+                      contentPlatforms={contentPlatforms}
+                      onEdit={onEditEvent}
+                      onDelete={onDeleteEvent}
+                      onReschedule={onRescheduleEvent}
+                    />
                   ))}
                 </div>
               </div>
