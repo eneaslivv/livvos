@@ -608,9 +608,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     // mode because they're internal work surfaces (vs Sales mode
     // which is pipeline-only).
     [
-      { id: 'strategy_hub',   label: 'Strategy',  icon: <Icons.Target /> },
-      { id: 'content_engine', label: 'Content',   icon: <Icons.Sparkles /> },
-      { id: 'team_scaling',   label: 'Scaling',   icon: <Icons.Users /> },
+      { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
+      { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
+      { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
+      { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
     ],
   ];
   // Inbox (Communications Hub — unified Gmail + Slack + leads inbox) was

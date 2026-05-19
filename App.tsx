@@ -57,6 +57,7 @@ const loadStrategyHub = () => retryDynamicImport(() => import('./pages/StrategyH
 const loadContentEngine = () => retryDynamicImport(() => import('./pages/ContentEngine').then(m => ({ default: m.ContentEngine })), 'ContentEngine');
 const loadSalesPipeline = () => retryDynamicImport(() => import('./pages/SalesPipeline').then(m => ({ default: m.SalesPipeline })), 'SalesPipeline');
 const loadTeamScaling = () => retryDynamicImport(() => import('./pages/TeamScaling').then(m => ({ default: m.TeamScaling })), 'TeamScaling');
+const loadGrowthDashboard = () => retryDynamicImport(() => import('./pages/GrowthDashboard').then(m => ({ default: m.GrowthDashboard })), 'GrowthDashboard');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -89,6 +90,7 @@ const StrategyHub = React.lazy(loadStrategyHub);
 const ContentEngine = React.lazy(loadContentEngine);
 const SalesPipeline = React.lazy(loadSalesPipeline);
 const TeamScaling = React.lazy(loadTeamScaling);
+const GrowthDashboard = React.lazy(loadGrowthDashboard);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -886,6 +888,13 @@ const AppContent: React.FC<{
               <TeamScaling />
             </KeepAlivePage>
           )}
+
+          {/* Growth Dashboard — weekly snapshot + KPIs + phases */}
+          {visitedPages.has('growth_dashboard') && (
+            <KeepAlivePage page="growth_dashboard" active={currentPage === 'growth_dashboard'}>
+              <GrowthDashboard />
+            </KeepAlivePage>
+          )}
         </>
       )}
     </Layout>
@@ -902,7 +911,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
-  'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling',
+  'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard',
 ]);
 
 const readLastPage = (): PageView => {
