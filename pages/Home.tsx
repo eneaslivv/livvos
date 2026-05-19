@@ -113,7 +113,55 @@ interface ChatMsg {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { user } = useAuth();
-  const { currentTenant } = useTenant();
+  const { currentTenant, updateTenant } = useTenant();
+
+  // ── Cover image upload ───────────────────────────────────────────
+  // Restores the "change cover" feature from the legacy Home (where it
+  // lived on a separate banner block). Now it overlays the gradient
+  // hero ribbon: hover the ribbon to reveal a "Change cover" pill, or
+  // click a small "×" to remove a previously uploaded one and fall
+  // back to the gradient. Uploaded image is stored on tenant_assets/
+  // and persisted on tenants.banner_url so it sticks across sessions
+  // and is shared by everyone in the workspace.
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  const handleCoverUpload = useCallback(async (file: File | undefined) => {
+    if (!file || !currentTenant) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setCoverError('Max 5MB');
+      setTimeout(() => setCoverError(null), 4000);
+      return;
+    }
+    setIsUploadingCover(true);
+    setCoverError(null);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `banners/${currentTenant.id}.${ext}`;
+      // Remove any older file at this path (different extension OK to leave).
+      await supabase.storage.from('tenant-assets').remove([path]).catch(() => {});
+      const { error: upErr } = await supabase.storage
+        .from('tenant-assets')
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+      // Cache-bust so the new image shows immediately even if the URL string is the same.
+      await updateTenant({ banner_url: `${urlData.publicUrl}?v=${Date.now()}` });
+    } catch (err) {
+      errorLogger.warn('home cover upload failed', err);
+      setCoverError((err as Error)?.message || 'Could not upload cover');
+      setTimeout(() => setCoverError(null), 6000);
+    } finally {
+      setIsUploadingCover(false);
+    }
+  }, [currentTenant, updateTenant]);
+  const handleCoverRemove = useCallback(async () => {
+    if (!currentTenant) return;
+    try {
+      await updateTenant({ banner_url: null as any });
+    } catch (err) {
+      errorLogger.warn('home cover remove failed', err);
+    }
+  }, [currentTenant, updateTenant]);
   const { tasks: allTasks, events, updateTask, createTask, updateEvent, createEvent, deleteEvent, deleteTask } = useCalendar();
   const { incomes, expenses } = useFinance();
   const { clients } = useClients();
@@ -326,10 +374,76 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
   return (
     <div className="min-h-[calc(100vh-3rem)]">
-      {/* Gradient hero ribbon — atmospheric, sets daily-ritual tone */}
-      <div className="h-[120px] w-full rounded-2xl overflow-hidden mb-6"
-           style={{ background: 'linear-gradient(120deg, #f9a8d4 0%, #fbcfe8 15%, #fde68a 35%, #fed7aa 55%, #fda4af 75%, #c4b5fd 100%)' }}
-           aria-hidden />
+      {/* Hero ribbon — atmospheric gradient by default, or a custom
+          cover image when the user uploads one. Hover the ribbon to
+          reveal the "Change cover" pill; if an uploaded cover is in
+          place, a small "Remove" pill appears next to it to fall back
+          to the gradient. Stays cosmetic — no copy lives inside. */}
+      <label
+        className="group relative h-[120px] w-full rounded-2xl overflow-hidden mb-6 block cursor-pointer"
+        style={
+          currentTenant?.banner_url
+            ? undefined
+            : { background: 'linear-gradient(120deg, #f9a8d4 0%, #fbcfe8 15%, #fde68a 35%, #fed7aa 55%, #fda4af 75%, #c4b5fd 100%)' }
+        }
+      >
+        {currentTenant?.banner_url && (
+          <img
+            src={currentTenant.banner_url}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        {/* Soft scrim on hover so the pill stays readable on any image */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
+
+        {/* Action pills — hidden until hover */}
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 translate-y-0.5 group-hover:translate-y-0 transition-all">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/95 dark:bg-zinc-900/95 backdrop-blur text-[11px] font-medium text-zinc-700 dark:text-zinc-200 shadow-sm">
+            {isUploadingCover ? (
+              <span className="w-3 h-3 border-2 border-zinc-400 border-t-zinc-900 rounded-full animate-spin" />
+            ) : (
+              <Icons.Upload size={11} />
+            )}
+            {isUploadingCover ? 'Uploading…' : currentTenant?.banner_url ? 'Change cover' : 'Add cover'}
+          </span>
+          {currentTenant?.banner_url && !isUploadingCover && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCoverRemove();
+              }}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/95 dark:bg-zinc-900/95 backdrop-blur text-[11px] font-medium text-zinc-600 dark:text-zinc-300 shadow-sm hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+              title="Remove cover image"
+            >
+              <Icons.X size={11} />
+              Remove
+            </button>
+          )}
+        </div>
+
+        {/* Hidden file input — click anywhere on the ribbon triggers it */}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          disabled={isUploadingCover}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            handleCoverUpload(file);
+            e.target.value = '';
+          }}
+        />
+
+        {/* Error toast — anchored bottom-center */}
+        {coverError && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-rose-50/95 border border-rose-200 text-[11px] font-medium text-rose-700">
+            {coverError}
+          </div>
+        )}
+      </label>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] gap-6 max-w-[1500px] mx-auto px-4">
         {/* ── LEFT main column ─────────────────────────────────── */}
