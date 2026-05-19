@@ -1179,6 +1179,139 @@ export const generateContent = async (args: GenerateContentInput): Promise<Gener
   )
 }
 
+// ─── Outreach generator (lead-scoped) ─────────────────────────────
+// Given a lead row + the user's ICP definitions, generate a draft
+// email/DM + a 60-sec Loom script + 2 follow-up variations.
+
+export interface GenerateOutreachInput {
+  lead: {
+    id: string
+    name: string | null
+    company: string | null
+    email?: string | null
+    website?: string | null
+    notes?: string | null
+    source?: string | null
+  }
+  icp_pain_points?: string[]
+  /** Optional context — anything the user wants the AI to consider. */
+  context?: string | null
+  channel?: 'email' | 'dm' | 'whatsapp'
+  tone?: 'formal' | 'friendly' | 'direct'
+}
+
+export interface OutreachResult {
+  channel: 'email' | 'dm' | 'whatsapp'
+  subject?: string
+  body: string
+  loom_script: string
+  follow_ups: Array<{ when: string; body: string }>
+  rationale?: string
+}
+
+export const generateOutreach = (args: GenerateOutreachInput): Promise<OutreachResult> =>
+  callGemini<OutreachResult>(
+    'generate_outreach',
+    JSON.stringify(args),
+    (r) => typeof r?.body === 'string' && typeof r?.loom_script === 'string',
+  )
+
+// ─── Case-study generator (project-scoped) ────────────────────────
+// Builds a problem/solution/result narrative from a finished project.
+
+export interface GenerateCaseStudyInput {
+  project: {
+    id: string
+    title: string
+    description?: string | null
+    client_name?: string | null
+    deadline?: string | null
+    /** Pre-aggregated metrics — pass what's most relevant. */
+    metrics?: Record<string, number | string>
+  }
+  /** Optional — bullets the user wants to highlight. */
+  highlights?: string[]
+  language?: 'en' | 'es' | 'pt'
+}
+
+export interface CaseStudyResult {
+  title: string
+  problem: string
+  solution: string
+  result: string
+  metrics_callout?: Array<{ label: string; value: string }>
+  pull_quote?: string
+}
+
+export const generateCaseStudy = (args: GenerateCaseStudyInput): Promise<CaseStudyResult> =>
+  callGemini<CaseStudyResult>(
+    'generate_case_study',
+    JSON.stringify(args),
+    (r) => typeof r?.problem === 'string' && typeof r?.solution === 'string' && typeof r?.result === 'string',
+  )
+
+// ─── Content idea suggester (brand × channel × ICP → ideas) ──────
+// Returns 5 concrete content ideas with hook, format, and angle.
+
+export interface SuggestContentInput {
+  brand_id?: string
+  brand_prompt?: string | null
+  channel: string
+  icp_summary?: string | null
+  /** Optional bias — "more about X", "less about Y". */
+  steer?: string | null
+  count?: number
+}
+
+export interface ContentIdeaResult {
+  ideas: Array<{
+    hook: string
+    angle: string
+    format: 'post' | 'thread' | 'reel' | 'story' | 'video' | 'ad' | 'email'
+    body_outline: string
+    rationale?: string
+  }>
+}
+
+export const suggestContent = (args: SuggestContentInput): Promise<ContentIdeaResult> =>
+  callGemini<ContentIdeaResult>(
+    'suggest_content',
+    JSON.stringify(args),
+    (r) => Array.isArray(r?.ideas) && r.ideas.length > 0,
+  )
+
+// ─── Ad copy generator (Meta / Google) ────────────────────────────
+
+export interface GenerateAdInput {
+  brand_id?: string
+  brand_prompt?: string | null
+  platform: 'meta' | 'google' | 'linkedin' | 'tiktok'
+  objective: 'awareness' | 'traffic' | 'leads' | 'conversions' | 'app_install'
+  product_description: string
+  /** Optional unique selling points to anchor on. */
+  usps?: string[]
+}
+
+export interface AdVariation {
+  headline: string
+  primary_text: string
+  description: string
+  cta: 'shop_now' | 'learn_more' | 'sign_up' | 'book_now' | 'contact_us' | 'subscribe' | 'apply_now' | 'get_quote'
+  rationale?: string
+}
+
+export interface AdResult {
+  variations: AdVariation[]
+  recommended_audience?: string
+}
+
+export const generateAd = (args: GenerateAdInput): Promise<AdResult> =>
+  callGemini<AdResult>(
+    'ad_generator',
+    JSON.stringify(args),
+    (r) => Array.isArray(r?.variations) && r.variations.length > 0,
+  )
+
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {
   try {

@@ -9,3 +9,4 @@ export * from './cms';
 export * from './documents';
 export * from './brand';
 export * from './partner';
+export * from './automation';

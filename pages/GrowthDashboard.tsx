@@ -30,7 +30,8 @@ import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import { usePartners } from '../hooks/usePartners';
 import { PartnerDetailPanel } from '../components/partner/PartnerDetailPanel';
-import type { Partner } from '../types';
+import { useAutomations } from '../hooks/useAutomations';
+import type { Partner, Automation } from '../types';
 
 interface Phase {
   id: string;
@@ -99,6 +100,9 @@ export const GrowthDashboard: React.FC = () => {
   // can drop in alongside the rest of the growth sections.
   const { partners, widgets } = usePartners();
   const [editingPartner, setEditingPartner] = useState<Partner | 'new' | null>(null);
+  // Automations — user-defined cross-module rules. Toggle on/off here;
+  // creation/edit form is deferred to a follow-up wizard.
+  const { automations, logs: automationLogs, toggleAutomation, deleteAutomation } = useAutomations();
   const weekStart = lastMonday();
 
   const refetch = useCallback(async () => {
@@ -205,6 +209,19 @@ export const GrowthDashboard: React.FC = () => {
             cta={<motion.button onClick={() => setEditingPartner('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Invite partner</motion.button>}>
             <PartnersGrid partners={partners} widgetsCount={widgets.length} onOpen={p => setEditingPartner(p)} onNew={() => setEditingPartner('new')} />
           </Section>
+
+          {/* Automations — user-defined cross-module rules. The 4 built-in
+              triggers (lead won → project / project done → case study /
+              etc.) still run unconditionally; these are extras on top. */}
+          <Section title="Automations"
+            hint={automations.length === 0 ? 'No custom automations yet. Built-in cross-module triggers still run (lead won → project, project done → case study, outreach response → status, content published → metric placeholder).' : null}>
+            <AutomationsList
+              automations={automations}
+              logs={automationLogs}
+              onToggle={toggleAutomation}
+              onDelete={deleteAutomation}
+            />
+          </Section>
         </>
       )}
 
@@ -226,6 +243,80 @@ export const GrowthDashboard: React.FC = () => {
           onClose={() => setEditingPartner(null)}
         />
       )}
+    </div>
+  );
+};
+
+// ── Automations list ──────────────────────────────────────────────
+const AutomationsList: React.FC<{
+  automations: Automation[];
+  logs: { automation_id: string; status: string; triggered_at: string }[];
+  onToggle: (id: string, next: 'active' | 'paused') => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}> = ({ automations, logs, onToggle, onDelete }) => {
+  if (automations.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 text-center">
+        <Icons.Zap size={18} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+        <p className="text-[12px] text-zinc-500 dark:text-zinc-400">
+          Built-in automations run silently in the background. Custom ones (Toolkit wizard) land in a follow-up.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {automations.map(a => {
+        const recent = logs.filter(l => l.automation_id === a.id).slice(0, 3);
+        const active = a.status === 'active';
+        return (
+          <div key={a.id} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 tracking-[-0.005em]">{a.name}</div>
+                {a.description && <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-1">{a.description}</div>}
+              </div>
+              <span className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                active ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                : a.status === 'paused' ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+              }`}>{a.status}</span>
+              <button
+                onClick={() => onToggle(a.id, active ? 'paused' : 'active')}
+                className={`relative w-9 h-5 rounded-full transition-colors ${active ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}
+                title={active ? 'Pause' : 'Activate'}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </button>
+              <button onClick={() => onDelete(a.id)} className="text-zinc-300 hover:text-rose-500" title="Delete">
+                <Icons.X size={12} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[10.5px] text-zinc-500 font-mono">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">{a.trigger_module} · {a.trigger_event}</span>
+              <Icons.ChevronRight size={10} className="text-zinc-400" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">{a.action_module} · {a.action_type}</span>
+              <span className="ml-auto">
+                {a.run_count} runs{a.error_count > 0 && <span className="text-rose-500"> · {a.error_count} errors</span>}
+              </span>
+            </div>
+            {recent.length > 0 && (
+              <div className="flex items-center gap-1 mt-2">
+                {recent.map((r, i) => (
+                  <span
+                    key={i}
+                    title={`${r.status} · ${new Date(r.triggered_at).toLocaleString()}`}
+                    className={`w-1.5 h-1.5 rounded-full ${r.status === 'success' ? 'bg-emerald-400' : r.status === 'failed' ? 'bg-rose-400' : 'bg-zinc-300'}`}
+                  />
+                ))}
+                {a.last_run_at && (
+                  <span className="ml-2 text-[10px] text-zinc-400 font-mono">last · {new Date(a.last_run_at).toLocaleDateString()}</span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
