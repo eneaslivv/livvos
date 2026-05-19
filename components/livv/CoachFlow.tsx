@@ -45,12 +45,20 @@ interface CoachFlowProps<T = any> {
   flow: CoachFlowDef<T>;
   onComplete: (data: T) => void;
   onClose: () => void;
+  /** When true, renders without the fullscreen overlay — sits inside
+   *  whatever container the parent provides. Used for "setup mode" where
+   *  the page chrome (tabs, breadcrumb) stays visible above the wizard. */
+  inline?: boolean;
+  /** Optional secondary CTA label for the bottom-left when inline (e.g. "Skip onboarding"). */
+  skipLabel?: string;
 }
 
 export function CoachFlow<T extends Record<string, any> = Record<string, any>>({
   flow,
   onComplete,
   onClose,
+  inline = false,
+  skipLabel,
 }: CoachFlowProps<T>) {
   const [idx, setIdx] = useState(0);
   const [data, setData] = useState<T>((flow.initial as T) || ({} as T));
@@ -100,8 +108,8 @@ export function CoachFlow<T extends Record<string, any> = Record<string, any>>({
 
   if (!step) return null;
 
-  return createPortal(
-    <div className="coach-shell">
+  const body = (
+    <>
       <div className="coach-progress">
         <span className="coach-prog-label">
           Step <strong>{String(idx + 1).padStart(2, '0')}</strong> of {String(total).padStart(2, '0')}
@@ -114,7 +122,9 @@ export function CoachFlow<T extends Record<string, any> = Record<string, any>>({
             />
           ))}
         </div>
-        <button className="coach-skip" onClick={onClose}>Skip onboarding</button>
+        <button className="coach-skip" onClick={onClose}>
+          {skipLabel || 'Skip onboarding'}
+        </button>
       </div>
 
       <div className="coach">
@@ -165,6 +175,23 @@ export function CoachFlow<T extends Record<string, any> = Record<string, any>>({
           {flow.visual ? flow.visual({ data, step: idx, total }) : null}
         </div>
       </div>
+    </>
+  );
+
+  // Inline mode — render as a normal block inside the parent container.
+  // The page chrome (tabs, breadcrumb) stays visible above.
+  if (inline) {
+    return (
+      <div className="coach-shell coach-shell--inline">
+        {body}
+      </div>
+    );
+  }
+
+  // Fullscreen overlay mode — original behavior.
+  return createPortal(
+    <div className="coach-shell">
+      {body}
     </div>,
     document.body
   );

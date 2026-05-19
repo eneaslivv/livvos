@@ -249,13 +249,44 @@ export const StrategyHub: React.FC = () => {
     positioning: positioning.length,
   }), [icps.length, packages.length, positioning.length]);
 
+  // Setup mode = current tab has no data → inline wizard takes over.
+  const inSetupMode = (
+    (tab === 'icps' && icps.length === 0) ||
+    (tab === 'packages' && packages.length === 0) ||
+    (tab === 'positioning' && positioning.length === 0)
+  );
+
   return (
     <div className="max-w-[1320px] mx-auto px-6 py-6">
+      {/* Bundle screenshot pattern — breadcrumb + setup mode pill */}
+      <div className="flex items-center gap-2 mb-3 text-[11px] font-mono uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+        <span className="inline-flex items-center gap-1">
+          <Icons.Target size={11} />
+          Strategy
+        </span>
+        <span className="opacity-40">/</span>
+        <span className="text-zinc-700 dark:text-zinc-200 capitalize">{tab}</span>
+        {inSetupMode && (
+          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/50 dark:border-amber-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Setup mode
+          </span>
+        )}
+      </div>
+
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="bdl-page-title">Strategy</h1>
+          <h1 className="bdl-page-title">
+            {inSetupMode
+              ? (tab === 'icps' ? 'Define your first ICP'
+                : tab === 'packages' ? 'Build a sellable package'
+                : 'Define a positioning principle')
+              : 'Strategy'}
+          </h1>
           <p className="bdl-page-sub">
-            Target audiences · Service packages · Positioning principles
+            {inSetupMode
+              ? `${(tab === 'icps' ? ICP_CREATION_FLOW : tab === 'packages' ? packageFlow : POSITIONING_CREATION_FLOW).steps.length} steps · live preview`
+              : 'Target audiences · Service packages · Positioning principles'}
           </p>
         </div>
       </header>
@@ -318,28 +349,64 @@ export const StrategyHub: React.FC = () => {
       )}
 
       {!loading && tab === 'icps' && (
-        <ICPGrid
-          icps={icps}
-          onEdit={(icp) => setViewingIcp(icp)}
-          onNew={() => setEditingIcp('new')}
-        />
+        icps.length === 0 ? (
+          // Empty state → SHOW THE WIZARD INLINE (bundle's "setup mode" pattern).
+          // The page header + tabs stay visible above. The wizard takes over
+          // the body area with steps + live preview. Click "Skip onboarding"
+          // to fall back to the legacy empty state.
+          <CoachFlow
+            flow={ICP_CREATION_FLOW}
+            onComplete={handleIcpCoachFinish}
+            onClose={() => setEditingIcp('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <ICPGrid
+            icps={icps}
+            onEdit={(icp) => setViewingIcp(icp)}
+            onNew={() => setEditingIcp('new')}
+          />
+        )
       )}
 
       {!loading && tab === 'packages' && (
-        <PackageGrid
-          packages={packages}
-          icps={icps}
-          onEdit={(p) => setEditingPackage(p)}
-          onNew={() => setEditingPackage('new')}
-        />
+        packages.length === 0 ? (
+          // Empty → inline Package wizard (bundle setup mode)
+          <CoachFlow
+            flow={packageFlow}
+            onComplete={handlePackageCoachFinish}
+            onClose={() => setEditingPackage('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <PackageGrid
+            packages={packages}
+            icps={icps}
+            onEdit={(p) => setEditingPackage(p)}
+            onNew={() => setEditingPackage('new')}
+          />
+        )
       )}
 
       {!loading && tab === 'positioning' && (
-        <PositioningList
-          rows={positioning}
-          onEdit={(p) => setEditingPositioning(p)}
-          onNew={() => setEditingPositioning('new')}
-        />
+        positioning.length === 0 ? (
+          // Empty → inline Positioning wizard with compass mini
+          <CoachFlow
+            flow={POSITIONING_CREATION_FLOW}
+            onComplete={handlePositioningCoachFinish}
+            onClose={() => setEditingPositioning('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <PositioningList
+            rows={positioning}
+            onEdit={(p) => setEditingPositioning(p)}
+            onNew={() => setEditingPositioning('new')}
+          />
+        )
       )}
 
       {/* Modals */}

@@ -33,6 +33,7 @@ import '../components/livv/bundle-strategy.css';
 import '../components/livv/bundle-cards.css';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { BRAND_CREATION_FLOW, type BrandData } from '../components/livv/flows/BrandCreationFlow';
+import { CONTENT_SETUP_FLOW, type ContentSetupData } from '../components/livv/flows/ContentChannelsFlow';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface Channel {
@@ -141,6 +142,41 @@ export const ContentEngine: React.FC = () => {
   const [brandCoachOpen, setBrandCoachOpen] = useState(false);
   const [brandCoachSaving, setBrandCoachSaving] = useState(false);
 
+  // Content Setup flow finish — inserts channels + their cadence target
+  // + creates the first piece as a draft. All from the wizard data.
+  const handleContentSetupFinish = useCallback(async (data: ContentSetupData) => {
+    if (!currentTenant?.id) return;
+    try {
+      const tid = currentTenant.id;
+      // 1) Insert all picked channels
+      const cadence = data.cadence || {};
+      const channelRows = (data.channels || []).map(id => ({
+        tenant_id: tid,
+        platform: id,
+        name: id.charAt(0).toUpperCase() + id.slice(1),
+        target_per_week: cadence[id] || 2,
+        priority: 1,
+        status: 'active',
+      }));
+      if (channelRows.length > 0) {
+        await supabase.from('content_channels').insert(channelRows);
+      }
+      // 2) Create the first piece as a draft
+      const fp = data.firstPiece;
+      if (fp?.title && fp.channel) {
+        await supabase.from('content_pieces').insert({
+          tenant_id: tid,
+          title: fp.title,
+          channel_platform: fp.channel,
+          status: 'draft',
+        });
+      }
+      await refetch();
+    } catch (e) {
+      errorLogger.warn('content setup finish failed', e);
+    }
+  }, [currentTenant?.id]);
+
   const handleBrandCoachFinish = useCallback(async (data: BrandData) => {
     if (!currentTenant?.id) return;
     setBrandCoachSaving(true);
@@ -232,13 +268,42 @@ export const ContentEngine: React.FC = () => {
     }
   };
 
+  // Setup mode is active when the current tab has no underlying data and
+  // we're auto-rendering the inline wizard. Show the SETUP MODE breadcrumb pill.
+  const inSetupMode = (
+    (tab === 'pipeline' && channels.length === 0) ||
+    (tab === 'calendar' && channels.length === 0) ||
+    (tab === 'channels' && channels.length === 0) ||
+    (tab === 'brands' && brands.length === 0)
+  );
+
   return (
     <div className="max-w-[1320px] mx-auto px-6 py-6">
+      {/* Setup-mode breadcrumb (bundle screenshot pattern) */}
+      <div className="flex items-center gap-2 mb-3 text-[11px] font-mono uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+        <span className="inline-flex items-center gap-1">
+          <Icons.Sparkles size={11} />
+          Content
+        </span>
+        <span className="opacity-40">/</span>
+        <span className="text-zinc-700 dark:text-zinc-200 capitalize">{tab}</span>
+        {inSetupMode && (
+          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/50 dark:border-amber-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Setup mode
+          </span>
+        )}
+      </div>
+
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="bdl-page-title">Content</h1>
+          <h1 className="bdl-page-title">
+            {inSetupMode ? `Build your ${tab}` : 'Content'}
+          </h1>
           <p className="bdl-page-sub">
-            Pipeline · Calendar · Channels · Brand kits · Studio
+            {inSetupMode
+              ? '3 steps · ~3 min · channels → cadence → first piece'
+              : 'Pipeline · Calendar · Channels · Brand kits · Studio'}
           </p>
         </div>
       </header>
@@ -303,36 +368,82 @@ export const ContentEngine: React.FC = () => {
         </div>
       )}
 
+      {/* When there are no channels yet, ANY of pipeline/calendar/channels
+         tabs takes over with the inline 3-step content setup wizard
+         (channels → cadence → first piece). Matches the bundle's
+         "Build your content engine" setup mode pattern. */}
       {!loading && tab === 'pipeline' && (
-        <Pipeline
-          grouped={pipelinePieces}
-          channels={channels}
-          icps={icps}
-          onEdit={(p) => setEditingPiece(p)}
-          onMoveStatus={handleMoveStatus}
-          onNew={() => setEditingPiece('new')}
-        />
+        channels.length === 0 ? (
+          <CoachFlow
+            flow={CONTENT_SETUP_FLOW}
+            onComplete={handleContentSetupFinish}
+            onClose={() => setEditingChannel('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <Pipeline
+            grouped={pipelinePieces}
+            channels={channels}
+            icps={icps}
+            onEdit={(p) => setEditingPiece(p)}
+            onMoveStatus={handleMoveStatus}
+            onNew={() => setEditingPiece('new')}
+          />
+        )
       )}
 
       {!loading && tab === 'calendar' && (
-        <CalendarView pieces={pieces} channels={channels} onEdit={(p) => setEditingPiece(p)} />
+        channels.length === 0 ? (
+          <CoachFlow
+            flow={CONTENT_SETUP_FLOW}
+            onComplete={handleContentSetupFinish}
+            onClose={() => setEditingChannel('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <CalendarView pieces={pieces} channels={channels} onEdit={(p) => setEditingPiece(p)} />
+        )
       )}
 
       {!loading && tab === 'channels' && (
-        <ChannelsList
-          channels={channels}
-          pieces={pieces}
-          onEdit={(c) => setEditingChannel(c)}
-          onNew={() => setEditingChannel('new')}
-        />
+        channels.length === 0 ? (
+          <CoachFlow
+            flow={CONTENT_SETUP_FLOW}
+            onComplete={handleContentSetupFinish}
+            onClose={() => setEditingChannel('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <ChannelsList
+            channels={channels}
+            pieces={pieces}
+            onEdit={(c) => setEditingChannel(c)}
+            onNew={() => setEditingChannel('new')}
+          />
+        )
       )}
 
       {!loading && tab === 'brands' && (
-        <BrandsGrid
-          brands={brands}
-          onOpen={(b) => setEditingBrand(b)}
-          onNew={() => setEditingBrand('new')}
-        />
+        brands.length === 0 ? (
+          // Empty → INLINE 6-step Brand wizard (bundle setup mode pattern).
+          // Page tabs stay visible above so the user can bail at any time.
+          <CoachFlow
+            flow={BRAND_CREATION_FLOW}
+            onComplete={handleBrandCoachFinish}
+            onClose={() => setEditingBrand('new' as any)}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <BrandsGrid
+            brands={brands}
+            onOpen={(b) => setEditingBrand(b)}
+            onNew={() => setEditingBrand('new')}
+          />
+        )
       )}
 
       {!loading && tab === 'studio' && (
