@@ -20,17 +20,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
-
-// ── iOS-feel spring presets ──────────────────────────────────────
-// Reused across every interactive element in this page so the feel
-// stays uniform. Tuned to match iOS: snappy but never bouncy enough
-// to overshoot. Stiffness ~300-400, damping ~25-28 = critically
-// damped feel without sliding into the linear curve.
-const SPRING_TAP    = { type: 'spring' as const, stiffness: 400, damping: 25 };
-const SPRING_ENTER  = { type: 'spring' as const, stiffness: 320, damping: 26 };
-const SPRING_LAYOUT = { type: 'spring' as const, stiffness: 300, damping: 28 };
-// Tap feedback — slight scale-down, spring back. iOS uses ~0.97.
-const TAP_SCALE     = 0.97;
+// Shared spring presets so Brief, AiAdvisor and future surfaces all
+// feel like one iOS-native UI. Tweaking the feel is a one-file change.
+import { SPRING_TAP, SPRING_ENTER, TAP_SCALE, SWIPE_THRESHOLD, SWIPE_VELOCITY } from '../lib/ui/motion';
 import { useCalendar, type CalendarTask } from '../context/CalendarContext';
 import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
@@ -986,10 +978,9 @@ const TaskSection: React.FC<{
 // non-drag interactions — Framer Motion treats small movements as
 // taps, big ones as drags.
 //
-// Threshold: 80px feels right at a normal card width (~340px in the
-// Brief right panel). Tweak SWIPE_THRESHOLD if cards grow/shrink.
-const SWIPE_THRESHOLD = 80;
-const SWIPE_VELOCITY  = 500;
+// SWIPE_THRESHOLD and SWIPE_VELOCITY are imported from lib/ui/motion
+// so the inbox card uses identical numbers — a swipe feels the same
+// regardless of which surface you're on.
 
 interface SwipeableTaskCardProps {
   task: CalendarTask;

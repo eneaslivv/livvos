@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Icons } from './ui/Icons';
+// Shared motion presets — same iOS-feel springs as Brief, so the
+// floating advisor and the Brief page belong to one design system.
+import { SPRING_TAP, SPRING_ENTER, TAP_SCALE } from '../lib/ui/motion';
+// Web Speech API wrapper — drives the mic button in the chat input.
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import {
   generateAdvisorInsights,
   getCachedAdvisorInsights,
@@ -116,9 +121,10 @@ const InsightsBlock: React.FC<{ greeting: string; insights: AdvisorInsight[] }> 
       return (
         <motion.div
           key={idx}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.05, duration: 0.3 }}
+          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ ...SPRING_ENTER, delay: idx * 0.05 }}
+          whileHover={{ y: -1, transition: SPRING_TAP }}
           className={`p-3 rounded-xl bg-gradient-to-br ${config.gradient} border ${config.border}`}
         >
           <div className="flex items-start gap-2.5">
@@ -388,6 +394,7 @@ export const AiAdvisor: React.FC = () => {
   const { createTask, updateTask, tasks: allTasks } = useCalendar();
   const { clients } = useClients();
 
+  const reduceMotion = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
@@ -408,6 +415,24 @@ export const AiAdvisor: React.FC = () => {
       .catch(() => { /* default profile is fine */ });
     return () => { cancelled = true; };
   }, [isOpen, user?.id, currentTenant?.id, aiProfile]);
+
+  // ── Voice input — mirrors Brief: derive a BCP-47 lang from the
+  // user's preferred_language (es-AR / en-US / pt-BR / browser
+  // default), pipe partials into the textarea live, don't auto-send.
+  const voiceLang = useMemo(() => {
+    const lang = aiProfile?.preferred_language || 'auto';
+    const map: Record<string, string> = {
+      es: 'es-AR',
+      en: 'en-US',
+      pt: 'pt-BR',
+      auto: typeof navigator !== 'undefined' ? navigator.language || 'en-US' : 'en-US',
+    };
+    return map[lang] || 'en-US';
+  }, [aiProfile?.preferred_language]);
+  const voice = useVoiceInput({
+    lang: voiceLang,
+    onPartial: (text) => setInput(text),
+  });
 
   // ── Daily persistence: load on mount, save on every change ────────
   // Keyed per user + per day. Older days quietly stay in localStorage —
@@ -1169,11 +1194,12 @@ export const AiAdvisor: React.FC = () => {
       {!otherModalOpen && (
       <motion.button
         onClick={() => setIsOpen(true)}
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
-        whileHover={{ scale: 1.03, y: -1 }}
-        whileTap={{ scale: 0.97 }}
+        initial={reduceMotion ? false : { opacity: 0, scale: 0.85, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.85, y: 8, transition: SPRING_TAP }}
+        transition={SPRING_ENTER}
+        whileHover={{ scale: 1.04, y: -2, transition: SPRING_TAP }}
+        whileTap={{ scale: TAP_SCALE, transition: SPRING_TAP }}
         className="fixed bottom-5 right-5 z-[55] group flex items-center gap-2 pl-2.5 pr-3.5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-full shadow-lg shadow-black/15 dark:shadow-black/30 hover:shadow-xl transition-shadow duration-300"
       >
         <div
@@ -1193,22 +1219,27 @@ export const AiAdvisor: React.FC = () => {
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-[60] overflow-hidden">
-            {/* Backdrop */}
+            {/* Backdrop — quick crossfade. Slightly faster than the
+                panel slide so the dimming reads as "instant" while the
+                panel takes the spotlight. */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.22 }}
               className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-[2px]"
               onClick={() => setIsOpen(false)}
             />
 
-            {/* Panel */}
+            {/* Panel — slides in from the right with the shared spring.
+                Was a cubic-bezier tween; spring physics give it the
+                iOS-native arrival (decelerates naturally instead of
+                landing on a curve). */}
             <motion.div
-              initial={{ x: '100%' }}
+              initial={reduceMotion ? false : { x: '100%' }}
               animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ x: '100%', transition: { type: 'spring', stiffness: 360, damping: 32 } }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
               className="absolute inset-y-0 right-0 w-screen max-w-md max-h-screen bg-white dark:bg-zinc-900 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden"
             >
               {/* ── Header ── */}
@@ -1278,20 +1309,25 @@ export const AiAdvisor: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 pt-1">
-                      {SUGGESTED_PROMPTS.map((p) => {
+                      {SUGGESTED_PROMPTS.map((p, pi) => {
                         const IconComp = (Icons as any)[p.icon] || Icons.Sparkles;
                         return (
-                          <button
+                          <motion.button
                             key={p.label}
                             onClick={() => handlePrompt(p)}
                             disabled={busy}
+                            initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ ...SPRING_ENTER, delay: 0.08 + pi * 0.035 }}
+                            whileTap={{ scale: 0.96, transition: SPRING_TAP }}
+                            whileHover={{ y: -1, transition: SPRING_TAP }}
                             className="flex items-start gap-2 p-2.5 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left disabled:opacity-50"
                           >
                             <IconComp size={12} className="text-zinc-400 shrink-0 mt-0.5" />
                             <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 leading-tight">
                               {p.label}
                             </span>
-                          </button>
+                          </motion.button>
                         );
                       })}
                     </div>
@@ -1485,20 +1521,63 @@ export const AiAdvisor: React.FC = () => {
                         handleSubmit();
                       }
                     }}
-                    placeholder="Ask anything, or ask it to create a task, plan the week..."
+                    placeholder={voice.isListening ? 'Listening…' : 'Ask anything, or ask it to create a task, plan the week...'}
                     disabled={busy}
                     rows={1}
-                    className="flex-1 px-3.5 py-2.5 text-[12px] bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 focus:outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors disabled:opacity-60 resize-none leading-snug"
+                    className={`flex-1 px-3.5 py-2.5 text-[12px] rounded-xl border focus:outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors disabled:opacity-60 resize-none leading-snug ${
+                      voice.isListening
+                        ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
+                        : 'bg-zinc-100 dark:bg-zinc-800 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
+                    }`}
                   />
-                  <button
+                  {/* Mic — same UX as Brief: hidden when browser
+                      doesn't support SpeechRecognition, red+pulsing
+                      while listening, halo radiates out. */}
+                  {voice.isSupported && (
+                    <motion.button
+                      type="button"
+                      onClick={() => voice.isListening ? voice.stop() : voice.start()}
+                      disabled={busy}
+                      title={voice.isListening ? 'Stop listening' : `Dictate (${voiceLang})`}
+                      aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
+                      whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+                      animate={voice.isListening
+                        ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
+                        : { scale: 1 }
+                      }
+                      className={`p-2.5 rounded-xl border transition-colors relative ${
+                        voice.isListening
+                          ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
+                          : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
+                      }`}
+                    >
+                      <Icons.Mic size={13} />
+                      {voice.isListening && !reduceMotion && (
+                        <motion.span
+                          aria-hidden
+                          className="absolute inset-0 rounded-xl bg-rose-500/30"
+                          initial={{ scale: 1, opacity: 0.6 }}
+                          animate={{ scale: 1.6, opacity: 0 }}
+                          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
+                        />
+                      )}
+                    </motion.button>
+                  )}
+                  <motion.button
                     type="submit"
                     disabled={busy || !input.trim()}
+                    whileTap={{ scale: 0.9, transition: SPRING_TAP }}
                     className="p-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
                     title="Send (Enter)"
                   >
                     <Icons.Send size={13} />
-                  </button>
+                  </motion.button>
                 </div>
+                {voice.error && (
+                  <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">
+                    {voice.error}
+                  </div>
+                )}
                 <div className="text-[9px] text-zinc-400 mt-1.5 text-right">
                   Enter to send · Shift+Enter for new line · History is saved per day
                 </div>
