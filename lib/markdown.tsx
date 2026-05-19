@@ -26,7 +26,44 @@ type Block =
   | { type: 'quote'; text: string }
   | { type: 'callout'; tone: ToneKey; body: string }
   | { type: 'stat'; label: string; value: string; tone: ToneKey }
-  | { type: 'divider' };
+  | { type: 'divider' }
+  // ── Richer directives ────────────────────────────────────────────
+  // section: titled, color-toned block. Body parsed recursively.
+  //   :::section title="..." tone="violet"
+  //   ... markdown body ...
+  //   :::end:::
+  | { type: 'section'; title: string; tone: ToneKey; body: Block[] }
+  // row: aligned key:value display. Multiple rows stack nicely.
+  //   :::row label="Implementation" value="$5,000":::
+  | { type: 'row'; label: string; value: string; tone?: ToneKey }
+  // kpi: bigger value display for a single key metric — bigger than stat.
+  //   :::kpi label="MRR" value="$2,400" target="$3,000" tone="emerald":::
+  | { type: 'kpi'; label: string; value: string; target?: string; tone: ToneKey }
+  // Visual grid of stat tiles. Body lines are `label | value | tone`.
+  //   :::grid
+  //   Overdue | 25 | rose
+  //   Due today | 1 | amber
+  //   :::end:::
+  | { type: 'grid'; tiles: Array<{ label: string; value: string; tone: ToneKey }> }
+  // tasklist: bullet list where each item can be prefixed with
+  // [urgent] / [high] / [medium] / [low] / [done] for visual priority.
+  // Treated specially so the renderer can drop colored dots.
+  | { type: 'tasklist'; items: Array<{ priority: TaskPriority; text: string }> };
+
+type TaskPriority = 'urgent' | 'high' | 'medium' | 'low' | 'done' | 'none';
+const PRIORITY_DOT: Record<TaskPriority, string> = {
+  urgent: 'bg-rose-500',
+  high:   'bg-amber-500',
+  medium: 'bg-indigo-400',
+  low:    'bg-zinc-300 dark:bg-zinc-700',
+  done:   'bg-emerald-500',
+  none:   'bg-zinc-300 dark:bg-zinc-700',
+};
+const detectPriority = (s: string): { priority: TaskPriority; text: string } => {
+  const m = s.match(/^\[(urgent|high|medium|low|done)\]\s+(.+)$/i);
+  if (m) return { priority: m[1].toLowerCase() as TaskPriority, text: m[2] };
+  return { priority: 'none', text: s };
+};
 
 type ToneKey = 'rose' | 'amber' | 'emerald' | 'violet' | 'indigo' | 'blue' | 'zinc';
 
@@ -72,7 +109,7 @@ const parseBlocks = (md: string): Block[] => {
       blocks.push({ type: 'code', lang, content: body.join('\n') });
       continue;
     }
-    // Custom directive: :::stat label="X" value="Y" tone="emerald"
+    // Custom directive: :::stat label="X" value="Y" tone="emerald":::
     const statM = line.match(/^:::stat\s+(.+):::$/);
     if (statM) {
       flushPara(); flushList();
@@ -84,6 +121,94 @@ const parseBlocks = (md: string): Block[] => {
         tone: toneOf(attrs.tone),
       });
       i++; continue;
+    }
+    // :::row label="..." value="..." tone="...":::
+    const rowM = line.match(/^:::row\s+(.+):::$/);
+    if (rowM) {
+      flushPara(); flushList();
+      const attrs = parseAttrs(rowM[1]);
+      blocks.push({
+        type: 'row',
+        label: attrs.label || '',
+        value: attrs.value || '',
+        tone: attrs.tone ? toneOf(attrs.tone) : undefined,
+      });
+      i++; continue;
+    }
+    // :::kpi label="..." value="..." target="..." tone="...":::
+    const kpiM = line.match(/^:::kpi\s+(.+):::$/);
+    if (kpiM) {
+      flushPara(); flushList();
+      const attrs = parseAttrs(kpiM[1]);
+      blocks.push({
+        type: 'kpi',
+        label: attrs.label || '',
+        value: attrs.value || '',
+        target: attrs.target || undefined,
+        tone: toneOf(attrs.tone),
+      });
+      i++; continue;
+    }
+    // :::section title="..." tone="..." ... :::end:::
+    // Body is parsed recursively so nested directives work.
+    const sectionOpen = line.match(/^:::section\s+(.+)$/);
+    if (sectionOpen && !line.endsWith(':::')) {
+      flushPara(); flushList();
+      const attrs = parseAttrs(sectionOpen[1]);
+      const body: string[] = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== ':::end:::' && lines[i].trim() !== ':::') {
+        body.push(lines[i]);
+        i++;
+      }
+      i++;
+      blocks.push({
+        type: 'section',
+        title: attrs.title || '',
+        tone: toneOf(attrs.tone),
+        body: parseBlocks(body.join('\n')),
+      });
+      continue;
+    }
+    // :::grid ... :::end:::  — body lines: `label | value | tone`
+    const gridOpen = line.match(/^:::grid\s*$/);
+    if (gridOpen) {
+      flushPara(); flushList();
+      const tiles: Array<{ label: string; value: string; tone: ToneKey }> = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== ':::end:::' && lines[i].trim() !== ':::') {
+        const row = lines[i].trim();
+        if (row) {
+          const parts = row.split('|').map(p => p.trim());
+          if (parts.length >= 2) {
+            tiles.push({
+              label: parts[0] || '',
+              value: parts[1] || '',
+              tone: toneOf(parts[2]),
+            });
+          }
+        }
+        i++;
+      }
+      i++;
+      blocks.push({ type: 'grid', tiles });
+      continue;
+    }
+    // :::tasklist ... :::end:::  — body lines: each is a task item
+    // (with optional [urgent] [high] [medium] [low] [done] prefix).
+    const tasklistOpen = line.match(/^:::tasklist\s*$/);
+    if (tasklistOpen) {
+      flushPara(); flushList();
+      const items: Array<{ priority: TaskPriority; text: string }> = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== ':::end:::' && lines[i].trim() !== ':::') {
+        const raw = lines[i].trim().replace(/^[-*•]\s*/, '');
+        if (raw) items.push(detectPriority(raw));
+        i++;
+      }
+      i++;
+      blocks.push({ type: 'tasklist', items });
+      continue;
     }
     // Custom directive: :::callout tone="info" :: Body text
     const calloutInline = line.match(/^:::callout\s+(.+?)::\s*(.+)$/);
@@ -284,14 +409,32 @@ const TONE_CLASS: Record<ToneKey, { card: string; text: string; muted: string }>
 // ── Block renderer ──────────────────────────────────────────────
 const Heading: React.FC<{ level: number; text: string }> = ({ level, text }) => {
   const inline = parseInline(text);
-  // Tailwind sizes scale roughly with heading level — kept tight to
-  // match the dense zen-minimal vibe.
-  const cls = level === 1 ? 'text-[15px] font-bold text-zinc-900 dark:text-zinc-100 mt-3 mb-1.5'
-            : level === 2 ? 'text-[13.5px] font-bold text-zinc-900 dark:text-zinc-100 mt-3 mb-1'
-            : level === 3 ? 'text-[12.5px] font-semibold text-zinc-800 dark:text-zinc-200 mt-2.5 mb-1 uppercase tracking-wider'
-            :              'text-[12px] font-semibold text-zinc-700 dark:text-zinc-300 mt-2 mb-1';
   const Tag = `h${Math.min(level, 6)}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
-  return React.createElement(Tag, { className: cls }, inline);
+  // H1: big + violet accent bar on the left. Headlines a section.
+  if (level === 1) {
+    return (
+      <Tag className="text-[17px] font-bold text-zinc-900 dark:text-zinc-100 mt-4 mb-2 pl-2.5 border-l-2 border-violet-500">
+        {inline}
+      </Tag>
+    );
+  }
+  // H2: medium + thin underline. Section breaks.
+  if (level === 2) {
+    return (
+      <Tag className="text-[14px] font-bold text-zinc-900 dark:text-zinc-100 mt-3.5 mb-1.5 pb-1 border-b border-zinc-200/70 dark:border-zinc-800">
+        {inline}
+      </Tag>
+    );
+  }
+  // H3: small + uppercase + tracking. Sub-sections / category tags.
+  if (level === 3) {
+    return (
+      <Tag className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400 mt-3 mb-1.5">
+        {inline}
+      </Tag>
+    );
+  }
+  return React.createElement(Tag, { className: 'text-[12px] font-semibold text-zinc-700 dark:text-zinc-300 mt-2 mb-1' }, inline);
 };
 
 const ListItem: React.FC<{ text: string }> = ({ text }) => (
@@ -301,11 +444,31 @@ const ListItem: React.FC<{ text: string }> = ({ text }) => (
 const RenderBlock: React.FC<{ block: Block }> = ({ block }) => {
   if (block.type === 'heading') return <Heading level={block.level} text={block.text} />;
   if (block.type === 'para') return <p className="text-[12.5px] leading-relaxed text-zinc-700 dark:text-zinc-200">{parseInline(block.text)}</p>;
-  if (block.type === 'ulist') return (
-    <ul className="list-disc list-outside pl-5 space-y-0.5 text-[12.5px] text-zinc-700 dark:text-zinc-200 marker:text-zinc-400">
-      {block.items.map((t, i) => <ListItem key={i} text={t} />)}
-    </ul>
-  );
+  if (block.type === 'ulist') {
+    // Auto-upgrade plain bullets to task-style rendering when any item
+    // starts with a [priority] prefix. Keeps the renderer "do what I
+    // mean" — the AI doesn't have to remember to wrap in :::tasklist:::
+    // if it's already using bracketed priorities.
+    const detected = block.items.map(detectPriority);
+    const anyPriority = detected.some(d => d.priority !== 'none');
+    if (anyPriority) {
+      return (
+        <ul className="space-y-1 my-1">
+          {detected.map((d, i) => (
+            <li key={i} className="flex items-start gap-2 text-[12.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed">
+              <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[d.priority]}`} aria-hidden />
+              <span className="flex-1 min-w-0">{parseInline(d.text)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <ul className="list-disc list-outside pl-5 space-y-0.5 text-[12.5px] text-zinc-700 dark:text-zinc-200 marker:text-zinc-400">
+        {block.items.map((t, i) => <ListItem key={i} text={t} />)}
+      </ul>
+    );
+  }
   if (block.type === 'olist') return (
     <ol className="list-decimal list-outside pl-5 space-y-0.5 text-[12.5px] text-zinc-700 dark:text-zinc-200 marker:text-zinc-400 marker:tabular-nums">
       {block.items.map((t, i) => <ListItem key={i} text={t} />)}
@@ -337,6 +500,79 @@ const RenderBlock: React.FC<{ block: Block }> = ({ block }) => {
         <span className={`text-[9px] font-bold uppercase tracking-wider ${c.muted}`}>{block.label}</span>
         <span className={`text-[13px] font-semibold tabular-nums ${c.text}`}>{block.value}</span>
       </div>
+    );
+  }
+  // ── Richer directives ──────────────────────────────────────────
+  if (block.type === 'section') {
+    const c = TONE_CLASS[block.tone];
+    return (
+      <section className={`rounded-xl border my-2 ${c.card}`}>
+        {block.title && (
+          <div className={`px-3 py-2 border-b border-current/10 text-[11px] font-bold uppercase tracking-[0.06em] ${c.text}`}>
+            {block.title}
+          </div>
+        )}
+        <div className="px-3 py-2 space-y-1.5">
+          {block.body.map((b, i) => <RenderBlock key={i} block={b} />)}
+        </div>
+      </section>
+    );
+  }
+  if (block.type === 'row') {
+    const c = block.tone ? TONE_CLASS[block.tone] : TONE_CLASS.zinc;
+    return (
+      <div className="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-md bg-zinc-50/60 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/60 my-0.5">
+        <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 truncate">{parseInline(block.label)}</span>
+        <span className={`text-[12px] font-semibold tabular-nums shrink-0 ${block.tone ? c.text : 'text-zinc-800 dark:text-zinc-100'}`}>{parseInline(block.value)}</span>
+      </div>
+    );
+  }
+  if (block.type === 'kpi') {
+    const c = TONE_CLASS[block.tone];
+    return (
+      <div className={`rounded-xl border p-3 my-2 ${c.card}`}>
+        <div className={`text-[10px] font-bold uppercase tracking-wider ${c.muted} mb-1`}>{block.label}</div>
+        <div className="flex items-baseline gap-2">
+          <span className={`text-[22px] font-bold tabular-nums ${c.text}`}>{block.value}</span>
+          {block.target && (
+            <span className={`text-[11px] tabular-nums ${c.muted}`}>/ {block.target}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (block.type === 'grid') {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 my-2">
+        {block.tiles.map((t, i) => {
+          const c = TONE_CLASS[t.tone];
+          return (
+            <div key={i} className={`rounded-lg border px-3 py-2 ${c.card}`}>
+              <div className={`text-[9.5px] font-bold uppercase tracking-wider ${c.muted}`}>{t.label}</div>
+              <div className={`text-[15px] font-semibold tabular-nums mt-0.5 ${c.text}`}>{t.value}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  if (block.type === 'tasklist') {
+    return (
+      <ul className="space-y-1 my-1">
+        {block.items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-[12.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed">
+            <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[item.priority]}`} aria-hidden />
+            <span className="flex-1 min-w-0">{parseInline(item.text)}</span>
+            {item.priority !== 'none' && item.priority !== 'medium' && (
+              <span className={`text-[9px] font-bold uppercase tracking-wider shrink-0 mt-1 ${
+                item.priority === 'urgent' || item.priority === 'high' ? 'text-rose-500' :
+                item.priority === 'done' ? 'text-emerald-500' :
+                'text-zinc-400'
+              }`}>{item.priority}</span>
+            )}
+          </li>
+        ))}
+      </ul>
     );
   }
   return null;

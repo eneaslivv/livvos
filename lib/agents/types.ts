@@ -138,6 +138,64 @@ export const NON_INVENTION_RULES = [
 ].join('\n');
 
 // ──────────────────────────────────────────────────────────────────────
+//  Presentation guide — taught to every agent so their replies render
+//  as structured, scannable layouts in the UI (the markdown renderer
+//  understands all the directives below natively).
+// ──────────────────────────────────────────────────────────────────────
+export const PRESENTATION_GUIDE = [
+  '',
+  '── PRESENTATION GUIDE — your reply RENDERS as rich markdown ──',
+  'Make replies scannable, not wall-of-text. The UI parses markdown + the custom directives below.',
+  '',
+  'Structure rules:',
+  '  • Lead with a 1-sentence headline (no heading marker). Then break into sections.',
+  '  • Use ## Section Title for the 2-4 main groupings (not "Section X:" in prose).',
+  '  • Use ### Sub-label (small uppercase) for tighter subsections.',
+  '  • Keep paragraphs short (≤2 sentences). Use bullets for enumerations.',
+  '  • Use **bold** for the KEY TERM in each bullet (task title, client name, $ amount).',
+  '  • Use *italics* for soft asides; `inline code` for ids or commands.',
+  '',
+  'Task / priority lists — use these prefixes so the UI renders colored priority dots:',
+  '  - [urgent] task description    → rose dot + URGENT tag',
+  '  - [high]   task description    → amber dot + HIGH tag',
+  '  - [medium] task description    → indigo dot (no tag)',
+  '  - [low]    task description    → grey dot + LOW tag',
+  '  - [done]   task description    → emerald dot + DONE tag',
+  'Any plain `-` bullet that starts with [urgent]/[high]/[medium]/[low]/[done] is auto-upgraded — you do not need :::tasklist:::.',
+  '',
+  'Custom directives — emit on their own line, ONE per line:',
+  '  :::stat label="Revenue" value="$5,000" tone="emerald":::',
+  '       → inline pill — use for ≤3 key numbers in flow',
+  '  :::kpi label="MRR" value="$2,400" target="$3,000" tone="emerald":::',
+  '       → bigger card with a target — use when the number is THE point',
+  '  :::row label="Implementation" value="$5,000" tone="zinc":::',
+  '       → label-on-left value-on-right row — perfect for breakdowns',
+  '  :::callout tone="warning" :: Sunnyside has gone 8 days without contact. :::',
+  '       → tinted block for important context. tone = info / warning / success / error',
+  '',
+  '  :::grid',
+  '  Overdue | 25 | rose',
+  '  Due today | 1 | amber',
+  '  Active retainers | 3 | emerald',
+  '  :::end:::',
+  '       → grid of stat tiles. Body lines: `label | value | tone` separated by `|`.',
+  '',
+  '  :::section title="Tareas vencidas" tone="rose"',
+  '  ... any markdown body (bullets, tasklists, rows, etc.) ...',
+  '  :::end:::',
+  '       → titled, color-toned section block. Use for clearly-grouped output.',
+  '',
+  'Tones: rose, amber, emerald, violet, indigo, blue, zinc (defaults to zinc).',
+  '',
+  'Style discipline:',
+  '  • Prefer one :::section::: with 3-5 bullets over a long flat list.',
+  '  • At most ONE :::kpi::: per reply (the headline number).',
+  '  • Skip the directives if you only have 1-2 items to show — plain markdown is fine.',
+  '  • Never restate the same number twice in different blocks.',
+  '  • Conclude with a 1-line "next step" question or recommendation. No closing pleasantries.',
+].join('\n');
+
+// ──────────────────────────────────────────────────────────────────────
 //  Action proposal protocol
 // ──────────────────────────────────────────────────────────────────────
 // When the user asks the agent to DO something (mark done, snooze,
@@ -221,8 +279,12 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
  */
 export function buildActionProtocol(domain: string): string {
   const menu = ACTION_MENU_BY_DOMAIN[domain] || '';
-  if (!menu) return '';
-  return `${ACTION_PROTOCOL_HEADER}${menu}`;
+  // Even agents without any write actions get the presentation guide —
+  // it shapes how their READ-only replies look. Keeping the two
+  // concerns in one function means every agent file picks up the
+  // upgrade just by calling buildActionProtocol(domain).
+  const action = menu ? `${ACTION_PROTOCOL_HEADER}${menu}` : '';
+  return `${PRESENTATION_GUIDE}\n${action}`.trim();
 }
 
 /** Legacy export for back-compat with tasks-agent.ts. New agents should
