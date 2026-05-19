@@ -29,6 +29,7 @@ import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { ICP_CREATION_FLOW, type IcpData } from '../components/livv/flows/IcpCreationFlow';
+import { IcpDetailSlideOver } from '../components/livv/IcpDetailSlideOver';
 import '../components/livv/bundle-strategy.css';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
@@ -122,6 +123,9 @@ export const StrategyHub: React.FC = () => {
   // Triggered by the "Guided" button next to "+ New ICP".
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachSaving, setCoachSaving] = useState(false);
+  // ICP slide-over — click an ICP card opens this (read-only summary + tabs).
+  // Edit button inside opens the legacy ICPModal for the full form.
+  const [viewingIcp, setViewingIcp] = useState<ICP | null>(null);
 
   // ── Load all three slices in parallel on mount + tenant change ───
   const refetch = useCallback(async () => {
@@ -251,7 +255,7 @@ export const StrategyHub: React.FC = () => {
       {!loading && tab === 'icps' && (
         <ICPGrid
           icps={icps}
-          onEdit={(icp) => setEditingIcp(icp)}
+          onEdit={(icp) => setViewingIcp(icp)}
           onNew={() => setEditingIcp('new')}
         />
       )}
@@ -305,6 +309,25 @@ export const StrategyHub: React.FC = () => {
           flow={ICP_CREATION_FLOW}
           onComplete={handleCoachFinish}
           onClose={() => !coachSaving && setCoachOpen(false)}
+        />
+      )}
+
+      {/* ICP slide-over — bundle design. Read-only summary across Overview /
+         Pains / Expansion / Playbook tabs. Edit button switches to the
+         legacy form modal for full field editing. */}
+      {viewingIcp && (
+        <IcpDetailSlideOver
+          icp={viewingIcp as any}
+          onClose={() => setViewingIcp(null)}
+          onSaved={(updated) => {
+            setViewingIcp(updated as any);
+            refetch();
+          }}
+          onEdit={() => {
+            const icp = viewingIcp;
+            setViewingIcp(null);
+            setEditingIcp(icp);
+          }}
         />
       )}
     </div>
