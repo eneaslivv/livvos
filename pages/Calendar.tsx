@@ -235,8 +235,12 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
   const [listDensity, setListDensity] = useState<'compact' | 'comfy'>(
     () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-density') as any)) || 'comfy'
   );
-  const [listQuickFilter, setListQuickFilter] = useState<'all' | 'mine' | 'overdue' | 'high'>(
-    () => (typeof window !== 'undefined' && (localStorage.getItem('calendar:list-quick') as any)) || 'all'
+  // Quick filter — accepts a discriminated union plus dynamic forms
+  // `project:${id}` and `unassigned` so the sidebar "Filter quickly"
+  // card can target any project or surface ownerless work without
+  // bloating this enum each time.
+  const [listQuickFilter, setListQuickFilter] = useState<string>(
+    () => (typeof window !== 'undefined' && localStorage.getItem('calendar:list-quick')) || 'all'
   );
   const [showTweaksPanel, setShowTweaksPanel] = useState<boolean>(
     () => (typeof window !== 'undefined' && localStorage.getItem('calendar:list-tweaks')) !== '0'
@@ -1727,11 +1731,20 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         const overdueCount   = baseTasks.filter(isOverdue).length;
         const highUrgentCount = baseTasks.filter(isHighOrUrgent).length;
 
-        // Apply the active quick pill to narrow the list.
+        // Apply the active quick filter to narrow the list. Top pills
+        // drive 4 of these; the sidebar "Filter quickly" card drives
+        // the rest (urgent-only, per-project, unassigned).
         let quickFiltered = baseTasks;
-        if (listQuickFilter === 'mine')    quickFiltered = baseTasks.filter(isMineThisWeek);
-        if (listQuickFilter === 'overdue') quickFiltered = baseTasks.filter(isOverdue);
-        if (listQuickFilter === 'high')    quickFiltered = baseTasks.filter(isHighOrUrgent);
+        if (listQuickFilter === 'mine')           quickFiltered = baseTasks.filter(isMineThisWeek);
+        else if (listQuickFilter === 'overdue')   quickFiltered = baseTasks.filter(isOverdue);
+        else if (listQuickFilter === 'high')      quickFiltered = baseTasks.filter(isHighOrUrgent);
+        else if (listQuickFilter === 'urgent')    quickFiltered = baseTasks.filter(t => t.priority === 'urgent');
+        else if (listQuickFilter === 'high_only') quickFiltered = baseTasks.filter(t => t.priority === 'high');
+        else if (listQuickFilter === 'unassigned') quickFiltered = baseTasks.filter(t => !t.assignee_id);
+        else if (listQuickFilter.startsWith('project:')) {
+          const pid = listQuickFilter.slice('project:'.length);
+          quickFiltered = baseTasks.filter(t => t.project_id === pid);
+        }
 
         // ─── Status + priority filters (Tweaks panel) ──────────
         const filtered = quickFiltered.filter(t => {
@@ -1936,6 +1949,77 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
           const d = (e.start_date || '').slice(0, 10);
           if (d && d.startsWith(`${miniYear}-${String(miniMonth + 1).padStart(2, '0')}`)) daysWithContent.add(d);
         }
+
+        // ─── "This week" mini chart data ───────────────────────
+        // 7 bars (Mon → Sun) with height proportional to task count
+        // for that day. Today's bar gets the gold tone; the others
+        // are tone-mapped from cream → wine by their ratio to the
+        // busiest day so the eye picks up the heavy days fast.
+        const weekDayCounts = Array.from({ length: 7 }).map((_, i) => {
+          const d = new Date(weekStartDate);
+          d.setDate(weekStartDate.getDate() + i);
+          const iso = d.toISOString().split('T')[0];
+          const count = baseTasks.filter(t => (t.start_date || '').slice(0, 10) === iso).length;
+          return {
+            iso,
+            day: d.getDate(),
+            dow: ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i],
+            count,
+            isToday: iso === todayKey,
+          };
+        });
+        const weekMaxCount  = Math.max(1, ...weekDayCounts.map(d => d.count));
+        const weekTasksTotal = weekDayCounts.reduce((s, d) => s + d.count, 0);
+        const weekEventsTotal = events.filter(ev => {
+          const d = (ev.start_date || '').slice(0, 10);
+          return d && d >= weekStartKey && d <= weekEndKey;
+        }).length;
+        const barToneFor = (ratio: number, isToday: boolean): string => {
+          if (isToday) return '#E8BC59'; // gold
+          if (ratio >= 0.85) return '#2C0405'; // wine-400 darkest
+          if (ratio >= 0.55) return '#5c1d18'; // wine-200
+          if (ratio >= 0.3)  return '#A8A29A'; // cream-400
+          if (ratio > 0)     return '#D6D1C7'; // cream-300
+          return '#F5F2EB';                    // cream-100 (empty)
+        };
+
+        // ─── "Filter quickly" row data ─────────────────────────
+        // Counts run on the open base (not-completed) so the numbers
+        // are actionable — clicking a row narrows to those tasks.
+        const openBase = baseTasks.filter(t => !t.completed && t.status !== 'done' && t.status !== 'cancelled');
+        const mineCount      = openBase.filter(isMineThisWeek).length;
+        const urgentCount    = openBase.filter(t => t.priority === 'urgent').length;
+        const highCount      = openBase.filter(t => t.priority === 'high').length;
+        const unassignedCount = openBase.filter(t => !t.assignee_id).length;
+        const projectCountMap = new Map<string, { name: string; count: number }>();
+        for (const t of openBase) {
+          if (!t.project_id) continue;
+          const prev = projectCountMap.get(t.project_id);
+          if (prev) prev.count += 1;
+          else projectCountMap.set(t.project_id, { name: getProjectLabel(t), count: 1 });
+        }
+        const topProjects = Array.from(projectCountMap.entries())
+          .sort((a, b) => b[1].count - a[1].count)
+          .slice(0, 4)
+          .map(([id, info]) => ({ id, name: info.name, count: info.count }));
+
+        // Reused dot color palette per row (Material-style soft tones).
+        type QuickRow = { id: string; label: string; count: number; dot: string };
+        const filterRows: QuickRow[] = [
+          { id: 'mine',       label: 'Mine',          count: mineCount,       dot: '#769268' },
+          { id: 'urgent',     label: 'Urgent',        count: urgentCount,     dot: '#ef4444' },
+          { id: 'high_only',  label: 'High',          count: highCount,       dot: '#E8BC59' },
+          ...topProjects.map<QuickRow>(p => ({
+            id: `project:${p.id}`,
+            label: p.name,
+            count: p.count,
+            // Hash project id → stable hue so each project gets a unique dot.
+            dot: ['#6DBEDC', '#F1ADD8', '#7c5cff', '#769268'][
+              Math.abs(p.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 4
+            ],
+          })),
+          { id: 'unassigned', label: 'Without owner', count: unassignedCount, dot: '#A8A29A' },
+        ];
 
         // Density-aware row paddings.
         const rowPad     = listDensity === 'compact' ? 'px-3 py-2'   : 'px-3.5 py-2.5';
@@ -2304,6 +2388,93 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
                           <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 w-1 h-1 rounded-full bg-violet-500" />
                         )}
                       </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* This week — micro bar chart of task density by day */}
+              <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+                <div className="text-[12px] font-semibold text-zinc-800 dark:text-zinc-100 mb-0.5">This week</div>
+                <div className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400">
+                  {weekTasksTotal} {weekTasksTotal === 1 ? 'task' : 'tasks'} · {weekEventsTotal} {weekEventsTotal === 1 ? 'event' : 'events'}
+                </div>
+                {/* 7 bars, scaled by count, today gets the gold tone */}
+                <div className="mt-2 flex items-end justify-between gap-1 h-[64px]">
+                  {weekDayCounts.map(d => {
+                    const ratio = d.count / weekMaxCount;
+                    const heightPx = Math.max(4, Math.round(ratio * 60));
+                    const tone = barToneFor(ratio, d.isToday);
+                    return (
+                      <motion.button
+                        key={d.iso}
+                        type="button"
+                        onClick={() => setSelectedDate(d.iso)}
+                        whileTap={{ scale: 0.94, transition: SPRING_TAP }}
+                        title={`${d.count} ${d.count === 1 ? 'task' : 'tasks'} on ${d.iso}`}
+                        className="flex-1 flex items-end justify-center rounded-md transition-opacity hover:opacity-80"
+                        style={{ height: '60px' }}
+                      >
+                        <span
+                          className="w-full rounded-md"
+                          style={{ height: `${heightPx}px`, background: tone }}
+                        />
+                      </motion.button>
+                    );
+                  })}
+                </div>
+                {/* Day labels */}
+                <div className="flex items-center justify-between gap-1 mt-1.5">
+                  {weekDayCounts.map(d => (
+                    <div
+                      key={d.iso}
+                      className={`flex-1 text-center font-mono text-[9px] leading-tight ${
+                        d.isToday ? 'text-zinc-900 dark:text-zinc-100 font-semibold' : 'text-zinc-400'
+                      }`}
+                    >
+                      <div>{d.dow}</div>
+                      <div className="tabular-nums">{d.day}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter quickly — colored-dot rows for Mine / Urgent /
+                 High / top projects / Without owner. Each row toggles
+                 the unified listQuickFilter; clicking the active row
+                 again clears it. Counts run on open tasks only. */}
+              <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+                <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-400 mb-2">Filter quickly</div>
+                <div className="space-y-0.5">
+                  {filterRows.map(row => {
+                    const isActive = listQuickFilter === row.id;
+                    return (
+                      <motion.button
+                        key={row.id}
+                        type="button"
+                        onClick={() => setListQuickFilter(isActive ? 'all' : row.id)}
+                        whileTap={{ scale: 0.98, transition: SPRING_TAP }}
+                        className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
+                          isActive
+                            ? 'bg-zinc-100 dark:bg-zinc-800'
+                            : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: row.dot }}
+                        />
+                        <span className={`text-[12.5px] truncate ${
+                          isActive
+                            ? 'text-zinc-900 dark:text-zinc-100 font-medium'
+                            : 'text-zinc-700 dark:text-zinc-300'
+                        }`}>
+                          {row.label}
+                        </span>
+                        <span className="ml-auto inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                          {row.count}
+                        </span>
+                      </motion.button>
                     );
                   })}
                 </div>
