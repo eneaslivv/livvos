@@ -1,0 +1,230 @@
+/* ============================================================
+   Brief — LIVV OS design tokens
+   Source: bundle inicio-web-dash-livv (livv-os-styles.css + livv-activity)
+   ------------------------------------------------------------
+   Mirrors the editorial typography + mono labels + gold pulse +
+   gradient day-label divider already in use on Activity / Calendar
+   / Home. Applied to Brief so all five surfaces speak the same
+   visual language.
+   ============================================================ */
+
+/* ── Header eyebrow row ──────────────────────────────────────── */
+.bd-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #71717a;
+  font-weight: 600;
+}
+
+:is(.dark) .bd-eyebrow { color: #a1a1aa; }
+
+/* Gold breathing dot — matches the LIVV pulse on Activity */
+.bd-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #c4a35a;
+  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.18);
+  animation: bd-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes bd-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.18); }
+  50%      { box-shadow: 0 0 0 6px rgba(196, 163, 90, 0.05); }
+}
+
+/* Sage dot — for "no meetings ahead" / "ok" state */
+.bd-dot-ok {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #769268;
+  box-shadow: 0 0 0 3px rgba(118, 146, 104, 0.18);
+  animation: bd-dot-ok 2.4s ease-in-out infinite;
+}
+
+@keyframes bd-dot-ok {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(118, 146, 104, 0.18); }
+  50%      { box-shadow: 0 0 0 6px rgba(118, 146, 104, 0.05); }
+}
+
+/* Amber dot — for "meeting in N minutes" */
+.bd-dot-meet {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #e8bc59;
+  box-shadow: 0 0 0 3px rgba(232, 188, 89, 0.22);
+  animation: bd-dot-meet 1.6s ease-in-out infinite;
+}
+
+@keyframes bd-dot-meet {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(232, 188, 89, 0.22); }
+  50%      { box-shadow: 0 0 0 7px rgba(232, 188, 89, 0.06); }
+}
+
+/* ── Editorial section card chrome ───────────────────────────── */
+.bd-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(253, 251, 247, 0.88) 100%);
+  border: 0.5px solid rgba(214, 209, 199, 0.5);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 8px 24px -12px rgba(44, 4, 5, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+:is(.dark) .bd-card {
+  background:
+    linear-gradient(180deg, rgba(24, 24, 27, 0.94) 0%, rgba(15, 15, 17, 0.88) 100%);
+  border-color: rgba(63, 63, 70, 0.45);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 8px 24px -12px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Tab pill (right column) ────────────────────────────────── */
+.bd-tab-active {
+  position: relative;
+  color: #18181b !important;
+}
+
+:is(.dark) .bd-tab-active { color: #fafafa !important; }
+
+.bd-tab-active::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, #c4a35a, #769268);
+  border-radius: 2px 2px 0 0;
+}
+
+/* ── Section label (Overdue · Due today · Due soon) ─────────── */
+.bd-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #71717a;
+}
+
+:is(.dark) .bd-section-label { color: #a1a1aa; }
+
+.bd-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(82, 82, 91, 0.15), transparent);
+}
+
+/* ── Chat input shell — frosted with focus halo ──────────────── */
+.bd-input-shell {
+  background: rgba(255, 255, 255, 0.6);
+  border: 0.5px solid rgba(214, 209, 199, 0.55);
+  border-radius: 16px;
+  transition:
+    background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:is(.dark) .bd-input-shell {
+  background: rgba(24, 24, 27, 0.6);
+  border-color: rgba(63, 63, 70, 0.55);
+}
+
+.bd-input-shell:focus-within {
+  background: #ffffff;
+  border-color: rgba(9, 9, 11, 0.22);
+  box-shadow: 0 0 0 4px rgba(9, 9, 11, 0.03);
+}
+
+:is(.dark) .bd-input-shell:focus-within {
+  background: #18181b;
+  border-color: rgba(196, 163, 90, 0.35);
+  box-shadow: 0 0 0 4px rgba(196, 163, 90, 0.08);
+}
+
+/* ── Chip ─────────────────────────────────────────────────── */
+.bd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 0.5px solid rgba(214, 209, 199, 0.5);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #3f3f46;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:is(.dark) .bd-chip {
+  background: rgba(24, 24, 27, 0.55);
+  border-color: rgba(63, 63, 70, 0.55);
+  color: #d4d4d8;
+}
+
+.bd-chip:hover {
+  background: #ffffff;
+  border-color: rgba(196, 163, 90, 0.35);
+  color: #18181b;
+  transform: translateY(-1px);
+}
+
+:is(.dark) .bd-chip:hover {
+  background: rgba(39, 39, 42, 0.8);
+  border-color: rgba(196, 163, 90, 0.4);
+  color: #fafafa;
+}
+
+.bd-chip:active { transform: scale(0.96); }
+
+/* ── Send button — gold-on-press recipe ──────────────────────── */
+.bd-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 9999px;
+  background: #18181b;
+  color: #fafafa;
+  border: 0;
+  cursor: pointer;
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:is(.dark) .bd-send { background: #fafafa; color: #18181b; }
+
+.bd-send:hover:not(:disabled) {
+  transform: scale(1.04);
+  background: #5c1d18;
+}
+
+:is(.dark) .bd-send:hover:not(:disabled) {
+  background: #c4a35a;
+}
+
+.bd-send:active:not(:disabled) { transform: scale(0.94); }
+
+.bd-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}

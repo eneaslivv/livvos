@@ -32,6 +32,7 @@ import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useLongPress, type LongPressPosition } from '../hooks/useLongPress';
 import { ContextMenu } from '../components/ui/ContextMenu';
 import { DailyBrief } from '../components/brief/DailyBrief';
+import '../components/brief/BriefDesign.css';
 import { Markdown } from '../lib/markdown';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
@@ -474,23 +475,28 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] gap-4 max-w-[1600px] mx-auto py-4">
       {/* ── LEFT: chat column ── */}
       <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-        {/* Header — minimal: meeting status + date. No tabs, no clutter. */}
-        <header className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-2.5">
+        {/* Header — LIVV OS design: breathing dot (amber if meeting,
+           sage if clear) + mono uppercase status + date on the right.
+           Same visual recipe as the LIVE pill in Activity. */}
+        <header className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3">
           {nextMeeting ? (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-[11px] text-zinc-700 dark:text-zinc-200">
-                in {nextMeeting.minutesUntil}m · <span className="font-medium">{nextMeeting.event.title}</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="bd-dot-meet" aria-hidden />
+              <span className="bd-eyebrow !text-zinc-700 dark:!text-zinc-200">
+                in {nextMeeting.minutesUntil}m
               </span>
-            </>
+              <span className="text-[11.5px] text-zinc-600 dark:text-zinc-300 font-medium tracking-[-0.003em] truncate max-w-[220px]">
+                {nextMeeting.event.title}
+              </span>
+            </span>
           ) : (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[11px] text-zinc-400">No meetings ahead</span>
-            </>
+            <span className="inline-flex items-center gap-2">
+              <span className="bd-dot-ok" aria-hidden />
+              <span className="bd-eyebrow">No meetings ahead</span>
+            </span>
           )}
-          <span className="ml-auto text-[11px] text-zinc-400 tabular-nums">
-            {today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+          <span className="ml-auto bd-eyebrow tabular-nums">
+            {today.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         </header>
 
@@ -649,12 +655,11 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Input + action chips. Chips fire prompts directly (one-tap)
-            so the user doesn't have to type the common stuff. Adapted
-            to context: empty chat → broad questions; ongoing chat →
-            sharper follow-ups. */}
-        <div className="px-4 pt-2.5 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
-          <div className="flex flex-wrap gap-1.5 mb-2">
+        {/* Input + action chips — LIVV OS design: chips with warm
+            cream + gold-hover, frosted input shell with focus halo,
+            send button that scales 1.04 on hover and tints to wine. */}
+        <div className="px-4 pt-3 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
             {[
               { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
               { label: 'What’s blocked?', prompt: 'What’s blocked or waiting on someone else right now?' },
@@ -668,15 +673,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 initial={reduceMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...SPRING_ENTER, delay: 0.05 + idx * 0.03 }}
-                whileTap={{ scale: 0.94, transition: SPRING_TAP }}
-                whileHover={{ y: -1, transition: SPRING_TAP }}
-                className="px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="bd-chip disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {c.label}
               </motion.button>
             ))}
           </div>
-          <div className="flex items-end gap-2">
+          <div className={`bd-input-shell flex items-end gap-1.5 pl-3.5 pr-1.5 py-1.5 ${voice.isListening ? '!bg-rose-50/40 dark:!bg-rose-500/5 !border-rose-200/60 dark:!border-rose-500/30' : ''}`}>
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -685,12 +688,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               }}
               placeholder={voice.isListening ? 'Listening…' : 'Ask anything…'}
               rows={1}
-              className={`flex-1 resize-none px-3.5 py-2 rounded-xl border text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors ${
-                voice.isListening
-                  ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
-                  : 'bg-zinc-50 dark:bg-zinc-800/60 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
-              }`}
-              style={{ minHeight: '36px' }}
+              className="flex-1 bg-transparent border-0 outline-none text-[13px] leading-[1.5] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 disabled:opacity-60 resize-none py-1.5 tracking-[-0.003em] max-h-32"
+              style={{ minHeight: '32px' }}
             />
             {/* Mic — toggles voice input. Only rendered when the
                 browser supports SpeechRecognition (hidden in Firefox
@@ -706,15 +705,14 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 reduceMotion={!!reduceMotion}
               />
             )}
-            <motion.button
+            <button
               onClick={() => handleSend()}
               disabled={!input.trim() || sending}
-              whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-              className="p-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+              className="bd-send shrink-0 self-end mb-0.5"
               aria-label="Send"
             >
-              <Icons.Send size={14} />
-            </motion.button>
+              <Icons.Send size={13} />
+            </button>
           </div>
           {voice.error && (
             <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">
@@ -726,7 +724,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
       {/* ── RIGHT: structured panel with tabs ── */}
       <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-        {/* Tab strip */}
+        {/* Tab strip — LIVV OS design: gradient underline accent for the
+           active tab (gold→sage gradient like the section labels on
+           the design's section dividers). */}
         <header className="border-b border-zinc-100 dark:border-zinc-800/60 px-3 pt-3 flex items-center gap-1">
           {([
             { id: 'tasks' as const,    label: 'Tasks',    icon: 'Check' as const,    count: overdue.length + dueToday.length + dueSoon.length },
@@ -740,9 +740,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 key={t.id}
                 onClick={() => setRightTab(t.id)}
                 className={`relative px-3 py-2 text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors ${
-                  active
-                    ? 'text-zinc-900 dark:text-zinc-100'
-                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                  active ? 'bd-tab-active' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
                 }`}
               >
                 <IconCmp size={12} />
@@ -752,13 +750,12 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                     active ? 'bg-zinc-900/10 dark:bg-zinc-100/10' : 'bg-zinc-100 dark:bg-zinc-800'
                   }`}>{t.count}</span>
                 )}
-                {active && <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-full" />}
               </button>
             );
           })}
           <button
             onClick={() => onNavigate(rightTab === 'inbox' ? 'communications' : 'calendar')}
-            className="ml-auto text-[10px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 inline-flex items-center gap-1 py-2 px-2"
+            className="ml-auto bd-eyebrow hover:!text-zinc-700 dark:hover:!text-zinc-200 inline-flex items-center gap-1 py-2 px-2"
             title="Open full page"
           >
             Open full →
@@ -912,7 +909,7 @@ const TaskSection: React.FC<{
   if (tasks.length === 0) {
     return (
       <section>
-        <header className="flex items-center gap-1.5 mb-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+        <header className="bd-section-label mb-1.5">
           {icon}
           {title}
         </header>
@@ -924,7 +921,7 @@ const TaskSection: React.FC<{
     <section>
       <header
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400 cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+        className="bd-section-label mb-2 cursor-pointer hover:!text-zinc-700 dark:hover:!text-zinc-200 transition-colors"
       >
         {icon}
         {title}
