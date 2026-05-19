@@ -55,6 +55,7 @@ const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/Plat
 const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
 const loadStrategyHub = () => retryDynamicImport(() => import('./pages/StrategyHub').then(m => ({ default: m.StrategyHub })), 'StrategyHub');
 const loadContentEngine = () => retryDynamicImport(() => import('./pages/ContentEngine').then(m => ({ default: m.ContentEngine })), 'ContentEngine');
+const loadSalesPipeline = () => retryDynamicImport(() => import('./pages/SalesPipeline').then(m => ({ default: m.SalesPipeline })), 'SalesPipeline');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -85,6 +86,7 @@ const PlatformFeatures = React.lazy(loadPlatformFeatures);
 const PlatformAudit = React.lazy(loadPlatformAudit);
 const StrategyHub = React.lazy(loadStrategyHub);
 const ContentEngine = React.lazy(loadContentEngine);
+const SalesPipeline = React.lazy(loadSalesPipeline);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -868,6 +870,13 @@ const AppContent: React.FC<{
               <ContentEngine />
             </KeepAlivePage>
           )}
+
+          {/* Sales Pipeline — leads kanban + outreach log + per-lead detail */}
+          {visitedPages.has('sales_pipeline') && (
+            <KeepAlivePage page="sales_pipeline" active={currentPage === 'sales_pipeline'}>
+              <SalesPipeline />
+            </KeepAlivePage>
+          )}
         </>
       )}
     </Layout>
@@ -884,7 +893,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
-  'strategy_hub', 'content_engine',
+  'strategy_hub', 'content_engine', 'sales_pipeline',
 ]);
 
 const readLastPage = (): PageView => {

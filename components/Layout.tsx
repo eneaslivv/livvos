@@ -628,6 +628,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     // The 'sales_leads' PageView still works for deep links / legacy URLs
     // and renders the same Sales page with the inbox sub-view selected.
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
+    // Pipeline — the growth-engine sales funnel: leads kanban + outreach
+    // log. Distinct from "Sales Overview" (which is the BI dashboard of
+    // historical revenue + proposals). Pipeline is the WORK surface for
+    // active prospecting.
+    { id: 'sales_pipeline', label: 'Pipeline', icon: <Icons.Target /> },
     // Inbox (Communications Hub) — moved here from OS mode. Sits next to
     // Sales Overview so all incoming-message surfaces live together.
     { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
