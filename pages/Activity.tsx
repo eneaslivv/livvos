@@ -9,6 +9,7 @@ import { useTenant } from '../context/TenantContext';
 import { useTeam } from '../context/TeamContext';
 import { supabase } from '../lib/supabase';
 import { MemberWeeklySummaryPanel } from '../components/activity/MemberWeeklySummaryPanel';
+import '../components/activity/ActivityDesign.css';
 
 type TabType = 'All Activity' | 'My Updates' | 'Comments' | 'Files';
 
@@ -291,6 +292,52 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
     const replies = rawActivities.filter((a: any) => a.parent_id);
     return topLevel.filter((a: any) => a.type === 'comment' || a.type === 'status').length + replies.length;
   }, [rawActivities]);
+
+  // ── Sparkline series ──────────────────────────────────────────
+  // 4 series (one per KPI tile) — last 7 days, count per day. Drives
+  // the tiny bar charts in the upgraded KPI tiles. Building them all
+  // in one useMemo keeps the math co-located + cheap (single pass per
+  // input array). Peak day (last in series) gets the brighter tone
+  // via .actd-kpi-spark span.peak — matches the design's `.bar.peak`.
+  const sparklines = useMemo(() => {
+    const days: string[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    const completed = new Array(7).fill(0);
+    const discussions = new Array(7).fill(0);
+    const signins = new Array(7).fill(0);
+    const velocity = new Array(7).fill(0); // sum of completions per day = velocity proxy
+
+    // Completed tasks per day
+    (allTasks || []).forEach((t: any) => {
+      if (!t.completed || !t.completed_at) return;
+      const key = t.completed_at.slice(0, 10);
+      const idx = days.indexOf(key);
+      if (idx >= 0) {
+        completed[idx] += 1;
+        velocity[idx] += 1;
+      }
+    });
+
+    // Discussions + sign-ins per day (from rawActivities)
+    if (rawActivities) {
+      for (const a of rawActivities) {
+        if (!a.created_at) continue;
+        const key = a.created_at.slice(0, 10);
+        const idx = days.indexOf(key);
+        if (idx < 0) continue;
+        if (a.type === 'comment' || a.type === 'status') discussions[idx] += 1;
+        if (a.type === 'user_login') signins[idx] += 1;
+      }
+    }
+
+    return { completed, velocity, discussions, signins };
+  }, [allTasks, rawActivities]);
 
   // Transform and filter activities
   const allActivities = useMemo(() => {
@@ -615,86 +662,108 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-5xl mx-auto pt-3 pb-6 space-y-3 font-sans">
-      {/* Compact header — h2 instead of h3, inline KPI strip */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Activity</h1>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
-            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+      {/* Editorial header — Inter Light h1 + LIVE pill with breathing
+         halo (matches the LIVV OS design handoff: livv-activity.html). */}
+      <div className="flex items-end justify-between gap-4 pb-1">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="actd-title">Activity</h1>
+          <span className="actd-live">
+            <span className="actd-live-dot" />
             Live
           </span>
         </div>
-        <button
-          onClick={() => refresh()}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition"
-        >
-          <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
-        </button>
+        <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+          {weeklyStats.totalLoginsThisWeek > 0 && (
+            <span className="hidden sm:inline">{weeklyStats.totalLoginsThisWeek} sign-ins · last 7d</span>
+          )}
+          <button
+            onClick={() => refresh()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-200/70 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 hover:bg-white dark:hover:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-700 dark:text-zinc-200 transition-all"
+          >
+            <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
       </div>
 
-      {/* KPI strip — denser, single-row inline */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
-          <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10">
-            <Icons.CheckCircle size={12} className="text-emerald-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Completed</div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{weeklyStats.thisWeekTotal}</span>
-              <span className="text-[10px] text-zinc-500">tasks</span>
-              {weeklyStats.topPerformerName && (
-                <span className="text-[10px] text-zinc-400 truncate">· top {weeklyStats.topPerformerName} ({weeklyStats.topPerformerCount})</span>
-              )}
+      {/* KPI strip — editorial typography + 7-day sparkline per tile.
+         Layered on top of the previous grid: same data, more visual
+         weight. Each tile uses .actd-kpi for hover lift + the
+         .actd-kpi-spark block in the bottom-right corner. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {([
+          { id: 'completed',   label: 'Completed',  icon: 'CheckCircle', tone: 'emerald',
+            num: weeklyStats.thisWeekTotal, suffix: 'tasks',
+            sub: weeklyStats.topPerformerName ? `top ${weeklyStats.topPerformerName} · ${weeklyStats.topPerformerCount}` : 'this week',
+            series: sparklines.completed,
+            color: '#10b981' },
+          { id: 'velocity',    label: 'Velocity',   icon: 'Zap',         tone: weeklyStats.velocity >= 0 ? 'emerald' : 'rose',
+            num: `${weeklyStats.velocity >= 0 ? '+' : ''}${weeklyStats.velocity}%`, suffix: '',
+            sub: `${weeklyStats.thisWeekTotal} vs ${weeklyStats.lastWeekTotal} last wk`,
+            series: sparklines.velocity,
+            color: weeklyStats.velocity >= 0 ? '#10b981' : '#f43f5e' },
+          { id: 'discussions', label: 'Discussions',icon: 'Message',     tone: 'violet',
+            num: threadCount, suffix: 'threads',
+            sub: 'comments + statuses',
+            series: sparklines.discussions,
+            color: '#8b5cf6' },
+          { id: 'signins',     label: 'Sign-ins',   icon: 'LogIn',       tone: 'teal',
+            num: weeklyStats.totalLoginsThisWeek, suffix: 'this week',
+            sub: (() => {
+              const distinct = weeklyStats.ranking.filter(r => r.logins > 0).length;
+              return distinct > 0 ? `${distinct} ${distinct === 1 ? 'person' : 'people'}` : ' ';
+            })(),
+            series: sparklines.signins,
+            color: '#14b8a6' },
+        ] as const).map(t => {
+          const IconCmp = (Icons as any)[t.icon] || Icons.Activity;
+          const max = Math.max(1, ...t.series);
+          const toneBg =
+            t.tone === 'emerald' ? 'bg-emerald-50 dark:bg-emerald-500/10' :
+            t.tone === 'rose'    ? 'bg-rose-50 dark:bg-rose-500/10' :
+            t.tone === 'violet'  ? 'bg-violet-50 dark:bg-violet-500/10' :
+            t.tone === 'teal'    ? 'bg-teal-50 dark:bg-teal-500/10' :
+                                   'bg-zinc-100 dark:bg-zinc-800';
+          const toneIcon =
+            t.tone === 'emerald' ? 'text-emerald-500' :
+            t.tone === 'rose'    ? 'text-rose-500' :
+            t.tone === 'violet'  ? 'text-violet-500' :
+            t.tone === 'teal'    ? 'text-teal-500' :
+                                   'text-zinc-500';
+          const numTone =
+            t.id === 'velocity' && weeklyStats.velocity < 0 ? 'text-rose-600 dark:text-rose-400' :
+            t.id === 'velocity' ? 'text-emerald-600 dark:text-emerald-400' :
+                                  'text-zinc-900 dark:text-zinc-100';
+          return (
+            <div
+              key={t.id}
+              className="actd-kpi px-3.5 py-3 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-xl flex items-start gap-3"
+            >
+              <div className={`p-1.5 rounded-md ${toneBg} ${toneIcon} shrink-0`}>
+                <IconCmp size={13} />
+              </div>
+              <div className="min-w-0 flex-1 relative">
+                <div className="font-mono text-[9.5px] uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500 mb-1.5">{t.label}</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`actd-kpi-num ${numTone}`}>{t.num}</span>
+                  {t.suffix && <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{t.suffix}</span>}
+                </div>
+                {t.sub && (
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{t.sub}</div>
+                )}
+                {/* 7-day sparkline anchored bottom-right */}
+                <div className="actd-kpi-spark" style={{ color: t.color }} aria-hidden>
+                  {t.series.map((v, i) => (
+                    <span
+                      key={i}
+                      className={i === t.series.length - 1 ? 'peak' : ''}
+                      style={{ height: `${Math.max(15, (v / max) * 100)}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
-          <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-500/10">
-            <Icons.Zap size={12} className="text-blue-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Velocity</div>
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-sm font-semibold tabular-nums ${weeklyStats.velocity >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {weeklyStats.velocity >= 0 ? '+' : ''}{weeklyStats.velocity}%
-              </span>
-              <span className="text-[10px] text-zinc-400 truncate">{weeklyStats.thisWeekTotal} vs {weeklyStats.lastWeekTotal} last wk</span>
-            </div>
-          </div>
-        </div>
-        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
-          <div className="p-1 rounded-md bg-violet-50 dark:bg-violet-500/10">
-            <Icons.Message size={12} className="text-violet-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Discussions</div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{threadCount}</span>
-              <span className="text-[10px] text-zinc-500">threads</span>
-            </div>
-          </div>
-        </div>
-        {/* Sign-ins this week — total + how many distinct people came in.
-            New stat card so it's the same size/format as the others. */}
-        <div className="px-3 py-2 bg-white dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center gap-2.5">
-          <div className="p-1 rounded-md bg-teal-50 dark:bg-teal-500/10">
-            <Icons.LogIn size={12} className="text-teal-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold">Sign-ins</div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{weeklyStats.totalLoginsThisWeek}</span>
-              <span className="text-[10px] text-zinc-500">this week</span>
-              {(() => {
-                const distinct = weeklyStats.ranking.filter(r => r.logins > 0).length;
-                return distinct > 0
-                  ? <span className="text-[10px] text-zinc-400 truncate">· {distinct} {distinct === 1 ? 'person' : 'people'}</span>
-                  : null;
-              })()}
-            </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Team Performance — compact roster with click-to-drill-down */}
@@ -756,8 +825,8 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
                         title={`Ver resumen semanal de ${member.name}`}
                         className="text-xs font-medium text-zinc-700 dark:text-zinc-200 w-24 truncate text-left hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
                       >{member.name}</button>
-                      <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${barWidth}%` }} />
+                      <div className={`actd-team-bar flex-1 ${member.thisWeek === 0 ? 'idle' : ''}`}>
+                        <div className="actd-team-fill" style={{ width: `${barWidth}%` }} />
                       </div>
                       <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums w-5 text-right">{member.thisWeek}</span>
                       {weekDelta !== 0 ? (
@@ -962,7 +1031,10 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
       <div className="space-y-3">
         {Object.entries(groupedActivities).map(([date, items]) => (
           <div key={date} className="relative">
-            <div className="uppercase text-[10px] font-bold text-zinc-400 dark:text-zinc-500 tracking-wider mb-1.5 pl-10">
+            {/* Day-label divider — mono uppercase + gradient line per
+                the LIVV OS design. Spans the full row width so it
+                reads as a section break, not a row label. */}
+            <div className="actd-day-label">
               {date}
             </div>
 

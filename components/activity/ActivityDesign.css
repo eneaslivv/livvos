@@ -1,0 +1,269 @@
+/* ============================================================
+   Activity — design tokens from LIVV OS handoff
+   Source: inicio-web-dash-livv/project/livv-activity.html
+   ------------------------------------------------------------
+   We layer this on top of the existing Activity page — it
+   doesn't remove anything, it gives the existing pieces the
+   right visual weight (typography, halo pulse, gradient
+   progress bars, day-label dividers, sparkline blocks).
+   ============================================================ */
+
+/* ── LIVE pill with breathing halo ─────────────────────────── */
+.actd-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(118, 146, 104, 0.13);
+  color: #4d6b4d;
+  border-radius: 9999px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+:is(.dark) .actd-live {
+  background: rgba(118, 146, 104, 0.2);
+  color: #a4c4a0;
+}
+
+.actd-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(118, 146, 104, 0.18);
+  animation: actd-pulse 2s ease-in-out infinite;
+}
+
+@keyframes actd-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(118, 146, 104, 0.18); }
+  50%      { box-shadow: 0 0 0 6px rgba(118, 146, 104, 0.05); }
+}
+
+/* ── Editorial title — Inter Light + tight tracking ──────── */
+.actd-title {
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: #18181b;
+}
+
+:is(.dark) .actd-title { color: #fafafa; }
+
+/* ── KPI tile — used to dress up the existing 4-card row ─── */
+.actd-kpi {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.actd-kpi:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+}
+
+.actd-kpi-num {
+  font-size: 22px;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.actd-kpi-spark {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  height: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.actd-kpi-spark span {
+  width: 3px;
+  background: currentColor;
+  opacity: 0.55;
+  border-radius: 1px;
+  transition: opacity 0.2s ease;
+}
+
+.actd-kpi-spark span.peak {
+  opacity: 1;
+}
+
+.actd-kpi:hover .actd-kpi-spark span {
+  opacity: 0.8;
+}
+
+/* ── Day-label divider for the feed ──────────────────────── */
+.actd-day-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0 8px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #71717a;
+  font-weight: 600;
+}
+
+:is(.dark) .actd-day-label { color: #a1a1aa; }
+
+.actd-day-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(82, 82, 91, 0.18), transparent);
+}
+
+/* ── Team leaderboard — gradient progress bar ─────────────── */
+.actd-team-bar {
+  height: 5px;
+  background: rgba(82, 82, 91, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.actd-team-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #769268 0%, #c4a35a 100%);
+  border-radius: 9999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.actd-team-row.idle .actd-team-fill {
+  background: rgba(82, 82, 91, 0.15);
+}
+
+.actd-team-rank {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #a1a1aa;
+  text-align: right;
+}
+
+.actd-team-row.top .actd-team-rank {
+  color: #c4a35a;
+  font-weight: 600;
+}
+
+/* ── Activity item — refined hover + avatar mark ─────────── */
+.actd-item-av-mark {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #fff;
+}
+
+:is(.dark) .actd-item-av-mark {
+  background: #18181b;
+  border-color: #18181b;
+}
+
+.actd-item-av-mark.complete { color: #16a34a; }
+.actd-item-av-mark.message  { color: #0ea5e9; }
+.actd-item-av-mark.create   { color: #c4a35a; }
+.actd-item-av-mark.status   { color: #a855f7; }
+.actd-item-av-mark.delete   { color: #ef4444; }
+.actd-item-av-mark.upload   { color: #0891b2; }
+
+/* ── Composer pill ───────────────────────────────────────── */
+.actd-composer {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 0.5px solid rgba(82, 82, 91, 0.12);
+  border-radius: 14px;
+  transition: border-color 0.2s ease;
+}
+
+:is(.dark) .actd-composer {
+  background: rgba(24, 24, 27, 0.6);
+  border-color: rgba(82, 82, 91, 0.3);
+}
+
+.actd-composer:focus-within {
+  border-color: rgba(82, 82, 91, 0.3);
+}
+
+:is(.dark) .actd-composer:focus-within {
+  border-color: rgba(196, 163, 90, 0.4);
+}
+
+.actd-composer-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #c4a35a, #a855f7);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.actd-composer-input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: inherit;
+  resize: none;
+  padding: 6px 0;
+  min-height: 36px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.actd-composer-input::placeholder {
+  color: #a1a1aa;
+}
+
+.actd-post-btn {
+  align-self: flex-end;
+  padding: 6px 14px;
+  background: #18181b;
+  color: #fafafa;
+  border: 0;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+:is(.dark) .actd-post-btn {
+  background: #fafafa;
+  color: #18181b;
+}
+
+.actd-post-btn:hover { transform: scale(1.02); }
+.actd-post-btn:active { transform: scale(0.97); }
+.actd-post-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
