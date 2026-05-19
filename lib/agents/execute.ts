@@ -26,12 +26,21 @@ export interface ExecuteResult {
 
 /** Helpers the executor needs from the calling surface. Keeps the
  *  executor decoupled from React contexts — Brief / AiAdvisor pass
- *  their concrete implementations in. */
+ *  their concrete implementations in.
+ *
+ *  All helpers are optional. If an action's required helper is
+ *  missing, the executor throws a clear error inside its case branch
+ *  (no silent no-op). Surfaces that don't expose, say, deleteTask
+ *  simply won't be able to handle a delete_task action — the AI
+ *  shouldn't propose one in the first place, but defensively the
+ *  user just sees "helper not provided" in the action card error. */
 export interface ExecutorHelpers {
   /** Wraps CalendarContext.updateTask. */
   updateTask?: (id: string, patch: Record<string, any>) => Promise<any>;
   /** Wraps CalendarContext.createTask. */
   createTask?: (data: Record<string, any>) => Promise<any>;
+  /** Wraps CalendarContext.deleteTask. */
+  deleteTask?: (id: string) => Promise<any>;
   /** Wraps CalendarContext.updateEvent. */
   updateEvent?: (id: string, patch: Record<string, any>) => Promise<any>;
   /** Wraps CalendarContext.createEvent. */
@@ -78,6 +87,11 @@ export async function executeProposedAction(
 
       case 'create_task': {
         if (!helpers.createTask) throw new Error('createTask helper not provided');
+        // If the agent passed an assignee_id, seed assignee_ids with
+        // it. Without this, "create a task for Christie" would
+        // create the task unassigned even when Christie's id was
+        // resolved upstream.
+        const assignees: string[] = action.params.assignee_id ? [action.params.assignee_id] : [];
         const created = await helpers.createTask({
           title: action.params.title,
           description: action.params.description,
@@ -86,11 +100,30 @@ export async function executeProposedAction(
           completed: false,
           owner_id: ctx.userId,
           project_id: action.params.project_id,
+          client_id: action.params.client_id,
           start_date: action.params.due_date,
-          assignee_ids: [],
+          assignee_ids: assignees,
           order_index: 0,
         });
         return { ok: true, summary: `Created task "${action.params.title}"`, newRowId: (created as any)?.id };
+      }
+
+      case 'assign_task': {
+        if (!helpers.updateTask) throw new Error('updateTask helper not provided');
+        // Single-assignee for now (covers the 95% case of "asignale
+        // esto a X"). The DB column is assignee_ids[] so this
+        // overwrites any previous assignees — which is the desired
+        // semantics for a voice/chat "assign to Y" command.
+        await helpers.updateTask(action.params.task_id, {
+          assignee_ids: [action.params.assignee_id],
+        });
+        return { ok: true, summary: 'Task reassigned' };
+      }
+
+      case 'delete_task': {
+        if (!helpers.deleteTask) throw new Error('deleteTask helper not provided');
+        await helpers.deleteTask(action.params.task_id);
+        return { ok: true, summary: 'Task deleted' };
       }
 
       // ── Finance ──
@@ -139,6 +172,25 @@ export async function executeProposedAction(
         return { ok: true, summary: `Income "${action.params.concept}" logged`, newRowId: (data as any)?.id };
       }
 
+      case 'delete_expense': {
+        // tenant_id filter is the RLS belt-and-suspenders — RLS would
+        // reject cross-tenant deletes anyway, but adding the eq
+        // surfaces a row-not-found error instead of silently no-op'ing.
+        const { error } = await ctx.db.from('expenses').delete()
+          .eq('id', action.params.expense_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Expense deleted' };
+      }
+
+      case 'delete_income': {
+        const { error } = await ctx.db.from('incomes').delete()
+          .eq('id', action.params.income_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Income deleted' };
+      }
+
       // ── Calendar ──
       case 'reschedule_event': {
         if (!helpers.updateEvent) throw new Error('updateEvent helper not provided');
@@ -165,6 +217,16 @@ export async function executeProposedAction(
           owner_id: ctx.userId,
         });
         return { ok: true, summary: `Event "${action.params.title}" scheduled`, newRowId: (created as any)?.id };
+      }
+
+      case 'delete_event': {
+        // Functionally identical to cancel_event today (both delete
+        // the row). Kept as a separate kind so prompts that emit
+        // "delete the meeting" map cleanly without the agent having
+        // to remember the cancel/delete distinction.
+        if (!helpers.deleteEvent) throw new Error('deleteEvent helper not provided');
+        await helpers.deleteEvent(action.params.event_id);
+        return { ok: true, summary: 'Event deleted' };
       }
 
       // ── Inbox ──
@@ -232,6 +294,24 @@ export async function executeProposedAction(
         return { ok: true, summary: `Client "${action.params.name}" created`, newRowId: (data as any)?.id };
       }
 
+      case 'delete_client': {
+        // Soft-guard: refuse if the client still has projects. The DB
+        // may also enforce this via FK constraints — we pre-check so
+        // the user gets a useful message instead of a Postgres error.
+        const { count } = await ctx.db.from('projects')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', action.params.client_id)
+          .eq('tenant_id', ctx.tenantId);
+        if ((count || 0) > 0) {
+          return { ok: false, summary: 'Cannot delete', error: `Client still has ${count} project(s). Archive or reassign them first.` };
+        }
+        const { error } = await ctx.db.from('clients').delete()
+          .eq('id', action.params.client_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Client deleted' };
+      }
+
       // ── Projects ──
       case 'set_project_status': {
         const { error } = await ctx.db.from('projects').update({
@@ -260,6 +340,26 @@ export async function executeProposedAction(
         }).select('id').single();
         if (error) throw error;
         return { ok: true, summary: `Project "${action.params.title}" created`, newRowId: (data as any)?.id };
+      }
+
+      case 'delete_project': {
+        // Soft-guard mirrors delete_client — refuse when open tasks
+        // exist so the user doesn't orphan a backlog. "Open" means
+        // not done AND not cancelled; a project with only finished
+        // tasks is safe to delete.
+        const { count } = await ctx.db.from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', action.params.project_id)
+          .eq('tenant_id', ctx.tenantId)
+          .not('status', 'in', '(done,cancelled)');
+        if ((count || 0) > 0) {
+          return { ok: false, summary: 'Cannot delete', error: `Project still has ${count} open task(s). Close them or move them first.` };
+        }
+        const { error } = await ctx.db.from('projects').delete()
+          .eq('id', action.params.project_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Project deleted' };
       }
 
       default:

@@ -47,17 +47,21 @@ const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
   // Tasks
   'complete_task', 'reopen_task', 'start_task',
   'update_task_priority', 'update_task_due_date', 'create_task',
+  'assign_task', 'delete_task',
   // Finance
   'mark_installment_paid', 'mark_installment_pending',
   'create_expense', 'create_income',
+  'delete_expense', 'delete_income',
   // Calendar
   'reschedule_event', 'cancel_event', 'create_event',
+  'delete_event',
   // Inbox
   'mark_message_done', 'convert_to_task', 'draft_reply',
   // Clients
-  'update_client_notes', 'create_client',
+  'update_client_notes', 'create_client', 'delete_client',
   // Projects
   'set_project_status', 'set_project_deadline', 'create_project',
+  'delete_project',
 ]);
 
 const parseActionsFromReply = (reply: string): { cleanReply: string; actions: ProposedAction[] } => {

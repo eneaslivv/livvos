@@ -158,7 +158,13 @@ const ACTION_PROTOCOL_HEADER = [
 ].join('\n');
 
 /** Per-domain action menu — appended to each agent's prompt. Tells the
- *  agent which action kinds it can emit + their param contract. */
+ *  agent which action kinds it can emit + their param contract.
+ *
+ *  When adding a destructive action (delete_*, etc.), also add a
+ *  matching case to lib/agents/execute.ts and an entry to the
+ *  SUPPORTED_KINDS allowlist in lib/agents/orchestrator.ts. The
+ *  approval card in the UI is the user's safety net — never wire
+ *  auto-execution for delete kinds. */
 const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
   tasks: [
     'Supported actions for this agent:',
@@ -167,20 +173,25 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
     '  start_task             task_id="<uuid>"',
     '  update_task_priority   task_id="<uuid>" priority="urgent|high|medium|low"',
     '  update_task_due_date   task_id="<uuid>" due_date="YYYY-MM-DD"',
-    '  create_task            title="..." project_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
+    '  assign_task            task_id="<uuid>" assignee_id="<uuid>"',
+    '  create_task            title="..." project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
+    '  delete_task            task_id="<uuid>"   (DESTRUCTIVE — only emit when the user explicitly asked to delete)',
   ].join('\n'),
   finance: [
     'Supported actions for this agent:',
-    '  mark_installment_paid  installment_id="<uuid>" paid_date="YYYY-MM-DD?"',
+    '  mark_installment_paid    installment_id="<uuid>" paid_date="YYYY-MM-DD?"',
     '  mark_installment_pending installment_id="<uuid>"',
-    '  create_expense         concept="..." amount="123.45" date="YYYY-MM-DD" category="..." status="paid|pending"',
-    '  create_income          concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?"',
+    '  create_expense           concept="..." amount="123.45" date="YYYY-MM-DD" category="..." status="paid|pending"',
+    '  create_income            concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?"',
+    '  delete_expense           expense_id="<uuid>"   (DESTRUCTIVE)',
+    '  delete_income            income_id="<uuid>"    (DESTRUCTIVE)',
   ].join('\n'),
   calendar: [
     'Supported actions for this agent:',
     '  reschedule_event       event_id="<uuid>" new_date="YYYY-MM-DD" new_time="HH:MM?"',
     '  cancel_event           event_id="<uuid>"',
     '  create_event           title="..." start_date="YYYY-MM-DD" start_time="HH:MM?" duration="60" type="meeting|call|work-block|deadline|note"',
+    '  delete_event           event_id="<uuid>"   (DESTRUCTIVE — equivalent to cancel_event, prefer cancel)',
   ].join('\n'),
   inbox: [
     'Supported actions for this agent:',
@@ -192,12 +203,14 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
     'Supported actions for this agent:',
     '  update_client_notes    client_id="<uuid>" notes="..."',
     '  create_client          name="..." email="..." company="..."',
+    '  delete_client          client_id="<uuid>"   (DESTRUCTIVE — fails if the client has projects)',
   ].join('\n'),
   projects: [
     'Supported actions for this agent:',
     '  set_project_status     project_id="<uuid>" status="Active|Pending|Review|Completed|Archived"',
     '  set_project_deadline   project_id="<uuid>" deadline="YYYY-MM-DD"',
     '  create_project         title="..." client_id="<uuid>?" deadline="YYYY-MM-DD?"',
+    '  delete_project         project_id="<uuid>"   (DESTRUCTIVE — fails if the project has open tasks)',
   ].join('\n'),
 };
 
@@ -221,17 +234,21 @@ export type ActionKind =
   // Tasks
   | 'complete_task' | 'reopen_task' | 'start_task'
   | 'update_task_priority' | 'update_task_due_date' | 'create_task'
+  | 'assign_task' | 'delete_task'
   // Finance
   | 'mark_installment_paid' | 'mark_installment_pending'
   | 'create_expense' | 'create_income'
+  | 'delete_expense' | 'delete_income'
   // Calendar
   | 'reschedule_event' | 'cancel_event' | 'create_event'
+  | 'delete_event'
   // Inbox
   | 'mark_message_done' | 'convert_to_task' | 'draft_reply'
   // Clients
-  | 'update_client_notes' | 'create_client'
+  | 'update_client_notes' | 'create_client' | 'delete_client'
   // Projects
-  | 'set_project_status' | 'set_project_deadline' | 'create_project';
+  | 'set_project_status' | 'set_project_deadline' | 'create_project'
+  | 'delete_project';
 
 export interface ProposedAction {
   kind: ActionKind;

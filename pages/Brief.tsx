@@ -24,7 +24,8 @@ import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
-import { runOrchestrator, recordFeedback, executeProposedAction, type ProposedAction } from '../lib/agents';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import type { PageView, NavParams } from '../types';
@@ -73,7 +74,7 @@ const formatRelative = (dateStr: string | undefined): string => {
 export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { currentTenant } = useTenant();
-  const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent } = useCalendar();
+  const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent, deleteTask } = useCalendar();
   const [rightTab, setRightTab] = useState<RightTab>('tasks');
   const [pendingMessages, setPendingMessages] = useState<any[]>([]);
   const { projects } = useProjects();
@@ -84,6 +85,36 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const [sending, setSending] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Voice input ─────────────────────────────────────────────────
+  // Loads the user's preferred language once, maps to a BCP-47 tag,
+  // then feeds the recognizer. Live transcript pipes into the same
+  // `input` state so the user sees their words as they speak. On
+  // stop, the final transcript stays in the textarea so they can
+  // review / edit before sending — we deliberately do NOT auto-send
+  // so a hot mic in a noisy room can't fire off random questions.
+  const [voiceLang, setVoiceLang] = useState<string>('en-US');
+  useEffect(() => {
+    if (!user?.id || !currentTenant?.id) return;
+    let cancelled = false;
+    getUserProfile(supabase as any, { userId: user.id, tenantId: currentTenant.id })
+      .then(p => {
+        if (cancelled) return;
+        const map: Record<string, string> = {
+          es: 'es-AR',  // could refine via geo later — es-AR is a safe default for LIVV's audience
+          en: 'en-US',
+          pt: 'pt-BR',
+          auto: navigator.language || 'en-US',
+        };
+        setVoiceLang(map[p.preferred_language] || 'en-US');
+      })
+      .catch(() => { /* keep default */ });
+    return () => { cancelled = true; };
+  }, [user?.id, currentTenant?.id]);
+  const voice = useVoiceInput({
+    lang: voiceLang,
+    onPartial: (text) => setInput(text),
+  });
 
   // ── Task groupings ───────────────────────────────────────────────
   const myTasks = useMemo(() => allTasks.filter(t =>
@@ -293,6 +324,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         {
           updateTask: (id, patch) => updateTask(id, patch as any),
           createTask: (data) => createTask(data as any),
+          deleteTask: (id) => deleteTask(id),
           updateEvent: (id, patch) => updateEvent(id, patch as any),
           createEvent: (data) => createEvent(data as any),
           deleteEvent: (id) => deleteEvent(id),
@@ -578,11 +610,36 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
               }}
-              placeholder="Ask anything…"
+              placeholder={voice.isListening ? 'Listening…' : 'Ask anything…'}
               rows={1}
-              className="flex-1 resize-none px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors"
+              className={`flex-1 resize-none px-3.5 py-2 rounded-xl border text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors ${
+                voice.isListening
+                  ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
+                  : 'bg-zinc-50 dark:bg-zinc-800/60 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
+              }`}
               style={{ minHeight: '36px' }}
             />
+            {/* Mic — toggles voice input. Only rendered when the
+                browser supports SpeechRecognition (hidden in Firefox
+                and on iOS Safari versions that haven't shipped it).
+                Listening state turns the button red + pulsing, with a
+                title that reflects the current language so the user
+                knows what locale is being dictated. */}
+            {voice.isSupported && (
+              <button
+                onClick={() => voice.isListening ? voice.stop() : voice.start()}
+                disabled={sending}
+                title={voice.isListening ? 'Stop listening' : `Dictate (${voiceLang})`}
+                aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
+                className={`p-2 rounded-xl border transition-colors ${
+                  voice.isListening
+                    ? 'bg-rose-500 border-rose-500 text-white animate-pulse'
+                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
+                }`}
+              >
+                <Icons.Mic size={14} />
+              </button>
+            )}
             <button
               onClick={() => handleSend()}
               disabled={!input.trim() || sending}
@@ -592,6 +649,11 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               <Icons.Send size={14} />
             </button>
           </div>
+          {voice.error && (
+            <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">
+              {voice.error}
+            </div>
+          )}
         </div>
       </section>
 
