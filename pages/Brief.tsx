@@ -800,7 +800,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        {/* Feed area — bundle's bd-feed wraps everything so the rows
+            sit on the iOS-style grouped container with day labels. */}
+        <div className="bd-feed flex-1 overflow-y-auto">
           {rightTab === 'tasks' && (
             <>
               <TaskSection
@@ -846,55 +848,63 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           )}
 
           {rightTab === 'calendar' && (
-            <section>
-              <header className="flex items-center gap-1.5 mb-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                <Icons.Calendar size={11} className="text-zinc-400" />
-                Today's events
-                <span className="text-[9px] tabular-nums font-mono opacity-70">{todayEvents.length}</span>
-              </header>
+            <>
+              <div className="bd-day">
+                {today.toLocaleDateString('en-US', { weekday: 'long' })} · {today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
               {todayEvents.length === 0 ? (
-                <p className="text-[11px] text-zinc-400 italic pl-4">No events on the calendar today.</p>
+                <div className="px-5 py-8 text-center text-[12px] text-zinc-400 dark:text-zinc-500 italic">
+                  No events on the calendar today.
+                </div>
               ) : (
-                <ul className="space-y-1">
-                  {todayEvents.map(e => (
-                    <li key={e.id}
-                        className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
-                        onClick={() => onNavigate('calendar')}>
-                      <div className="w-12 text-[10px] font-mono text-zinc-400 tabular-nums pt-0.5">
+                todayEvents.map(e => {
+                  const eventColor = (e as any).color || '#c4a35a';
+                  return (
+                    <div
+                      key={e.id}
+                      className="bd-msg"
+                      style={{ gridTemplateColumns: '60px 1fr 80px' }}
+                      onClick={() => onNavigate('calendar')}
+                    >
+                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#18181b', fontWeight: 600, letterSpacing: '0.04em' }}>
                         {e.start_time || '—'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12.5px] font-medium text-zinc-800 dark:text-zinc-100 truncate">{e.title}</div>
+                      </span>
+                      <div className="bd-msg-body">
+                        <div style={{ fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: 9999, background: eventColor }} />
+                          <span style={{ color: '#18181b' }} className="dark:!text-zinc-50">{e.title}</span>
+                        </div>
                         {(e.location || e.duration) && (
-                          <div className="text-[10px] text-zinc-400 mt-0.5 inline-flex items-center gap-2">
-                            {e.duration && <span>⏱ {e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`}</span>}
-                            {e.location && <span className="truncate max-w-[180px]">📍 {e.location}</span>}
+                          <div style={{ fontSize: 11, color: '#71717a', fontFamily: 'JetBrains Mono, monospace', marginTop: 3, display: 'inline-flex', gap: 10 }}>
+                            {e.duration && <span>{e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`} duration</span>}
+                            {e.location && <span className="truncate" style={{ maxWidth: 180 }}>📍 {e.location}</span>}
                           </div>
                         )}
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                      <span className="bd-msg-time">{e.duration ? (e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`) : ''}</span>
+                    </div>
+                  );
+                })
               )}
-            </section>
+            </>
           )}
 
           {rightTab === 'inbox' && (
-            <section>
-              <header className="flex items-center gap-1.5 mb-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                <Icons.Mail size={11} className="text-zinc-400" />
+            <>
+              <div className="bd-day flex items-center">
                 Pending messages
-                <span className="text-[9px] tabular-nums font-mono opacity-70">{pendingMessages.length}</span>
+                <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{pendingMessages.length}</span>
                 <button
                   onClick={() => onNavigate('communications')}
-                  className="ml-auto text-[10px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 normal-case tracking-normal"
+                  className="ml-auto bd-open-full hover:!text-[#5c1d18]"
                 >Open Inbox →</button>
-              </header>
+              </div>
               {pendingMessages.length === 0 ? (
-                <p className="text-[11px] text-zinc-400 italic pl-4">Inbox empty.</p>
+                <div className="px-5 py-8 text-center text-[12px] text-zinc-400 dark:text-zinc-500 italic">
+                  Inbox empty.
+                </div>
               ) : (
-                <div className="space-y-2">
-                  <AnimatePresence initial={false}>
+                <AnimatePresence initial={false}>
                   {pendingMessages.map((m, idx) => (
                     <SwipeableInboxCard
                       key={m.id}
@@ -905,10 +915,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                       onMarkDone={() => handleMarkMessageDone(m)}
                     />
                   ))}
-                  </AnimatePresence>
-                </div>
+                </AnimatePresence>
               )}
-            </section>
+            </>
           )}
         </div>
       </section>
@@ -946,28 +955,27 @@ const TaskSection: React.FC<{
   const [open, setOpen] = useState(true);
   if (tasks.length === 0) {
     return (
-      <section>
-        <header className="bd-section-label mb-1.5">
+      <>
+        <div className="bd-day flex items-center">
           {icon}
-          {title}
-        </header>
-        <p className="text-[11px] text-zinc-400 italic pl-4">{emptyText}</p>
-      </section>
+          <span className="ml-1.5">{title}</span>
+        </div>
+        <div className="px-5 py-3 text-[11px] text-zinc-400 dark:text-zinc-500 italic">{emptyText}</div>
+      </>
     );
   }
   return (
-    <section>
-      <header
+    <>
+      <div
         onClick={() => setOpen(o => !o)}
-        className="bd-section-label mb-2 cursor-pointer hover:!text-zinc-700 dark:hover:!text-zinc-200 transition-colors"
+        className="bd-day flex items-center cursor-pointer hover:!text-zinc-700 dark:hover:!text-zinc-200 transition-colors"
       >
         {icon}
-        {title}
-        <span className="text-[9px] tabular-nums font-mono opacity-70">{tasks.length}</span>
+        <span className="ml-1.5">{title}</span>
+        <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{tasks.length}</span>
         <Icons.ChevronDown size={11} className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`} />
-      </header>
+      </div>
       {open && (
-        <div className="space-y-2">
         <AnimatePresence initial={false}>
           {tasks.slice(0, 12).map((t, idx) => {
             const proj = t.project_id ? projectsById.get(t.project_id) : null;
@@ -992,12 +1000,11 @@ const TaskSection: React.FC<{
             );
           })}
         </AnimatePresence>
-          {tasks.length > 12 && (
-            <div className="px-3 py-1 text-[10px] text-zinc-400">+{tasks.length - 12} more</div>
-          )}
-        </div>
       )}
-    </section>
+      {open && tasks.length > 12 && (
+        <div className="px-5 py-2 text-[10px] text-zinc-400 font-mono">+{tasks.length - 12} more</div>
+      )}
+    </>
   );
 };
 
@@ -1136,67 +1143,86 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         dragConstraints={{ left: -150, right: 150 }}
         dragElastic={0.15}
         dragMomentum={false}
-        style={{ x }}
+        style={{ x, gridTemplateColumns: '22px 1fr auto auto' }}
         onDragEnd={handleDragEnd}
         whileTap={{ scale: 0.995 }}
-        whileHover={{ y: -1, transition: SPRING_TAP }}
-        className="group relative bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-xl overflow-hidden"
+        className="bd-msg group"
+        onClick={() => onClick(t)}
       >
-        {/* Left priority edge — 4px colored bar absolute-positioned
-            so the rest of the card stays a clean rectangle. */}
-        <span className={`absolute left-0 top-0 bottom-0 w-1 ${edge}`} aria-hidden />
-        <button
-          onClick={() => onClick(t)}
-          className="w-full text-left pl-4 pr-3 pt-2.5 pb-2"
+        {/* Priority check — sage when done, tone-edged ring when open */}
+        <span
+          className="bd-task-check"
+          onClick={(e) => { e.stopPropagation(); onComplete(t); }}
+          title="Mark done"
+          style={{
+            borderColor:
+              tone === 'rose'   ? 'rgba(239,68,68,0.5)' :
+              tone === 'amber'  ? 'rgba(232,188,89,0.6)' :
+              tone === 'indigo' ? 'rgba(109,190,220,0.6)' :
+              'rgba(214,209,199,0.7)',
+          }}
         >
-          <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
-            {t.title}
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <Icons.Check size={9} />
+          </span>
+        </span>
+
+        {/* Body */}
+        <div className="bd-msg-body min-w-0">
+          <div className="bd-msg-head">
+            <span className="bd-msg-from truncate">{t.title}</span>
           </div>
-          <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
-            {due && (
-              <span className={`inline-flex items-center gap-0.5 ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
-                {tone === 'rose' && <Icons.Clock size={9} />}
-                {due}
-              </span>
-            )}
-            {t.duration && (
-              <span className="inline-flex items-center gap-0.5">
-                ⏱ {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
-              </span>
-            )}
-            {proj && (
-              <span className="inline-flex items-center gap-0.5 truncate max-w-[120px]">
-                <Icons.Briefcase size={9} />
-                {proj.title}
-              </span>
-            )}
-            {cli && !proj && (
-              <span className="inline-flex items-center gap-0.5 truncate max-w-[100px]">
-                <Icons.Users size={9} />
-                {cli.name}
-              </span>
-            )}
+          <div className="bd-msg-preview" style={{ fontSize: 11, marginTop: 1 }}>
+            {[
+              proj?.title,
+              cli && !proj ? cli.name : null,
+            ].filter(Boolean).join(' · ') || ' '}
           </div>
-        </button>
-        {/* Hover-revealed inline actions — kept for mouse users who
-            don't want to drag. Touch users get the swipe gestures
-            via the parent motion.div. */}
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-zinc-900 rounded-md">
-          <button
-            onClick={(e) => { e.stopPropagation(); onComplete(t); }}
-            title="Mark done"
-            className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-          >
-            <Icons.Check size={11} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
-            title="Snooze +1 day"
-            className="p-1.5 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
-          >
-            <Icons.Clock size={11} />
-          </button>
         </div>
+
+        {/* Due — mono, color-coded */}
+        <span
+          className="font-mono text-[10.5px]"
+          style={{
+            color:
+              tone === 'rose'   ? '#b91c1c' :
+              tone === 'amber'  ? '#8b6a17' :
+              '#a1a1aa',
+            fontWeight: tone === 'rose' || tone === 'amber' ? 500 : 400,
+            letterSpacing: '0.04em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {due}
+          {t.duration && (
+            <span className="ml-2 opacity-70">
+              {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
+            </span>
+          )}
+        </span>
+
+        {/* Priority pill */}
+        <span
+          className={`bd-msg-prio ${
+            t.priority === 'urgent' ? 'urgent' :
+            t.priority === 'high'   ? 'action' :
+            t.priority === 'low'    ? 'fyi' :
+            'action'
+          }`}
+          style={{ marginTop: 0 }}
+        >
+          <span className="dot" style={{ width: 4, height: 4, borderRadius: 9999, background: 'currentColor' }} />
+          {t.priority || 'medium'}
+        </span>
+
+        {/* Hover-revealed snooze button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
+          title="Snooze +1 day"
+          className="absolute right-2 top-2 p-1 rounded-md text-zinc-300 dark:text-zinc-600 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all opacity-0 group-hover:opacity-100"
+        >
+          <Icons.Clock size={11} />
+        </button>
       </motion.div>
     </motion.div>
   );
@@ -1500,70 +1526,102 @@ const InboxCard: React.FC<{
   const cls: InboxClassification = message.ai_classification || {};
   const isRequest = cls.should_create_task === true;
   const isUrgent = cls.priority === 'high' || cls.intent === 'urgent';
-
-  // Badge: pick the most informative one. Urgent wins, then Request,
-  // then a generic FYI. Kept TINY (8px) so it never overwhelms the
-  // card — the zen-minimal vibe wants info hierarchy, not a sticker
-  // explosion.
-  const badge = isUrgent
-    ? { text: 'URGENT',  bg: 'bg-rose-50 dark:bg-rose-500/10',     fg: 'text-rose-700 dark:text-rose-300' }
-    : isRequest
-      ? { text: 'REQUEST', bg: 'bg-emerald-50 dark:bg-emerald-500/10', fg: 'text-emerald-700 dark:text-emerald-300' }
-      : { text: 'FYI',     bg: 'bg-zinc-100 dark:bg-zinc-800',         fg: 'text-zinc-500 dark:text-zinc-400' };
+  const isReplied = message.status === 'replied' || message.status === 'task_created';
+  const isUnread = !isReplied && message.status !== 'read';
 
   const sender = message.from_name || message.from_email || message.channel_name || 'Anonymous';
   const subject = message.subject || message.body_text?.split('\n')[0]?.slice(0, 80) || '(no subject)';
-  const preview = (message.body_text || '').replace(/\s+/g, ' ').slice(0, 120);
+  const preview = (message.body_text || '').replace(/\s+/g, ' ').slice(0, 180);
   const time = formatMsgTime(message.received_at);
 
+  // Platform → source class (drives left-edge accent + corner badge color)
   const isGmail = message.platform === 'gmail';
+  const isSlack = message.platform === 'slack';
+  const sourceClass = isGmail ? 'source-mail' : isSlack ? 'source-slack' : 'source-msg';
+  const sourceColor = isGmail ? '#0a66c2' : isSlack ? '#4a154b' : '#6dbedc';
+
+  // Tag classification → pill color
+  const tag = isUrgent ? { l: 'urgent', c: '#b91c1c' }
+    : isRequest ? { l: 'approval', c: '#8b6a17' }
+    : { l: 'fyi', c: '#71717a' };
+
+  // Avatar initials (mono, like bundle)
+  const initials = (() => {
+    const parts = (sender || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '·';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  })();
+
+  // Stable color seed from sender name → LIVV palette
+  const palette = ['#c4a35a', '#6dbedc', '#f1add8', '#769268', '#a855f7', '#8b5a2b'];
+  const seed = (sender || '').split('').reduce((s, ch) => (s * 31 + ch.charCodeAt(0)) | 0, 0);
+  const avBg = palette[Math.abs(seed) % palette.length];
 
   return (
-    <div className="group rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors overflow-hidden">
-      {/* Top: classification + sender + time. Clickable to open. */}
-      <button
-        onClick={onOpen}
-        className="w-full text-left px-3 pt-2.5 pb-2"
-      >
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <span className={`text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.bg} ${badge.fg}`}>
-            {badge.text}
-          </span>
-          {isGmail
-            ? <Icons.Mail size={10} className="text-zinc-400" />
-            : <Icons.Message size={10} className="text-zinc-400" />}
-          <span className="text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 truncate">
-            {sender}
-          </span>
-          <span className="ml-auto text-[10px] text-zinc-400 tabular-nums shrink-0">{time}</span>
+    <div
+      className={`bd-msg ${sourceClass} ${isUnread ? 'unread' : ''} group`}
+      onClick={onOpen}
+    >
+      {/* Avatar + source corner badge */}
+      <div className="bd-msg-av" style={{ background: avBg }}>
+        {initials}
+        <span className="bd-msg-src" style={{ ['--c' as any]: sourceColor }}>
+          {isGmail ? (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="M2 7l10 7 10-7" />
+            </svg>
+          ) : isSlack ? (
+            <strong style={{ fontSize: 9, fontWeight: 700 }}>S</strong>
+          ) : (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-4-1L3 21l1-5a8.4 8.4 0 0 1-1-4 8.4 8.4 0 0 1 17 0z" />
+            </svg>
+          )}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div className="bd-msg-body">
+        <div className="bd-msg-head">
+          <span className="bd-msg-tag" style={{ ['--tc' as any]: tag.c }}>{tag.l}</span>
+          <span className="bd-msg-from">{sender}</span>
+          {message.channel_name && (
+            <span className="bd-msg-channel">#{message.channel_name}</span>
+          )}
         </div>
-        <div className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200 truncate">
-          {subject}
-        </div>
+        <div className="bd-msg-subject">{subject}</div>
         {preview && preview !== subject && (
-          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-            {preview}
-          </div>
+          <div className="bd-msg-preview">{preview}</div>
         )}
-      </button>
-      {/* Inline actions — only render Convert when the AI flagged this
-          as a real request, so we don't tempt the user into a flood of
-          spurious task creation on FYI messages. */}
-      <div className="px-3 pb-2 flex items-center gap-1">
-        {isRequest && (
-          <button
-            onClick={onConvert}
-            className="text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1 transition-colors"
-          >
-            <Icons.Plus size={10} /> Convert to task
+        {/* Hover-only foot — reply + convert + attachments */}
+        <div className="bd-msg-foot">
+          {isRequest && (
+            <button
+              className="bd-msg-action"
+              onClick={(e) => { e.stopPropagation(); onConvert(); }}
+            >
+              <Icons.Plus size={10} /> Convert
+            </button>
+          )}
+          <button className="bd-msg-action" onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+            <Icons.Mail size={10} /> Draft reply
           </button>
-        )}
-        <button
-          onClick={onOpen}
-          className="text-[10.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md inline-flex items-center gap-1 transition-colors"
-        >
-          <Icons.Mail size={10} /> Draft reply
-        </button>
+        </div>
+      </div>
+
+      {/* Time + priority pill */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <span className="bd-msg-time">{time}</span>
+        <span className={`bd-msg-prio ${
+          isUrgent ? 'urgent' :
+          isRequest ? 'action' :
+          isReplied ? 'replied' :
+          'fyi'
+        }`}>
+          {isUrgent ? 'urgent' : isRequest ? 'action' : isReplied ? 'replied' : 'fyi'}
+        </span>
       </div>
     </div>
   );
@@ -1629,7 +1687,7 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
       transition={{ ...SPRING_ENTER, delay: idx < 8 ? idx * 0.025 : 0 }}
       {...longPress}
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
-      className="relative rounded-xl overflow-hidden"
+      className="relative overflow-hidden"
     >
       {menuPos && (
         <ContextMenu
