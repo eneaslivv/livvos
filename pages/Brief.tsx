@@ -29,6 +29,8 @@ import { useClients } from '../context/ClientsContext';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useLongPress, type LongPressPosition } from '../hooks/useLongPress';
+import { ContextMenu } from '../components/ui/ContextMenu';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
@@ -282,6 +284,26 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       await updateTask(t.id, { start_date: iso, end_date: iso } as any);
     } catch (e) {
       errorLogger.warn('task snooze failed', { taskId: t.id, error: e });
+    }
+  };
+
+  // ── Long-press context menu: delete task ─────────────────────────
+  // Routed through the centralized executor (same path the AI would
+  // use), so audit logging + RLS checks stay consistent. Optimistic
+  // update is handled by CalendarContext.deleteTask itself.
+  const handleTaskDelete = async (t: CalendarTask) => {
+    if (!currentTenant?.id || !user?.id) return;
+    const result = await executeProposedAction(
+      {
+        kind: 'delete_task',
+        label: `Delete "${t.title.slice(0, 40)}"`,
+        params: { task_id: t.id },
+      },
+      { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+      { deleteTask: (id) => deleteTask(id) },
+    );
+    if (!result.ok) {
+      errorLogger.warn('delete_task failed', { taskId: t.id, error: result.error });
     }
   };
 
@@ -785,6 +807,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 onTaskClick={handleTaskClick}
                 onComplete={handleTaskComplete}
                 onSnooze={handleTaskSnooze}
+                onDelete={handleTaskDelete}
                 emptyText="Nothing slipped — good."
               />
               <TaskSection
@@ -797,6 +820,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 onTaskClick={handleTaskClick}
                 onComplete={handleTaskComplete}
                 onSnooze={handleTaskSnooze}
+                onDelete={handleTaskDelete}
                 emptyText="Nothing on today's list."
               />
               <TaskSection
@@ -809,6 +833,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 onTaskClick={handleTaskClick}
                 onComplete={handleTaskComplete}
                 onSnooze={handleTaskSnooze}
+                onDelete={handleTaskDelete}
                 emptyText="Nothing scheduled this week."
               />
             </>
@@ -909,8 +934,9 @@ const TaskSection: React.FC<{
   onTaskClick: (t: CalendarTask) => void;
   onComplete: (t: CalendarTask) => void;
   onSnooze: (t: CalendarTask) => void;
+  onDelete: (t: CalendarTask) => void;
   emptyText: string;
-}> = ({ title, icon, tasks, tone, projectsById, clientsById, onTaskClick, onComplete, onSnooze, emptyText }) => {
+}> = ({ title, icon, tasks, tone, projectsById, clientsById, onTaskClick, onComplete, onSnooze, onDelete, emptyText }) => {
   const [open, setOpen] = useState(true);
   if (tasks.length === 0) {
     return (
@@ -955,6 +981,7 @@ const TaskSection: React.FC<{
                 onClick={onTaskClick}
                 onComplete={onComplete}
                 onSnooze={onSnooze}
+                onDelete={onDelete}
               />
             );
           })}
@@ -993,16 +1020,23 @@ interface SwipeableTaskCardProps {
   onClick: (t: CalendarTask) => void;
   onComplete: (t: CalendarTask) => void;
   onSnooze: (t: CalendarTask) => void;
+  onDelete: (t: CalendarTask) => void;
 }
 
 const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
-  task: t, edge, due, tone, proj, cli, idx, onClick, onComplete, onSnooze,
+  task: t, edge, due, tone, proj, cli, idx, onClick, onComplete, onSnooze, onDelete,
 }) => {
   const reduceMotion = useReducedMotion();
   // x tracks the card's horizontal offset during a drag. The
   // background opacities + icon scales are derived from it via
   // useTransform so they respond live with no extra state.
   const x = useMotionValue(0);
+  // Long-press / right-click → floating context menu anchored to the
+  // press point. Lets the user reach actions that don't have their
+  // own swipe gesture (Delete, Open task, etc) without crowding the
+  // resting UI with buttons.
+  const [menuPos, setMenuPos] = useState<LongPressPosition | null>(null);
+  const longPress = useLongPress<HTMLDivElement>(pos => setMenuPos(pos));
   // Reveal the snooze (indigo) panel when dragging right; intensify
   // sharply near the threshold so the user feels the "snap zone".
   const snoozeOpacity = useTransform(x, [0, 30, 70, 80, 200], [0, 0.3, 0.85, 1, 1]);
@@ -1035,8 +1069,26 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.22 } }}
       transition={{ type: 'spring', stiffness: 320, damping: 26, delay: idx < 8 ? idx * 0.02 : 0 }}
+      {...longPress}
+      // touch-callout off so iOS doesn't fire its system menu over
+      // ours when the user long-presses; user-select off so the
+      // 500ms hold doesn't pop the text-selection UI.
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
       className="relative rounded-xl overflow-hidden"
     >
+      {menuPos && (
+        <ContextMenu
+          position={menuPos}
+          onClose={() => setMenuPos(null)}
+          header={t.title}
+          items={[
+            { icon: <Icons.Check size={13} />,  label: 'Mark done',  onSelect: () => onComplete(t) },
+            { icon: <Icons.Clock size={13} />,  label: 'Snooze +1 day', onSelect: () => onSnooze(t) },
+            { icon: <Icons.Edit size={13} />,   label: 'Open task',  onSelect: () => onClick(t) },
+            { icon: <Icons.Trash size={13} />,  label: 'Delete task', onSelect: () => onDelete(t), destructive: true },
+          ]}
+        />
+      )}
       {/* Background panels under the card — reveal during drag.
           Pointer-events none so they never interfere with the card's
           own click handling. */}
@@ -1441,6 +1493,11 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
 }) => {
   const reduceMotion = useReducedMotion();
   const x = useMotionValue(0);
+  // Long-press / right-click → context menu. Same pattern as
+  // SwipeableTaskCard so the gesture lexicon is uniform across
+  // the right-panel.
+  const [menuPos, setMenuPos] = useState<LongPressPosition | null>(null);
+  const longPress = useLongPress<HTMLDivElement>(pos => setMenuPos(pos));
   // Mirror the task-card transforms so the snap zone feels identical
   // across both surfaces.
   const doneOpacity    = useTransform(x, [-200, -80, -70, -30, 0], [1, 1, 0.85, 0.3, 0]);
@@ -1460,6 +1517,7 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
     }
   };
 
+  const senderForHeader = message.from_name || message.from_email || message.channel_name || 'Message';
   return (
     <motion.div
       layout
@@ -1467,8 +1525,22 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.22 } }}
       transition={{ ...SPRING_ENTER, delay: idx < 8 ? idx * 0.025 : 0 }}
+      {...longPress}
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
       className="relative rounded-xl overflow-hidden"
     >
+      {menuPos && (
+        <ContextMenu
+          position={menuPos}
+          onClose={() => setMenuPos(null)}
+          header={senderForHeader}
+          items={[
+            { icon: <Icons.Check size={13} />, label: 'Mark done',       onSelect: onMarkDone },
+            { icon: <Icons.Plus size={13} />,  label: 'Convert to task', onSelect: onConvert },
+            { icon: <Icons.Mail size={13} />,  label: 'Open in inbox',   onSelect: onOpen },
+          ]}
+        />
+      )}
       {/* Reveal-on-drag panels. Mirrors SwipeableTaskCard's structure
           so the two surfaces feel like one design. */}
       <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
