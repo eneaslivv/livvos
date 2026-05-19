@@ -30,6 +30,8 @@ import type { Brand } from '../types';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import '../components/livv/bundle-strategy.css';
+import { CoachFlow } from '../components/livv/CoachFlow';
+import { BRAND_CREATION_FLOW, type BrandData } from '../components/livv/flows/BrandCreationFlow';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface Channel {
@@ -133,6 +135,55 @@ export const ContentEngine: React.FC = () => {
   // evolve without touching the rest of this page).
   const { brands } = useBrands();
   const [editingBrand, setEditingBrand] = useState<Brand | 'new' | null>(null);
+  // Brand CoachFlow — 6-step guided wizard for creating a brand kit.
+  // Triggered by the "Guided" button on the Brands tab.
+  const [brandCoachOpen, setBrandCoachOpen] = useState(false);
+  const [brandCoachSaving, setBrandCoachSaving] = useState(false);
+
+  const handleBrandCoachFinish = useCallback(async (data: BrandData) => {
+    if (!currentTenant?.id) return;
+    setBrandCoachSaving(true);
+    try {
+      // Compile the brand_prompt the wizard built
+      const compiled = [
+        `# ${data.name || 'Brand'}`,
+        data.about ? `\n${data.about}\n` : '',
+        data.typography_mood ? `Typography mood: ${data.typography_mood}` : '',
+        `Voice: formality ${data.voice_formality ?? 50} · energy ${data.voice_energy ?? 50} · warmth ${data.voice_warmth ?? 50} · cleverness ${data.voice_cleverness ?? 50}`,
+        (data.rules_dos || []).filter(Boolean).length > 0
+          ? `\nDO: ${(data.rules_dos || []).filter(Boolean).join(' · ')}`
+          : '',
+        (data.rules_donts || []).filter(Boolean).length > 0
+          ? `\nDON'T: ${(data.rules_donts || []).filter(Boolean).join(' · ')}`
+          : '',
+      ].filter(Boolean).join('\n');
+
+      const { error } = await supabase.from('brand_kits').insert({
+        tenant_id: currentTenant.id,
+        name: data.name,
+        slug: data.slug,
+        about: data.about,
+        palette: data.palette || [],
+        typography_mood: data.typography_mood,
+        voice_formality: data.voice_formality,
+        voice_energy: data.voice_energy,
+        voice_warmth: data.voice_warmth,
+        voice_cleverness: data.voice_cleverness,
+        rules_dos: (data.rules_dos || []).filter(Boolean),
+        rules_donts: (data.rules_donts || []).filter(Boolean),
+        references: (data.references || []).filter(Boolean),
+        brand_prompt: compiled,
+      });
+      if (error) throw error;
+      setBrandCoachOpen(false);
+      await refetch();
+    } catch (err: any) {
+      errorLogger.warn('brand coach finish failed', err);
+      alert(`Could not save brand kit: ${err.message}`);
+    } finally {
+      setBrandCoachSaving(false);
+    }
+  }, [currentTenant?.id]);
 
   const refetch = useCallback(async () => {
     if (!currentTenant?.id) return;
@@ -215,6 +266,21 @@ export const ContentEngine: React.FC = () => {
             );
           })}
         </div>
+        {tab === 'brands' && (
+          <button
+            onClick={() => setBrandCoachOpen(true)}
+            className="bdl-action ml-auto"
+            style={{
+              borderColor: 'rgba(196,163,90,0.5)',
+              color: '#8b6a17',
+              background: 'rgba(196,163,90,0.08)',
+            }}
+            title="Guided 6-step brand kit wizard"
+          >
+            <Icons.Sparkles size={12} />
+            Guided
+          </button>
+        )}
         {tab !== 'studio' && (
           <button
             onClick={() => {
@@ -222,7 +288,7 @@ export const ContentEngine: React.FC = () => {
               else if (tab === 'brands') setEditingBrand('new' as any);
               else setEditingPiece('new');
             }}
-            className="bdl-action primary ml-auto"
+            className={`bdl-action primary ${tab === 'brands' ? '' : 'ml-auto'}`}
           >
             <Icons.Plus size={12} />
             New {tab === 'channels' ? 'channel' : tab === 'brands' ? 'brand' : 'piece'}
@@ -302,6 +368,16 @@ export const ContentEngine: React.FC = () => {
           brand={editingBrand === 'new' ? null : editingBrand}
           isOpen
           onClose={() => setEditingBrand(null)}
+        />
+      )}
+
+      {/* Brand CoachFlow — 6-step guided wizard (identity/visual/voice/rules/refs/preview).
+         On finish, inserts a row in brand_kits with the compiled brand_prompt. */}
+      {brandCoachOpen && (
+        <CoachFlow
+          flow={BRAND_CREATION_FLOW}
+          onComplete={handleBrandCoachFinish}
+          onClose={() => !brandCoachSaving && setBrandCoachOpen(false)}
         />
       )}
     </div>

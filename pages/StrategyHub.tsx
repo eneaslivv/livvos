@@ -29,6 +29,8 @@ import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { ICP_CREATION_FLOW, type IcpData } from '../components/livv/flows/IcpCreationFlow';
+import { buildPackageFlow, type PackageData } from '../components/livv/flows/PackageCreationFlow';
+import { POSITIONING_CREATION_FLOW, type PositioningData } from '../components/livv/flows/PositioningCreationFlow';
 import { IcpDetailSlideOver } from '../components/livv/IcpDetailSlideOver';
 import '../components/livv/bundle-strategy.css';
 
@@ -119,9 +121,9 @@ export const StrategyHub: React.FC = () => {
   const [editingIcp, setEditingIcp] = useState<ICP | 'new' | null>(null);
   const [editingPackage, setEditingPackage] = useState<Package | 'new' | null>(null);
   const [editingPositioning, setEditingPositioning] = useState<Positioning | 'new' | null>(null);
-  // CoachFlow — guided wizard for creating a new ICP via a 5-step flow.
-  // Triggered by the "Guided" button next to "+ New ICP".
-  const [coachOpen, setCoachOpen] = useState(false);
+  // CoachFlows — guided wizards for ICP / Package / Positioning creation.
+  // Each "Guided" button opens its matching flow.
+  const [coachOpen, setCoachOpen] = useState<null | 'icp' | 'package' | 'positioning'>(null);
   const [coachSaving, setCoachSaving] = useState(false);
   // ICP slide-over — click an ICP card opens this (read-only summary + tabs).
   // Edit button inside opens the legacy ICPModal for the full form.
@@ -149,9 +151,8 @@ export const StrategyHub: React.FC = () => {
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  // CoachFlow finish handler — inserts a row in strategy_icps with the
-  // collected wizard data, then refetches the list so the new ICP appears.
-  const handleCoachFinish = useCallback(async (data: IcpData) => {
+  // CoachFlow finish — inserts a row in strategy_icps + refetches.
+  const handleIcpCoachFinish = useCallback(async (data: IcpData) => {
     if (!currentTenant?.id) return;
     setCoachSaving(true);
     try {
@@ -165,7 +166,7 @@ export const StrategyHub: React.FC = () => {
         modules: data.path || [],
       });
       if (error) throw error;
-      setCoachOpen(false);
+      setCoachOpen(null);
       await refetch();
     } catch (err: any) {
       errorLogger.logError(err, { feature: 'strategy_icp_coach_finish' });
@@ -174,6 +175,71 @@ export const StrategyHub: React.FC = () => {
       setCoachSaving(false);
     }
   }, [currentTenant?.id, refetch]);
+
+  // Package finish — inserts strategy_packages
+  const handlePackageCoachFinish = useCallback(async (data: PackageData) => {
+    if (!currentTenant?.id) return;
+    setCoachSaving(true);
+    try {
+      const { error } = await supabase.from('strategy_packages').insert({
+        tenant_id: currentTenant.id,
+        name: data.name,
+        target_icp_id: data.target_icp_id,
+        status: data.status || 'draft',
+        modules_included: data.modules_included || [],
+        price_implementation: data.price_implementation,
+        price_monthly: data.price_monthly,
+        implementation_weeks: data.implementation_weeks,
+        deliverables: (data.deliverables || []).filter(Boolean),
+      });
+      if (error) throw error;
+      setCoachOpen(null);
+      await refetch();
+    } catch (err: any) {
+      errorLogger.logError(err, { feature: 'strategy_package_coach_finish' });
+      alert(`Could not save package: ${err.message}`);
+    } finally {
+      setCoachSaving(false);
+    }
+  }, [currentTenant?.id, refetch]);
+
+  // Positioning finish — inserts strategy_positioning
+  const handlePositioningCoachFinish = useCallback(async (data: PositioningData) => {
+    if (!currentTenant?.id) return;
+    setCoachSaving(true);
+    try {
+      const { error } = await supabase.from('strategy_positioning').insert({
+        tenant_id: currentTenant.id,
+        principle: data.principle,
+        description: data.description,
+        examples: (data.examples || []).filter(Boolean),
+        applies_to: data.applies_to || [],
+        // Extra fields stored as JSON in the row if there's a meta column;
+        // fall back to extending applies_to if not.
+        ...(((): any => {
+          const meta: any = {};
+          if (data.axis_x != null) meta.axis_x = data.axis_x;
+          if (data.axis_y != null) meta.axis_y = data.axis_y;
+          if (data.tag_color) meta.tag_color = data.tag_color;
+          if (data.tags) meta.tags = data.tags;
+          return Object.keys(meta).length ? { meta } : {};
+        })()),
+      });
+      if (error) throw error;
+      setCoachOpen(null);
+      await refetch();
+    } catch (err: any) {
+      errorLogger.logError(err, { feature: 'strategy_positioning_coach_finish' });
+      alert(`Could not save positioning: ${err.message}`);
+    } finally {
+      setCoachSaving(false);
+    }
+  }, [currentTenant?.id, refetch]);
+
+  // Build the package flow with live ICP context (so the user picks from real ICPs)
+  const packageFlow = useMemo(() => buildPackageFlow({
+    icps: icps.map(i => ({ id: i.id, name: i.name, color: (i as any).color })),
+  }), [icps]);
 
   // ── Counters for the tab strip ───────────────────────────────────
   const counts = useMemo(() => ({
@@ -217,29 +283,27 @@ export const StrategyHub: React.FC = () => {
           })}
         </div>
 
-        {/* Guided wizard — gold pill, only on ICPs tab */}
-        {tab === 'icps' && (
-          <button
-            onClick={() => setCoachOpen(true)}
-            className="bdl-action ml-auto"
-            style={{
-              borderColor: 'rgba(196,163,90,0.5)',
-              color: '#8b6a17',
-              background: 'rgba(196,163,90,0.08)',
-            }}
-            title="Step-by-step wizard with live preview"
-          >
-            <Icons.Sparkles size={12} />
-            Guided
-          </button>
-        )}
+        {/* Guided wizard — gold pill, shows on all tabs (each has its own flow) */}
+        <button
+          onClick={() => setCoachOpen(tab === 'icps' ? 'icp' : tab === 'packages' ? 'package' : 'positioning')}
+          className="bdl-action ml-auto"
+          style={{
+            borderColor: 'rgba(196,163,90,0.5)',
+            color: '#8b6a17',
+            background: 'rgba(196,163,90,0.08)',
+          }}
+          title="Step-by-step wizard with live preview"
+        >
+          <Icons.Sparkles size={12} />
+          Guided
+        </button>
         <button
           onClick={() => {
             if (tab === 'icps') setEditingIcp('new');
             else if (tab === 'packages') setEditingPackage('new');
             else setEditingPositioning('new');
           }}
-          className={`bdl-action primary ${tab === 'icps' ? '' : 'ml-auto'}`}
+          className="bdl-action primary"
         >
           <Icons.Plus size={12} />
           New {tab === 'icps' ? 'ICP' : tab === 'packages' ? 'Package' : 'Principle'}
@@ -303,12 +367,26 @@ export const StrategyHub: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* CoachFlow — fullscreen guided wizard. Renders only when open. */}
-      {coachOpen && (
+      {/* CoachFlows — fullscreen guided wizards. One mounted at a time. */}
+      {coachOpen === 'icp' && (
         <CoachFlow
           flow={ICP_CREATION_FLOW}
-          onComplete={handleCoachFinish}
-          onClose={() => !coachSaving && setCoachOpen(false)}
+          onComplete={handleIcpCoachFinish}
+          onClose={() => !coachSaving && setCoachOpen(null)}
+        />
+      )}
+      {coachOpen === 'package' && (
+        <CoachFlow
+          flow={packageFlow}
+          onComplete={handlePackageCoachFinish}
+          onClose={() => !coachSaving && setCoachOpen(null)}
+        />
+      )}
+      {coachOpen === 'positioning' && (
+        <CoachFlow
+          flow={POSITIONING_CREATION_FLOW}
+          onComplete={handlePositioningCoachFinish}
+          onClose={() => !coachSaving && setCoachOpen(null)}
         />
       )}
 
