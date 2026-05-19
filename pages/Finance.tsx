@@ -7,7 +7,7 @@ import {
   ArrowDownLeft, ArrowUpFromLine, Clock, CheckCircle2, CircleDot,
   Search, Banknote, Building2, Briefcase, Tag, Users, Trash2, Pencil, Plus, Link2,
   Send, ThumbsUp, ThumbsDown, ArrowRight, Layers, Sparkles, MessageSquare,
-  MoreHorizontal,
+  MoreHorizontal, List,
 } from 'lucide-react';
 import { LivvFinanceView } from '../components/finance/LivvFinanceView';
 import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
@@ -16,6 +16,7 @@ import { FinanceChat } from '../components/finance/FinanceChat';
 import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
 import { PartnerPayoutsCard } from '../components/finance/PartnerPayoutsCard';
 import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
+import { IncomesPipeline } from '../components/finance/IncomesPipeline';
 import { ProjectQuickEditModal } from '../components/finance/ProjectQuickEditModal';
 import {
   useFinance,
@@ -182,6 +183,14 @@ export const Finance: React.FC = () => {
   }, [expensesLoading]);
 
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
+  // View-mode toggle inside the Ingresos tab (List vs Pipeline kanban).
+  // Persisted in localStorage so the user's preference survives reloads.
+  const [incomesViewMode, setIncomesViewMode] = useState<'list' | 'pipeline'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('finance:incomes-view-mode') as any)) || 'list'
+  );
+  useEffect(() => {
+    try { localStorage.setItem('finance:incomes-view-mode', incomesViewMode); } catch {}
+  }, [incomesViewMode]);
   const [incomeSearch, setIncomeSearch] = useState('');
   const [incomeStatusFilter, setIncomeStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
   const [incomeDateFrom, setIncomeDateFrom] = useState('');
@@ -1323,37 +1332,79 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ INGRESOS (Livv editorial) ═══════════════ */}
       {activeTab === 'ingresos' && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <LivvIncomeTab
-            incomes={incomes}
-            filteredIncomes={filteredIncomes}
-            totalPaidIncome={totalPaidIncome}
-            totalPendingIncome={totalPendingIncome}
-            totalOverdueIncome={totalOverdueIncome}
-            overdueInstallmentCount={overdueInstallmentCount}
-            incomeSearch={incomeSearch}
-            setIncomeSearch={setIncomeSearch}
-            incomeStatusFilter={incomeStatusFilter}
-            setIncomeStatusFilter={setIncomeStatusFilter}
-            incomeDateFrom={incomeDateFrom}
-            setIncomeDateFrom={setIncomeDateFrom}
-            incomeDateTo={incomeDateTo}
-            setIncomeDateTo={setIncomeDateTo}
-            expandedIncome={expandedIncome}
-            setExpandedIncome={setExpandedIncome}
-            incomesLoading={incomesLoading}
-            incomesTimedOut={incomesTimedOut}
-            projectTasksCache={projectTasksCache}
-            fetchProjectTasks={fetchProjectTasks}
-            openEditIncome={openEditIncome}
-            handleDeleteIncome={handleDeleteIncome}
-            handleMarkInstallmentPaid={handleMarkInstallmentPaid}
-            updateInstallment={updateInstallment}
-            openIncomeForm={openIncomeForm}
-            canCreate={hasPermission('finance', 'create')}
-            onOpenAIAssistant={() => setIsAssistantOpen(true)}
-            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
-            onOpenProject={(projectId) => setQuickEditProjectId(projectId)}
-          />
+          {/* View-mode toggle — List ↔ Pipeline kanban. Pipeline view is
+              the new LIVV OS design lifted from livv-os-pipeline.jsx;
+              List is the existing detailed view. Toggle persists in
+              localStorage so the user's preference sticks. */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="inline-flex p-0.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
+              {([
+                { id: 'list' as const,     label: 'List',     icon: 'List' },
+                { id: 'pipeline' as const, label: 'Pipeline', icon: 'Layers' },
+              ]).map(opt => {
+                const active = incomesViewMode === opt.id;
+                const IconCmp = opt.icon === 'List' ? List : Layers;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setIncomesViewMode(opt.id)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-all ${
+                      active
+                        ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                        : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <IconCmp size={11} />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {incomesViewMode === 'pipeline' ? (
+            <IncomesPipeline
+              incomes={incomes}
+              totalPaidIncome={totalPaidIncome}
+              totalPendingIncome={totalPendingIncome}
+              totalOverdueIncome={totalOverdueIncome}
+              onOpenIncome={openEditIncome}
+              onAddIncome={() => openIncomeForm()}
+              fmtCurrency={fmtCurrency}
+            />
+          ) : (
+            <LivvIncomeTab
+              incomes={incomes}
+              filteredIncomes={filteredIncomes}
+              totalPaidIncome={totalPaidIncome}
+              totalPendingIncome={totalPendingIncome}
+              totalOverdueIncome={totalOverdueIncome}
+              overdueInstallmentCount={overdueInstallmentCount}
+              incomeSearch={incomeSearch}
+              setIncomeSearch={setIncomeSearch}
+              incomeStatusFilter={incomeStatusFilter}
+              setIncomeStatusFilter={setIncomeStatusFilter}
+              incomeDateFrom={incomeDateFrom}
+              setIncomeDateFrom={setIncomeDateFrom}
+              incomeDateTo={incomeDateTo}
+              setIncomeDateTo={setIncomeDateTo}
+              expandedIncome={expandedIncome}
+              setExpandedIncome={setExpandedIncome}
+              incomesLoading={incomesLoading}
+              incomesTimedOut={incomesTimedOut}
+              projectTasksCache={projectTasksCache}
+              fetchProjectTasks={fetchProjectTasks}
+              openEditIncome={openEditIncome}
+              handleDeleteIncome={handleDeleteIncome}
+              handleMarkInstallmentPaid={handleMarkInstallmentPaid}
+              updateInstallment={updateInstallment}
+              openIncomeForm={openIncomeForm}
+              canCreate={hasPermission('finance', 'create')}
+              onOpenAIAssistant={() => setIsAssistantOpen(true)}
+              onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
+              onOpenProject={(projectId) => setQuickEditProjectId(projectId)}
+            />
+          )}
         </div>
       )}
 
