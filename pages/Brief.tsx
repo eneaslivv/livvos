@@ -31,6 +31,7 @@ import { useTenant } from '../context/TenantContext';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useLongPress, type LongPressPosition } from '../hooks/useLongPress';
 import { ContextMenu } from '../components/ui/ContextMenu';
+import { DailyBrief } from '../components/brief/DailyBrief';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
@@ -192,31 +193,12 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     return () => { cancelled = true; };
   }, [currentTenant?.id]);
 
-  // ── Initial greeting (only once when component mounts with data) ──
-  const greetedRef = useRef(false);
-  useEffect(() => {
-    if (greetedRef.current) return;
-    if (!user) return;
-    greetedRef.current = true;
-    const name = (user as any)?.user_metadata?.name?.split(' ')[0] || 'there';
-    const now = new Date();
-    const hour = now.getHours();
-    const greeting = hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
-    // Single-line greeting. The numbers live in the stat cards above
-    // the chat — duplicating them in the message just adds noise.
-    // When everything's clear we say so explicitly so the user gets the
-    // "take the win" beat.
-    const allClear = overdue.length === 0 && dueToday.length === 0
-      && todayEvents.length === 0 && pendingRequestsCount === 0;
-    const tail = allClear
-      ? "You're clear today. Take the win — or ask me what to set up for tomorrow."
-      : "What do you want to do first?";
-    setMessages([{
-      role: 'assistant',
-      content: `${greeting}, ${name}. ${tail}`,
-      ts: Date.now(),
-    }]);
-  }, [user, overdue.length, dueToday.length, todayEvents.length, pendingRequestsCount]);
+  // ── Greeting moved to <DailyBrief> ─────────────────────────────
+  // The category-driven AI brief at the top of the chat column
+  // replaces the old single-line greeting. Brief.tsx no longer
+  // seeds a synthetic assistant message on mount — the chat starts
+  // empty, the DailyBrief provides the "what's going on" context,
+  // and the action chips + input drive the conversation from there.
 
   // ── Auto-scroll on new message ───────────────────────────────────
   useEffect(() => {
@@ -511,26 +493,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           </span>
         </header>
 
-        {/* Stat cards — 2x2 grid of the 4 things that actually need
-            attention. Zen minimal: thin borders, no fills, color only
-            on the number. Click anywhere on a card to jump to the
-            corresponding section (tasks tab, inbox, calendar).
-            Stagger-in on mount via the parent variants so the four
-            cards cascade rather than pop all at once. */}
-        <motion.div
-          className="px-5 pt-4 pb-3 grid grid-cols-2 gap-2"
-          initial={reduceMotion ? false : 'hidden'}
-          animate="visible"
-          variants={{
-            hidden:  { transition: { staggerChildren: 0 } },
-            visible: { transition: { staggerChildren: 0.05, delayChildren: 0.04 } },
-          }}
-        >
-          <StatCard value={overdue.length}             label="Overdue"        tone="rose"    onClick={() => setRightTab('tasks')} />
-          <StatCard value={dueToday.length}            label="Due today"      tone="amber"   onClick={() => setRightTab('tasks')} />
-          <StatCard value={todayEvents.length}         label="Events today"   tone="emerald" onClick={() => setRightTab('calendar')} />
-          <StatCard value={pendingRequestsCount}       label="Pending msgs"   tone="violet"  onClick={() => setRightTab('inbox')} />
-        </motion.div>
+        {/* Daily Brief — AI-driven structured summary across every
+            module the user has enabled. Replaces the old 2×2 stat
+            cards: those only covered tasks + events + inbox; the
+            DailyBrief pulls from Finance, Sales pipeline, Content,
+            Team KPIs, Strategy signals, and Upcoming too, with an
+            AI narrative on top biased toward the user's strategy. */}
+        <DailyBrief onAskFollowUp={(prompt) => handleSend(prompt)} />
 
         {/* Chat messages — each one slides up + fades in with spring
             physics. User msgs originate slightly from the right,
