@@ -23,6 +23,7 @@ import { supabase } from '../lib/supabase';
 import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
+import '../components/livv/bundle-strategy.css';
 
 interface Role {
   id: string;
@@ -146,12 +147,14 @@ export const TeamScaling: React.FC = () => {
   }, [members, roles, kpis]);
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-6">
-      <header className="mb-5">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Team & Scaling</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Roles to hire, people on the team, and the KPIs they're tracked against.
-        </p>
+    <div className="max-w-[1320px] mx-auto px-6 py-6">
+      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="bdl-page-title">Scaling</h1>
+          <p className="bdl-page-sub">
+            Roles · People · KPIs
+          </p>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
@@ -161,42 +164,38 @@ export const TeamScaling: React.FC = () => {
         <StatCard label="Roles in pipeline" value={totals.plannedRoles + totals.filledRoles} hint="planned + hiring + filled" tone="violet" />
       </div>
 
-      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 mb-5">
-        {([
-          { id: 'roles' as const,  label: 'Roles',  icon: 'Briefcase' },
-          { id: 'people' as const, label: 'People', icon: 'Users' },
-          { id: 'kpis' as const,   label: 'KPIs',   icon: 'Chart' },
-        ]).map(t => {
-          const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
-          const active = tab === t.id;
-          return (
-            <motion.button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              whileTap={{ scale: 0.96, transition: SPRING_TAP }}
-              className={`relative px-3 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors ${
-                active ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-              }`}
-            >
-              <IconCmp size={13} />
-              {t.label}
-              {active && <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-full" />}
-            </motion.button>
-          );
-        })}
-        <motion.button
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="bdl-tabs">
+          {([
+            { id: 'roles' as const,  label: 'Roles',  icon: 'Briefcase' },
+            { id: 'people' as const, label: 'People', icon: 'Users' },
+            { id: 'kpis' as const,   label: 'KPIs',   icon: 'Chart' },
+          ]).map(t => {
+            const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`bdl-tab ${active ? 'active' : ''}`}
+              >
+                <IconCmp size={13} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
           onClick={() => {
             if (tab === 'roles') setEditingRole('new');
             else if (tab === 'people') setEditingMember('new');
             else setEditingKpi('new');
           }}
-          whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5"
+          className="bdl-action primary ml-auto"
         >
           <Icons.Plus size={12} />
           New {tab === 'roles' ? 'role' : tab === 'people' ? 'person' : 'KPI log'}
-        </motion.button>
+        </button>
       </div>
 
       {loading && <div className="flex items-center justify-center py-16"><Icons.Loader className="animate-spin text-zinc-400" size={20} /></div>}

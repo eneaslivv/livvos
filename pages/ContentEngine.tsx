@@ -29,6 +29,7 @@ import { generateContent, type ContentVariation } from '../lib/ai';
 import type { Brand } from '../types';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
+import '../components/livv/bundle-strategy.css';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface Channel {
@@ -180,56 +181,52 @@ export const ContentEngine: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Content Engine</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Distribution motor — channels, content pipeline, and what's shipped. Each piece is a
-          single ship-able artifact across one of your channels.
-        </p>
+    <div className="max-w-[1320px] mx-auto px-6 py-6">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="bdl-page-title">Content</h1>
+          <p className="bdl-page-sub">
+            Pipeline · Calendar · Channels · Brand kits · Studio
+          </p>
+        </div>
       </header>
 
-      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 mb-6">
-        {([
-          { id: 'pipeline' as const, label: 'Pipeline', icon: 'List' },
-          { id: 'calendar' as const, label: 'Calendar', icon: 'Calendar' },
-          { id: 'channels' as const, label: 'Channels', icon: 'Globe' },
-          { id: 'brands' as const,   label: 'Brands',   icon: 'Sparkles' },
-          { id: 'studio' as const,   label: 'Studio',   icon: 'Edit' },
-        ]).map(t => {
-          const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
-          const active = tab === t.id;
-          return (
-            <motion.button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              whileTap={{ scale: 0.96, transition: SPRING_TAP }}
-              className={`relative px-3 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors ${
-                active
-                  ? 'text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-              }`}
-            >
-              <IconCmp size={13} />
-              {t.label}
-              {active && <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-full" />}
-            </motion.button>
-          );
-        })}
+      {/* Bundle-style pill tabs + action button */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="bdl-tabs">
+          {([
+            { id: 'pipeline' as const, label: 'Pipeline', icon: 'List' },
+            { id: 'calendar' as const, label: 'Calendar', icon: 'Calendar' },
+            { id: 'channels' as const, label: 'Channels', icon: 'Globe' },
+            { id: 'brands' as const,   label: 'Brands',   icon: 'Sparkles' },
+            { id: 'studio' as const,   label: 'Studio',   icon: 'Edit' },
+          ]).map(t => {
+            const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`bdl-tab ${active ? 'active' : ''}`}
+              >
+                <IconCmp size={13} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
         {tab !== 'studio' && (
-          <motion.button
+          <button
             onClick={() => {
               if (tab === 'channels') setEditingChannel('new');
               else if (tab === 'brands') setEditingBrand('new' as any);
               else setEditingPiece('new');
             }}
-            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-            whileHover={{ y: -1, transition: SPRING_TAP }}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5"
+            className="bdl-action primary ml-auto"
           >
             <Icons.Plus size={12} />
             New {tab === 'channels' ? 'channel' : tab === 'brands' ? 'brand' : 'piece'}
-          </motion.button>
+          </button>
         )}
       </div>
 
