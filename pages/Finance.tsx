@@ -17,6 +17,7 @@ import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard
 import { PartnerPayoutsCard } from '../components/finance/PartnerPayoutsCard';
 import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
 import { IncomesPipeline } from '../components/finance/IncomesPipeline';
+import { ExpensesPipeline } from '../components/finance/ExpensesPipeline';
 import { ProjectQuickEditModal } from '../components/finance/ProjectQuickEditModal';
 import {
   useFinance,
@@ -191,6 +192,13 @@ export const Finance: React.FC = () => {
   useEffect(() => {
     try { localStorage.setItem('finance:incomes-view-mode', incomesViewMode); } catch {}
   }, [incomesViewMode]);
+  // Same pattern for Gastos (Pending / Recurring due / Paid kanban).
+  const [expensesViewMode, setExpensesViewMode] = useState<'list' | 'pipeline'>(
+    () => (typeof window !== 'undefined' && (localStorage.getItem('finance:expenses-view-mode') as any)) || 'list'
+  );
+  useEffect(() => {
+    try { localStorage.setItem('finance:expenses-view-mode', expensesViewMode); } catch {}
+  }, [expensesViewMode]);
   const [incomeSearch, setIncomeSearch] = useState('');
   const [incomeStatusFilter, setIncomeStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
   const [incomeDateFrom, setIncomeDateFrom] = useState('');
@@ -1744,31 +1752,71 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ GASTOS (Livv editorial) ═══════════════ */}
       {activeTab === 'gastos' && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <LivvExpenseTab
-            expenses={expenses}
-            filteredExpenses={filteredExpenses}
-            expenseSearch={expenseSearch}
-            setExpenseSearch={setExpenseSearch}
-            expenseCategoryFilter={expenseCategoryFilter}
-            setExpenseCategoryFilter={setExpenseCategoryFilter}
-            expenseViewMonth={expenseViewMonth}
-            setExpenseViewMonth={setExpenseViewMonth}
-            setExpenseDateFrom={setExpenseDateFrom}
-            setExpenseDateTo={setExpenseDateTo}
-            expenseCustomDateRange={expenseCustomDateRange}
-            setExpenseCustomDateRange={setExpenseCustomDateRange}
-            expensesLoading={expensesLoading}
-            expensesTimedOut={expensesTimedOut}
-            expenseCategories={EXPENSE_CATEGORIES}
-            monthNames={MONTH_NAMES}
-            getMonthBounds={getMonthBounds}
-            openExpenseForm={openExpenseForm}
-            openEditExpense={openEditExpense}
-            handleDeleteExpense={handleDeleteExpense}
-            canCreate={hasPermission('finance', 'create')}
-            onOpenAIAssistant={() => setIsAssistantOpen(true)}
-            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
-          />
+          {/* List ↔ Pipeline toggle — same recipe as the Ingresos tab.
+              Pipeline view shows a 3-column kanban (Pending /
+              Recurring due / Paid) with a 4-stat KPI bar above. */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="inline-flex p-0.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
+              {([
+                { id: 'list' as const,     label: 'List',     icon: 'List' },
+                { id: 'pipeline' as const, label: 'Pipeline', icon: 'Layers' },
+              ]).map(opt => {
+                const active = expensesViewMode === opt.id;
+                const IconCmp = opt.icon === 'List' ? List : Layers;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setExpensesViewMode(opt.id)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-all ${
+                      active
+                        ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                        : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <IconCmp size={11} />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {expensesViewMode === 'pipeline' ? (
+            <ExpensesPipeline
+              expenses={expenses}
+              totalPaidExpense={totalExpensesPaid}
+              totalPendingExpense={totalExpensesPending}
+              onOpenExpense={openEditExpense}
+              onAddExpense={() => openExpenseForm()}
+              fmtCurrency={fmtCurrency}
+            />
+          ) : (
+            <LivvExpenseTab
+              expenses={expenses}
+              filteredExpenses={filteredExpenses}
+              expenseSearch={expenseSearch}
+              setExpenseSearch={setExpenseSearch}
+              expenseCategoryFilter={expenseCategoryFilter}
+              setExpenseCategoryFilter={setExpenseCategoryFilter}
+              expenseViewMonth={expenseViewMonth}
+              setExpenseViewMonth={setExpenseViewMonth}
+              setExpenseDateFrom={setExpenseDateFrom}
+              setExpenseDateTo={setExpenseDateTo}
+              expenseCustomDateRange={expenseCustomDateRange}
+              setExpenseCustomDateRange={setExpenseCustomDateRange}
+              expensesLoading={expensesLoading}
+              expensesTimedOut={expensesTimedOut}
+              expenseCategories={EXPENSE_CATEGORIES}
+              monthNames={MONTH_NAMES}
+              getMonthBounds={getMonthBounds}
+              openExpenseForm={openExpenseForm}
+              openEditExpense={openEditExpense}
+              handleDeleteExpense={handleDeleteExpense}
+              canCreate={hasPermission('finance', 'create')}
+              onOpenAIAssistant={() => setIsAssistantOpen(true)}
+              onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
+            />
+          )}
         </div>
       )}
 
