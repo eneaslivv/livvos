@@ -9,6 +9,7 @@ import { useTenant } from '../context/TenantContext';
 import { useTeam } from '../context/TeamContext';
 import { supabase } from '../lib/supabase';
 import { MemberWeeklySummaryPanel } from '../components/activity/MemberWeeklySummaryPanel';
+import { ActivitySidebar } from '../components/activity/ActivitySidebar';
 import '../components/activity/ActivityDesign.css';
 
 type TabType = 'All Activity' | 'My Updates' | 'Comments' | 'Files';
@@ -660,30 +661,85 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
 
   const canPost = isReady || contextTimedOut;
 
+  // Sidebar data — derive from existing hooks; the sidebar is presentational.
+  const sidebarPresence = useMemo(() => {
+    return (members || []).slice(0, 6).map((m: any) => {
+      const last = m.lastLogin ? new Date(m.lastLogin) : null;
+      const mins = last ? Math.floor((Date.now() - last.getTime()) / 60000) : null;
+      const status: 'online' | 'away' | 'off' =
+        mins == null ? 'off' :
+        mins < 10 ? 'online' :
+        mins < 120 ? 'away' :
+        'off';
+      const when = mins == null ? '—'
+        : mins < 1 ? 'now'
+        : mins < 60 ? `${mins}m`
+        : mins < 60 * 24 ? `${Math.floor(mins / 60)}h`
+        : `${Math.floor(mins / 1440)}d`;
+      return {
+        id: m.id,
+        name: m.name || m.email,
+        avatar: m.avatar_url,
+        status,
+        doing: status === 'online' ? 'in workspace' : status === 'away' ? `last seen ${when} ago` : 'offline',
+        when,
+        color: m.color,
+      };
+    });
+  }, [members]);
+
+  const sidebarAnnouncement = useMemo(() => {
+    const recentCompletes = (allTasks || []).filter((t: any) => t.completed).length;
+    if (recentCompletes === 0) return null;
+    return {
+      title: `${recentCompletes} task${recentCompletes === 1 ? '' : 's'} shipped this week`,
+      desc: weeklyStats.topPerformerName
+        ? `Top: ${weeklyStats.topPerformerName} with ${weeklyStats.topPerformerCount} completes. Velocity ${weeklyStats.velocity >= 0 ? '+' : ''}${weeklyStats.velocity}% vs last week.`
+        : 'Keep the cadence — review the weekly summary to spot blockers.',
+      foot: 'Pinned · this week',
+      ctaLabel: 'Open report',
+      onCta: () => {},
+    };
+  }, [allTasks, weeklyStats]);
+
   return (
-    <div className="max-w-5xl mx-auto pt-3 pb-6 space-y-3 font-sans">
+    <div className="max-w-[1320px] mx-auto pt-3 pb-6 font-sans">
       {/* Editorial header — Inter Light h1 + LIVE pill with breathing
          halo (matches the LIVV OS design handoff: livv-activity.html). */}
-      <div className="flex items-end justify-between gap-4 pb-1">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="actd-title">Activity</h1>
-          <span className="actd-live">
-            <span className="actd-live-dot" />
-            Live
-          </span>
+      <div className="flex items-end justify-between gap-4 pb-3 mb-4">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="actd-title">Activity</h1>
+            <span className="actd-live">
+              <span className="actd-live-dot" />
+              Live
+            </span>
+          </div>
+          <div className="actd-head-meta" style={{ marginTop: 8 }}>
+            <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · Week {Math.ceil(((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000 + new Date(new Date().getFullYear(), 0, 1).getDay() + 1) / 7)}</span>
+            <span style={{ color: '#d4d4d8' }}>·</span>
+            <span><strong>{members.length}</strong> people in workspace</span>
+            {sidebarPresence.filter(p => p.status === 'online').length > 0 && (
+              <>
+                <span style={{ color: '#d4d4d8' }}>·</span>
+                <span><strong>{sidebarPresence.filter(p => p.status === 'online').length}</strong> online now</span>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+        <div className="flex items-center gap-3">
           {weeklyStats.totalLoginsThisWeek > 0 && (
-            <span className="hidden sm:inline">{weeklyStats.totalLoginsThisWeek} sign-ins · last 7d</span>
+            <span className="hidden sm:inline font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{weeklyStats.totalLoginsThisWeek} sign-ins · last 7d</span>
           )}
-          <button
-            onClick={() => refresh()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-200/70 dark:border-zinc-700 bg-white/60 dark:bg-zinc-900/60 hover:bg-white dark:hover:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-700 dark:text-zinc-200 transition-all"
-          >
+          <button onClick={() => refresh()} className="actd-refresh">
             <Icons.RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
       </div>
+
+      {/* 2-column grid: main + 320px sidebar (community pulse) */}
+      <div className="actd-grid">
+        <div className="min-w-0 space-y-3">
 
       {/* KPI strip — editorial typography + 7-day sparkline per tile.
          Layered on top of the previous grid: same data, more visual
@@ -924,85 +980,75 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* Tabs — compact */}
-      <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="flex gap-5">
-          {(['All Activity', 'My Updates', 'Comments', 'Files'] as TabType[]).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-1.5 text-[12px] font-medium transition-colors relative flex items-center gap-1.5 ${
-                activeTab === tab
-                  ? 'text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
-              }`}
-            >
-              {tab}
-              {tabCounts[tab] > 0 && (
-                <span className={`text-[9px] px-1 py-0 rounded-full font-bold tabular-nums ${
-                  activeTab === tab
-                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                }`}>
-                  {tabCounts[tab]}
-                </span>
-              )}
-              {activeTab === tab && (
-                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-t-full" />
-              )}
-            </button>
-          ))}
+      {/* Tabs row — pill tabs with mono count badges */}
+      <div className="actd-tabs-row">
+        {(['All Activity', 'My Updates', 'Comments', 'Files'] as TabType[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`actd-tab ${activeTab === tab ? 'active' : ''}`}
+          >
+            {tab}
+            {tabCounts[tab] > 0 && (
+              <span className="actd-tab-count">{tabCounts[tab]}</span>
+            )}
+          </button>
+        ))}
+        <div className="actd-tabs-row-right">
+          <button className="actd-filter-btn"><Icons.Briefcase size={11} />Module</button>
+          <button className="actd-filter-btn"><Icons.User size={11} />Anyone</button>
         </div>
       </div>
 
-      {/* Input Area — compact */}
-      <Card className="p-3 border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg">
-        <div className="flex gap-2.5">
-          <div className={`h-8 w-8 rounded-full ${userAvatarColor} text-white flex items-center justify-center font-bold text-[10px] shrink-0`}>
-            {userInitials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <textarea
-              ref={textareaRef}
-              value={newPost}
-              onChange={handleTextareaChange}
-              onKeyDown={handleTextareaKeyDown}
-              placeholder={canPost ? "Share an update..." : "Loading..."}
-              disabled={!canPost}
-              className="w-full bg-transparent border-none focus:ring-0 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none text-sm p-0 min-h-[36px] disabled:opacity-50 outline-none"
-              rows={1}
-            />
-            <div className="flex justify-between items-center pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-1.5">
-              <div className="flex gap-3 text-zinc-400">
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Attach file"><Icons.Paperclip size={14} /></button>
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add image"><Icons.Image size={14} /></button>
-                <button type="button" className="hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title="Add document"><Icons.Docs size={14} /></button>
-              </div>
-              <div className="flex items-center gap-2">
-                {newPost.trim() && (
-                  <span className="text-[9px] text-zinc-400 hidden sm:block">⌘+Enter</span>
-                )}
-                <button
-                  onClick={handlePost}
-                  disabled={posting || !newPost.trim() || !canPost}
-                  className="bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white px-3 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-                >
-                  {posting ? (
-                    <span className="flex items-center gap-1.5">
-                      <Icons.Loader size={11} className="animate-spin" /> Posting
-                    </span>
-                  ) : 'Post'}
-                </button>
-              </div>
-            </div>
-            {postError && (
-              <div className="mt-1.5 text-[11px] text-red-500 font-medium flex items-center gap-1">
-                <Icons.AlertCircle size={11} /> {postError}
-              </div>
+      {/* Composer — frosted with rich tools */}
+      <div className="actd-composer">
+        <div className="actd-composer-av">{userInitials}</div>
+        <div className="actd-composer-body">
+          <textarea
+            ref={textareaRef}
+            value={newPost}
+            onChange={handleTextareaChange}
+            onKeyDown={handleTextareaKeyDown}
+            placeholder={canPost ? "Share an update, ask a question, or @ someone…" : "Loading..."}
+            disabled={!canPost}
+            className="actd-composer-input"
+            rows={1}
+          />
+          <div className="actd-composer-tools">
+            <button type="button" className="actd-tool" title="Attach file"><Icons.Paperclip size={13} /></button>
+            <button type="button" className="actd-tool" title="Add image"><Icons.Image size={13} /></button>
+            <button type="button" className="actd-tool" title="Mention">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M16 8v6a4 4 0 0 0 8 0v-2a10 10 0 1 0-4 8"/>
+              </svg>
+            </button>
+            <button type="button" className="actd-tool" title="Link"><Icons.Link size={13} /></button>
+            <button type="button" className="actd-tool-chip"><Icons.Briefcase size={10} />Module</button>
+            <button type="button" className="actd-tool-chip"><Icons.Sparkles size={10} />Ask Agent to draft</button>
+            {newPost.trim() && (
+              <span className="text-[9px] text-zinc-400 ml-auto hidden sm:block">⌘+Enter</span>
             )}
+            <button
+              onClick={handlePost}
+              disabled={posting || !newPost.trim() || !canPost}
+              className={`actd-post-btn ${newPost.trim() ? '' : ''}`}
+              style={newPost.trim() ? undefined : { marginLeft: 'auto' }}
+            >
+              {posting ? (
+                <><Icons.Loader size={11} className="animate-spin" /> Posting</>
+              ) : (
+                <>Post <Icons.ChevronRight size={11} /></>
+              )}
+            </button>
           </div>
+          {postError && (
+            <div className="mt-1.5 text-[11px] text-red-500 font-medium flex items-center gap-1">
+              <Icons.AlertCircle size={11} /> {postError}
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
 
       {/* Fetch error */}
       {fetchError && !loading && allActivities.length === 0 && (
@@ -1167,6 +1213,18 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
             </p>
           </div>
         )}
+      </div>
+        </div>
+
+        {/* Right sidebar — community + team pulse */}
+        <ActivitySidebar
+          presence={sidebarPresence}
+          announcement={sidebarAnnouncement}
+          threads={[]}
+          clients={[]}
+          pinned={[]}
+          onPersonClick={(id) => setSummaryMemberId(id)}
+        />
       </div>
 
       {/* Activity Details Sidebar */}
