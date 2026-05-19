@@ -53,6 +53,8 @@ const loadPlatformCustomers = () => retryDynamicImport(() => import('./pages/Pla
 const loadPlatformRoles = () => retryDynamicImport(() => import('./pages/PlatformRoles').then(m => ({ default: m.PlatformRoles })), 'PlatformRoles');
 const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/PlatformFeatures').then(m => ({ default: m.PlatformFeatures })), 'PlatformFeatures');
 const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
+const loadStrategyHub = () => retryDynamicImport(() => import('./pages/StrategyHub').then(m => ({ default: m.StrategyHub })), 'StrategyHub');
+const loadContentEngine = () => retryDynamicImport(() => import('./pages/ContentEngine').then(m => ({ default: m.ContentEngine })), 'ContentEngine');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -81,6 +83,8 @@ const PlatformCustomers = React.lazy(loadPlatformCustomers);
 const PlatformRoles = React.lazy(loadPlatformRoles);
 const PlatformFeatures = React.lazy(loadPlatformFeatures);
 const PlatformAudit = React.lazy(loadPlatformAudit);
+const StrategyHub = React.lazy(loadStrategyHub);
+const ContentEngine = React.lazy(loadContentEngine);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -850,6 +854,20 @@ const AppContent: React.FC<{
               <PlatformAudit />
             </KeepAlivePage>
           )}
+
+          {/* Strategy Hub — ICPs, packages, positioning principles */}
+          {visitedPages.has('strategy_hub') && (
+            <KeepAlivePage page="strategy_hub" active={currentPage === 'strategy_hub'}>
+              <StrategyHub />
+            </KeepAlivePage>
+          )}
+
+          {/* Content Engine — channels, content pieces, calendar + pipeline */}
+          {visitedPages.has('content_engine') && (
+            <KeepAlivePage page="content_engine" active={currentPage === 'content_engine'}>
+              <ContentEngine />
+            </KeepAlivePage>
+          )}
         </>
       )}
     </Layout>
@@ -862,10 +880,11 @@ cleanupLocalStorage();
 const LAST_PAGE_KEY = 'eneas:lastPage';
 const LAST_MODE_KEY = 'eneas:lastMode';
 const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
-  'home', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
+  'home', 'brief', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
+  'strategy_hub', 'content_engine',
 ]);
 
 const readLastPage = (): PageView => {
