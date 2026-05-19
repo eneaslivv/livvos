@@ -27,6 +27,8 @@ import { supabase } from '../lib/supabase';
 import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
+import { CoachFlow } from '../components/livv/CoachFlow';
+import { ICP_CREATION_FLOW, type IcpData } from '../components/livv/flows/IcpCreationFlow';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface ICP {
@@ -115,6 +117,10 @@ export const StrategyHub: React.FC = () => {
   const [editingIcp, setEditingIcp] = useState<ICP | 'new' | null>(null);
   const [editingPackage, setEditingPackage] = useState<Package | 'new' | null>(null);
   const [editingPositioning, setEditingPositioning] = useState<Positioning | 'new' | null>(null);
+  // CoachFlow — guided wizard for creating a new ICP via a 5-step flow.
+  // Triggered by the "Guided" button next to "+ New ICP".
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [coachSaving, setCoachSaving] = useState(false);
 
   // ── Load all three slices in parallel on mount + tenant change ───
   const refetch = useCallback(async () => {
@@ -137,6 +143,32 @@ export const StrategyHub: React.FC = () => {
   }, [currentTenant?.id]);
 
   useEffect(() => { refetch(); }, [refetch]);
+
+  // CoachFlow finish handler — inserts a row in strategy_icps with the
+  // collected wizard data, then refetches the list so the new ICP appears.
+  const handleCoachFinish = useCallback(async (data: IcpData) => {
+    if (!currentTenant?.id) return;
+    setCoachSaving(true);
+    try {
+      const { error } = await supabase.from('strategy_icps').insert({
+        tenant_id: currentTenant.id,
+        name: data.name,
+        short_code: data.short,
+        color: data.color,
+        status: data.status,
+        pain_points: (data.pains || []).filter(Boolean),
+        modules: data.path || [],
+      });
+      if (error) throw error;
+      setCoachOpen(false);
+      await refetch();
+    } catch (err: any) {
+      errorLogger.logError(err, { feature: 'strategy_icp_coach_finish' });
+      alert(`Could not save ICP: ${err.message}`);
+    } finally {
+      setCoachSaving(false);
+    }
+  }, [currentTenant?.id, refetch]);
 
   // ── Counters for the tab strip ───────────────────────────────────
   const counts = useMemo(() => ({
@@ -184,6 +216,20 @@ export const StrategyHub: React.FC = () => {
             </motion.button>
           );
         })}
+        {/* Guided wizard — opens the CoachFlow with the matching flow.
+           Only ICPs has a flow defined yet — Packages / Principles to follow. */}
+        {tab === 'icps' && (
+          <motion.button
+            onClick={() => setCoachOpen(true)}
+            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+            whileHover={{ y: -1, transition: SPRING_TAP }}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg border border-amber-300/60 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-500/20 transition-colors mb-1.5"
+            title="Step-by-step wizard with live preview"
+          >
+            <Icons.Sparkles size={12} />
+            Guided
+          </motion.button>
+        )}
         <motion.button
           onClick={() => {
             if (tab === 'icps') setEditingIcp('new');
@@ -192,7 +238,7 @@ export const StrategyHub: React.FC = () => {
           }}
           whileTap={{ scale: 0.97, transition: SPRING_TAP }}
           whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5"
+          className={`${tab === 'icps' ? '' : 'ml-auto'} inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5`}
         >
           <Icons.Plus size={12} />
           New {tab === 'icps' ? 'ICP' : tab === 'packages' ? 'Package' : 'Principle'}
@@ -255,6 +301,15 @@ export const StrategyHub: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* CoachFlow — fullscreen guided wizard. Renders only when open. */}
+      {coachOpen && (
+        <CoachFlow
+          flow={ICP_CREATION_FLOW}
+          onComplete={handleCoachFinish}
+          onClose={() => !coachSaving && setCoachOpen(false)}
+        />
+      )}
     </div>
   );
 };

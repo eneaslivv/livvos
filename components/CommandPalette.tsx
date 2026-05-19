@@ -5,6 +5,7 @@ import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
 import { useTeam } from '../context/TeamContext';
 import { useCalendar } from '../context/CalendarContext';
+import './livv/LivvBundleDesign.css';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -273,100 +274,59 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh]">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-white/60 dark:bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="cmdk-back" onClick={onClose}>
+      <div className="cmdk" onClick={e => e.stopPropagation()}>
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
-          <Icons.Search className="text-zinc-400 shrink-0" size={18} />
+        <div className="cmdk-input">
+          <Icons.Search size={16} />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search projects, clients, team, events..."
-            className="flex-1 outline-none text-sm placeholder:text-zinc-400 bg-transparent text-zinc-900 dark:text-zinc-100"
+            placeholder="Find anything — leads, projects, clients, brands, pages…"
           />
-          <span className="text-[10px] text-zinc-400 font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">ESC</span>
         </div>
 
         {/* Results */}
-        <div ref={listRef} className="max-h-[50vh] overflow-y-auto overscroll-contain py-1">
+        <div ref={listRef} className="cmdk-results">
           {results.length === 0 && query && (
-            <div className="px-4 py-8 text-center text-sm text-zinc-400">
-              No results for "{query}"
+            <div className="cmdk-empty">
+              <Icons.Search size={20} />
+              <span>No results for "{query}"</span>
+              <span className="hint">Try searching by company, project, or client name</span>
             </div>
           )}
 
           {grouped.map(group => (
-            <div key={group.category}>
-              <div className="px-4 pt-2.5 pb-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                {group.category}
-              </div>
+            <React.Fragment key={group.category}>
+              <div className="cmdk-group">{group.category}</div>
               {group.items.map(item => (
-                <button
+                <div
                   key={item.id}
                   data-index={item.flatIndex}
                   onClick={item.action}
                   onMouseEnter={() => setSelectedIndex(item.flatIndex)}
-                  className={`w-full text-left px-4 py-2 flex items-center gap-3 text-sm transition-colors duration-75 ${
-                    selectedIndex === item.flatIndex
-                      ? 'bg-zinc-100 dark:bg-zinc-800'
-                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                  }`}
+                  className={`cmdk-item ${selectedIndex === item.flatIndex ? 'sel' : ''}`}
                 >
-                  <span className={`shrink-0 ${
-                    selectedIndex === item.flatIndex
-                      ? 'text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-400'
-                  }`}>
-                    {item.icon}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className={`truncate font-medium ${
-                      selectedIndex === item.flatIndex
-                        ? 'text-zinc-900 dark:text-zinc-100'
-                        : 'text-zinc-700 dark:text-zinc-300'
-                    }`}>
-                      {item.label}
-                    </div>
-                    {item.sublabel && (
-                      <div className="truncate text-xs text-zinc-400 mt-0.5">
-                        {item.sublabel}
-                      </div>
-                    )}
-                  </div>
-                  {selectedIndex === item.flatIndex && (
-                    <span className="text-[10px] text-zinc-400 font-mono bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded shrink-0">
-                      ↵
-                    </span>
-                  )}
-                </button>
+                  <span className="icon">{item.icon}</span>
+                  <span className="label">{item.label}</span>
+                  {item.sublabel && <span className="sub">{item.sublabel}</span>}
+                  <span className="mod">{group.category}</span>
+                </div>
               ))}
-            </div>
+            </React.Fragment>
           ))}
         </div>
 
         {/* Footer hints */}
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded font-mono">↑↓</kbd>
-            navigate
+        <div className="cmdk-foot">
+          <span>
+            <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open
           </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded font-mono">↵</kbd>
-            open
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded font-mono">esc</kbd>
-            close
+          <span>
+            <kbd>esc</kbd> close
           </span>
         </div>
       </div>
