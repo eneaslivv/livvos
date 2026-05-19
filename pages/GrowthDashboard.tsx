@@ -32,6 +32,7 @@ import { usePartners } from '../hooks/usePartners';
 import { PartnerDetailPanel } from '../components/partner/PartnerDetailPanel';
 import { useAutomations } from '../hooks/useAutomations';
 import type { Partner, Automation } from '../types';
+import '../components/livv/bundle-growth.css';
 
 interface Phase {
   id: string;
@@ -158,24 +159,22 @@ export const GrowthDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-6">
-      <header className="mb-6 flex items-end justify-between gap-4">
+    <div className="max-w-[1320px] mx-auto px-6 py-6">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Growth</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Cross-module rollup. Week of <span className="font-mono tabular-nums">{weekStart}</span>.
+          <h1 className="bdg-page-title">Growth</h1>
+          <p className="bdg-page-sub">
+            Cross-module rollup · Week of {weekStart}
           </p>
         </div>
-        <motion.button
+        <button
           onClick={handleRecompute}
           disabled={recomputing}
-          whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity disabled:opacity-50"
+          className="bdg-refresh"
         >
           {recomputing ? <Icons.Loader size={13} className="animate-spin" /> : <Icons.Activity size={13} />}
           {recomputing ? 'Recomputing…' : 'Recompute this week'}
-        </motion.button>
+        </button>
       </header>
 
       {loading && <div className="flex items-center justify-center py-16"><Icons.Loader className="animate-spin text-zinc-400" size={20} /></div>}
@@ -491,43 +490,76 @@ const KpiGrid: React.FC<{ kpis: Kpi[]; onEdit: (k: Kpi) => void }> = ({ kpis, on
   if (kpis.length === 0) {
     return <p className="text-[11px] text-zinc-400 italic">No KPIs defined yet. Click "Add KPI" to define your north-star metrics.</p>;
   }
+  // Synthesize an 8-week sparkline shape based on trend direction.
+  // Real per-week history would replace this once snapshots accumulate.
+  const sparkFor = (trend: Kpi['trend']): number[] => {
+    if (trend === 'up')   return [3, 3, 4, 4, 5, 4, 5, 6];
+    if (trend === 'down') return [6, 5, 5, 4, 4, 3, 3, 2];
+    return [4, 5, 4, 5, 4, 5, 4, 5];
+  };
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+    <div className="bdg-kpi-row">
       {kpis.map((k, idx) => {
         const hit = k.target_value != null && k.current_value != null && k.current_value >= k.target_value;
-        const pct = k.target_value && k.current_value != null ? Math.round((k.current_value / k.target_value) * 100) : null;
+        const pct = k.target_value && k.current_value != null ? Math.min(100, (k.current_value / k.target_value) * 100) : null;
+        const spark = sparkFor(k.trend);
+        const max = Math.max(...spark);
+        const deltaCls = k.trend === 'up' ? 'up' : k.trend === 'down' ? 'down' : 'flat';
+        const deltaArrow = k.trend === 'up' ? '↑' : k.trend === 'down' ? '↓' : '→';
         return (
-          <motion.button key={k.id} onClick={() => onEdit(k)}
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING_ENTER, delay: idx * 0.02 }}
-            whileTap={{ scale: 0.98, transition: SPRING_TAP }} whileHover={{ y: -1, transition: SPRING_TAP }}
-            className="text-left px-3 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <div className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 truncate">{k.metric_name}</div>
+          <motion.button
+            key={k.id}
+            onClick={() => onEdit(k)}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
+            whileTap={{ scale: 0.98, transition: SPRING_TAP }}
+            className="bdg-kpi"
+          >
+            {/* Header — mono label + delta pill */}
+            <div className="bdg-kpi-head">
+              <span className="bdg-kpi-lbl">
+                {k.category && <span className="ic"><Icons.Activity size={11} /></span>}
+                {k.metric_name}
+              </span>
               {k.trend && (
-                <span className={`text-[10px] ${
-                  k.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' :
-                  k.trend === 'down' ? 'text-rose-600 dark:text-rose-400' :
-                  'text-zinc-400'
-                }`}>{k.trend === 'up' ? '↑' : k.trend === 'down' ? '↓' : '→'}</span>
+                <span className={`bdg-kpi-delta ${deltaCls}`}>
+                  {deltaArrow}
+                  {pct !== null ? `${Math.round(pct)}%` : k.trend}
+                </span>
               )}
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-[18px] font-semibold tabular-nums ${hit ? 'text-emerald-700 dark:text-emerald-300' : pct !== null ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-500'}`}>
+
+            {/* Value row — editorial Light 30px + target sub */}
+            <div className="bdg-kpi-row-val">
+              <span className={`bdg-kpi-v ${hit ? 'hit' : ''}`}>
                 {k.current_value ?? '—'}
+                {k.target_unit && <span style={{ fontSize: 16, marginLeft: 4, opacity: 0.6 }}>{k.target_unit}</span>}
               </span>
               {k.target_value != null && (
-                <span className="text-[11px] text-zinc-400">/ {k.target_value}</span>
-              )}
-              {k.target_unit && (
-                <span className="text-[10px] text-zinc-400 ml-0.5">{k.target_unit}</span>
+                <span className="bdg-kpi-target">
+                  goal {k.target_value.toLocaleString()}
+                </span>
               )}
             </div>
+
+            {/* Progress bar — shown when target is set */}
             {pct !== null && (
-              <div className="mt-1.5 h-1 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                <div className={`h-full rounded-full ${hit ? 'bg-emerald-500' : 'bg-violet-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+              <div className="bdg-kpi-bar">
+                <div className={`bdg-kpi-bar-fill ${hit ? 'hit' : ''}`} style={{ width: `${pct}%` }} />
               </div>
             )}
-            {k.category && <div className="text-[9.5px] text-zinc-400 uppercase font-mono mt-1.5">{k.category}</div>}
+
+            {/* Sparkline — 8 bars, last is peak (gold) */}
+            <div className="bdg-kpi-spark">
+              {spark.map((h, i) => (
+                <span
+                  key={i}
+                  className={`bar ${i === spark.length - 1 ? 'peak' : ''}`}
+                  style={{ height: `${(h / max) * 100}%` }}
+                />
+              ))}
+            </div>
           </motion.button>
         );
       })}
@@ -547,23 +579,34 @@ const PhasesList: React.FC<{ phases: Phase[]; onEdit: (p: Phase) => void }> = ({
     return <p className="text-[11px] text-zinc-400 italic">No phases defined. Add the 4-phase roadmap to track milestones.</p>;
   }
   return (
-    <div className="space-y-2">
+    <div className="bdg-phase-track">
       {phases.map((p, idx) => {
         const totalMs = p.milestones.length;
         const doneMs = p.milestones.filter(m => m.completed).length;
+        const pct = totalMs > 0 ? Math.round((doneMs / totalMs) * 100) : 0;
         return (
-          <motion.button key={p.id} onClick={() => onEdit(p)}
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING_ENTER, delay: idx * 0.04 }}
-            whileTap={{ scale: 0.995, transition: SPRING_TAP }} whileHover={{ y: -1, transition: SPRING_TAP }}
-            className="w-full text-left p-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors">
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono tabular-nums text-zinc-400">#{p.phase_number}</span>
-                  <span className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{p.title}</span>
-                </div>
-                {p.timeline && <div className="text-[10.5px] text-zinc-400 mt-0.5">{p.timeline}</div>}
-              </div>
+          <motion.button
+            key={p.id}
+            onClick={() => onEdit(p)}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING_ENTER, delay: idx * 0.04 }}
+            className={`bdg-phase ${p.status}`}
+          >
+            <div className="bdg-phase-n">
+              Phase {String(p.phase_number).padStart(2, '0')} · {p.status}
+            </div>
+            <div className="bdg-phase-name">{p.title}</div>
+            {p.timeline && <div className="bdg-phase-range">{p.timeline}</div>}
+            <div className="bdg-phase-bar">
+              <div className="bdg-phase-fill" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="bdg-phase-pct">
+              <span>{doneMs}/{totalMs} milestones</span>
+              <strong>{pct}%</strong>
+            </div>
+            {/* hidden legacy details kept for layout completeness */}
+            <div className="hidden">
               <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${PHASE_TONE[p.status]}`}>{p.status}</span>
             </div>
             {totalMs > 0 && (
