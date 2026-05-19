@@ -21,6 +21,7 @@ import { useBrands } from '../../hooks/useBrands';
 import { trainBrandStyle } from '../../lib/ai';
 import { errorLogger } from '../../lib/errorLogger';
 import type { Brand, BrandReferenceType } from '../../types';
+import '../livv/bundle-slideover.css';
 
 interface Props {
   brand: Brand | null;
@@ -118,7 +119,19 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
 
   // ── Draft state — local to the panel ────────────────────────────
   const [draft, setDraft] = useState<Brand | null>(null);
-  const [openSections, setOpenSections] = useState({ identity: true, visual: false, voice: false, rules: false, refs: false, gen: false });
+  // Tabs (bundle design) instead of accordion sections — only one is visible at a time.
+  type BrandTab = 'identity' | 'visual' | 'voice' | 'rules' | 'refs' | 'gen';
+  const [activeTab, setActiveTab] = useState<BrandTab>('identity');
+  // openSections kept as a derived map for legacy section toggle callsites — only
+  // the active tab is "open"; everything else collapsed. Old `toggle()` becomes a no-op.
+  const openSections = useMemo(() => ({
+    identity: activeTab === 'identity',
+    visual:   activeTab === 'visual',
+    voice:    activeTab === 'voice',
+    rules:    activeTab === 'rules',
+    refs:     activeTab === 'refs',
+    gen:      activeTab === 'gen',
+  }), [activeTab]);
   const [saving, setSaving] = useState(false);
   const [training, setTraining] = useState(false);
   const [moodUrl, setMoodUrl] = useState('');
@@ -147,7 +160,9 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
 
   if (!isOpen || !draft) return null;
 
-  const toggle = (key: keyof typeof openSections) => setOpenSections(s => ({ ...s, [key]: !s[key] }));
+  // Accordion toggle behavior is replaced by tab activation — clicking a
+  // SectionHeader makes that section the only visible one.
+  const toggle = (key: BrandTab) => setActiveTab(key);
 
   const handleSave = async () => {
     if (!draft.name.trim()) return;
@@ -207,69 +222,118 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
     }
   };
 
+  const brandColor = draft.color_primary || '#18181b';
+
   return createPortal(
     <AnimatePresence>
       <motion.div
-        key="bdp"
+        key="bdp-overlay"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-50 flex justify-end bg-black/15 dark:bg-black/40 backdrop-blur-[2px]"
+        transition={{ duration: 0.2 }}
+        className="bdl-so-overlay"
         onClick={onClose}
+      />
+      <motion.aside
+        key="bdp-panel"
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bdl-so"
+        style={{ ['--icp-color' as any]: brandColor }}
       >
-        <motion.aside
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
-          transition={SPRING_ENTER}
-          onClick={(e) => e.stopPropagation()}
-          className="h-full w-full max-w-[640px] bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] flex flex-col overflow-hidden"
-        >
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-zinc-200/40 dark:border-zinc-800/60 flex items-start justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-[11px] font-semibold shrink-0 border border-zinc-200/50 dark:border-zinc-700/60"
-                style={{
-                  background: draft.color_primary || (draft.logo_url ? 'transparent' : '#f5f2eb'),
-                  color: draft.color_text || '#1a1a1a',
-                }}
-              >
-                {draft.logo_url
-                  ? <img src={draft.logo_url} alt="" className="w-full h-full object-contain rounded-xl" />
-                  : (draft.name || 'B').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
-              </div>
-              <div className="min-w-0">
+          {/* Header — bundle design with logo block + editable title + status + close */}
+          <header className="bdl-so-head">
+            <div
+              className="bdl-so-icp"
+              style={{
+                background: brandColor,
+                color: draft.color_text || (brandColor === '#18181b' ? '#fafafa' : '#18181b'),
+                width: 44,
+                height: 44,
+                borderRadius: 11,
+                fontSize: 14,
+              }}
+            >
+              {draft.logo_url
+                ? <img src={draft.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 'inherit' }} />
+                : (draft.name || 'B').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="bdl-so-titleline">
+              <div className="bdl-so-title">
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   placeholder="Brand name"
-                  className="text-[15.5px] font-semibold bg-transparent border-0 outline-none w-full tracking-[-0.012em] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                  style={{
+                    background: 'transparent',
+                    border: 0,
+                    outline: 'none',
+                    font: 'inherit',
+                    fontSize: 18,
+                    fontWeight: 500,
+                    letterSpacing: '-0.02em',
+                    color: 'inherit',
+                    width: '100%',
+                  }}
                 />
-                <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-0.5 truncate">
-                  {draft.tagline || draft.industry || (isNew ? 'New brand kit' : '—')}
-                </div>
+                <span className={`bdl-so-status`}>
+                  <span className="dot" />{draft.status}
+                </span>
+              </div>
+              <div className="bdl-so-sub">
+                <span>{draft.tagline || draft.industry || (isNew ? 'New brand kit' : '—')}</span>
               </div>
             </div>
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="bdl-so-actions">
               <select
                 value={draft.status}
                 onChange={(e) => setDraft({ ...draft, status: e.target.value as Brand['status'] })}
-                className="text-[10.5px] font-semibold uppercase tracking-wider bg-transparent border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 outline-none text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                className="bdl-so-iconbtn"
+                style={{
+                  width: 'auto', padding: '4px 8px',
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: 'transparent', cursor: 'pointer',
+                  border: '0.5px solid rgba(214,209,199,0.55)',
+                }}
               >
                 <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="archived">Archived</option>
               </select>
-              <button onClick={onClose} className="p-1.5 rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <button onClick={onClose} className="bdl-so-iconbtn" title="Close (Esc)">
                 <Icons.X size={14} />
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* Sections */}
-          <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 px-5">
+          {/* Tab nav — bundle design (replaces the accordion) */}
+          <nav className="bdl-so-tabs" style={{ flexWrap: 'wrap' }}>
+            {([
+              { id: 'identity', label: 'Identity', icon: <Icons.User size={11} /> },
+              { id: 'visual',   label: 'Visual',   icon: <Icons.Sparkles size={11} /> },
+              { id: 'voice',    label: 'Voice',    icon: <Icons.Message size={11} /> },
+              { id: 'rules',    label: 'Rules',    icon: <Icons.Check size={11} /> },
+              { id: 'refs',     label: 'References', icon: <Icons.Bookmark size={11} /> },
+              { id: 'gen',      label: 'Preview',  icon: <Icons.Sparkles size={11} /> },
+            ] as { id: BrandTab; label: string; icon: React.ReactNode }[]).map(t => (
+              <button
+                key={t.id}
+                className={`bdl-so-tab ${activeTab === t.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(t.id)}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Sections — only the active tab is rendered open */}
+          <div className="bdl-so-body" style={{ paddingTop: 12 }}>
 
             {/* 1 — Identity */}
             <SectionHeader icon={<Icons.User size={12} />} title="Identity" open={openSections.identity} onToggle={() => toggle('identity')} />
@@ -591,8 +655,7 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
               </motion.button>
             </div>
           </div>
-        </motion.aside>
-      </motion.div>
+      </motion.aside>
     </AnimatePresence>,
     document.body,
   );

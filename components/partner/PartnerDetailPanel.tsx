@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { errorLogger } from '../../lib/errorLogger';
 import type { Partner, PartnerType, PartnerCommissionModel, PartnerWidget, PartnerWidgetType } from '../../types';
 import { WidgetBuilder } from './WidgetBuilder';
+import '../livv/bundle-slideover.css';
 
 interface Props {
   partner: Partner | null;
@@ -55,7 +56,17 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
   const isNew = !partner;
 
   const [draft, setDraft] = useState<Partner | null>(null);
-  const [open, setOpen] = useState({ identity: true, referral: true, commission: false, settings: false, widgets: false, payouts: false });
+  // Bundle design: tabs instead of accordion. Single active tab visible at a time.
+  type PartnerTab = 'identity' | 'referral' | 'commission' | 'settings' | 'widgets' | 'payouts';
+  const [activeTab, setActiveTab] = useState<PartnerTab>('identity');
+  const open = useMemo(() => ({
+    identity:   activeTab === 'identity',
+    referral:   activeTab === 'referral',
+    commission: activeTab === 'commission',
+    settings:   activeTab === 'settings',
+    widgets:    activeTab === 'widgets',
+    payouts:    activeTab === 'payouts',
+  }), [activeTab]);
   const [saving, setSaving] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [widgetBuilderOpen, setWidgetBuilderOpen] = useState(false);
@@ -109,7 +120,7 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
     } catch {/* ignore */}
   };
 
-  const toggle = (k: keyof typeof open) => setOpen(s => ({ ...s, [k]: !s[k] }));
+  const toggle = (k: PartnerTab) => setActiveTab(k);
 
   const handleSave = async () => {
     if (!draft.name.trim() || !draft.referral_code.trim()) return;
@@ -141,60 +152,119 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
     }
   };
 
+  const partnerColor = draft.brand_color || '#5C1D18';
+
   return createPortal(
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-50 flex justify-end bg-black/15 dark:bg-black/40 backdrop-blur-[2px]"
+        key="pdp-overlay"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+        className="bdl-so-overlay"
         onClick={onClose}
+      />
+      <motion.aside
+        key="pdp-panel"
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bdl-so"
+        style={{ ['--icp-color' as any]: partnerColor }}
       >
-        <motion.aside
-          initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={SPRING_ENTER}
-          onClick={(e) => e.stopPropagation()}
-          className="h-full w-full max-w-[640px] bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] flex flex-col overflow-hidden"
-        >
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-zinc-200/40 dark:border-zinc-800/60 flex items-start justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-[11px] font-semibold shrink-0 border border-zinc-200/50 dark:border-zinc-700/60 text-white"
-                style={{ background: draft.brand_color || '#3f3f46' }}
-              >
-                {draft.avatar_url
-                  ? <img src={draft.avatar_url} alt="" className="w-full h-full object-cover rounded-xl" />
-                  : (draft.name || 'P').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
-              </div>
-              <div className="min-w-0">
+          {/* Header — bundle design */}
+          <header className="bdl-so-head">
+            <div
+              className="bdl-so-icp"
+              style={{
+                background: partnerColor,
+                color: '#fff',
+                width: 44,
+                height: 44,
+                borderRadius: 11,
+                fontSize: 14,
+              }}
+            >
+              {draft.avatar_url
+                ? <img src={draft.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                : (draft.name || 'P').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="bdl-so-titleline">
+              <div className="bdl-so-title">
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   placeholder="Partner name"
-                  className="text-[15.5px] font-semibold bg-transparent border-0 outline-none w-full tracking-[-0.012em] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                  style={{
+                    background: 'transparent', border: 0, outline: 'none',
+                    font: 'inherit', fontSize: 18, fontWeight: 500,
+                    letterSpacing: '-0.02em', color: 'inherit', width: '100%',
+                  }}
                 />
-                <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-0.5 truncate font-mono">
-                  {draft.referral_code} · {draft.type}
-                </div>
+                <span className="bdl-so-status">
+                  <span className="dot" />{draft.status}
+                </span>
+              </div>
+              <div className="bdl-so-sub">
+                <span className="lk" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em' }}>
+                  {draft.referral_code}
+                </span>
+                <span className="sep">·</span>
+                <span>{draft.type}</span>
+                {draft.email && (
+                  <>
+                    <span className="sep">·</span>
+                    <span className="lk">{draft.email}</span>
+                  </>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="bdl-so-actions">
               <select
                 value={draft.status}
                 onChange={(e) => setDraft({ ...draft, status: e.target.value as Partner['status'] })}
-                className="text-[10.5px] font-semibold uppercase tracking-wider bg-transparent border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 outline-none text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                className="bdl-so-iconbtn"
+                style={{
+                  width: 'auto', padding: '4px 8px',
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: 'transparent', cursor: 'pointer',
+                  border: '0.5px solid rgba(214,209,199,0.55)',
+                }}
               >
                 <option value="invited">Invited</option>
                 <option value="active">Active</option>
                 <option value="paused">Paused</option>
                 <option value="archived">Archived</option>
               </select>
-              <button onClick={onClose} className="p-1.5 rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <button onClick={onClose} className="bdl-so-iconbtn" title="Close (Esc)">
                 <Icons.X size={14} />
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 px-5">
+          {/* Tab nav — bundle design (replaces accordion) */}
+          <nav className="bdl-so-tabs" style={{ flexWrap: 'wrap' }}>
+            {([
+              { id: 'identity',   label: 'Identity',   icon: <Icons.User size={11} /> },
+              { id: 'referral',   label: 'Referral',   icon: <Icons.Link size={11} /> },
+              { id: 'commission', label: 'Commission', icon: <Icons.DollarSign size={11} /> },
+              { id: 'settings',   label: 'Settings',   icon: <Icons.Settings size={11} /> },
+              { id: 'widgets',    label: 'Widgets',    icon: <Icons.Sparkles size={11} />, badge: widgets.filter(w => partner && w.partner_id === partner.id).length },
+              { id: 'payouts',    label: 'Payouts',    icon: <Icons.Chart size={11} />, badge: payouts.length },
+            ] as { id: PartnerTab; label: string; icon: React.ReactNode; badge?: number }[]).map(t => (
+              <button
+                key={t.id}
+                className={`bdl-so-tab ${activeTab === t.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(t.id)}
+              >
+                {t.icon}
+                {t.label}
+                {t.badge != null && t.badge > 0 && <span className="badge">{t.badge}</span>}
+              </button>
+            ))}
+          </nav>
+
+          {/* Body — only active tab visible */}
+          <div className="bdl-so-body" style={{ paddingTop: 12 }}>
 
             {/* 1 — Identity */}
             <SectionHeader icon={<Icons.User size={12} />} title="Identity" open={open.identity} onToggle={() => toggle('identity')} />
@@ -455,8 +525,7 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
               </motion.button>
             </div>
           </div>
-        </motion.aside>
-      </motion.div>
+      </motion.aside>
 
       {/* Widget builder slide-in (on top of the partner panel) */}
       {widgetBuilderOpen && partner?.id && (
