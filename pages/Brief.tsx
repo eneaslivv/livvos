@@ -18,7 +18,19 @@
  * CalendarContext which already has realtime subscriptions.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
+
+// ── iOS-feel spring presets ──────────────────────────────────────
+// Reused across every interactive element in this page so the feel
+// stays uniform. Tuned to match iOS: snappy but never bouncy enough
+// to overshoot. Stiffness ~300-400, damping ~25-28 = critically
+// damped feel without sliding into the linear curve.
+const SPRING_TAP    = { type: 'spring' as const, stiffness: 400, damping: 25 };
+const SPRING_ENTER  = { type: 'spring' as const, stiffness: 320, damping: 26 };
+const SPRING_LAYOUT = { type: 'spring' as const, stiffness: 300, damping: 28 };
+// Tap feedback — slight scale-down, spring back. iOS uses ~0.97.
+const TAP_SCALE     = 0.97;
 import { useCalendar, type CalendarTask } from '../context/CalendarContext';
 import { useProjects } from '../context/ProjectsContext';
 import { useClients } from '../context/ClientsContext';
@@ -72,6 +84,7 @@ const formatRelative = (dateStr: string | undefined): string => {
 };
 
 export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
+  const reduceMotion = useReducedMotion();
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent, deleteTask } = useCalendar();
@@ -458,38 +471,40 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         {/* Stat cards — 2x2 grid of the 4 things that actually need
             attention. Zen minimal: thin borders, no fills, color only
             on the number. Click anywhere on a card to jump to the
-            corresponding section (tasks tab, inbox, calendar). */}
-        <div className="px-5 pt-4 pb-3 grid grid-cols-2 gap-2">
-          <StatCard
-            value={overdue.length}
-            label="Overdue"
-            tone="rose"
-            onClick={() => setRightTab('tasks')}
-          />
-          <StatCard
-            value={dueToday.length}
-            label="Due today"
-            tone="amber"
-            onClick={() => setRightTab('tasks')}
-          />
-          <StatCard
-            value={todayEvents.length}
-            label="Events today"
-            tone="emerald"
-            onClick={() => setRightTab('calendar')}
-          />
-          <StatCard
-            value={pendingRequestsCount}
-            label="Pending msgs"
-            tone="violet"
-            onClick={() => setRightTab('inbox')}
-          />
-        </div>
+            corresponding section (tasks tab, inbox, calendar).
+            Stagger-in on mount via the parent variants so the four
+            cards cascade rather than pop all at once. */}
+        <motion.div
+          className="px-5 pt-4 pb-3 grid grid-cols-2 gap-2"
+          initial={reduceMotion ? false : 'hidden'}
+          animate="visible"
+          variants={{
+            hidden:  { transition: { staggerChildren: 0 } },
+            visible: { transition: { staggerChildren: 0.05, delayChildren: 0.04 } },
+          }}
+        >
+          <StatCard value={overdue.length}             label="Overdue"        tone="rose"    onClick={() => setRightTab('tasks')} />
+          <StatCard value={dueToday.length}            label="Due today"      tone="amber"   onClick={() => setRightTab('tasks')} />
+          <StatCard value={todayEvents.length}         label="Events today"   tone="emerald" onClick={() => setRightTab('calendar')} />
+          <StatCard value={pendingRequestsCount}       label="Pending msgs"   tone="violet"  onClick={() => setRightTab('inbox')} />
+        </motion.div>
 
-        {/* Chat messages */}
+        {/* Chat messages — each one slides up + fades in with spring
+            physics. User msgs originate slightly from the right,
+            assistant msgs from the left, so the direction reinforces
+            who's speaking. Pre-existing messages on mount don't
+            animate (initial=false) — only NEW ones do, which avoids
+            the on-mount "all messages cascade in" awkwardness. */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pt-2 pb-4 space-y-4">
+          <AnimatePresence initial={false}>
           {messages.map((m, i) => (
-            <div key={`${m.ts}-${i}`} className={m.role === 'user' ? 'flex justify-end' : ''}>
+            <motion.div
+              key={`${m.ts}-${i}`}
+              initial={reduceMotion ? false : { opacity: 0, y: 6, x: m.role === 'user' ? 8 : -4 }}
+              animate={{ opacity: 1, y: 0, x: 0 }}
+              transition={SPRING_ENTER}
+              className={m.role === 'user' ? 'flex justify-end' : ''}
+            >
               <div className="max-w-full">
                 <div className={`text-[13px] leading-relaxed whitespace-pre-wrap ${
                   m.role === 'user'
@@ -503,12 +518,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 {m.role === 'assistant' && m.actions && m.actions.length > 0 && (
                   <div className="mt-2 space-y-1.5">
                     {m.actions.map((a, k) => (
-                      <ActionCard
-                        key={k}
-                        action={a}
-                        onConfirm={() => executeAction(i, k)}
-                        onSkip={() => skipAction(i, k)}
-                      />
+                      <AnimatePresence key={k} mode="wait" initial={false}>
+                        <ActionCard
+                          action={a}
+                          onConfirm={() => executeAction(i, k)}
+                          onSkip={() => skipAction(i, k)}
+                        />
+                      </AnimatePresence>
                     ))}
                   </div>
                 )}
@@ -571,14 +587,35 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           ))}
+          </AnimatePresence>
+          <AnimatePresence>
           {sending && (
-            <div className="text-zinc-400 text-[12px] inline-flex items-center gap-2">
-              <span className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+            <motion.div
+              key="thinking"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={SPRING_TAP}
+              className="text-zinc-400 text-[12px] inline-flex items-center gap-2"
+            >
+              {/* Animated dots — three pulse out of phase. More iOS than
+                  the spinner that was here. */}
+              <span className="inline-flex gap-1 items-center">
+                {[0, 1, 2].map(i => (
+                  <motion.span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-zinc-400"
+                    animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.12, ease: 'easeInOut' }}
+                  />
+                ))}
+              </span>
               Thinking…
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
         </div>
 
         {/* Input + action chips. Chips fire prompts directly (one-tap)
@@ -588,19 +625,24 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         <div className="px-4 pt-2.5 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
           <div className="flex flex-wrap gap-1.5 mb-2">
             {[
-              { label: 'Plan my week',       prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
+              { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
               { label: 'What’s blocked?', prompt: 'What’s blocked or waiting on someone else right now?' },
-              { label: 'Follow-ups',         prompt: 'Show me pending follow-ups across clients + inbox I haven’t replied to.' },
-              { label: 'Catch me up',        prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
-            ].map(c => (
-              <button
+              { label: 'Follow-ups',      prompt: 'Show me pending follow-ups across clients + inbox I haven’t replied to.' },
+              { label: 'Catch me up',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+            ].map((c, idx) => (
+              <motion.button
                 key={c.label}
                 onClick={() => handleSend(c.prompt)}
                 disabled={sending}
+                initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...SPRING_ENTER, delay: 0.05 + idx * 0.03 }}
+                whileTap={{ scale: 0.94, transition: SPRING_TAP }}
+                whileHover={{ y: -1, transition: SPRING_TAP }}
                 className="px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {c.label}
-              </button>
+              </motion.button>
             ))}
           </div>
           <div className="flex items-end gap-2">
@@ -626,28 +668,46 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 title that reflects the current language so the user
                 knows what locale is being dictated. */}
             {voice.isSupported && (
-              <button
+              <motion.button
                 onClick={() => voice.isListening ? voice.stop() : voice.start()}
                 disabled={sending}
                 title={voice.isListening ? 'Stop listening' : `Dictate (${voiceLang})`}
                 aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
-                className={`p-2 rounded-xl border transition-colors ${
+                whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+                animate={voice.isListening
+                  ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
+                  : { scale: 1 }
+                }
+                className={`p-2 rounded-xl border transition-colors relative ${
                   voice.isListening
-                    ? 'bg-rose-500 border-rose-500 text-white animate-pulse'
+                    ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
                     : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
                 }`}
               >
                 <Icons.Mic size={14} />
-              </button>
+                {/* Soft pulsing halo when listening — radiates out then
+                    fades. Subtle vs the obvious red dot, but reads
+                    instantly as "I'm hearing you". */}
+                {voice.isListening && !reduceMotion && (
+                  <motion.span
+                    aria-hidden
+                    className="absolute inset-0 rounded-xl bg-rose-500/30"
+                    initial={{ scale: 1, opacity: 0.6 }}
+                    animate={{ scale: 1.6, opacity: 0 }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
+                  />
+                )}
+              </motion.button>
             )}
-            <button
+            <motion.button
               onClick={() => handleSend()}
               disabled={!input.trim() || sending}
+              whileTap={{ scale: 0.9, transition: SPRING_TAP }}
               className="p-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
               aria-label="Send"
             >
               <Icons.Send size={14} />
-            </button>
+            </motion.button>
           </div>
           {voice.error && (
             <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">
@@ -789,14 +849,24 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 <p className="text-[11px] text-zinc-400 italic pl-4">Inbox empty.</p>
               ) : (
                 <div className="space-y-2">
-                  {pendingMessages.map(m => (
-                    <InboxCard
+                  <AnimatePresence initial={false}>
+                  {pendingMessages.map((m, idx) => (
+                    <motion.div
                       key={m.id}
-                      message={m}
-                      onOpen={() => onNavigate('communications')}
-                      onConvert={() => handleConvertToTask(m)}
-                    />
+                      layout
+                      initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
+                      transition={{ ...SPRING_ENTER, delay: idx < 8 ? idx * 0.025 : 0 }}
+                    >
+                      <InboxCard
+                        message={m}
+                        onOpen={() => onNavigate('communications')}
+                        onConvert={() => handleConvertToTask(m)}
+                      />
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                 </div>
               )}
             </section>
@@ -858,15 +928,22 @@ const TaskSection: React.FC<{
       </header>
       {open && (
         <div className="space-y-2">
-          {tasks.slice(0, 12).map(t => {
+        <AnimatePresence initial={false}>
+          {tasks.slice(0, 12).map((t, idx) => {
             const proj = t.project_id ? projectsById.get(t.project_id) : null;
             const cli  = t.client_id ? clientsById.get(t.client_id) : (proj?.client_id ? clientsById.get(proj.client_id) : null);
             const due = formatRelative(t.start_date);
             const edge = PRIORITY_EDGE[t.priority || 'medium'];
             return (
-              <div
+              <motion.div
                 key={t.id}
-                className="group relative rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors overflow-hidden"
+                layout
+                initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96, x: 20, transition: { duration: 0.2 } }}
+                transition={{ type: 'spring', stiffness: 320, damping: 26, delay: idx < 8 ? idx * 0.02 : 0 }}
+                whileHover={{ y: -1, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
+                className="group relative rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden"
               >
                 {/* Left priority edge — 4px colored bar absolute-positioned
                     so the rest of the card stays a clean rectangle. */}
@@ -923,9 +1000,10 @@ const TaskSection: React.FC<{
                     <Icons.Clock size={11} />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
+        </AnimatePresence>
           {tasks.length > 12 && (
             <div className="px-3 py-1 text-[10px] text-zinc-400">+{tasks.length - 12} more</div>
           )}
@@ -944,56 +1022,106 @@ const ActionCard: React.FC<{
   onConfirm: () => void;
   onSkip: () => void;
 }> = ({ action, onConfirm, onSkip }) => {
+  // Each state is its own motion.div under an AnimatePresence
+  // mode="wait" so the card morphs between forms: pending → executing
+  // (small scale-out, spin in) → done (chip swooshes in with a Check
+  // pop). iOS feel: spring physics, never linear easing.
+  const tx = SPRING_TAP;
   if (action.state === 'done') {
     return (
-      <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
-        <Icons.Check size={11} />
+      <motion.div
+        key="done"
+        layout
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={tx}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+      >
+        {/* The check pops in slightly after the chip so the eye reads
+            the chip first, then the action confirmation. */}
+        <motion.span
+          initial={{ scale: 0, rotate: -10 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ ...tx, delay: 0.08 }}
+        >
+          <Icons.Check size={11} />
+        </motion.span>
         {action.label}
-      </div>
+      </motion.div>
     );
   }
   if (action.state === 'skipped') {
     return (
-      <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-zinc-100 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+      <motion.div
+        key="skipped"
+        layout
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={tx}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-zinc-100 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700"
+      >
         <Icons.Close size={10} />
         {action.label} (skipped)
-      </div>
+      </motion.div>
     );
   }
   if (action.state === 'failed') {
     return (
-      <div title={action.error} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30">
+      <motion.div
+        key="failed"
+        layout
+        title={action.error}
+        initial={{ opacity: 0, x: -6 }}
+        animate={{ opacity: 1, x: [0, -3, 3, -2, 2, 0] }}
+        transition={{ x: { duration: 0.4 }, opacity: { duration: 0.2 } }}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-medium bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30"
+      >
         <Icons.AlertCircle size={11} />
         {action.label} — failed
-      </div>
+      </motion.div>
     );
   }
   return (
-    <div className="flex items-center gap-2 p-2 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50/60 dark:bg-violet-500/5">
+    <motion.div
+      key="pending"
+      layout
+      initial={{ opacity: 0, y: 4, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={SPRING_ENTER}
+      className="flex items-center gap-2 p-2 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50/60 dark:bg-violet-500/5"
+    >
       <Icons.Sparkles size={12} className="text-violet-600 dark:text-violet-400 shrink-0" />
       <span className="flex-1 text-[11.5px] text-zinc-800 dark:text-zinc-100 leading-snug">
         {action.label}
       </span>
       {action.state === 'executing' ? (
-        <span className="text-[10px] text-violet-600 dark:text-violet-400 inline-flex items-center gap-1">
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={tx}
+          className="text-[10px] text-violet-600 dark:text-violet-400 inline-flex items-center gap-1"
+        >
           <span className="w-2.5 h-2.5 border border-violet-400 border-t-transparent rounded-full animate-spin" />
           Running…
-        </span>
+        </motion.span>
       ) : (
         <>
-          <button
+          <motion.button
             onClick={onSkip}
+            whileTap={{ scale: 0.92, transition: tx }}
             className="text-[10.5px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-1.5 py-0.5"
-          >Skip</button>
-          <button
+          >Skip</motion.button>
+          <motion.button
             onClick={onConfirm}
+            whileTap={{ scale: 0.92, transition: tx }}
+            whileHover={{ y: -1, transition: tx }}
             className="text-[10.5px] font-semibold text-white bg-violet-600 hover:bg-violet-700 px-2 py-1 rounded-md inline-flex items-center gap-1"
           >
             <Icons.Check size={10} /> Confirm
-          </button>
+          </motion.button>
         </>
       )}
-    </div>
+    </motion.div>
   );
 };
 
@@ -1018,17 +1146,35 @@ const StatCard: React.FC<{
   const t = STAT_TONE[tone];
   const isAlert = value > 0;
   return (
-    <button
+    <motion.button
       onClick={onClick}
+      variants={{
+        hidden:  { opacity: 0, y: 8, scale: 0.96 },
+        visible: { opacity: 1, y: 0, scale: 1, transition: SPRING_ENTER },
+      }}
+      whileTap={{ scale: TAP_SCALE, transition: SPRING_TAP }}
+      whileHover={{ y: -1, transition: SPRING_TAP }}
       className="group text-left px-3 py-2.5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors"
     >
-      <div className={`text-[20px] leading-none font-semibold tabular-nums ${isAlert ? t.text : t.mute}`}>
-        {value}
-      </div>
+      {/* Number animates in via an inline AnimatePresence so the value
+          itself feels alive when it changes (e.g. user completes a
+          task → overdue count drops by one with a tiny slide). */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={value}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={SPRING_TAP}
+          className={`text-[20px] leading-none font-semibold tabular-nums ${isAlert ? t.text : t.mute}`}
+        >
+          {value}
+        </motion.div>
+      </AnimatePresence>
       <div className="text-[10.5px] mt-1 text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
         {label}
       </div>
-    </button>
+    </motion.button>
   );
 };
 
