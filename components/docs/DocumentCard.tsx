@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icons } from '../ui/Icons';
 import type { Document } from '../../types/documents';
+import { avatarColor, initials } from './FolderIcon';
 
 interface DocumentCardProps {
   document: Document;
@@ -30,6 +31,11 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
     if (days < 30) return `${days}d ago`;
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  // Indigo accent — internal docs are always "doc" type, so pick a
+  // consistent editorial color (sage for live, gold for draft) to match
+  // the rest of the LIVV palette.
+  const tone = document.status === 'draft' ? '#c4a35a' : '#769268';
 
   const SelectBox: React.FC<{ floating?: boolean }> = ({ floating }) => (
     onToggleSelect ? (
@@ -62,16 +68,19 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
         }`}
       >
         <SelectBox />
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-50 to-zinc-50 dark:from-indigo-500/15 dark:to-zinc-800/40 flex items-center justify-center shrink-0 shadow-sm">
-          <Icons.Docs size={18} className="text-indigo-500 dark:text-indigo-400" />
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `color-mix(in oklab, ${tone} 14%, #ffffff)`, color: tone, border: `0.5px solid color-mix(in oklab, ${tone} 22%, transparent)` }}
+        >
+          <Icons.Docs size={18} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{document.title}</p>
-          <p className="text-[11px] text-zinc-400">{timeAgo(document.updated_at)}</p>
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{timeAgo(document.updated_at)}</p>
         </div>
-        {document.status === 'draft' && (
-          <span className="text-[10px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">Draft</span>
-        )}
+        <span className={`dxd-status ${document.status === 'draft' ? 'draft' : 'live'}`}>
+          <span className="dot" />{document.status === 'draft' ? 'draft' : 'live'}
+        </span>
         {document.share_enabled && (
           <Icons.Globe size={13} className="text-zinc-300 dark:text-zinc-600" />
         )}
@@ -92,52 +101,89 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ document, view, onCl
       onClick={onClick}
       draggable={!!onDragStart}
       onDragStart={onDragStart}
-      className={`group relative bg-white dark:bg-zinc-900 border rounded-xl p-4 hover:shadow-sm transition-all ${
-        onDragStart ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
-      } ${
-        selected
-          ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 bg-zinc-50 dark:bg-zinc-800/40'
-          : 'border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700'
+      className={`dxd-doc group ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''} ${
+        selected ? 'ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 !border-zinc-900 dark:!border-zinc-100' : ''
       }`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-50 to-zinc-50 dark:from-indigo-500/15 dark:to-zinc-800/40 flex items-center justify-center shadow-sm">
-          <Icons.Docs size={20} className="text-indigo-500 dark:text-indigo-400" />
+      {/* Pin button — top-right */}
+      <button
+        className={`dxd-doc-pin ${document.is_favorite ? 'pinned' : ''}`}
+        aria-label="Pin"
+        onClick={(e) => { e.stopPropagation(); }}
+      >
+        <svg width={11} height={11} viewBox="0 0 24 24" fill={document.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+          <path d="M12 2v6M9 8h6l-1 5h-4l-1-5zM12 13v9" />
+        </svg>
+      </button>
+
+      {/* Notebook-lined preview with DOC ext badge */}
+      <div className="dxd-doc-preview" style={{ ['--c' as any]: tone }}>
+        <div
+          className="dxd-doc-preview-ic"
+          style={{
+            background: `color-mix(in oklab, ${tone} 14%, #ffffff)`,
+            border: `0.5px solid color-mix(in oklab, ${tone} 22%, transparent)`,
+            color: tone,
+          }}
+        >
+          DOC
         </div>
-        <div className="flex items-center gap-1">
-          <SelectBox floating />
-          {onMore && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onMore(); }}
-              className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
-            >
-              <Icons.MoreVert size={15} />
-            </button>
+        <div className="dxd-doc-preview-thumb">
+          <span className="ln title" style={{ background: `color-mix(in oklab, ${tone} 50%, transparent)` }} />
+          <span className="ln short" />
+          <span className="ln" />
+          <span className="ln shorter" />
+          <span className="ln short" />
+          <span className="ln" />
+          <span className="ln short" />
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="dxd-doc-body">
+        <div className="dxd-doc-name">{document.title || 'Untitled Document'}</div>
+        <div className="dxd-doc-meta">
+          <span>{timeAgo(document.updated_at)}</span>
+          {document.share_enabled && (
+            <>
+              <span className="sep">·</span>
+              <span className="inline-flex items-center gap-1"><Icons.Globe size={10} /> shared</span>
+            </>
           )}
         </div>
+        <div className="dxd-doc-foot">
+          <span className={`dxd-status ${document.status === 'draft' ? 'draft' : 'live'}`}>
+            <span className="dot" />{document.status === 'draft' ? 'draft' : 'live'}
+          </span>
+          {linkedTaskTitle && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onUnlinkTask?.(); }}
+              title={`Linked to: ${linkedTaskTitle} — click to unlink`}
+              className="dxd-tag"
+              style={{ background: 'rgba(118,146,104,0.13)', color: '#4d6b4d' }}
+            >
+              <span className="dot" style={{ background: '#4d6b4d' }} />
+              <span className="truncate max-w-[120px]">{linkedTaskTitle}</span>
+            </button>
+          )}
+          <span className="dxd-doc-av" style={{ background: avatarColor(1) }}>
+            {initials(document.title)}
+          </span>
+        </div>
       </div>
-      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate mb-1">{document.title}</p>
-      <div className="flex items-center gap-2">
-        <p className="text-[11px] text-zinc-400">{timeAgo(document.updated_at)}</p>
-        {document.status === 'draft' && (
-          <span className="text-[9px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">Draft</span>
-        )}
-        {document.share_enabled && (
-          <Icons.Globe size={11} className="text-zinc-300 dark:text-zinc-600" />
+
+      {/* Hover-only actions, top-right area */}
+      <div className="absolute top-2 right-9 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <SelectBox floating />
+        {onMore && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMore(); }}
+            className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 p-1 rounded-md"
+          >
+            <Icons.MoreVert size={11} />
+          </button>
         )}
       </div>
-      {linkedTaskTitle && (
-        // Inline (not absolute) so the chip stays inside the card bounds
-        // and the date row above stays readable. Click → unlinks.
-        <button
-          onClick={(e) => { e.stopPropagation(); onUnlinkTask?.(); }}
-          title={`Linked to task: ${linkedTaskTitle} — click to unlink`}
-          className="mt-2 inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
-        >
-          <Icons.CheckCircle size={9} />
-          <span className="truncate">{linkedTaskTitle}</span>
-        </button>
-      )}
     </div>
   );
 };

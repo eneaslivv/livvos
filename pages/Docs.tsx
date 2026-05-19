@@ -10,6 +10,7 @@ import { BlogPanel } from '../components/docs/BlogPanel';
 import { PasswordsPanel } from '../components/docs/PasswordsPanel';
 import { DocumentEditor } from '../components/docs/DocumentEditor';
 import { DocumentCard } from '../components/docs/DocumentCard';
+import { FolderIcon, avatarColor, initials, folderColor, extColor } from '../components/docs/FolderIcon';
 import '../components/docs/DocsDesign.css';
 
 export const Docs: React.FC = () => {
@@ -846,6 +847,71 @@ export const Docs: React.FC = () => {
         </div>
       </div>
 
+      {/* KPI stats strip — only on Documents tab, when there's content */}
+      {activeTab === 'documents' && (folders.length + files.length + documents.length) > 0 && (
+        <div className="dxd-stats">
+          <div className="dxd-stat">
+            <span className="dxd-stat-ic" style={{ background: 'rgba(196,163,90,0.14)', color: '#c4a35a' }}>
+              <Icons.Docs size={13} />
+            </span>
+            <div className="dxd-stat-body">
+              <div className="dxd-stat-l">All files</div>
+              <div className="dxd-stat-v">
+                {folders.length + files.length + documents.length}
+                <small> · {folders.length} folder{folders.length === 1 ? '' : 's'}</small>
+              </div>
+            </div>
+          </div>
+          <div className="dxd-stat">
+            <span className="dxd-stat-ic" style={{ background: 'rgba(196,163,90,0.14)', color: '#c4a35a' }}>
+              <Icons.Edit size={13} />
+            </span>
+            <div className="dxd-stat-body">
+              <div className="dxd-stat-l">Drafts</div>
+              <div className="dxd-stat-v">
+                {documents.filter((d: any) => d.status === 'draft').length}
+                <small> · awaiting</small>
+              </div>
+            </div>
+          </div>
+          <div className="dxd-stat">
+            <span className="dxd-stat-ic" style={{ background: 'rgba(109,190,220,0.14)', color: '#6dbedc' }}>
+              <Icons.Link size={13} />
+            </span>
+            <div className="dxd-stat-body">
+              <div className="dxd-stat-l">Shared</div>
+              <div className="dxd-stat-v">
+                {
+                  folders.filter(f => f.client_id || f.project_id).length +
+                  files.filter(f => f.client_id || f.project_id).length +
+                  documents.filter((d: any) => d.client_id || d.project_id).length
+                }
+                <small> · clients & projects</small>
+              </div>
+            </div>
+          </div>
+          <div className="dxd-stat">
+            <span className="dxd-stat-ic" style={{ background: 'rgba(118,146,104,0.14)', color: '#769268' }}>
+              <Icons.Folder size={13} />
+            </span>
+            <div className="dxd-stat-body">
+              <div className="dxd-stat-l">Storage</div>
+              <div className="dxd-stat-v">
+                {(() => {
+                  const total = files.reduce((s, f) => s + (f.size || 0), 0);
+                  if (total === 0) return '0';
+                  const units = ['B', 'KB', 'MB', 'GB'];
+                  let v = total; let u = 0;
+                  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+                  return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[u]}`;
+                })()}
+                <small> / 50 GB</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New folder inline form */}
       <AnimatePresence>
       {activeTab === 'documents' && showNewFolderInput && (
@@ -1029,13 +1095,7 @@ export const Docs: React.FC = () => {
                Layout was causing per-item reflow + cascade animations
                every time a folder opened. Google Drive uses a fixed
                grid; we do the same. */
-            <div
-              className={
-                view === 'grid'
-                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
-                  : 'space-y-1.5'
-              }
-            >
+            <div className={view === 'grid' ? 'dxd-grid' : 'space-y-1.5'}>
               {/* No AnimatePresence wrapper — items add/remove instantly. */}
               {/* Folders */}
               {folders.map((folder, i) => {
@@ -1043,6 +1103,8 @@ export const Docs: React.FC = () => {
                 const selItem: SelectedItem = { kind: 'folder', id: folder.id, name: folder.name };
                 const isDragSource = draggedItemId === folder.id;
                 const isDropHover = dropTargetFolderId === folder.id && draggedItemId !== folder.id;
+                const fColor = folder.color || folderColor(folder.id);
+                const itemsInFolder = files.filter(f => f.folder_id === folder.id).length;
                 return view === 'grid' ? (
                   <motion.div
                     key={folder.id}
@@ -1061,54 +1123,81 @@ export const Docs: React.FC = () => {
                     onDragOver={onFolderDropTarget.onDragOver}
                     onDragLeave={(e) => onFolderDropTarget.onDragLeave(e, folder.id)}
                     onDrop={(e) => onFolderDropTarget.onDrop(e, folder.id)}
-                    className={`group cursor-grab active:cursor-grabbing bg-white dark:bg-zinc-900 border rounded-xl p-4 transition-[border-color,background-color,box-shadow] duration-200 ${
+                    className={`dxd-folder group ${
                       isDropHover
-                        ? 'border-amber-500 dark:border-amber-400 ring-2 ring-amber-300/60 dark:ring-amber-500/40 bg-amber-50 dark:bg-amber-950/30 shadow-lg shadow-amber-500/20'
+                        ? 'ring-2 ring-amber-300/60 dark:ring-amber-500/40 !border-amber-400'
                         : sel
-                        ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 bg-zinc-50 dark:bg-zinc-800/40'
-                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 hover:shadow-sm'
+                        ? 'ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 !border-zinc-900 dark:!border-zinc-100'
+                        : ''
                     }`}
-                    whileHover={isDropHover ? undefined : { y: -2 }}
-                    whileTap={{ scale: 0.98 }}
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-500/10 flex items-center justify-center shadow-sm">
-                        <Icons.Folder size={24} className="text-amber-600 dark:text-amber-400" />
-                        {isDropHover && (
-                          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 animate-ping" />
-                        )}
+                    {/* Pin / favorite */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateFolder(folder.id, { is_favorite: !folder.is_favorite } as any); }}
+                      className={`dxd-folder-pin ${folder.is_favorite ? 'pinned' : ''}`}
+                      aria-label={folder.is_favorite ? 'Unpin' : 'Pin'}
+                    >
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill={folder.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                        <path d="M12 2v6M9 8h6l-1 5h-4l-1-5zM12 13v9" />
+                      </svg>
+                    </button>
+
+                    {/* SVG folder icon */}
+                    <div className="dxd-folder-ic">
+                      <FolderIcon color={fColor} />
+                    </div>
+
+                    {/* Body */}
+                    <div className="dxd-folder-body">
+                      <div className="dxd-folder-name">{folder.name}</div>
+                      <div className="dxd-folder-meta">
+                        <span>{itemsInFolder} item{itemsInFolder === 1 ? '' : 's'}</span>
+                        <span className="sep">·</span>
+                        <span>{fmtDate(folder.created_at)}</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                    </div>
+
+                    {/* Foot — task chip OR collaborator avatars */}
+                    <div className="dxd-folder-foot">
+                      {folder.task_id && taskById.get(folder.task_id) ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); unlinkFolderTask(folder.id); }}
+                          title="Click to unlink"
+                          className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded text-[10px] font-medium"
+                          style={{ background: 'rgba(118,146,104,0.13)', color: '#4d6b4d' }}
+                        >
+                          <Icons.CheckCircle size={9} />
+                          <span className="truncate">{(taskById.get(folder.task_id) as any).title}</span>
+                        </button>
+                      ) : (
+                        <>
+                          <span className="dxd-folder-avs">
+                            <span className="av" style={{ background: avatarColor(0) }}>{initials(folder.name)}</span>
+                          </span>
+                          <span>{folder.client_id || folder.project_id ? 'shared' : 'private'}</span>
+                        </>
+                      )}
+                      {/* Select checkbox + actions, overlayed on hover */}
+                      <span className="ml-auto inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleSelected(selItem); }}
                           aria-label={sel ? 'Deselect' : 'Select'}
-                          className={`flex items-center justify-center w-5 h-5 rounded-md border transition-all ${
+                          className={`flex items-center justify-center w-4 h-4 rounded border transition-all ${
                             sel
-                              ? 'bg-blue-600 border-blue-600 text-white opacity-100'
-                              : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400'
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-transparent hover:border-blue-400'
                           }`}
                         >
-                          {sel && <Icons.Tick size={12} strokeWidth={3} />}
+                          {sel && <Icons.Tick size={10} strokeWidth={3} />}
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); openActionMenu('folder', folder); }}
-                          className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all p-1"
+                          className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200"
                         >
-                          <Icons.MoreVert size={16} />
+                          <Icons.MoreVert size={13} />
                         </button>
-                      </div>
+                      </span>
                     </div>
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{folder.name}</p>
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{fmtDate(folder.created_at)}</p>
-                    {folder.task_id && taskById.get(folder.task_id) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); unlinkFolderTask(folder.id); }}
-                        title={`Vinculada: ${(taskById.get(folder.task_id) as any).title} — click para desvincular`}
-                        className="mt-2 inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">
-                        <Icons.CheckCircle size={9} />
-                        <span className="truncate">{(taskById.get(folder.task_id) as any).title}</span>
-                      </button>
-                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -1209,6 +1298,9 @@ export const Docs: React.FC = () => {
                 const fSel = isSelected(file.id);
                 const fSelItem: SelectedItem = { kind: 'file', id: file.id, name: file.name, url: file.url };
                 const fIsDragSource = draggedItemId === file.id;
+                const ext = (file.name.split('.').pop() || 'file').toLowerCase();
+                const fc = extColor(ext);
+                const isImg = isImageType(file.type) && !!file.url;
                 return view === 'grid' ? (
                   <motion.div
                     key={file.id}
@@ -1220,15 +1312,20 @@ export const Docs: React.FC = () => {
                     onDragStart={(e: any) => onCardDragStart(e, 'file', file.id)}
                     onDragEnd={onCardDragEnd}
                     onClick={(e) => { if ((e as any).shiftKey) toggleSelected(fSelItem); }}
-                    className={`group relative cursor-grab active:cursor-grabbing bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden hover:shadow-sm transition-[border-color,box-shadow] duration-200 ${
-                      fSel
-                        ? 'border-zinc-900 dark:border-zinc-100 ring-2 ring-zinc-300/40 dark:ring-zinc-700/40'
-                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
-                    }`}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
+                    className={`dxd-doc group ${fSel ? 'ring-2 ring-zinc-300/40 dark:ring-zinc-700/40 !border-zinc-900 dark:!border-zinc-100' : ''}`}
                   >
-                    {/* Floating select checkbox (top-left, always reachable) */}
+                    {/* Pin (top-right corner) */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateFile(file.id, { is_favorite: !file.is_favorite } as any); }}
+                      className={`dxd-doc-pin ${file.is_favorite ? 'pinned' : ''}`}
+                      aria-label={file.is_favorite ? 'Unpin' : 'Pin'}
+                    >
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill={file.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                        <path d="M12 2v6M9 8h6l-1 5h-4l-1-5zM12 13v9" />
+                      </svg>
+                    </button>
+
+                    {/* Floating select checkbox (top-left) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleSelected(fSelItem); }}
                       aria-label={fSel ? 'Deselect' : 'Select'}
@@ -1241,67 +1338,76 @@ export const Docs: React.FC = () => {
                       {fSel && <Icons.Tick size={12} strokeWidth={3} />}
                     </button>
 
-                    {/* Image thumbnail or icon */}
-                    {isImageType(file.type) && file.url ? (
-                      <div className="relative w-full h-28 bg-zinc-100 dark:bg-zinc-800">
-                        <img
-                          src={file.url}
-                          alt={file.name}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-blue-500 p-1.5 rounded-lg shadow-sm"
-                          >
-                            <Icons.External size={12} />
-                          </a>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
-                            className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 p-1.5 rounded-lg shadow-sm"
-                          >
-                            <Icons.MoreVert size={12} />
-                          </button>
+                    {/* Notebook-lined preview area with ext badge OR image */}
+                    <div className="dxd-doc-preview" style={{ ['--c' as any]: fc }}>
+                      {isImg ? (
+                        <div className="dxd-doc-preview-image" style={{ background: `linear-gradient(135deg, color-mix(in oklab, ${fc} 80%, transparent), color-mix(in oklab, ${fc} 40%, #18181b))` }}>
+                          <img src={file.url} alt={file.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                          <span className="relative z-10 text-white drop-shadow">{ext.toUpperCase()}</span>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 pb-0">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="w-12 h-12 rounded-xl bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center">
-                            {getFileIcon(file.type, file.name)}
+                      ) : (
+                        <>
+                          <div
+                            className="dxd-doc-preview-ic"
+                            style={{
+                              background: `color-mix(in oklab, ${fc} 14%, #ffffff)`,
+                              border: `0.5px solid color-mix(in oklab, ${fc} 22%, transparent)`,
+                              color: fc,
+                            }}
+                          >
+                            {ext.toUpperCase().slice(0, 3)}
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                            <a
-                              href={file.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-zinc-300 dark:text-zinc-600 hover:text-blue-500 dark:hover:text-blue-400 p-1"
-                            >
-                              <Icons.External size={13} />
-                            </a>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
-                              className="text-zinc-300 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 p-1"
-                            >
-                              <Icons.MoreVert size={13} />
-                            </button>
+                          <div className="dxd-doc-preview-thumb">
+                            <span className="ln title" style={{ background: `color-mix(in oklab, ${fc} 50%, transparent)` }} />
+                            <span className="ln short" />
+                            <span className="ln" />
+                            <span className="ln shorter" />
+                            <span className="ln short" />
+                            <span className="ln" />
+                            <span className="ln short" />
                           </div>
-                        </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="dxd-doc-body">
+                      <div className="dxd-doc-name">{file.name}</div>
+                      <div className="dxd-doc-meta">
+                        <span>{fmtDate(file.created_at)}</span>
+                        <span className="sep">·</span>
+                        <span>{formatSize(file.size)}</span>
                       </div>
-                    )}
-                    <div className="px-4 py-3">
-                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{formatSize(file.size)}</span>
-                        {file.created_at && (
-                          <>
-                            <span className="text-zinc-200 dark:text-zinc-700 text-[10px]">|</span>
-                            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{fmtDate(file.created_at)}</span>
-                          </>
+                      <div className="dxd-doc-foot">
+                        {/* Status: file uploads = "live"; could expand later */}
+                        <span className="dxd-status live">
+                          <span className="dot" />live
+                        </span>
+                        {(file.client_id || file.project_id) && (
+                          <span className="dxd-tag" style={{ background: 'rgba(109,190,220,0.12)', color: '#226cae' }}>
+                            <span className="dot" style={{ background: '#226cae' }} />
+                            {file.client_id ? 'client' : 'project'}
+                          </span>
                         )}
+                        <span className="dxd-doc-av" style={{ background: avatarColor(0) }}>{initials(file.name)}</span>
+                      </div>
+                      {/* Hover actions row */}
+                      <div className="absolute top-2 right-9 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 p-1 rounded-md"
+                        >
+                          <Icons.External size={11} />
+                        </a>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openActionMenu('file', file); }}
+                          className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 p-1 rounded-md"
+                        >
+                          <Icons.MoreVert size={11} />
+                        </button>
                       </div>
                     </div>
                   </motion.div>
