@@ -18,7 +18,7 @@
  * CalendarContext which already has realtime subscriptions.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 
 // ── iOS-feel spring presets ──────────────────────────────────────
@@ -935,72 +935,19 @@ const TaskSection: React.FC<{
             const due = formatRelative(t.start_date);
             const edge = PRIORITY_EDGE[t.priority || 'medium'];
             return (
-              <motion.div
+              <SwipeableTaskCard
                 key={t.id}
-                layout
-                initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96, x: 20, transition: { duration: 0.2 } }}
-                transition={{ type: 'spring', stiffness: 320, damping: 26, delay: idx < 8 ? idx * 0.02 : 0 }}
-                whileHover={{ y: -1, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-                className="group relative rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden"
-              >
-                {/* Left priority edge — 4px colored bar absolute-positioned
-                    so the rest of the card stays a clean rectangle. */}
-                <span className={`absolute left-0 top-0 bottom-0 w-1 ${edge}`} aria-hidden />
-                <button
-                  onClick={() => onTaskClick(t)}
-                  className="w-full text-left pl-4 pr-3 pt-2.5 pb-2"
-                >
-                  <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                    {t.title}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
-                    {due && (
-                      <span className={`inline-flex items-center gap-0.5 ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
-                        {tone === 'rose' && <Icons.Clock size={9} />}
-                        {due}
-                      </span>
-                    )}
-                    {t.duration && (
-                      <span className="inline-flex items-center gap-0.5">
-                        ⏱ {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
-                      </span>
-                    )}
-                    {proj && (
-                      <span className="inline-flex items-center gap-0.5 truncate max-w-[120px]">
-                        <Icons.Briefcase size={9} />
-                        {proj.title}
-                      </span>
-                    )}
-                    {cli && !proj && (
-                      <span className="inline-flex items-center gap-0.5 truncate max-w-[100px]">
-                        <Icons.Users size={9} />
-                        {cli.name}
-                      </span>
-                    )}
-                  </div>
-                </button>
-                {/* Hover-revealed inline actions. stopPropagation so the
-                    button clicks don't ALSO trigger onTaskClick (would
-                    open the panel right after completing/snoozing). */}
-                <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-zinc-900 rounded-md">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onComplete(t); }}
-                    title="Mark done"
-                    className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                  >
-                    <Icons.Check size={11} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
-                    title="Snooze +1 day"
-                    className="p-1.5 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
-                  >
-                    <Icons.Clock size={11} />
-                  </button>
-                </div>
-              </motion.div>
+                task={t}
+                edge={edge}
+                due={due}
+                tone={tone}
+                proj={proj}
+                cli={cli}
+                idx={idx}
+                onClick={onTaskClick}
+                onComplete={onComplete}
+                onSnooze={onSnooze}
+              />
             );
           })}
         </AnimatePresence>
@@ -1010,6 +957,183 @@ const TaskSection: React.FC<{
         </div>
       )}
     </section>
+  );
+};
+
+// ── Swipeable task card (iOS Mail style) ────────────────────────────
+// Drag right (+X) → reveals indigo "Snooze +1d" panel underneath →
+// past 80px, releasing fires onSnooze and the card exits.
+// Drag left (-X) → reveals emerald "Mark done" panel → past 80px,
+// fires onComplete.
+// Below threshold or short distance: spring-back-to-origin (handled
+// by dragSnapToOrigin). The whole card is also still clickable for
+// non-drag interactions — Framer Motion treats small movements as
+// taps, big ones as drags.
+//
+// Threshold: 80px feels right at a normal card width (~340px in the
+// Brief right panel). Tweak SWIPE_THRESHOLD if cards grow/shrink.
+const SWIPE_THRESHOLD = 80;
+const SWIPE_VELOCITY  = 500;
+
+interface SwipeableTaskCardProps {
+  task: CalendarTask;
+  edge: string;
+  due: string;
+  tone: 'rose' | 'amber' | 'indigo';
+  proj: any;
+  cli: any;
+  idx: number;
+  onClick: (t: CalendarTask) => void;
+  onComplete: (t: CalendarTask) => void;
+  onSnooze: (t: CalendarTask) => void;
+}
+
+const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
+  task: t, edge, due, tone, proj, cli, idx, onClick, onComplete, onSnooze,
+}) => {
+  const reduceMotion = useReducedMotion();
+  // x tracks the card's horizontal offset during a drag. The
+  // background opacities + icon scales are derived from it via
+  // useTransform so they respond live with no extra state.
+  const x = useMotionValue(0);
+  // Reveal the snooze (indigo) panel when dragging right; intensify
+  // sharply near the threshold so the user feels the "snap zone".
+  const snoozeOpacity = useTransform(x, [0, 30, 70, 80, 200], [0, 0.3, 0.85, 1, 1]);
+  const snoozeScale   = useTransform(x, [0, 60, 80, 200], [0.85, 0.95, 1.1, 1.1]);
+  // Same on the left side for the complete (emerald) panel.
+  const completeOpacity = useTransform(x, [-200, -80, -70, -30, 0], [1, 1, 0.85, 0.3, 0]);
+  const completeScale   = useTransform(x, [-200, -80, -60, 0], [1.1, 1.1, 0.95, 0.85]);
+
+  const handleDragEnd = (_: any, info: PanInfo) => {
+    const past = Math.abs(info.offset.x) > SWIPE_THRESHOLD;
+    const fast = Math.abs(info.velocity.x) > SWIPE_VELOCITY;
+    if (past || fast) {
+      if (info.offset.x < 0) onComplete(t);
+      else onSnooze(t);
+      // Card removal is handled by the parent updating its tasks
+      // list (the AnimatePresence exit animation runs automatically).
+      // If for some reason the parent doesn't update (e.g. failed
+      // mutation), spring x back so the card stays usable.
+      setTimeout(() => x.set(0), 200);
+    } else {
+      // Below threshold — spring back to origin.
+      x.set(0);
+    }
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.22 } }}
+      transition={{ type: 'spring', stiffness: 320, damping: 26, delay: idx < 8 ? idx * 0.02 : 0 }}
+      className="relative rounded-xl overflow-hidden"
+    >
+      {/* Background panels under the card — reveal during drag.
+          Pointer-events none so they never interfere with the card's
+          own click handling. */}
+      <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
+        <motion.div
+          style={{ opacity: snoozeOpacity, scale: snoozeScale }}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300"
+        >
+          <Icons.Clock size={13} />
+          Snooze +1d
+        </motion.div>
+        <motion.div
+          style={{ opacity: completeOpacity, scale: completeScale }}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"
+        >
+          Mark done
+          <Icons.Check size={13} />
+        </motion.div>
+      </div>
+      {/* Background tint — also driven by x. Sits below the panels'
+          text so the card slides over a colored ground. */}
+      <motion.div
+        style={{ opacity: useTransform(x, [-100, 0, 100], [0.18, 0, 0.18]) }}
+        className="absolute inset-0 pointer-events-none"
+      >
+        <motion.div
+          style={{ opacity: useTransform(x, [-100, 0], [1, 0]) }}
+          className="absolute inset-0 bg-emerald-100 dark:bg-emerald-500/20"
+        />
+        <motion.div
+          style={{ opacity: useTransform(x, [0, 100], [0, 1]) }}
+          className="absolute inset-0 bg-indigo-100 dark:bg-indigo-500/20"
+        />
+      </motion.div>
+
+      {/* The draggable card itself */}
+      <motion.div
+        drag={reduceMotion ? false : 'x'}
+        dragConstraints={{ left: -150, right: 150 }}
+        dragElastic={0.15}
+        dragMomentum={false}
+        style={{ x }}
+        onDragEnd={handleDragEnd}
+        whileTap={{ scale: 0.995 }}
+        whileHover={{ y: -1, transition: SPRING_TAP }}
+        className="group relative bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-xl overflow-hidden"
+      >
+        {/* Left priority edge — 4px colored bar absolute-positioned
+            so the rest of the card stays a clean rectangle. */}
+        <span className={`absolute left-0 top-0 bottom-0 w-1 ${edge}`} aria-hidden />
+        <button
+          onClick={() => onClick(t)}
+          className="w-full text-left pl-4 pr-3 pt-2.5 pb-2"
+        >
+          <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
+            {t.title}
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
+            {due && (
+              <span className={`inline-flex items-center gap-0.5 ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
+                {tone === 'rose' && <Icons.Clock size={9} />}
+                {due}
+              </span>
+            )}
+            {t.duration && (
+              <span className="inline-flex items-center gap-0.5">
+                ⏱ {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
+              </span>
+            )}
+            {proj && (
+              <span className="inline-flex items-center gap-0.5 truncate max-w-[120px]">
+                <Icons.Briefcase size={9} />
+                {proj.title}
+              </span>
+            )}
+            {cli && !proj && (
+              <span className="inline-flex items-center gap-0.5 truncate max-w-[100px]">
+                <Icons.Users size={9} />
+                {cli.name}
+              </span>
+            )}
+          </div>
+        </button>
+        {/* Hover-revealed inline actions — kept for mouse users who
+            don't want to drag. Touch users get the swipe gestures
+            via the parent motion.div. */}
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-zinc-900 rounded-md">
+          <button
+            onClick={(e) => { e.stopPropagation(); onComplete(t); }}
+            title="Mark done"
+            className="p-1.5 rounded-md text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+          >
+            <Icons.Check size={11} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
+            title="Snooze +1 day"
+            className="p-1.5 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+          >
+            <Icons.Clock size={11} />
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
