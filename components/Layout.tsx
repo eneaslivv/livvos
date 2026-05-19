@@ -615,6 +615,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       // Toolkit — sells the agency's strategy work as a productized
       // client deliverable. Distinct revenue line from system retainers.
       { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
+      // Agent — AI workspace (Ask / Workflows / Reports). Cross-module
+      // surface that reads from everything else and runs automated rules.
+      { id: 'agent',            label: 'Agent',     icon: <Icons.Sparkles /> },
     ],
   ];
   // Inbox (Communications Hub — unified Gmail + Slack + leads inbox) was

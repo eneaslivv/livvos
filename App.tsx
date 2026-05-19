@@ -2,6 +2,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DebugPanel } from './components/DebugPanel';
 import { Layout } from './components/Layout';
+import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { PageView, AppMode, NavParams } from './types';
 import { ensureAuthSession } from './lib/auth';
 import { supabase, cleanupLocalStorage } from './lib/supabase';
@@ -61,6 +62,7 @@ const loadTeamScaling = () => retryDynamicImport(() => import('./pages/TeamScali
 const loadGrowthDashboard = () => retryDynamicImport(() => import('./pages/GrowthDashboard').then(m => ({ default: m.GrowthDashboard })), 'GrowthDashboard');
 const loadStrategyToolkit = () => retryDynamicImport(() => import('./pages/StrategyToolkit').then(m => ({ default: m.StrategyToolkit })), 'StrategyToolkit');
 const loadBundlePreview = () => retryDynamicImport(() => import('./pages/BundlePreview').then(m => ({ default: m.BundlePreview })), 'BundlePreview');
+const loadAgent = () => retryDynamicImport(() => import('./pages/Agent').then(m => ({ default: m.Agent })), 'Agent');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -97,6 +99,7 @@ const TeamScaling = React.lazy(loadTeamScaling);
 const GrowthDashboard = React.lazy(loadGrowthDashboard);
 const StrategyToolkit = React.lazy(loadStrategyToolkit);
 const BundlePreview = React.lazy(loadBundlePreview);
+const Agent = React.lazy(loadAgent);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -918,8 +921,20 @@ const AppContent: React.FC<{
               <BundlePreview />
             </KeepAlivePage>
           )}
+
+          {/* Agent — AI workspace from the bundle (Ask / Workflows / Reports tabs).
+             Cross-module reports, automation library, saved analyses. */}
+          {visitedPages.has('agent') && (
+            <KeepAlivePage page="agent" active={currentPage === 'agent'}>
+              <Agent />
+            </KeepAlivePage>
+          )}
         </>
       )}
+      {/* Bottom-right floating: "Force refresh" pill (always visible) +
+         pop-up banner when a SW update is waiting. Solves the "I deployed
+         a change but the user keeps seeing the old version" problem. */}
+      <PwaUpdatePrompt />
     </Layout>
   );
 };
@@ -935,7 +950,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
-  'bundle_preview',
+  'bundle_preview', 'agent',
 ]);
 
 const readLastPage = (): PageView => {
