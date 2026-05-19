@@ -30,6 +30,7 @@ import type { Brand } from '../types';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import '../components/livv/bundle-strategy.css';
+import '../components/livv/bundle-cards.css';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { BRAND_CREATION_FLOW, type BrandData } from '../components/livv/flows/BrandCreationFlow';
 
@@ -399,50 +400,86 @@ const BrandsGrid: React.FC<{ brands: Brand[]; onOpen: (b: Brand) => void; onNew:
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {brands.map(b => (
-        <motion.button
-          key={b.id}
-          onClick={() => onOpen(b)}
-          whileTap={{ scale: 0.99, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="text-left p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-        >
-          <div className="flex items-start gap-3 mb-3">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-[12px] font-semibold shrink-0 border border-zinc-200/50 dark:border-zinc-700/60"
-              style={{ background: b.color_primary || '#f5f2eb', color: b.color_text || '#1a1a1a' }}
-            >
-              {b.logo_url
-                ? <img src={b.logo_url} alt="" className="w-full h-full object-contain rounded-xl" />
-                : b.name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+    <div className="bdl-brand-grid">
+      {brands.map((b, idx) => {
+        const palette = [
+          (b as any).palette?.[0] || b.color_primary,
+          (b as any).palette?.[1] || b.color_secondary,
+          (b as any).palette?.[2] || b.color_accent,
+          (b as any).palette?.[3] || b.color_background,
+          (b as any).palette?.[4] || b.color_text,
+        ].filter(Boolean);
+        const initials = b.name.split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+        const brandColor = b.color_primary || palette[0] || '#18181b';
+        const textColor = b.color_text || (brandColor === '#18181b' ? '#fafafa' : '#18181b');
+        const isOwn = (b as any).is_own === true; // marks the agency's own brand
+        return (
+          <motion.button
+            key={b.id}
+            onClick={() => onOpen(b)}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
+            className="bdl-brand-card"
+            style={{ ['--brand-color' as any]: brandColor }}
+          >
+            <div className="bdl-brand-card-head">
+              <div className="bdl-brand-logo" style={{ background: brandColor, color: textColor }}>
+                {b.logo_url ? (
+                  <img src={b.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 'inherit' }} />
+                ) : initials}
+                {isOwn && <span className="bdl-brand-own-dot" />}
+              </div>
+              <div className="bdl-brand-meta">
+                <h3>{b.name}</h3>
+                <div className="bdl-brand-industry">{b.industry || (b as any).slug || '—'}</div>
+              </div>
+              <span className={`bdl-brand-status ${b.status}`}>{b.status}</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate tracking-[-0.012em]">{b.name}</div>
-              <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 truncate">{b.tagline || b.industry || '—'}</div>
-            </div>
-            <span className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
-              b.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-              : b.status === 'draft' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300'
-              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-            }`}>{b.status}</span>
-          </div>
-          {/* Palette dots */}
-          <div className="flex items-center gap-1 mb-2">
-            {[b.color_primary, b.color_secondary, b.color_accent, b.color_background, b.color_text].filter(Boolean).slice(0, 5).map((c, i) => (
-              <span key={i} className="w-4 h-4 rounded-md border border-zinc-200/60 dark:border-zinc-700/60" style={{ background: c as string }} />
-            ))}
-            {b.brand_prompt && (
-              <span className="ml-auto inline-flex items-center gap-1 text-[9.5px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                <Icons.Sparkles size={9} /> trained
-              </span>
+
+            {(b.tagline || b.description || (b as any).about) && (
+              <p className="bdl-brand-tagline">
+                {b.tagline || b.description || (b as any).about}
+              </p>
             )}
-          </div>
-          {b.description && (
-            <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{b.description}</p>
-          )}
-        </motion.button>
-      ))}
+
+            {palette.length > 0 && (
+              <div className="bdl-brand-palette">
+                {palette.slice(0, 6).map((c, i) => (
+                  <span key={i} className="bdl-brand-swatch" style={{ background: c as string }} />
+                ))}
+              </div>
+            )}
+
+            <div className="bdl-brand-foot">
+              <span>
+                {palette.length} colors · {(b as any).typography_mood || 'editorial'}
+              </span>
+              {b.brand_prompt && (
+                <span style={{ color: '#4d6b4d', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icons.Sparkles size={10} />
+                  <strong>trained</strong>
+                </span>
+              )}
+            </div>
+          </motion.button>
+        );
+      })}
+
+      {/* + New brand dashed card */}
+      <motion.button
+        onClick={onNew}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...SPRING_ENTER, delay: brands.length * 0.03 }}
+        className="bdl-brand-add"
+      >
+        <span className="bdl-brand-add-ic"><Icons.Plus size={18} /></span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>New brand kit</span>
+        <span style={{ fontSize: 11, color: '#a1a1aa', textAlign: 'center', maxWidth: 220 }}>
+          Capture voice, palette, audience, content rules. AI uses this to stay on-brand.
+        </span>
+      </motion.button>
     </div>
   );
 };

@@ -33,6 +33,7 @@ import { buildPackageFlow, type PackageData } from '../components/livv/flows/Pac
 import { POSITIONING_CREATION_FLOW, type PositioningData } from '../components/livv/flows/PositioningCreationFlow';
 import { IcpDetailSlideOver } from '../components/livv/IcpDetailSlideOver';
 import '../components/livv/bundle-strategy.css';
+import '../components/livv/bundle-cards.css';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface ICP {
@@ -580,6 +581,17 @@ const PackageGrid: React.FC<{
   onNew: () => void;
 }> = ({ packages, icps, onEdit, onNew }) => {
   const icpById = useMemo(() => new Map(icps.map(i => [i.id, i])), [icps]);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  // Hero stats
+  const totalImpl = packages.reduce((s, p) => s + (p.price_implementation || 0), 0);
+  const totalMrr = packages.reduce((s, p) => s + (p.price_monthly || 0), 0);
+  const activeCount = packages.filter(p => p.status === 'active').length;
+  const uniqueIcps = new Set(packages.map(p => p.target_icp_id).filter(Boolean)).size;
+
+  // Module coverage matrix
+  const MODULES_LIST = ['Strategy', 'Sales', 'Content', 'Scaling', 'Toolkit'];
+
   if (packages.length === 0) {
     return (
       <EmptyState
@@ -591,65 +603,185 @@ const PackageGrid: React.FC<{
       />
     );
   }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {packages.map((p, idx) => {
-        const icp = p.target_icp_id ? icpById.get(p.target_icp_id) : null;
-        return (
-          <motion.button
-            key={p.id}
-            onClick={() => onEdit(p)}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
-            whileTap={{ scale: 0.98, transition: SPRING_TAP }}
-            whileHover={{ y: -2, transition: SPRING_TAP }}
-            className="text-left p-4 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors"
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h3 className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100">{p.name}</h3>
-              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${STATUS_TONE[p.status]}`}>
-                {p.status}
-              </span>
+    <>
+      {/* Hero summary + module matrix */}
+      <section className="bdl-pkg-hero">
+        <div>
+          <div className="bdl-pkg-hero-eyebrow">
+            <span className="dot" />
+            Package matrix
+          </div>
+          <h2 className="bdl-pkg-hero-title">
+            <span>{packages.length} package{packages.length === 1 ? '' : 's'}</span>
+            <br />
+            <span style={{ color: '#71717a' }}>across {uniqueIcps || 0} ICP segment{uniqueIcps === 1 ? '' : 's'}</span>
+          </h2>
+          <div className="bdl-pkg-hero-stats">
+            <div>
+              <div className="bdl-pkg-hero-stat-v">{totalImpl > 0 ? `$${(totalImpl / 1000).toFixed(0)}K` : '—'}</div>
+              <div className="bdl-pkg-hero-stat-l">Total impl. value</div>
             </div>
-            {icp && (
-              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-2 inline-flex items-center gap-1">
-                <Icons.Target size={10} />
-                {icp.name}
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Implementation</div>
-                <div className="text-zinc-800 dark:text-zinc-200 tabular-nums font-semibold mt-0.5">{fmtMoney(p.price_implementation)}</div>
-              </div>
-              <div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Monthly</div>
-                <div className="text-zinc-800 dark:text-zinc-200 tabular-nums font-semibold mt-0.5">{fmtMoney(p.price_monthly)}</div>
-              </div>
+            <div>
+              <div className="bdl-pkg-hero-stat-v">{totalMrr > 0 ? `$${(totalMrr / 1000).toFixed(1)}K` : '—'}</div>
+              <div className="bdl-pkg-hero-stat-l">Total MRR potential</div>
             </div>
-            {p.modules_included.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
-                {p.modules_included.map(m => (
-                  <span key={m} className="text-[9.5px] px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 font-mono">
-                    {m}
-                  </span>
+            <div>
+              <div className="bdl-pkg-hero-stat-v">{activeCount}</div>
+              <div className="bdl-pkg-hero-stat-l">Active</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Coverage matrix */}
+        <div className="bdl-pkg-matrix" style={{ ['--cols' as any]: MODULES_LIST.length }}>
+          <div className="bdl-pkg-matrix-head">
+            <span />
+            {MODULES_LIST.map(m => (
+              <span key={m} className="bdl-pkg-matrix-mod">{m.slice(0, 3)}</span>
+            ))}
+          </div>
+          {packages.slice(0, 6).map(p => {
+            const icp = p.target_icp_id ? icpById.get(p.target_icp_id) : null;
+            const color = (icp as any)?.color || '#c4a35a';
+            return (
+              <div key={p.id} className="bdl-pkg-matrix-row" style={{ ['--icp-color' as any]: color }}>
+                <span className="bdl-pkg-matrix-name">{p.name}</span>
+                {MODULES_LIST.map(m => (
+                  <span
+                    key={m}
+                    className={`bdl-pkg-matrix-cell ${p.modules_included.includes(m) ? 'on' : ''}`}
+                  />
                 ))}
-                {p.implementation_weeks != null && (
-                  <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 tabular-nums ml-auto">
-                    {p.implementation_weeks}w
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Card grid */}
+      <div className="bdl-pkg-grid">
+        {packages.map((p, idx) => {
+          const icp = p.target_icp_id ? icpById.get(p.target_icp_id) : null;
+          const color = (icp as any)?.color || '#c4a35a';
+          const isOpen = openId === p.id;
+          return (
+            <motion.article
+              key={p.id}
+              onClick={() => setOpenId(isOpen ? null : p.id)}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
+              className={`bdl-pkg-card ${isOpen ? 'expanded' : ''}`}
+              style={{ ['--icp-color' as any]: color }}
+            >
+              <header className="bdl-pkg-card-head">
+                <span className={`bdl-pkg-card-status ${p.status}`}>{p.status}</span>
+                {icp && (
+                  <span className="bdl-pkg-card-icp">
+                    <span className="dot" />
+                    {icp.name}
                   </span>
                 )}
+              </header>
+
+              <h3 className="bdl-pkg-card-title">{p.name}</h3>
+
+              {p.modules_included.length > 0 && (
+                <div className="bdl-pkg-card-mods">
+                  {p.modules_included.slice(0, 5).map(m => (
+                    <span key={m} className="bdl-pkg-card-mod">{m}</span>
+                  ))}
+                  {p.modules_included.length > 5 && (
+                    <span className="bdl-pkg-card-mod" style={{ opacity: 0.6 }}>+{p.modules_included.length - 5}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="bdl-pkg-card-prices">
+                <div className="bdl-pkg-card-price">
+                  <span className="bdl-pkg-card-price-l">Impl</span>
+                  <span className="bdl-pkg-card-price-v">{fmtMoney(p.price_implementation)}</span>
+                </div>
+                <div className="bdl-pkg-card-price mrr">
+                  <span className="bdl-pkg-card-price-l">Monthly</span>
+                  <span className="bdl-pkg-card-price-v">{fmtMoney(p.price_monthly)}</span>
+                </div>
+                <div className="bdl-pkg-card-price">
+                  <span className="bdl-pkg-card-price-l">Sprint</span>
+                  <span className="bdl-pkg-card-price-v">{p.implementation_weeks != null ? `${p.implementation_weeks}w` : '—'}</span>
+                </div>
               </div>
-            )}
-          </motion.button>
-        );
-      })}
-    </div>
+
+              <footer className="bdl-pkg-card-foot">
+                <span>{isOpen ? 'Hide details' : 'View deliverables'}</span>
+                <Icons.ChevronDown size={13} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </footer>
+
+              {isOpen && (
+                <div className="bdl-pkg-card-expand" onClick={(e) => e.stopPropagation()}>
+                  <div style={{
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: 9.5,
+                    letterSpacing: '0.2em', textTransform: 'uppercase',
+                    color: '#71717a', fontWeight: 600, marginBottom: 8,
+                  }}>Deliverables · {p.deliverables.length}</div>
+                  {p.deliverables.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#a1a1aa', fontStyle: 'italic', margin: '4px 0 12px' }}>
+                      No deliverables listed yet.
+                    </p>
+                  ) : (
+                    <ul style={{ margin: '4px 0 12px', paddingLeft: 18, color: '#3f3f46', fontSize: 12.5, lineHeight: 1.7 }}>
+                      {p.deliverables.map((d, i) => <li key={i}>{d}</li>)}
+                    </ul>
+                  )}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEdit(p); }}
+                      className="bdl-action primary"
+                      style={{ padding: '6px 12px', fontSize: 11.5 }}
+                    >
+                      <Icons.Edit size={11} /> Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.article>
+          );
+        })}
+
+        {/* "+ New package" card */}
+        <motion.button
+          onClick={onNew}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...SPRING_ENTER, delay: packages.length * 0.03 }}
+          className="bdl-pos-add"
+          style={{ minHeight: 0 }}
+        >
+          <span className="bdl-pos-add-ic"><Icons.Plus size={16} /></span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>New package</span>
+          <span style={{ fontSize: 11, color: '#a1a1aa', textAlign: 'center', maxWidth: 200 }}>
+            Combine modules into a productized offer.
+          </span>
+        </motion.button>
+      </div>
+    </>
   );
 };
 
-// ── Positioning list ──────────────────────────────────────────────
+// ── Positioning list (bundle design: compass + principle cards) ───
+const TAG_PALETTE = ['#C4A35A', '#6DBEDC', '#769268', '#F1ADD8', '#A855F7'];
+
+function posMeta(p: Positioning) {
+  const m: any = (p as any).meta || {};
+  const tagColor = m.tag_color || TAG_PALETTE[((p as any).id ? p.id.charCodeAt(0) : 0) % TAG_PALETTE.length];
+  const ax = typeof m.axis_x === 'number' ? m.axis_x : 0.5;
+  const ay = typeof m.axis_y === 'number' ? m.axis_y : 0.5;
+  const tags: string[] = Array.isArray(m.tags) ? m.tags : [];
+  return { tagColor, axisX: ax, axisY: ay, tags };
+}
+
 const PositioningList: React.FC<{
   rows: Positioning[];
   onEdit: (p: Positioning) => void;
@@ -667,45 +799,91 @@ const PositioningList: React.FC<{
     );
   }
   return (
-    <div className="space-y-2">
-      {rows.map((p, idx) => (
+    <>
+      {/* Compass — 2x2 with axis labels + dot per principle */}
+      <div className="bdl-pos-compass">
+        <span className="bdl-pos-compass-axis-h" />
+        <span className="bdl-pos-compass-axis-v" />
+        <span className="bdl-pos-axis-label" style={{ top: 12, left: 16 }}>Internal</span>
+        <span className="bdl-pos-axis-label" style={{ top: 12, right: 16 }}>External</span>
+        <span className="bdl-pos-axis-label" style={{ bottom: 12, left: 16 }}>Tactical</span>
+        <span className="bdl-pos-axis-label" style={{ bottom: 12, right: 16 }}>Strategic</span>
+        {rows.map((p, i) => {
+          const { tagColor, axisX, axisY } = posMeta(p);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className="bdl-pos-compass-pin"
+              style={{
+                left: `${axisX * 100}%`,
+                bottom: `${axisY * 100}%`,
+                background: tagColor,
+                boxShadow: `0 0 0 4px color-mix(in oklab, ${tagColor} 18%, transparent)`,
+              }}
+              onClick={() => onEdit(p)}
+              title={p.principle}
+            >
+              {String(i + 1).padStart(2, '0')}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Principle cards grid */}
+      <div className="bdl-pos-grid">
+        {rows.map((p, idx) => {
+          const { tagColor, tags } = posMeta(p);
+          return (
+            <motion.button
+              key={p.id}
+              onClick={() => onEdit(p)}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...SPRING_ENTER, delay: idx * 0.025 }}
+              className="bdl-pos-card"
+              style={{ ['--tag-color' as any]: tagColor }}
+            >
+              <div className="bdl-pos-card-num">{String(idx + 1).padStart(2, '0')}</div>
+              <h3 className="bdl-pos-card-title">{p.principle}</h3>
+              {p.description && (
+                <p className="bdl-pos-card-desc">{p.description}</p>
+              )}
+              {(tags.length > 0 || p.applies_to.length > 0) && (
+                <div className="bdl-pos-card-foot">
+                  {tags.slice(0, 4).map(t => (
+                    <span key={t} className="bdl-pos-card-tag">{t}</span>
+                  ))}
+                  {p.applies_to.slice(0, 3).map(a => (
+                    <span
+                      key={a}
+                      className="bdl-pos-card-tag"
+                      style={{ background: 'rgba(82,82,91,0.06)', color: '#71717a' }}
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </motion.button>
+          );
+        })}
+
         <motion.button
-          key={p.id}
-          onClick={() => onEdit(p)}
+          onClick={onNew}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ ...SPRING_ENTER, delay: idx * 0.025 }}
-          whileTap={{ scale: 0.995, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="w-full text-left p-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors"
+          transition={{ ...SPRING_ENTER, delay: rows.length * 0.025 }}
+          className="bdl-pos-add"
         >
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100">{p.principle}</h3>
-            {p.applies_to.length > 0 && (
-              <div className="flex flex-wrap gap-1 shrink-0">
-                {p.applies_to.map(a => (
-                  <span key={a} className="text-[9.5px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-mono uppercase">
-                    {a}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          {p.description && (
-            <p className="text-[12px] text-zinc-600 dark:text-zinc-400 mt-1.5">{p.description}</p>
-          )}
-          {p.examples.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 space-y-0.5">
-              {p.examples.slice(0, 3).map((ex, i) => (
-                <div key={i} className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
-                  · {ex}
-                </div>
-              ))}
-            </div>
-          )}
+          <span className="bdl-pos-add-ic"><Icons.Plus size={16} /></span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>New principle</span>
+          <span style={{ fontSize: 11, color: '#a1a1aa', textAlign: 'center', maxWidth: 200 }}>
+            Add an operating belief that shapes everything downstream.
+          </span>
         </motion.button>
-      ))}
-    </div>
+      </div>
+    </>
   );
 };
 
