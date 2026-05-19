@@ -494,24 +494,32 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           </span>
         </header>
 
-        {/* Daily Brief — AI-driven structured summary across every
-            module the user has enabled. Replaces the old 2×2 stat
-            cards: those only covered tasks + events + inbox; the
-            DailyBrief pulls from Finance, Sales pipeline, Content,
-            Team KPIs, Strategy signals, and Upcoming too, with an
-            AI narrative on top biased toward the user's strategy. */}
-        <DailyBrief
-          onAskFollowUp={(prompt) => handleSend(prompt)}
-          onNavigate={(page) => onNavigate(page as PageView)}
-        />
+        {/* Single scroll surface: DailyBrief + chat messages flow
+            together. Putting them in one scroll lets DailyBrief's
+            sticky reflection header stay pinned as the user scrolls
+            chat history — which is what you want when the brief is
+            "context" and the chat is "conversation about that
+            context." The DailyBrief itself paints from cache on
+            mount so we don't flash empty on re-navigation. */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          {/* Daily Brief — AI-driven structured summary across every
+              module the user has enabled. Pulls from Finance, Sales
+              pipeline, Content, Team KPIs, Strategy signals, and
+              Upcoming, with an AI narrative on top biased toward
+              the user's strategy. Sticky reflection header lives
+              inside it. */}
+          <DailyBrief
+            onAskFollowUp={(prompt) => handleSend(prompt)}
+            onNavigate={(page) => onNavigate(page as PageView)}
+          />
 
-        {/* Chat messages — each one slides up + fades in with spring
-            physics. User msgs originate slightly from the right,
-            assistant msgs from the left, so the direction reinforces
-            who's speaking. Pre-existing messages on mount don't
-            animate (initial=false) — only NEW ones do, which avoids
-            the on-mount "all messages cascade in" awkwardness. */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pt-2 pb-4 space-y-4">
+          {/* Chat messages — each one slides up + fades in with spring
+              physics. User msgs originate slightly from the right,
+              assistant msgs from the left, so the direction reinforces
+              who's speaking. Pre-existing messages on mount don't
+              animate (initial=false) — only NEW ones do, which avoids
+              the on-mount "all messages cascade in" awkwardness. */}
+          <div className="px-5 pt-2 pb-4 space-y-4">
           <AnimatePresence initial={false}>
           {messages.map((m, i) => (
             <motion.div
@@ -638,6 +646,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             </motion.div>
           )}
           </AnimatePresence>
+          </div>
         </div>
 
         {/* Input + action chips. Chips fire prompts directly (one-tap)

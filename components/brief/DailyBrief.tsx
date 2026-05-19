@@ -31,6 +31,102 @@ import { BriefSettings } from './BriefSettings';
 
 const DEFAULT_ENABLED: CategoryId[] = ['today_load','cashflow','pipeline','content','inbox','team_kpis','strategy','upcoming'];
 
+// ── Day-keyed cache so reopening the page doesn't re-fetch + re-
+//    synthesize. The synthesis Gemini call is the slow piece (2-5s);
+//    the load itself fans out a handful of Supabase queries. With this
+//    cache the page paints from cache instantly and only refreshes
+//    silently in the background (skipping the synthesis call if the
+//    payload didn't change). Cache is scoped to the calendar day so
+//    morning vs afternoon-by-default get distinct snapshots without
+//    bookkeeping.
+const CACHE_VERSION = 'v1';
+const cacheKey = (userId: string) =>
+  `brief_cache:${CACHE_VERSION}:${userId}:${new Date().toISOString().slice(0, 10)}`;
+
+type CachedBrief = {
+  cards: CategoryData[];
+  synthesis: BriefSynthesis | null;
+  ts: number;
+};
+
+const readBriefCache = (userId: string): CachedBrief | null => {
+  try {
+    const raw = localStorage.getItem(cacheKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedBrief;
+    if (!parsed || !Array.isArray(parsed.cards)) return null;
+    return parsed;
+  } catch { return null; }
+};
+
+const writeBriefCache = (userId: string, payload: Omit<CachedBrief, 'ts'>) => {
+  try {
+    localStorage.setItem(cacheKey(userId), JSON.stringify({ ...payload, ts: Date.now() }));
+    // Best-effort GC of older day-keys for this user (one-day-of-staleness max).
+    const prefix = `brief_cache:${CACHE_VERSION}:${userId}:`;
+    const todayKey = cacheKey(userId);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix) && k !== todayKey) localStorage.removeItem(k);
+    }
+  } catch { /* quota / private-mode */ }
+};
+
+// ── Daily reflection — a short phrase rotated by day-of-year. Sits
+//    in the sticky header so it's always visible while the user
+//    scrolls through cards or chat below. Mix of focus / clarity /
+//    leadership maxims. Keep them under ~90 chars so they render in
+//    one line on the chat column at typical widths.
+const REFLECTIONS_ES: string[] = [
+  'Foco sobre frenesí. Una cosa bien hecha vale 10 a medias.',
+  'Lo que medís, mejora. Mirá tus métricas antes de planear.',
+  'Empezá por lo que mueve la aguja, no por lo más fácil.',
+  'Lo urgente roba tiempo a lo importante. Hoy elegí.',
+  'La claridad escala. Lo confuso se rompe en producción.',
+  'Decidir es restar. Sacá una cosa de la lista antes de sumar.',
+  'Hablar con un cliente vale más que mirar tres dashboards.',
+  'Si no podés explicarlo en una línea, todavía no lo entendiste.',
+  'Velocidad mata perfección — pero solo si después iterás.',
+  'El sistema gana al esfuerzo. Construí flujo, no heroísmo.',
+  'Lo que delegás bien hoy, te devuelve dos horas mañana.',
+  'Empezá las reuniones por la decisión que necesitás tomar.',
+  'Una promesa cumplida vale más que diez prometidas.',
+  'Mostrá el trabajo antes de pulirlo. Feedback temprano gana.',
+  'Tu calendario es tu estrategia. Mirá dónde gastás las horas.',
+  'Pedir ayuda no es debilidad — es economía de tiempo.',
+  'Lo que repetís tres veces, automatizalo o documentalo.',
+  'Pensá como dueño: ¿esto me deja un activo o solo cansancio?',
+  'Un buen "no" libera tiempo para tu mejor "sí".',
+  'La calidad del input determina la calidad del output. Cuidá tu dieta de info.',
+  'Hoy no es para terminar todo — es para terminar lo que importa.',
+  'Las mejores ideas vienen caminando. Salí del escritorio 20 minutos.',
+  'Si todo es prioridad, nada lo es. Elegí tres cosas.',
+  'Reuniones sin agenda son robos consentidos. Mandá agenda o no vayas.',
+  'Tu energía es finita. Trabajá en bloques, no en goteo.',
+  'Lo que no se mide no se cobra. Trackeá las horas, sí o sí.',
+  'Cuidá la primera media hora del día — define las otras 23.',
+  'Un cliente feliz trae tres. Uno enojado los espanta a todos.',
+  'Procesos boring, productos sexy. Aburrite con la operación.',
+  'La marca es lo que dicen de vos cuando no estás. Cuidá cada detalle.',
+  'Cobrar bien es el primer acto de respeto por tu trabajo.',
+  'El equipo crece donde el líder presta atención. Mirá a quién mirás.',
+  'No vendas tu tiempo — vendé tu criterio.',
+  'Documentar es regalarle tiempo a tu yo del futuro.',
+  'Hoy, una decisión difícil vale más que diez tareas fáciles.',
+  'Antes de optimizar, preguntate si hace falta hacerlo.',
+  'Lo que se hace en silencio gana. La performance se nota sin avisar.',
+  'Cerrá ciclos. Una cosa terminada vale más que tres abiertas.',
+  'Tu próximo cliente te está mirando. Hoy es un día de show.',
+  'Cada error documentado es un error que no se repite.',
+];
+
+function getDailyReflection(): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const day = Math.floor((now.getTime() - start.getTime()) / 86400000);
+  return REFLECTIONS_ES[day % REFLECTIONS_ES.length];
+}
+
 interface Prefs {
   enabled_categories: CategoryId[];
   ai_synthesis_enabled: boolean;
@@ -122,8 +218,10 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
     } catch { return null; }
   }, [currentTenant?.id]);
 
-  // Full refresh: load cards + optionally synthesize.
-  const refresh = useCallback(async (loadedPrefs?: Prefs) => {
+  // Full refresh: load cards + optionally synthesize. `silent` means
+  // we already painted from cache — skip the spinner and only flip
+  // the small "refreshing" pill so the UI doesn't flash on re-mounts.
+  const refresh = useCallback(async (loadedPrefs?: Prefs, opts?: { silent?: boolean }) => {
     if (!currentTenant?.id || !user?.id) return;
     const usePrefs = loadedPrefs || prefs;
     setRefreshing(true);
@@ -132,6 +230,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
       const loadedCards = await loadEnabledCategories(ctx, usePrefs.enabled_categories);
       setCards(loadedCards);
       // Synthesize separately — UI shows cards immediately while AI churns.
+      let synthResult: BriefSynthesis | null = null;
       if (usePrefs.ai_synthesis_enabled && loadedCards.length > 0) {
         setSynthesizing(true);
         try {
@@ -141,7 +240,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             loadStrategyContext(),
           ]);
           const firstName = ((user as any)?.user_metadata?.name || (user as any)?.email || '').split(/[\s@]/)[0] || null;
-          const result = await synthesizeBrief({
+          synthResult = await synthesizeBrief({
             cards: loadedCards,
             userName: firstName,
             tone: usePrefs.synthesis_tone,
@@ -149,30 +248,47 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             learnedTraits: profile?.learned_traits || null,
             strategyContext: strategyCtx,
           });
-          setSynthesis(result);
+          setSynthesis(synthResult);
         } finally {
           setSynthesizing(false);
         }
       } else {
         setSynthesis(null);
       }
+      // Persist for next mount — avoids the "se recarga muchas veces"
+      // feeling: re-opening the page paints from cache instantly.
+      writeBriefCache(user.id, { cards: loadedCards, synthesis: synthResult });
     } catch (e) {
       errorLogger.warn('daily brief load failed', e);
     } finally {
       setRefreshing(false);
       setLoading(false);
+      void opts; // silent flag is observed via initial loading state below
     }
   }, [currentTenant?.id, user?.id, prefs, loadStrategyContext]);
 
-  // Initial mount: load prefs then cards. We pass prefs through to
-  // refresh() so it doesn't wait for the next render to pick them up.
+  // Initial mount: load prefs, then either paint from cache (instant)
+  // and silently refresh, or block on a fresh fetch. We pass prefs
+  // through to refresh() so it doesn't wait for the next render.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const p = await loadPrefs();
       if (cancelled) return;
       setPrefs(p);
-      refresh(p);
+      // Paint from cache first — this is the difference between
+      // "brief flickers on every navigation" and "brief is always
+      // there." Cache is day-keyed so it's never more than a few
+      // hours stale, and the background refresh fixes anything new.
+      if (user?.id) {
+        const cached = readBriefCache(user.id);
+        if (cached) {
+          setCards(cached.cards);
+          setSynthesis(cached.synthesis);
+          setLoading(false);
+        }
+      }
+      refresh(p, { silent: true });
     })();
     return () => { cancelled = true; };
   }, [loadPrefs]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -203,38 +319,63 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
   }, [cards, prefs.enabled_categories]);
 
   const allEmpty = !loading && orderedCards.every(c => c.status === 'empty');
+  const reflection = useMemo(() => getDailyReflection(), []);
 
   return (
-    <div className="px-5 pt-4 pb-3 space-y-3">
-      {/* Top bar: refresh + settings */}
-      <div className="flex items-center gap-1">
-        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400">Today's brief</div>
-        {synthesizing && (
-          <span className="text-[10px] text-violet-500 inline-flex items-center gap-1 ml-1.5">
-            <Icons.Loader size={9} className="animate-spin" />
-            synthesizing
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-0.5">
-          <motion.button
-            onClick={() => refresh()}
-            disabled={refreshing}
-            whileTap={{ scale: 0.92, transition: SPRING_TAP }}
-            title="Refresh brief"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
-          >
-            <Icons.Activity size={11} className={refreshing ? 'animate-spin' : ''} />
-          </motion.button>
-          <motion.button
-            onClick={() => setSettingsOpen(true)}
-            whileTap={{ scale: 0.92, transition: SPRING_TAP }}
-            title="Configure categories"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <Icons.Settings size={11} />
-          </motion.button>
+    <div className="pb-3">
+      {/* ── Sticky header ─────────────────────────────────────────
+         Stays pinned at the top of the brief column while the user
+         scrolls through cards or chat below it. Inside it: the
+         "Today's brief" label + refresh/settings actions on the
+         first row, and the daily reflection phrase on the second.
+         Backdrop-blur so cards passing under it remain readable. */}
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur border-b border-zinc-100 dark:border-zinc-800/60 px-5 pt-3 pb-2.5">
+        <div className="flex items-center gap-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400">Today's brief</div>
+          {synthesizing && (
+            <span className="text-[10px] text-violet-500 inline-flex items-center gap-1">
+              <Icons.Loader size={9} className="animate-spin" />
+              synthesizing
+            </span>
+          )}
+          {refreshing && !synthesizing && !loading && (
+            <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
+              <Icons.Loader size={9} className="animate-spin" />
+              refreshing
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-0.5">
+            <motion.button
+              onClick={() => refresh()}
+              disabled={refreshing}
+              whileTap={{ scale: 0.92, transition: SPRING_TAP }}
+              title="Refresh brief"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+            >
+              <Icons.Activity size={11} className={refreshing ? 'animate-spin' : ''} />
+            </motion.button>
+            <motion.button
+              onClick={() => setSettingsOpen(true)}
+              whileTap={{ scale: 0.92, transition: SPRING_TAP }}
+              title="Configure categories"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <Icons.Settings size={11} />
+            </motion.button>
+          </div>
+        </div>
+        {/* Daily reflection — rotating per day-of-year. Small but
+           visible. Italic, with a soft violet accent dot on the left
+           so it reads as "thought" not "alert." */}
+        <div className="mt-1.5 flex items-start gap-2">
+          <span className="w-1 h-1 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+          <p className="text-[11.5px] text-zinc-600 dark:text-zinc-300 italic leading-snug">
+            {reflection}
+          </p>
         </div>
       </div>
+
+      <div className="px-5 pt-3 space-y-3">
 
       {/* AI synthesis at top */}
       <AnimatePresence>
@@ -321,6 +462,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
           />
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };
