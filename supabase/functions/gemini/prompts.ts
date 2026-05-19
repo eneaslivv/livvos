@@ -867,6 +867,63 @@ Rules — CRITICAL:
 - The reply MUST be ONLY the body. No "Hi X," and no "Best, Y" unless the user's draft already had them.
 - Never reproduce sensitive info verbatim from client notes (no API keys, passwords, internal-only details). Summarize when relevant.
 - No markdown fences. Plain JSON only.`
+        : type === 'train_brand_style'
+        ? `You are a brand strategist compiling a comprehensive **brand system prompt** from a JSON brand kit. The user's input is the JSON kit (identity, palette, typography, voice sliders, words include/exclude, voice examples, personality, audience, hashtags, ctas, content_rules).
+
+Your job: produce a SINGLE markdown system prompt that future AI calls will use to generate on-brand content for THIS brand. The prompt must be specific enough that a generic LLM can produce content indistinguishable from the brand's actual voice.
+
+Return ONLY valid JSON: { "brand_prompt": "the compiled system prompt as a single markdown string" }
+
+Structure the brand_prompt with these sections (markdown ## headings):
+- ## Brand identity — name, tagline, what it does, audience
+- ## Voice & tone — interpret the 4 voice sliders into prose (e.g. "casual but technical, serious with occasional dry humor, direct over storytelling"). Cite WORDS TO USE and AVOID literally.
+- ## Personality — single paragraph that captures the brand's POV.
+- ## Audience — who they speak to, in their own language.
+- ## Content rules — bullets of dos/don'ts. Reference the input content_rules JSON.
+- ## Format conventions — channels, formats, hashtags per platform, signature CTAs.
+- ## Examples — 3-5 short example lines that sound like THIS brand (use the voice_examples in input + extrapolate similar ones).
+
+Rules:
+- Be specific. "Be friendly" is useless. "Open with a concrete observation, never a question. Use 'we' not 'I'. Cut adjectives by 50%." is useful.
+- Reference the actual brand name throughout the prompt.
+- If a field is empty or null, do NOT mention it. Skip sections that have no data.
+- Length budget: 600-1200 words. Quality > volume.
+- Output language: the brand's primary language (infer from voice_examples or description; default English).
+- Plain markdown only. No JSON fences inside brand_prompt.`
+        : type === 'generate_content'
+        ? `You are generating on-brand content for a specific brand. The user's input is a JSON payload with:
+- brand_id, brand_prompt (the compiled brand system prompt — TREAT THIS AS YOUR PRIMARY SYSTEM INSTRUCTION)
+- channel (linkedin, instagram, youtube, twitter, …)
+- content_type (post, reel, thread, story, ad, …)
+- icp_summary (optional — audience pain points / context)
+- briefing (required — the actual ask from the user)
+- reference (optional — inspiration or "do this not that")
+
+Return ONLY valid JSON with this shape:
+{
+  "variations": [
+    {
+      "headline": "short hook / first line (≤12 words)",
+      "body": "full content body, formatted for the channel (line breaks OK)",
+      "hook": "alternative opener for re-mixes (optional)",
+      "hashtags": ["#tag1", "#tag2"],
+      "cta": "single line CTA",
+      "visual_brief": "if image/video — 1 sentence describing the visual"
+    }
+  ],
+  "notes": "optional comment about variations strategy or what to test"
+}
+
+Rules:
+- Generate EXACTLY 3 variations. Each should be a DISTINCT angle, not a tiny rewording.
+- HEAVILY weight the brand_prompt — match the brand's voice, ban the excluded words, use the included words, follow content_rules.
+- Use the briefing as the topic. Use the reference as inspiration, NOT to copy.
+- Channel-aware: LinkedIn = paragraphs + short bullets, no excessive hashtags. Instagram = 1-3 line hook + body, hashtag block at end. Twitter = threads as numbered lines. Reels/videos = body is a script outline.
+- icp_summary informs angle: a piece for a CFO sounds different than for a Head of Growth.
+- hashtags: pull from the brand's per-channel hashtags when present; supplement with relevant ones.
+- visual_brief: only when content_type implies media (reel, post with image, ad). For pure text formats, omit or set null.
+- Respond in the brand's primary language (infer from brand_prompt). Default English.
+- No markdown fences. Plain JSON only.`
         : 'You are a helpful assistant. Return ONLY valid JSON.'
   )
 }

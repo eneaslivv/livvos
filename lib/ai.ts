@@ -1073,6 +1073,112 @@ export const composeCommReply = (
   )
 }
 
+// ─── Brand Kit: train + generate ──────────────────────────────────
+// `train_brand_style` compiles every field of a brand kit into a
+// single system prompt the AI uses to write on-brand content. We
+// write the result back to the brand's `brand_prompt` column so it
+// becomes the authoritative system prompt for all future generation
+// calls scoped to that brand.
+
+import type { Brand } from '../types'
+
+export interface BrandTrainResult {
+  brand_prompt: string
+}
+
+/**
+ * Compile a brand kit into a reusable system prompt and persist it
+ * to `brands.brand_prompt`. Returns the compiled prompt.
+ * Idempotent — safe to re-run after any field change.
+ */
+export const trainBrandStyle = async (brand: Brand): Promise<string> => {
+  // Serialize the kit as JSON for the model. Numbers / arrays / nested
+  // JSON all survive — the model parses the structured payload and
+  // emits a markdown system prompt back.
+  const input = JSON.stringify({
+    name: brand.name,
+    tagline: brand.tagline,
+    industry: brand.industry,
+    description: brand.description,
+    palette: {
+      primary: brand.color_primary,
+      secondary: brand.color_secondary,
+      accent: brand.color_accent,
+      background: brand.color_background,
+      text: brand.color_text,
+    },
+    typography: {
+      heading: brand.font_heading,
+      body: brand.font_body,
+    },
+    photo_style: brand.photo_style_tags,
+    voice_sliders: {
+      formal_casual: brand.tone_formal_casual,
+      technical_accessible: brand.tone_technical_accessible,
+      serious_playful: brand.tone_serious_playful,
+      direct_storytelling: brand.tone_direct_storytelling,
+    },
+    words_include: brand.words_include,
+    words_exclude: brand.words_exclude,
+    voice_examples: brand.voice_examples,
+    personality: brand.personality,
+    audience: brand.audience_description,
+    hashtags: brand.hashtags,
+    ctas: brand.ctas,
+    content_rules: brand.content_rules,
+  })
+
+  const result = await callGemini<BrandTrainResult>(
+    'train_brand_style',
+    input,
+    (r) => typeof r?.brand_prompt === 'string' && r.brand_prompt.length > 50,
+  )
+
+  // Persist back to the brand row. Realtime push updates open tabs.
+  await supabase.from('brands').update({ brand_prompt: result.brand_prompt }).eq('id', brand.id)
+  return result.brand_prompt
+}
+
+// `generate_content` produces 3 on-brand variations for a given
+// brand × channel × content_type × ICP × briefing. Returns shape:
+//   { variations: [{ headline, body, hook, hashtags, cta, visual_brief }] }
+// The brand's compiled `brand_prompt` is injected server-side via
+// `type=generate_content` — the frontend passes the brand id + the
+// other context.
+
+export interface ContentVariation {
+  headline?: string
+  body: string
+  hook?: string
+  hashtags?: string[]
+  cta?: string
+  visual_brief?: string
+}
+
+export interface GenerateContentResult {
+  variations: ContentVariation[]
+  notes?: string
+}
+
+interface GenerateContentInput {
+  brand_id: string
+  brand_prompt?: string | null      // optional shortcut — server prefers DB row
+  channel: string                    // 'linkedin' | 'instagram' | …
+  content_type: string               // 'post' | 'reel' | 'thread' | …
+  icp_summary?: string | null        // optional pain points / desc of the ICP
+  briefing: string                   // freeform user prompt
+  reference?: string | null          // optional inspiration / "do this not that"
+}
+
+export const generateContent = async (args: GenerateContentInput): Promise<GenerateContentResult> => {
+  const input = JSON.stringify(args)
+  return callGemini<GenerateContentResult>(
+    'generate_content',
+    input,
+    (r) => Array.isArray(r?.variations) && r.variations.length > 0,
+  )
+}
+
 /** Force-clear all AI caches (e.g., when user wants fresh results) */
 export const clearAICache = (type?: string): void => {
   try {

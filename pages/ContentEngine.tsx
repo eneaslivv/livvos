@@ -23,6 +23,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { supabase } from '../lib/supabase';
 import { useTenant } from '../context/TenantContext';
+import { useBrands } from '../hooks/useBrands';
+import { BrandDetailPanel } from '../components/brand/BrandDetailPanel';
+import { generateContent, type ContentVariation } from '../lib/ai';
+import type { Brand } from '../types';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 
@@ -66,7 +70,7 @@ interface Piece {
 
 interface ICP { id: string; name: string }
 
-type Tab = 'pipeline' | 'calendar' | 'channels';
+type Tab = 'pipeline' | 'calendar' | 'channels' | 'brands' | 'studio';
 
 const STATUS_FLOW: Array<{ id: Piece['status']; label: string; tone: string }> = [
   { id: 'idea',       label: 'Ideas',      tone: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300' },
@@ -123,6 +127,11 @@ export const ContentEngine: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingPiece, setEditingPiece] = useState<Piece | 'new' | null>(null);
   const [editingChannel, setEditingChannel] = useState<Channel | 'new' | null>(null);
+  // Brand kit state — comes from its own hook (separate from the
+  // content channel/piece state above so the brand kit logic can
+  // evolve without touching the rest of this page).
+  const { brands } = useBrands();
+  const [editingBrand, setEditingBrand] = useState<Brand | 'new' | null>(null);
 
   const refetch = useCallback(async () => {
     if (!currentTenant?.id) return;
@@ -185,6 +194,8 @@ export const ContentEngine: React.FC = () => {
           { id: 'pipeline' as const, label: 'Pipeline', icon: 'List' },
           { id: 'calendar' as const, label: 'Calendar', icon: 'Calendar' },
           { id: 'channels' as const, label: 'Channels', icon: 'Globe' },
+          { id: 'brands' as const,   label: 'Brands',   icon: 'Sparkles' },
+          { id: 'studio' as const,   label: 'Studio',   icon: 'Edit' },
         ]).map(t => {
           const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
           const active = tab === t.id;
@@ -205,18 +216,21 @@ export const ContentEngine: React.FC = () => {
             </motion.button>
           );
         })}
-        <motion.button
-          onClick={() => {
-            if (tab === 'channels') setEditingChannel('new');
-            else setEditingPiece('new');
-          }}
-          whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5"
-        >
-          <Icons.Plus size={12} />
-          New {tab === 'channels' ? 'channel' : 'piece'}
-        </motion.button>
+        {tab !== 'studio' && (
+          <motion.button
+            onClick={() => {
+              if (tab === 'channels') setEditingChannel('new');
+              else if (tab === 'brands') setEditingBrand('new' as any);
+              else setEditingPiece('new');
+            }}
+            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+            whileHover={{ y: -1, transition: SPRING_TAP }}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5"
+          >
+            <Icons.Plus size={12} />
+            New {tab === 'channels' ? 'channel' : tab === 'brands' ? 'brand' : 'piece'}
+          </motion.button>
+        )}
       </div>
 
       {loading && (
@@ -249,6 +263,22 @@ export const ContentEngine: React.FC = () => {
         />
       )}
 
+      {!loading && tab === 'brands' && (
+        <BrandsGrid
+          brands={brands}
+          onOpen={(b) => setEditingBrand(b)}
+          onNew={() => setEditingBrand('new')}
+        />
+      )}
+
+      {!loading && tab === 'studio' && (
+        <StudioPanel
+          brands={brands}
+          channels={channels}
+          icps={icps}
+        />
+      )}
+
       <AnimatePresence>
         {editingPiece && (
           <PieceModal
@@ -268,6 +298,252 @@ export const ContentEngine: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Brand detail slide-over — opens for both "new" and existing brands. */}
+      {editingBrand !== null && (
+        <BrandDetailPanel
+          brand={editingBrand === 'new' ? null : editingBrand}
+          isOpen
+          onClose={() => setEditingBrand(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Brands grid ───────────────────────────────────────────────────
+const BrandsGrid: React.FC<{ brands: Brand[]; onOpen: (b: Brand) => void; onNew: () => void }> = ({ brands, onOpen, onNew }) => {
+  if (brands.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
+        <Icons.Sparkles size={20} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+        <div className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">No brand kits yet</div>
+        <p className="text-[11.5px] text-zinc-500 mt-1">A brand kit captures voice, palette, audience, and content rules so the AI generates on-brand content.</p>
+        <button onClick={onNew} className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900">
+          <Icons.Plus size={11} /> Create your first brand
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {brands.map(b => (
+        <motion.button
+          key={b.id}
+          onClick={() => onOpen(b)}
+          whileTap={{ scale: 0.99, transition: SPRING_TAP }}
+          whileHover={{ y: -1, transition: SPRING_TAP }}
+          className="text-left p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+        >
+          <div className="flex items-start gap-3 mb-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-[12px] font-semibold shrink-0 border border-zinc-200/50 dark:border-zinc-700/60"
+              style={{ background: b.color_primary || '#f5f2eb', color: b.color_text || '#1a1a1a' }}
+            >
+              {b.logo_url
+                ? <img src={b.logo_url} alt="" className="w-full h-full object-contain rounded-xl" />
+                : b.name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate tracking-[-0.012em]">{b.name}</div>
+              <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 truncate">{b.tagline || b.industry || '—'}</div>
+            </div>
+            <span className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+              b.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+              : b.status === 'draft' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+            }`}>{b.status}</span>
+          </div>
+          {/* Palette dots */}
+          <div className="flex items-center gap-1 mb-2">
+            {[b.color_primary, b.color_secondary, b.color_accent, b.color_background, b.color_text].filter(Boolean).slice(0, 5).map((c, i) => (
+              <span key={i} className="w-4 h-4 rounded-md border border-zinc-200/60 dark:border-zinc-700/60" style={{ background: c as string }} />
+            ))}
+            {b.brand_prompt && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[9.5px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                <Icons.Sparkles size={9} /> trained
+              </span>
+            )}
+          </div>
+          {b.description && (
+            <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{b.description}</p>
+          )}
+        </motion.button>
+      ))}
+    </div>
+  );
+};
+
+// ── Studio panel ──────────────────────────────────────────────────
+// Split layout: brand + channel + content_type + ICP + briefing on the
+// left, AI-generated variations on the right.
+const StudioPanel: React.FC<{ brands: Brand[]; channels: Channel[]; icps: ICP[] }> = ({ brands, channels, icps }) => {
+  const [brandId, setBrandId] = useState<string>('');
+  const [channelKey, setChannelKey] = useState<string>('linkedin');
+  const [contentType, setContentType] = useState<string>('post');
+  const [icpId, setIcpId] = useState<string>('');
+  const [briefing, setBriefing] = useState('');
+  const [reference, setReference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [variations, setVariations] = useState<ContentVariation[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Default brand selection — first active brand if any.
+  useEffect(() => {
+    if (!brandId && brands.length > 0) {
+      const active = brands.find(b => b.status === 'active') || brands[0];
+      setBrandId(active.id);
+    }
+  }, [brands, brandId]);
+
+  const selectedBrand = brands.find(b => b.id === brandId);
+  const selectedIcp = icps.find(i => i.id === icpId);
+
+  const handleGenerate = async () => {
+    if (!selectedBrand || !briefing.trim()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const result = await generateContent({
+        brand_id: selectedBrand.id,
+        brand_prompt: selectedBrand.brand_prompt,
+        channel: channelKey,
+        content_type: contentType,
+        icp_summary: selectedIcp?.name || null,
+        briefing: briefing.trim(),
+        reference: reference.trim() || null,
+      });
+      setVariations(result.variations || []);
+    } catch (e) {
+      setErr((e as Error).message);
+      errorLogger.warn('generate content failed', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5">
+      {/* Left — controls */}
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+          <div>
+            <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Brand</label>
+            <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none focus:border-zinc-400 text-zinc-800 dark:text-zinc-200">
+              {brands.length === 0 && <option value="">No brands yet — create one in the Brands tab</option>}
+              {brands.map(b => <option key={b.id} value={b.id}>{b.name}{!b.brand_prompt ? ' (not trained)' : ''}</option>)}
+            </select>
+            {selectedBrand && !selectedBrand.brand_prompt && (
+              <p className="text-[10.5px] text-amber-600 dark:text-amber-400 mt-1">⚠ This brand isn't trained yet. Open it in Brands and click <strong>Train style</strong> for best results.</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Channel</label>
+              <select value={channelKey} onChange={(e) => setChannelKey(e.target.value)} className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none">
+                <option value="linkedin">LinkedIn</option>
+                <option value="instagram">Instagram</option>
+                <option value="twitter">X / Twitter</option>
+                <option value="youtube">YouTube</option>
+                <option value="tiktok">TikTok</option>
+                <option value="email">Email</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Format</label>
+              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none">
+                <option value="post">Post</option>
+                <option value="thread">Thread</option>
+                <option value="reel">Reel</option>
+                <option value="story">Story</option>
+                <option value="ad">Ad</option>
+                <option value="email">Email</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Target ICP (optional)</label>
+            <select value={icpId} onChange={(e) => setIcpId(e.target.value)} className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none">
+              <option value="">— Any —</option>
+              {icps.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Briefing</label>
+            <textarea
+              value={briefing}
+              onChange={(e) => setBriefing(e.target.value)}
+              rows={5}
+              placeholder="What do you want to say? Topic, angle, hook ideas, must-include facts…"
+              className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none focus:border-zinc-400 resize-y text-zinc-800 dark:text-zinc-200"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1">Reference (optional)</label>
+            <textarea
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              rows={2}
+              placeholder="A post / ad / line that has the energy you want"
+              className="w-full px-2.5 py-1.5 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none resize-y text-zinc-800 dark:text-zinc-200"
+            />
+          </div>
+          <motion.button
+            type="button"
+            onClick={handleGenerate}
+            disabled={!selectedBrand || !briefing.trim() || loading}
+            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
+            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12.5px] font-semibold disabled:opacity-40"
+          >
+            <Icons.Sparkles size={12} />
+            {loading ? 'Generating…' : 'Generate 3 variations'}
+          </motion.button>
+          {err && <div className="text-[11px] text-rose-600 dark:text-rose-400">{err}</div>}
+        </div>
+      </div>
+
+      {/* Right — preview */}
+      <div className="space-y-3">
+        {variations.length === 0 && !loading && (
+          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
+            <Icons.Edit size={20} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+            <div className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">Studio is ready</div>
+            <p className="text-[11.5px] text-zinc-500 mt-1">Pick a brand, a channel, write your briefing, and click Generate. You'll get 3 on-brand variations.</p>
+          </div>
+        )}
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <Icons.Loader size={20} className="animate-spin text-zinc-400" />
+          </div>
+        )}
+        {variations.map((v, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING_ENTER, delay: i * 0.05 }}
+            className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-400">Variation {i + 1}</span>
+              {v.cta && <span className="ml-auto font-mono text-[9.5px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{v.cta}</span>}
+            </div>
+            {v.headline && <div className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100 leading-snug mb-1.5">{v.headline}</div>}
+            <p className="text-[12.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{v.body}</p>
+            {v.hashtags && v.hashtags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {v.hashtags.map((h, j) => <span key={j} className="text-[10.5px] text-zinc-500 dark:text-zinc-400">{h}</span>)}
+              </div>
+            )}
+            {v.visual_brief && (
+              <div className="mt-2 text-[10.5px] italic text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800 pt-2">
+                <Icons.Image size={10} className="inline mr-1" /> {v.visual_brief}
+              </div>
+            )}
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 };

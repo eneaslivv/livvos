@@ -398,8 +398,8 @@ ${examples}
 
     const systemPrompt = profileBlock + examplesBlock + baseSystemPrompt
 
-    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : type === 'comm_classify' ? 1200 : type === 'comm_reply_compose' ? 1500 : 512
-    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : type === 'comm_classify' ? 0.2 : type === 'comm_reply_compose' ? 0.4 : 0.3
+    const maxTokens = type === 'proposal' ? 2400 : type === 'blog' ? 2400 : type === 'tasks_bulk' ? 4500 : type === 'plan_period' ? 16384 : type === 'weekly_summary' ? 1600 : type === 'advisor' ? 2400 : type === 'advisor_chat' ? 1200 : type === 'advisor_chat_actions' ? 2400 : type === 'finance_chat' ? 1500 : type === 'standup' ? 4096 : type === 'finance_entry' ? 800 : type === 'finance_entries_batch' ? 12000 : type === 'content_strategy_suggest' ? 2400 : type === 'member_weekly_summary' ? 1200 : type === 'comm_classify' ? 1200 : type === 'comm_reply_compose' ? 1500 : type === 'train_brand_style' ? 3200 : type === 'generate_content' ? 2800 : 512
+    const temperature = type === 'tasks_bulk' || type === 'plan_period' || type === 'standup' ? 0.4 : type === 'weekly_summary' ? 0.5 : type === 'advisor' ? 0.6 : type === 'advisor_chat' ? 0.6 : type === 'advisor_chat_actions' ? 0.5 : type === 'finance_chat' ? 0.3 : type === 'finance_entry' || type === 'finance_entries_batch' ? 0 : type === 'content_strategy_suggest' ? 0.7 : type === 'member_weekly_summary' ? 0.5 : type === 'comm_classify' ? 0.2 : type === 'comm_reply_compose' ? 0.4 : type === 'train_brand_style' ? 0.4 : type === 'generate_content' ? 0.75 : 0.3
 
     // ─── Request: OpenAI (preferred) or Gemini fallback ─────────────
     const MAX_RETRIES = 3
@@ -672,6 +672,24 @@ ${examples}
       const batch = json as FinanceBatchResponse
       if (!batch || !Array.isArray(batch.entries)) {
         return new Response(JSON.stringify({ error: 'Invalid AI response', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'train_brand_style') {
+      // Brand training — must return a non-trivial brand_prompt string
+      const out = json as { brand_prompt?: string }
+      if (!out || typeof out.brand_prompt !== 'string' || out.brand_prompt.length < 50) {
+        return new Response(JSON.stringify({ error: 'Invalid AI response — brand_prompt missing or too short', raw: rawDebug }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else if (type === 'generate_content') {
+      // Content generation — must return variations[]
+      const out = json as { variations?: unknown[] }
+      if (!out || !Array.isArray(out.variations) || out.variations.length === 0) {
+        return new Response(JSON.stringify({ error: 'Invalid AI response — variations[] missing', raw: rawDebug }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
