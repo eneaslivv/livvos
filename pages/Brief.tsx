@@ -441,6 +441,28 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     }
   };
 
+  // ── Mark message done (handled, no task needed) ─────────────────
+  // Used by the LEFT swipe gesture on inbox cards. Same executor
+  // path as convert_to_task — just a different action kind that flips
+  // status to 'replied' so the message exits the pending queue.
+  const handleMarkMessageDone = async (msg: any) => {
+    if (!currentTenant?.id || !user?.id) return;
+    const result = await executeProposedAction(
+      {
+        kind: 'mark_message_done',
+        label: 'Mark message done',
+        params: { message_id: msg.id },
+      },
+      { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+    );
+    if (result.ok) {
+      setPendingMessages(prev => prev.filter(m => m.id !== msg.id));
+      setPendingRequestsCount(c => Math.max(0, c - 1));
+    } else {
+      errorLogger.warn('mark_message_done failed', { error: result.error });
+    }
+  };
+
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
   const clientsById = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
 
@@ -851,20 +873,14 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 <div className="space-y-2">
                   <AnimatePresence initial={false}>
                   {pendingMessages.map((m, idx) => (
-                    <motion.div
+                    <SwipeableInboxCard
                       key={m.id}
-                      layout
-                      initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
-                      transition={{ ...SPRING_ENTER, delay: idx < 8 ? idx * 0.025 : 0 }}
-                    >
-                      <InboxCard
-                        message={m}
-                        onOpen={() => onNavigate('communications')}
-                        onConvert={() => handleConvertToTask(m)}
-                      />
-                    </motion.div>
+                      message={m}
+                      idx={idx}
+                      onOpen={() => onNavigate('communications')}
+                      onConvert={() => handleConvertToTask(m)}
+                      onMarkDone={() => handleMarkMessageDone(m)}
+                    />
                   ))}
                   </AnimatePresence>
                 </div>
@@ -1405,5 +1421,109 @@ const InboxCard: React.FC<{
         </button>
       </div>
     </div>
+  );
+};
+
+// ── Swipeable inbox card ────────────────────────────────────────────
+// iOS Mail style — same physics as SwipeableTaskCard but with
+// different action semantics that match the inbox domain:
+//   Drag LEFT  (-X) → reveals emerald "Mark done" → marks message
+//                     status='replied', drops from pending queue
+//   Drag RIGHT (+X) → reveals violet  "Convert to task" → creates
+//                     a task from the message, status='task_created'
+//
+// Both gestures are universally available even on FYI messages
+// (vs. the inline buttons which gate "Convert to task" behind
+// isRequest). The deliberate physical commitment of a swipe makes
+// false positives much less likely than an accidentally-clicked
+// chip would, so universal coverage is fine here.
+interface SwipeableInboxCardProps {
+  message: any;
+  idx: number;
+  onOpen: () => void;
+  onConvert: () => void;
+  onMarkDone: () => void;
+}
+
+const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
+  message, idx, onOpen, onConvert, onMarkDone,
+}) => {
+  const reduceMotion = useReducedMotion();
+  const x = useMotionValue(0);
+  // Mirror the task-card transforms so the snap zone feels identical
+  // across both surfaces.
+  const doneOpacity    = useTransform(x, [-200, -80, -70, -30, 0], [1, 1, 0.85, 0.3, 0]);
+  const doneScale      = useTransform(x, [-200, -80, -60, 0], [1.1, 1.1, 0.95, 0.85]);
+  const convertOpacity = useTransform(x, [0, 30, 70, 80, 200], [0, 0.3, 0.85, 1, 1]);
+  const convertScale   = useTransform(x, [0, 60, 80, 200], [0.85, 0.95, 1.1, 1.1]);
+
+  const handleDragEnd = (_: any, info: PanInfo) => {
+    const past = Math.abs(info.offset.x) > SWIPE_THRESHOLD;
+    const fast = Math.abs(info.velocity.x) > SWIPE_VELOCITY;
+    if (past || fast) {
+      if (info.offset.x < 0) onMarkDone();
+      else onConvert();
+      setTimeout(() => x.set(0), 200);
+    } else {
+      x.set(0);
+    }
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.22 } }}
+      transition={{ ...SPRING_ENTER, delay: idx < 8 ? idx * 0.025 : 0 }}
+      className="relative rounded-xl overflow-hidden"
+    >
+      {/* Reveal-on-drag panels. Mirrors SwipeableTaskCard's structure
+          so the two surfaces feel like one design. */}
+      <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
+        <motion.div
+          style={{ opacity: convertOpacity, scale: convertScale }}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700 dark:text-violet-300"
+        >
+          <Icons.Plus size={13} />
+          Convert to task
+        </motion.div>
+        <motion.div
+          style={{ opacity: doneOpacity, scale: doneScale }}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300"
+        >
+          Mark done
+          <Icons.Check size={13} />
+        </motion.div>
+      </div>
+      <motion.div
+        style={{ opacity: useTransform(x, [-100, 0, 100], [0.18, 0, 0.18]) }}
+        className="absolute inset-0 pointer-events-none"
+      >
+        <motion.div
+          style={{ opacity: useTransform(x, [-100, 0], [1, 0]) }}
+          className="absolute inset-0 bg-emerald-100 dark:bg-emerald-500/20"
+        />
+        <motion.div
+          style={{ opacity: useTransform(x, [0, 100], [0, 1]) }}
+          className="absolute inset-0 bg-violet-100 dark:bg-violet-500/20"
+        />
+      </motion.div>
+
+      {/* The draggable card — wraps the existing InboxCard so the
+          presentational logic stays in one place. */}
+      <motion.div
+        drag={reduceMotion ? false : 'x'}
+        dragConstraints={{ left: -150, right: 150 }}
+        dragElastic={0.15}
+        dragMomentum={false}
+        style={{ x }}
+        onDragEnd={handleDragEnd}
+        whileTap={{ scale: 0.995 }}
+        whileHover={{ y: -1, transition: SPRING_TAP }}
+      >
+        <InboxCard message={message} onOpen={onOpen} onConvert={onConvert} />
+      </motion.div>
+    </motion.div>
   );
 };
