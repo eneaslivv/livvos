@@ -30,6 +30,12 @@ import { useRBAC } from '../context/RBACContext';
 import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { LinkifiedText } from './ui/LinkifiedText';
+// Markdown renderer — same one used in Brief chat. Supports headings,
+// **bold**, bullets, [urgent]/[high]/[low]/[done] priority dots, and
+// the rich custom directives (:::stat:::, :::callout:::, :::grid:::,
+// :::section:::, :::row:::, :::kpi:::, :::tasklist:::) that turn flat
+// AI replies into scannable structured cards.
+import { Markdown } from '../lib/markdown';
 // Memory layer — every AiAdvisor turn lands in agent_conversations so
 // the critique loop sees it alongside Brief/orchestrator turns. The
 // user profile is injected into context so style/length preferences
@@ -1361,7 +1367,7 @@ export const AiAdvisor: React.FC = () => {
               animate={{ x: 0 }}
               exit={{ x: '100%', transition: { type: 'spring', stiffness: 360, damping: 32 } }}
               transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-              className="aiad-panel absolute inset-y-0 right-0 w-screen max-w-lg max-h-screen flex flex-col overflow-hidden"
+              className="aiad-panel absolute inset-y-0 right-0 w-screen sm:w-[60vw] max-w-[960px] min-w-0 sm:min-w-[480px] max-h-screen flex flex-col overflow-hidden"
             >
               {/* ── Header ──
                  Refined per the design bundle: 38px wine-gradient
@@ -1501,7 +1507,7 @@ export const AiAdvisor: React.FC = () => {
                 {messages.map((msg, idx) => {
                   if (msg.role === 'user') {
                     return (
-                      <div key={idx} className="flex justify-end">
+                      <div key={idx} className="flex justify-end aiad-msg-in">
                         <div className="max-w-[85%] px-3.5 py-2 rounded-2xl aiad-bubble-user-tail bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[13px] leading-[1.55] tracking-[-0.003em] shadow-[0_2px_8px_-2px_rgba(9,9,11,0.18)] [&_a]:text-amber-300 dark:[&_a]:text-amber-700 [&_a]:underline">
                           <LinkifiedText text={msg.content} />
                         </div>
@@ -1515,16 +1521,22 @@ export const AiAdvisor: React.FC = () => {
                   const currentThumbs = (msg as any).thumbs as 'up' | 'down' | undefined;
                   const msgActions = (msg as any).actions as ProposedAction[] | undefined;
                   return (
-                    <div key={idx} className="flex items-start gap-2.5">
+                    <div key={idx} className="flex items-start gap-2.5 aiad-msg-in">
                       <div className="aiad-avatar w-7 h-7 rounded-[9px] shrink-0">
                         <Icons.Sparkles size={12} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`${isInsightsMsg ? '' : 'px-3.5 py-2.5 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 text-[13px] leading-[1.55] tracking-[-0.003em] text-zinc-800 dark:text-zinc-100'}`}>
+                        <div className={`${isInsightsMsg ? '' : 'px-4 py-3 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 tracking-[-0.003em] text-zinc-800 dark:text-zinc-100'}`}>
                           {isInsightsMsg ? (
                             <InsightsBlock greeting={(msg as any).greeting} insights={(msg as any).insights} />
                           ) : (
-                            <LinkifiedText text={(msg as any).content} />
+                            // Markdown render — turns plain `**bold**`, headings, bullets,
+                            // and custom directives into rich blocks. Falls back gracefully
+                            // for plain-text replies (no markdown = no formatting).
+                            <Markdown
+                              source={(msg as any).content}
+                              className="text-[13px] leading-[1.55]"
+                            />
                           )}
                           {outputId && (
                             <AIFeedbackBar outputId={outputId} className="mt-2" compact />
@@ -1596,7 +1608,7 @@ export const AiAdvisor: React.FC = () => {
                    "AI is replying" state looks consistent with sent
                    messages instead of jumping back to a generic look. */}
                 {busy && (
-                  <div className="flex items-start gap-2.5">
+                  <div className="flex items-start gap-2.5 aiad-msg-in">
                     <div className="aiad-avatar w-7 h-7 rounded-[9px] shrink-0">
                       <Icons.Sparkles size={12} />
                     </div>

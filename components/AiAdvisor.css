@@ -173,6 +173,25 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Per-message fade-up (iOS style) ────────────────────── */
+/* Each new chat row mounts with this. The CSS-driven animation
+   plays once on mount and stays put, so re-renders don't re-fire it.
+   Spring-ish easing — matches the design's `msg-in` keyframe. */
+.aiad-msg-in {
+  animation: aiad-msg-in 0.45s var(--aiad-ios-ease) both;
+}
+
+@keyframes aiad-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Children that should pop in slightly delayed for a layered feel
+   (action cards, source chips). Pure delay variant of msg-in. */
+.aiad-pop-in {
+  animation: aiad-msg-in 0.55s var(--aiad-ios-ease) 0.08s both;
+}
+
 /* ── Send button scale-in when ready ────────────────────── */
 .aiad-send-ready {
   animation: aiad-send-appear 0.4s var(--aiad-ios-ease);
