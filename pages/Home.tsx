@@ -448,16 +448,21 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] gap-6 max-w-[1500px] mx-auto px-4">
         {/* ── LEFT main column ─────────────────────────────────── */}
         <div className="space-y-5">
-          {/* Greeting row */}
+          {/* Greeting row — typographic treatment from the design bundle:
+             Inter Light (300) for the headline with -0.035em letter-spacing
+             gives it the elegant editorial feel of the mockup, in contrast
+             to the previous bold weight which felt heavier than the rest
+             of the surface. The eyebrow uses font-mono with wider tracking
+             so it reads as a label, not a sentence. */}
           <header>
-            <div className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-zinc-400">{dateLabel}</div>
-            <div className="flex items-end justify-between gap-4 mt-1.5 flex-wrap">
-              <h1 className="text-[28px] md:text-[34px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight">
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-400">{dateLabel}</div>
+            <div className="flex items-end justify-between gap-4 mt-2 flex-wrap">
+              <h1 className="text-[32px] md:text-[40px] font-light text-zinc-900 dark:text-zinc-100 leading-[1.05] tracking-[-0.035em]">
                 {partOfDay}, <span className="capitalize">{userFirstName}</span>.
               </h1>
               <ModeTabs mode={mode} onChange={persistMode} />
             </div>
-            <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3 text-[10.5px] text-zinc-400 uppercase tracking-wider">
+            <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3 text-[10px] font-mono text-zinc-400 uppercase tracking-[0.22em]">
               <Icons.Sparkles size={11} className="text-zinc-300 dark:text-zinc-700" />
               Brief — {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               <span className="ml-auto inline-flex items-center gap-1.5 normal-case tracking-normal text-zinc-500">
@@ -726,15 +731,20 @@ const STAT_TONE: Record<string, { text: string; mute: string }> = {
 const StatCard: React.FC<{ label: string; value: number; tone: keyof typeof STAT_TONE }> = ({ label, value, tone }) => {
   const t = STAT_TONE[tone];
   const alert = value > 0;
+  // Editorial-style stat tile from the design bundle: big light-weight
+  // numeral with tight letter-spacing, hover lifts the tile with a
+  // soft shadow. The light weight + tabular-nums combo makes the
+  // numbers feel like a magazine pull-quote rather than a UI counter.
   return (
     <motion.div
       initial={{ opacity: 0, y: 6, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -2, transition: SPRING_TAP }}
       transition={SPRING_ENTER}
-      className="px-4 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+      className="px-4 py-3.5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-shadow hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_10px_15px_-3px_rgba(0,0,0,0.05)]"
     >
-      <div className={`text-[26px] leading-none font-semibold tabular-nums ${alert ? t.text : t.mute}`}>{value}</div>
-      <div className="text-[10.5px] mt-1.5 text-zinc-500 dark:text-zinc-400">{label}</div>
+      <div className={`text-[32px] leading-none font-light tabular-nums tracking-[-0.04em] ${alert ? t.text : t.mute}`}>{value}</div>
+      <div className="text-[10.5px] mt-2 text-zinc-500 dark:text-zinc-400">{label}</div>
     </motion.div>
   );
 };
@@ -747,11 +757,11 @@ const SideCounter: React.FC<{ label: string; value: number; sub: string; tone: '
     whileHover={{ y: -1, transition: SPRING_TAP }}
     className="text-left px-4 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
   >
-    <div className="text-[9.5px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">{label}</div>
-    <div className={`text-[28px] leading-none font-semibold tabular-nums ${
+    <div className="text-[9.5px] font-mono uppercase tracking-[0.22em] text-zinc-400 mb-1.5">{label}</div>
+    <div className={`text-[34px] leading-none font-light tabular-nums tracking-[-0.045em] ${
       tone === 'emerald' && value > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-900 dark:text-zinc-100'
     }`}>{value}</div>
-    <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-1">{sub}</div>
+    <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-1.5">{sub}</div>
   </motion.button>
 );
 

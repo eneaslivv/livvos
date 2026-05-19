@@ -172,7 +172,10 @@ export const UnifiedNewPopover: React.FC<Props> = ({
         title={isTopbar || expanded ? undefined : 'New (⌘N)'}
         className={
           isTopbar
-            ? 'flex items-center gap-1 px-2.5 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[11px] font-medium hover:opacity-90 transition-opacity'
+            // Topbar "+ New" pill — uses the design bundle's micro-animation:
+            // hover scales to 1.03, active presses to 0.96. The transform
+            // gives it a small "live" feel without changing the layout.
+            ? 'flex items-center gap-1 px-2.5 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[11px] font-medium transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.03] active:scale-[0.96]'
             : `w-full flex items-center ${
                 expanded ? 'justify-start px-3' : 'justify-center px-2'
               } py-2.5 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-sm active:scale-[0.98]`
