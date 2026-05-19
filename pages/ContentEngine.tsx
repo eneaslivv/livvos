@@ -34,6 +34,7 @@ import '../components/livv/bundle-cards.css';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { BRAND_CREATION_FLOW, type BrandData } from '../components/livv/flows/BrandCreationFlow';
 import { CONTENT_SETUP_FLOW, type ContentSetupData } from '../components/livv/flows/ContentChannelsFlow';
+import { ContentStudio as BundleContentStudio } from '../components/livv/ContentStudio';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface Channel {
@@ -447,11 +448,11 @@ export const ContentEngine: React.FC = () => {
       )}
 
       {!loading && tab === 'studio' && (
-        <StudioPanel
-          brands={brands}
-          channels={channels}
-          icps={icps}
-        />
+        // Bundle's 3-pane Content Studio: Brand kit + channel + format + ICP +
+        // briefing on the left, Pinterest/Trained/Upload visual library + composed
+        // prompt in the middle, V1/V2/V3 preview with mockup + copy on the right.
+        // Source: livv-update / livv-os-content.jsx :: ContentStudio
+        <BundleContentStudio brands={brands} channels={channels} icps={icps} />
       )}
 
       <AnimatePresence>
