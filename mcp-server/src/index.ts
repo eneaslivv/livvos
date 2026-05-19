@@ -20,6 +20,15 @@
  * switch in callTool(). Each tool's input schema is a Zod object so
  * we validate args before they reach Supabase.
  */
+// Load .env from the mcp-server/ directory so the user only edits one
+// file and the MCP client doesn't need to know any secrets. We resolve
+// the path relative to THIS file (not cwd) because Claude Code spawns
+// us from its own working dir.
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+loadEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {

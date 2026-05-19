@@ -83,59 +83,28 @@ Deberías ver:
 
 Es normal que quede esperando — está escuchando JSON-RPC por stdin. Matá con `Ctrl+C`.
 
-### 4. Conectar a Claude Code
+### 4. Registrar el server con Claude Code
 
-Claude Code lee la config de MCPs desde `.mcp.json` en la raíz del proyecto **o** desde el config global (`~/.claude/mcp.json` en Linux/Mac, `%APPDATA%\Claude\mcp.json` en Windows).
+El server lee las credenciales del `.env` local (paso 2). Claude Code solo necesita saber dónde está el comando — sin secrets en la config del MCP.
 
-**Opción A — config global** (recomendado, no se commitea):
+Usá el CLI de Claude:
 
-```json
-{
-  "mcpServers": {
-    "livvos": {
-      "command": "npx",
-      "args": ["tsx", "C:/Users/eneas/Downloads/livv/eneas-os/mcp-server/src/index.ts"],
-      "env": {
-        "SUPABASE_URL": "https://ngswutcpsgdgmmjnfddi.supabase.co",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJ...your-service-role-key...",
-        "LIVVOS_TENANT_ID": "309be231-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-        "LIVVOS_OWNER_USER_ID": "",
-        "SUPABASE_ANON_KEY": "",
-        "LIVVOS_USER_JWT": ""
-      }
-    }
-  }
-}
-```
-
-**Opción B — `.mcp.json` en el repo** (cuidado: no commitees secrets):
-
-```json
-{
-  "mcpServers": {
-    "livvos": {
-      "command": "npx",
-      "args": ["tsx", "./mcp-server/src/index.ts"],
-      "env": {
-        "SUPABASE_URL": "${env:SUPABASE_URL}",
-        "SUPABASE_SERVICE_ROLE_KEY": "${env:SUPABASE_SERVICE_ROLE_KEY}",
-        "LIVVOS_TENANT_ID": "${env:LIVVOS_TENANT_ID}"
-      }
-    }
-  }
-}
-```
-
-Y los valores los exportás en tu shell antes de abrir Claude Code:
 ```bash
-export SUPABASE_URL="..."
-export SUPABASE_SERVICE_ROLE_KEY="..."
-export LIVVOS_TENANT_ID="..."
+claude mcp add livvos -- npx tsx "C:/Users/eneas/Downloads/livv/eneas-os/mcp-server/src/index.ts"
 ```
+
+(En Mac/Linux usá la ruta absoluta de tu repo.)
+
+Verificá con:
+```bash
+claude mcp list
+```
+
+Debería aparecer `livvos: ... - ✓ Connected`.
 
 ### 5. Reiniciar Claude Code
 
-Después de editar la config, **cerrá y volvé a abrir Claude Code** (o corré `/mcp` para ver el status).
+Después de registrar el MCP, **cerrá y volvé a abrir Claude Code** (o corré `/mcp` desde adentro para ver el status).
 
 Probá con:
 ```
