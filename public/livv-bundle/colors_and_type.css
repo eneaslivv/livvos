@@ -1,0 +1,284 @@
+/* ============================================================
+   LIVV STUDIO — Colors & Type
+   Source of truth for all design work.
+   Lifted from the live codebase (app/globals.css, app/fonts.ts)
+   ============================================================ */
+
+/* ---------- FONTS ---------- */
+/* Primary display + body. Live site uses Google-hosted Inter in 300/400/500. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* Brand display + retro typewriter, shipped as local .otf in the codebase. */
+@font-face {
+  font-family: "PP Playground";
+  src: url("./fonts/PPPlayground-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PP Mondwest";
+  src: url("./fonts/PPMondwest-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   ROOT TOKENS
+   ============================================================ */
+:root {
+  /* ---------- PRIMITIVE COLORS ---------- */
+  /* Warm cream neutrals (the codebase overrides Tailwind zinc with these) */
+  --livv-cream-50:  #FDFBF7;  /* Cream White — canvas */
+  --livv-cream-100: #F5F2EB;  /* Oat — muted surface */
+  --livv-cream-200: #E6E2D8;  /* Bone — borders */
+  --livv-cream-300: #D6D1C7;  /* Sand — heavy border */
+  --livv-cream-400: #A8A29A;  /* Stone — muted fg */
+  --livv-cream-500: #78736A;  /* Taupe */
+  --livv-cream-600: #52525B;
+  --livv-cream-700: #3F3F46;
+  --livv-cream-800: #27272A;  /* Near-black surface */
+  --livv-cream-900: #09090B;  /* Ink — primary fg */
+  --livv-cream-950: #000000;
+
+  /* Burgundy / wine — the secondary voice. Used for "about" section + gold-gradient base. */
+  --livv-wine-100: #7a4038;
+  --livv-wine-200: #5c1d18;
+  --livv-wine-300: #3d1214;
+  --livv-wine-400: #2C0405;   /* About-section background, gradient anchor */
+  --livv-wine-500: #2A1818;   /* Headline ink on cream */
+  --livv-wine-600: #1A1010;
+  --livv-wine-700: #0F0505;   /* Business-art-card background */
+
+  /* Parchment — brown-ish fg used atop burgundy */
+  --livv-parchment: #EDE5D8;
+
+  /* Gold — primary brand accent. Used in text-gradient-gold, ticker dots, spinning arrow ring. */
+  --livv-gold:       #C4A35A;
+  --livv-gold-soft:  #D4A574;
+  --livv-gold-bright:#E8BC59;
+
+  /* Secondary accents from the hero shader palette */
+  --livv-sage:      #769268;
+  --livv-sky:       #6DBEDC;
+
+  /* Pink highlight — used in stats cards, about-section accents */
+  --livv-pink:      #F1ADD8;
+  --livv-pink-soft: #FFB8E0;
+
+  /* Muted warm fg used in body copy on cream */
+  --livv-fg-body:   #5A3E3E;  /* 80%/70% opacity in source */
+
+  /* Status */
+  --livv-destructive: #ef4444;
+
+  /* ---------- SEMANTIC TOKENS ---------- */
+  --background: var(--livv-cream-50);
+  --foreground: var(--livv-cream-900);
+  --card: #FFFFFF;
+  --card-foreground: var(--livv-cream-900);
+  --muted: var(--livv-cream-100);
+  --muted-foreground: var(--livv-cream-500);
+  --accent: var(--livv-gold);
+  --accent-foreground: var(--livv-cream-900);
+  --border: var(--livv-cream-200);
+  --input:  var(--livv-cream-200);
+  --ring:   var(--livv-cream-900);
+
+  --primary: var(--livv-cream-900);
+  --primary-foreground: var(--livv-cream-50);
+  --secondary: var(--livv-cream-100);
+  --secondary-foreground: var(--livv-cream-900);
+
+  --fg-1: var(--livv-cream-900);  /* Headlines */
+  --fg-2: var(--livv-wine-500);   /* Body on cream */
+  --fg-3: var(--livv-cream-500);  /* Caption / meta */
+  --fg-on-wine: var(--livv-parchment);
+  --fg-gold: var(--livv-gold);
+
+  /* ---------- TYPOGRAPHY ---------- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "PP Playground", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-retro: "PP Mondwest", "Courier New", monospace;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+
+  /* Weights (Inter ships 300/400/500 in this project — 300 = light is the headline weight) */
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ---------- RADIUS ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;            /* Service cards use 10px */
+  --radius-md: 16px;
+  --radius-lg: 24px;           /* 1.5rem — primary card radius */
+  --radius-xl: 40px;           /* 2.5rem — hero frame */
+  --radius-pill: 9999px;
+
+  /* ---------- SPACING ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+
+  /* ---------- ELEVATION / SHADOWS ---------- */
+  /* Soft, "paper" shadows — livv avoids blown-out dark shadows */
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.05);
+  --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.08);
+  --shadow-xl: 0 25px 50px -12px rgba(0,0,0,0.08), 0 12px 24px -8px rgba(0,0,0,0.04);
+  --shadow-inset-glow: inset 0 0 20px rgba(255,255,255,0.5);
+
+  /* Gold glow ring (hover accent) */
+  --shadow-gold: 0 0 24px rgba(232, 188, 89, 0.35);
+  --shadow-pink: 0 0 16px rgba(255, 184, 224, 0.4);
+
+  /* ---------- SIGNATURE GRADIENTS ---------- */
+  --gradient-gold: linear-gradient(110deg, #2C0405 0%, #5c1d18 40%, #2C0405 80%);
+  --gradient-brand-conic: conic-gradient(from 0deg, #E8BC59, #769268, #6DBEDC, #E8BC59);
+  --gradient-section-to-wine: linear-gradient(to bottom,
+    #f5f2ed 0%, #e8ddd0 15%, #c4a08a 35%, #7a4038 65%, #3d1214 85%, #2C0405 100%);
+  --gradient-pricing-chip: linear-gradient(135deg, rgba(212,165,116,0.1), rgba(212,165,116,0.05));
+
+  /* ---------- MOTION ---------- */
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);      /* signature soft landing */
+  --ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-xs: 200ms;
+  --dur-sm: 300ms;
+  --dur-md: 500ms;
+  --dur-lg: 800ms;
+  --dur-xl: 1000ms;
+}
+
+/* ============================================================
+   SEMANTIC ELEMENT STYLES
+   These match the live site's signature type treatments.
+   ============================================================ */
+
+/* Base */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-regular);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* DISPLAY — huge marquee headlines ("livv services©") */
+.display-xl {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-light);
+  font-size: clamp(64px, 12vw, 180px);
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  color: var(--livv-wine-500);
+}
+
+/* SECTION HEADING — signature "section-heading" utility from globals.css */
+h1, .h1 {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-light);
+  font-size: clamp(40px, 6vw, 72px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--fg-1);
+}
+
+h2, .h2,
+.section-heading {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-light);
+  font-size: 40px;
+  line-height: 49px;
+  letter-spacing: -2.6px;
+  word-spacing: -0.05em;
+  color: var(--fg-1);
+}
+
+h3, .h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-medium);
+  font-size: 20px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--livv-wine-500);
+}
+
+h4, .h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-medium);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--livv-cream-900);
+}
+
+p { color: var(--fg-2); font-weight: 400; }
+
+/* CAPTION — the tracked, uppercase micro-label used everywhere (© Services サービス) */
+.caption,
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--livv-wine-500) 60%, transparent);
+}
+
+/* META — mono caption for stats, WDX® — 01 tags */
+.meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--livv-pink);
+}
+
+/* RETRO — PP Mondwest specimens (used sparingly on livv-os + art sections) */
+.retro {
+  font-family: var(--font-retro);
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  color: var(--livv-wine-500);
+}
+
+/* GOLD GRADIENT TEXT — the money-shot treatment */
+.text-gradient-gold {
+  background-image: var(--gradient-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Stat number specimen */
+.stat-value {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-light);
+  font-size: 72px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--livv-cream-900);
+}
+
+/* CODE / mono tag (used for meta + terminal bits) */
+code, .code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--livv-cream-100);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  color: var(--livv-wine-500);
+}

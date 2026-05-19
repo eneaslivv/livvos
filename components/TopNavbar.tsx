@@ -60,6 +60,19 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, cu
                             <Icons.Shield size={10} /> Master
                         </span>
                     )}
+                    {/* Bundle preview launcher — opens the static design-bundle
+                       workspace. Lets you browse every bundle screen (Strategy,
+                       Content, Scaling, Growth, Toolkit, Agent, Partners, all
+                       modals + wizards) without affecting the live app. */}
+                    {currentPage !== 'bundle_preview' && (
+                        <button
+                            onClick={() => onNavigate('bundle_preview')}
+                            className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-50 to-rose-50 dark:from-amber-500/15 dark:to-rose-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-300/40 hover:from-amber-100 hover:to-rose-100 dark:hover:from-amber-500/25 dark:hover:to-rose-500/25 transition-colors"
+                            title="Preview new design bundle — Strategy/Content/Scaling/Growth/Toolkit/Agent/Partners + all modals/wizards"
+                        >
+                            <Icons.Sparkles size={10} /> Preview
+                        </button>
+                    )}
                 </div>
 
                 {/* Right: Actions */}

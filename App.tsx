@@ -60,6 +60,7 @@ const loadSalesPipeline = () => retryDynamicImport(() => import('./pages/SalesPi
 const loadTeamScaling = () => retryDynamicImport(() => import('./pages/TeamScaling').then(m => ({ default: m.TeamScaling })), 'TeamScaling');
 const loadGrowthDashboard = () => retryDynamicImport(() => import('./pages/GrowthDashboard').then(m => ({ default: m.GrowthDashboard })), 'GrowthDashboard');
 const loadStrategyToolkit = () => retryDynamicImport(() => import('./pages/StrategyToolkit').then(m => ({ default: m.StrategyToolkit })), 'StrategyToolkit');
+const loadBundlePreview = () => retryDynamicImport(() => import('./pages/BundlePreview').then(m => ({ default: m.BundlePreview })), 'BundlePreview');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -95,6 +96,7 @@ const SalesPipeline = React.lazy(loadSalesPipeline);
 const TeamScaling = React.lazy(loadTeamScaling);
 const GrowthDashboard = React.lazy(loadGrowthDashboard);
 const StrategyToolkit = React.lazy(loadStrategyToolkit);
+const BundlePreview = React.lazy(loadBundlePreview);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -906,6 +908,16 @@ const AppContent: React.FC<{
               <StrategyToolkit />
             </KeepAlivePage>
           )}
+
+          {/* Bundle Preview — fullscreen iframe shell that loads every screen
+             from /public/livv-bundle/. The whole bundle (Strategy / Content /
+             Scaling / Growth / Toolkit / Agent / Partners / all modals + wizards)
+             is browsable from inside the "LIVV OS · full app" iframe. */}
+          {visitedPages.has('bundle_preview') && (
+            <KeepAlivePage page="bundle_preview" active={currentPage === 'bundle_preview'}>
+              <BundlePreview />
+            </KeepAlivePage>
+          )}
         </>
       )}
     </Layout>
@@ -923,6 +935,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
+  'bundle_preview',
 ]);
 
 const readLastPage = (): PageView => {

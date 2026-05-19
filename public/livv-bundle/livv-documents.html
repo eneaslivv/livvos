@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LIVV OS — Documents</title>
+<link rel="stylesheet" href="livv-os-styles.css">
+<style>
+/* ─── DOCUMENTS · Drive-style file manager ─────────────── */
+.dx-page { padding: 24px 32px 80px; max-width: 1440px; margin: 0 auto; }
+
+/* Header */
+.dx-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; margin-bottom: 18px;
+}
+.dx-head h1 {
+  margin: 0; font-size: 30px; font-weight: 300;
+  letter-spacing: -0.03em; color: var(--os-fg-0);
+  display: inline-flex; align-items: center; gap: 14px;
+}
+.dx-breadcrumb {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--os-fg-2); letter-spacing: 0.06em;
+  margin-top: 8px;
+}
+.dx-breadcrumb .crumb-step {
+  cursor: pointer;
+}
+.dx-breadcrumb .crumb-step:hover { color: var(--os-fg-0); }
+.dx-breadcrumb .crumb-step.active { color: var(--os-fg-0); font-weight: 500; }
+.dx-head-actions { display: flex; gap: 8px; }
+.dx-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px;
+  background: var(--os-panel); color: var(--os-fg-0);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12.5px; font-weight: 500;
+  transition: all .2s var(--ios-ease);
+}
+.dx-btn:hover { background: var(--os-surface); border-color: rgba(90,62,62,0.25); }
+.dx-btn.primary {
+  background: var(--os-ink); color: var(--livv-cream-50);
+  border-color: var(--os-ink);
+}
+.dx-btn.primary:hover { background: var(--wine); transform: translateY(-1px); }
+
+/* Toolbar */
+.dx-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 18px;
+}
+.dx-tabs {
+  display: inline-flex; align-items: center;
+  padding: 3px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  box-shadow: var(--shadow-card);
+}
+.dx-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px;
+  background: transparent; border: 0; cursor: pointer;
+  border-radius: 999px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-2);
+  transition: all .2s var(--ios-ease);
+}
+.dx-tab:hover { color: var(--os-fg-0); }
+.dx-tab.active {
+  background: var(--os-ink);
+  color: var(--livv-cream-50);
+}
+.dx-tab .count {
+  font-family: var(--font-mono); font-size: 9.5px;
+  padding: 1px 6px; border-radius: 5px;
+  background: var(--os-surface); color: var(--os-fg-2);
+}
+.dx-tab.active .count {
+  background: rgba(255,255,255,0.15); color: var(--livv-cream-50);
+}
+
+.dx-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.dx-filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px; color: var(--os-fg-1);
+}
+.dx-filter:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.dx-filter .label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; color: var(--os-fg-2); margin-right: 2px; }
+.dx-sort {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-2); letter-spacing: 0.06em;
+}
+.dx-view-toggle {
+  display: inline-flex; align-items: center;
+  padding: 2px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 8px;
+}
+.dx-view-btn {
+  width: 28px; height: 26px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-2);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s var(--ios-ease);
+}
+.dx-view-btn:hover { color: var(--os-fg-0); }
+.dx-view-btn.active { background: var(--os-ink); color: var(--accent-bright); }
+
+/* Quick stats strip */
+.dx-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.dx-stat {
+  padding: 12px 14px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 11px;
+  display: flex; align-items: center; gap: 11px;
+}
+.dx-stat-ic {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dx-stat-body { flex: 1; min-width: 0; }
+.dx-stat-l {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--os-fg-2);
+}
+.dx-stat-v {
+  font-size: 18px; font-weight: 300;
+  letter-spacing: -0.02em; color: var(--os-fg-0);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.dx-stat-v small {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--os-fg-3); margin-left: 4px;
+  font-weight: 400;
+}
+
+/* Section heading */
+.dx-section-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+  margin-top: 18px;
+}
+.dx-section-head:first-of-type { margin-top: 0; }
+.dx-section-head .label {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--os-fg-2); font-weight: 600;
+}
+.dx-section-head .count {
+  font-family: var(--font-mono); font-size: 10px;
+  padding: 1px 7px; border-radius: 5px;
+  background: var(--os-surface); color: var(--os-fg-2);
+}
+.dx-section-head .rule { flex: 1; height: 1px; background: var(--os-divider); }
+
+/* Grid */
+.dx-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+/* Folder card */
+.dx-folder {
+  position: relative;
+  padding: 16px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all .25s var(--ios-ease);
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 140px;
+  overflow: hidden;
+}
+.dx-folder:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lifted);
+  border-color: rgba(90,62,62,0.22);
+}
+.dx-folder-ic {
+  position: relative;
+  width: 44px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+}
+/* Folder SVG shape rendered via background */
+.dx-folder-ic svg { width: 44px; height: 38px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.06)); }
+.dx-folder-stack {
+  position: absolute; inset: 0;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--c) 18%, var(--os-surface));
+  transform: translate(2px, 2px);
+  z-index: -1;
+}
+.dx-folder-body { flex: 1; }
+.dx-folder-name {
+  font-size: 14px; font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--os-fg-0);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 2px;
+}
+.dx-folder-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--os-fg-2);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.dx-folder-meta .sep { color: var(--os-fg-3); }
+.dx-folder-foot {
+  display: flex; align-items: center; gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(90,62,62,0.10);
+  font-size: 10.5px;
+  font-family: var(--font-mono); color: var(--os-fg-2);
+  letter-spacing: 0.04em;
+}
+.dx-folder-avs { display: inline-flex; }
+.dx-folder-avs .av {
+  width: 16px; height: 16px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; color: #fff;
+  border: 1.5px solid var(--os-panel);
+  margin-left: -4px;
+}
+.dx-folder-avs .av:first-child { margin-left: 0; }
+.dx-folder-pin {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: all .2s var(--ios-ease);
+}
+.dx-folder:hover .dx-folder-pin { opacity: 1; }
+.dx-folder-pin:hover { background: var(--os-surface); color: var(--accent); }
+.dx-folder-pin.pinned { opacity: 1; color: var(--accent); }
+
+/* Document card */
+.dx-doc {
+  position: relative;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all .25s var(--ios-ease);
+  display: flex; flex-direction: column;
+  min-height: 200px;
+  overflow: hidden;
+}
+.dx-doc:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lifted);
+  border-color: rgba(90,62,62,0.22);
+}
+.dx-doc-preview {
+  position: relative;
+  aspect-ratio: 5 / 3;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 13px,
+      rgba(90,62,62,0.06) 13px,
+      rgba(90,62,62,0.06) 14px
+    ),
+    var(--os-surface);
+  border-bottom: 0.5px dashed rgba(90,62,62,0.10);
+  padding: 14px;
+  display: flex; align-items: flex-start;
+  overflow: hidden;
+}
+.dx-doc-preview-ic {
+  width: 30px; height: 36px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-panel));
+  border: 0.5px solid color-mix(in oklab, var(--c) 22%, transparent);
+  border-radius: 5px 5px 5px 5px;
+  position: relative;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c);
+}
+.dx-doc-preview-ic::before {
+  content: '';
+  position: absolute;
+  top: -1px; right: -1px;
+  width: 9px; height: 9px;
+  background: var(--os-panel);
+  border-left: 0.5px solid color-mix(in oklab, var(--c) 22%, transparent);
+  border-bottom: 0.5px solid color-mix(in oklab, var(--c) 22%, transparent);
+}
+.dx-doc-preview-thumb {
+  position: absolute;
+  inset: 0;
+  display: flex; flex-direction: column;
+  padding: 18px 22px;
+  gap: 4px;
+  pointer-events: none;
+}
+.dx-doc-preview-thumb .ln {
+  height: 5px; border-radius: 1.5px;
+  background: rgba(90,62,62,0.10);
+}
+.dx-doc-preview-thumb .ln.title { height: 7px; width: 60%; background: rgba(90,62,62,0.22); margin-bottom: 4px; }
+.dx-doc-preview-thumb .ln.short { width: 70%; }
+.dx-doc-preview-thumb .ln.shorter { width: 55%; }
+.dx-doc-preview-thumb.color .ln.title { background: var(--c); opacity: 0.5; }
+.dx-doc-preview-image {
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--c) 80%, transparent), color-mix(in oklab, var(--c) 40%, var(--os-fg-0)));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+}
+.dx-doc-body {
+  padding: 12px 14px;
+  flex: 1;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dx-doc-name {
+  font-size: 13.5px; font-weight: 500;
+  color: var(--os-fg-0); letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.dx-doc-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--os-fg-2);
+  letter-spacing: 0.04em;
+}
+.dx-doc-meta .sep { color: var(--os-fg-3); }
+.dx-doc-foot {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(90,62,62,0.08);
+}
+.dx-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 600;
+}
+.dx-status.draft   { background: rgba(196,163,90,0.13); color: #8b6a17; }
+.dx-status.review  { background: rgba(109,190,220,0.13); color: var(--sky); }
+.dx-status.live    { background: rgba(118,146,104,0.13); color: var(--ok); }
+.dx-status.archive { background: var(--os-surface); color: var(--os-fg-3); }
+.dx-status .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; }
+.dx-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  background: color-mix(in oklab, var(--tc) 10%, var(--os-surface));
+  color: color-mix(in oklab, var(--tc) 75%, var(--os-fg-0));
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+}
+.dx-tag .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--tc); }
+.dx-doc-pin {
+  margin-left: auto;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity .2s var(--ios-ease);
+}
+.dx-doc:hover .dx-doc-pin { opacity: 1; }
+.dx-doc-pin:hover { background: var(--os-surface); color: var(--accent); }
+.dx-doc-pin.pinned { opacity: 1; color: var(--accent); }
+
+/* New doc placeholder */
+.dx-new {
+  background: transparent;
+  border: 1px dashed var(--os-border-2);
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  min-height: 200px;
+  cursor: pointer;
+  transition: all .25s var(--ios-ease);
+  color: var(--os-fg-2);
+}
+.dx-new:hover {
+  background: var(--os-panel);
+  border-color: var(--accent-strong);
+  border-style: solid;
+  color: var(--os-fg-0);
+}
+.dx-new-ic {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: var(--os-surface);
+  display: flex; align-items: center; justify-content: center;
+}
+.dx-new:hover .dx-new-ic { background: var(--accent-soft); color: var(--accent); }
+
+/* List view */
+.dx-list {
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.dx-list-head, .dx-list-row {
+  display: grid;
+  grid-template-columns: 32px minmax(220px, 1fr) 110px 100px 90px 110px 22px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 18px;
+}
+.dx-list-head {
+  background: var(--os-surface);
+  border-bottom: 1px dashed rgba(90,62,62,0.12);
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--os-fg-2);
+}
+.dx-list-row {
+  border-bottom: 1px solid var(--os-divider);
+  cursor: pointer;
+  transition: background .15s var(--ios-ease);
+  font-size: 13px;
+}
+.dx-list-row:last-child { border-bottom: 0; }
+.dx-list-row:hover { background: var(--os-surface); }
+.dx-list-ic {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dx-list-name {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.dx-list-name strong {
+  font-weight: 500; color: var(--os-fg-0);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dx-list-name small {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+}
+.dx-list-meta {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--os-fg-2); letter-spacing: 0.04em;
+}
+.dx-list-action {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+}
+.dx-list-action:hover { background: var(--os-panel); color: var(--os-fg-0); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="livv-os-data.jsx"></script>
+<script type="text/babel" src="livv-os-shell.jsx"></script>
+<script type="text/babel">
+const { useState: useS } = React;
+
+const FOLDERS = [
+  { id: 1, name: 'Christie King',   color: 'var(--pink)',    items: 24, updated: 'May 18', avs: ['EN','LU'],      pinned: true },
+  { id: 2, name: 'Internal',         color: 'var(--accent)',  items: 87, updated: 'May 17', avs: ['EN','LU','MA'], pinned: true },
+  { id: 3, name: 'Sunnyside',        color: 'var(--sage)',    items: 56, updated: 'May 16', avs: ['EN','SA'] },
+  { id: 4, name: 'Cremona Capital',  color: 'var(--sky)',     items: 18, updated: 'May 12', avs: ['EN'] },
+  { id: 5, name: 'Mulberry Group',   color: '#8B5A2B',         items: 42, updated: 'May 10', avs: ['EN','LU','MA'] },
+  { id: 6, name: 'Archive · 2025',   color: 'var(--wine)',    items: 134, updated: 'Jan 14', avs: ['EN'] },
+];
+
+const DOCS = [
+  { id: 11, name: 'Mulberry · proposal v2',      type: 'doc',   ext: 'doc',  color: 'var(--accent)', folder: 'Mulberry', updated: 'Today',  size: '8 pages',  status: 'review', tag: { l: 'Sales',   c: 'var(--accent)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc', pinned: true },
+  { id: 12, name: 'Sunnyside cadence · 90d report', type: 'doc', ext: 'doc', color: 'var(--sage)',    folder: 'Sunnyside', updated: '9h ago', size: '12 pages', status: 'live',  tag: { l: 'Content', c: 'var(--pink)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc' },
+  { id: 13, name: 'Christie King · brand kit',     type: 'image', ext: 'fig', color: 'var(--pink)',  folder: 'Christie', updated: 'Yesterday', size: '8.4 MB', status: 'live', tag: { l: 'Brand', c: 'var(--pink)' }, owner: 'Sara', av: 'SA', avC: 'var(--sage)', preview: 'image' },
+  { id: 14, name: 'Q2 hiring plan',                 type: 'doc',   ext: 'doc', color: 'var(--purple)', folder: 'Internal', updated: '2d ago',  size: '6 pages', status: 'draft', tag: { l: 'Scaling', c: 'var(--purple)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc' },
+  { id: 15, name: 'Pricing Architecture · master', type: 'doc',  ext: 'doc',  color: 'var(--accent)', folder: 'Internal', updated: '3d ago',  size: '4 pages', status: 'live', tag: { l: 'Strategy', c: 'var(--sky)' }, owner: 'Lucía', av: 'LU', avC: 'var(--sky)', preview: 'doc' },
+  { id: 16, name: 'Agency OS · capabilities deck',  type: 'pdf',  ext: 'pdf', color: 'var(--err)',     folder: 'Internal', updated: '4d ago',  size: '4.2 MB', status: 'live', tag: { l: 'Sales', c: 'var(--accent)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc' },
+  { id: 17, name: 'Cremona · onboarding · v3',      type: 'doc',  ext: 'doc', color: 'var(--sky)',     folder: 'Cremona', updated: '6d ago',  size: '11 pages', status: 'draft', tag: { l: 'Delivery', c: 'var(--sage)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc' },
+  { id: 18, name: 'Moodboard · Mulberry editorial', type: 'image', ext: 'jpg', color: 'var(--pink)', folder: 'Mulberry', updated: '7d ago', size: '2.1 MB', status: 'live', tag: { l: 'Brand', c: 'var(--pink)' }, owner: 'Sara', av: 'SA', avC: 'var(--sage)', preview: 'image' },
+  { id: 19, name: 'Strategic Collaboration RFP',    type: 'pdf',  ext: 'pdf', color: 'var(--err)',     folder: 'Internal', updated: '14d ago', size: '293 KB',  status: 'draft', tag: null, owner: 'Lucía', av: 'LU', avC: 'var(--sky)', preview: 'doc' },
+  { id: 20, name: 'Sales OS · pricing tier sheet',  type: 'doc',  ext: 'doc', color: 'var(--sage)',    folder: 'Internal', updated: '14d ago', size: '3 pages', status: 'live', tag: { l: 'Strategy', c: 'var(--sky)' }, owner: 'Eneas', av: 'EN', avC: 'var(--accent)', preview: 'doc' },
+];
+
+const FolderIcon = ({ color }) => (
+  <svg viewBox="0 0 44 38" fill="none">
+    <path d="M2 10c0-2.2 1.8-4 4-4h10l3 3h21c2.2 0 4 1.8 4 4v21c0 2.2-1.8 4-4 4H6c-2.2 0-4-1.8-4-4V10z"
+      fill={`color-mix(in oklab, ${color} 22%, var(--os-panel))`}
+      stroke={`color-mix(in oklab, ${color} 38%, transparent)`} strokeWidth="0.8"/>
+    <path d="M2 13h40v3H2z" fill={`color-mix(in oklab, ${color} 30%, transparent)`} opacity="0.6"/>
+  </svg>
+);
+
+const App = () => {
+  const [tab, setTab]   = useS('docs');
+  const [view, setView] = useS('grid');
+  const folders = FOLDERS;
+  const docs    = DOCS;
+  const stats = [
+    { l: 'All files', icon: 'docs',     c: 'var(--accent)', v: docs.length + folders.reduce((s,f)=>s+f.items,0), sub: 'across 6 folders' },
+    { l: 'Drafts',     icon: 'edit',    c: 'var(--accent)', v: docs.filter(d => d.status === 'draft').length, sub: 'awaiting review' },
+    { l: 'Shared',     icon: 'link',    c: 'var(--sky)',    v: 14, sub: 'with clients' },
+    { l: 'Storage',    icon: 'docs',    c: 'var(--sage)',   v: '4.2 GB', sub: <small>/ 50 GB</small> },
+  ];
+
+  return (
+    <div className="os">
+      <aside className="sb" data-screen-label="Sidebar">
+        <div className="sb-logo">L</div>
+        <nav className="sb-rail">
+          {MODULES.map(m => (
+            <button key={m.id} className="sb-item">
+              <OS_ICON name={m.icon} size={18}/>
+              {m.badge > 0 && <span className="sb-badge">{m.badge}</span>}
+              <span className="sb-tooltip">{m.label}</span>
+            </button>
+          ))}
+          <button className="sb-item active">
+            <OS_ICON name="docs" size={18}/>
+            <span className="sb-tooltip">Docs</span>
+          </button>
+        </nav>
+        <div className="sb-avatar" title="Eneas">E</div>
+      </aside>
+
+      <div className="main">
+        <header className="tb">
+          <div className="crumbs">
+            <span className="mod-chip"><span className="ic"><OS_ICON name="docs" size={11}/></span>Docs</span>
+            <span className="sep">/</span>
+            <span className="seg-active">Documents</span>
+          </div>
+          <div className="tb-spacer"/>
+          <button className="tb-search">
+            <OS_ICON name="search" size={14}/>
+            <span>Search docs, folders, owners…</span>
+            <span className="kbd">⌘K</span>
+          </button>
+          <div className="tb-actions">
+            <button className="tb-iconbtn"><OS_ICON name="bell" size={15}/><span className="dot">3</span></button>
+          </div>
+          <button className="tb-new"><OS_ICON name="plus" size={13}/>New<span className="kbd">⌘N</span></button>
+        </header>
+
+        <div className="scroll">
+          <div className="dx-page">
+            <div className="dx-head">
+              <div>
+                <h1>Documents</h1>
+                <div className="dx-breadcrumb">
+                  <span className="crumb-step active">All files</span>
+                  <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+                  <span>{folders.length} folders</span>
+                  <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+                  <span>{docs.length} documents</span>
+                </div>
+              </div>
+              <div className="dx-head-actions">
+                <button className="dx-btn"><OS_ICON name="plus" size={12}/><span>New folder</span></button>
+                <button className="dx-btn"><OS_ICON name="docs" size={12}/><span>New doc</span></button>
+                <button className="dx-btn primary"><OS_ICON name="arrow" size={12} style={{ transform: 'rotate(-45deg)' }}/>Upload</button>
+              </div>
+            </div>
+
+            <div className="dx-stats">
+              {stats.map((s, i) => (
+                <div key={i} className="dx-stat" style={{ '--c': s.c }}>
+                  <span className="dx-stat-ic"><OS_ICON name={s.icon} size={13}/></span>
+                  <div className="dx-stat-body">
+                    <div className="dx-stat-l">{s.l}</div>
+                    <div className="dx-stat-v">{s.v} {typeof s.sub === 'string' ? <small>· {s.sub}</small> : s.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="dx-toolbar">
+              <div className="dx-tabs">
+                {[
+                  { id: 'docs',      label: 'Documents', icon: 'docs',  count: docs.length + folders.reduce((s,f)=>s+f.items,0) },
+                  { id: 'proposals', label: 'Proposals', icon: 'docs',  count: 8 },
+                  { id: 'blog',      label: 'Blog',      icon: 'content' },
+                  { id: 'passwords', label: 'Passwords', icon: 'cog',   count: 12 },
+                  { id: 'shared',    label: 'Shared',    icon: 'link',  count: 14 },
+                ].map(t => (
+                  <button key={t.id} className={`dx-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+                    <OS_ICON name={t.icon} size={11}/>
+                    {t.label}
+                    {t.count != null && <span className="count">{t.count}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="dx-toolbar-right">
+                <button className="dx-filter">
+                  <span className="label">FILTER</span>
+                  <span>All clients</span>
+                  <OS_ICON name="chevdown" size={10}/>
+                </button>
+                <button className="dx-filter">
+                  <span className="label">SORT</span>
+                  <span>Recent</span>
+                  <OS_ICON name="chevdown" size={10}/>
+                </button>
+                <div className="dx-view-toggle">
+                  <button className={`dx-view-btn ${view === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')}>
+                    <OS_ICON name="dashboard" size={12}/>
+                  </button>
+                  <button className={`dx-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h11"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {tab === 'docs' && view === 'grid' && (
+              <>
+                <div className="dx-section-head">
+                  <span className="label">Pinned</span>
+                  <span className="count">{folders.filter(f=>f.pinned).length + docs.filter(d=>d.pinned).length}</span>
+                  <span className="rule"/>
+                </div>
+                <div className="dx-grid">
+                  {folders.filter(f => f.pinned).map(f => <Folder key={f.id} f={f}/>)}
+                  {docs.filter(d => d.pinned).map(d => <Doc key={d.id} d={d}/>)}
+                </div>
+
+                <div className="dx-section-head">
+                  <span className="label">Folders</span>
+                  <span className="count">{folders.length}</span>
+                  <span className="rule"/>
+                </div>
+                <div className="dx-grid">
+                  {folders.filter(f => !f.pinned).map(f => <Folder key={f.id} f={f}/>)}
+                  <button className="dx-new">
+                    <div className="dx-new-ic"><OS_ICON name="plus" size={16}/></div>
+                    <span style={{ fontSize: 12.5, fontWeight: 500 }}>New folder</span>
+                  </button>
+                </div>
+
+                <div className="dx-section-head">
+                  <span className="label">Recent documents</span>
+                  <span className="count">{docs.filter(d => !d.pinned).length}</span>
+                  <span className="rule"/>
+                </div>
+                <div className="dx-grid">
+                  {docs.filter(d => !d.pinned).map(d => <Doc key={d.id} d={d}/>)}
+                  <button className="dx-new">
+                    <div className="dx-new-ic"><OS_ICON name="docs" size={16}/></div>
+                    <span style={{ fontSize: 12.5, fontWeight: 500 }}>New document</span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {tab === 'docs' && view === 'list' && <ListView folders={folders} docs={docs}/>}
+
+            {tab === 'proposals' && <ProposalsTab/>}
+            {tab === 'blog' && <BlogTab/>}
+            {tab === 'passwords' && <PasswordsTab/>}
+            {tab === 'shared' && <SharedTab/>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Folder = ({ f }) => (
+  <article className="dx-folder">
+    <button className={`dx-folder-pin ${f.pinned ? 'pinned' : ''}`}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill={f.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v6M9 8h6l-1 5h-4l-1-5zM12 13v9"/></svg>
+    </button>
+    <div className="dx-folder-ic">
+      <FolderIcon color={f.color}/>
+    </div>
+    <div className="dx-folder-body">
+      <div className="dx-folder-name">{f.name}</div>
+      <div className="dx-folder-meta">
+        <span>{f.items} items</span>
+        <span className="sep">·</span>
+        <span>{f.updated}</span>
+      </div>
+    </div>
+    <div className="dx-folder-foot">
+      <span className="dx-folder-avs">
+        {f.avs.map((a, i) => (
+          <span key={i} className="av" style={{ background: ['var(--accent)','var(--sky)','var(--pink)','var(--sage)'][i % 4] }}>{a}</span>
+        ))}
+      </span>
+      <span>{f.avs.length} {f.avs.length === 1 ? 'collaborator' : 'collaborators'}</span>
+    </div>
+  </article>
+);
+
+const Doc = ({ d }) => (
+  <article className="dx-doc">
+    <button className={`dx-doc-pin ${d.pinned ? 'pinned' : ''}`} style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill={d.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v6M9 8h6l-1 5h-4l-1-5zM12 13v9"/></svg>
+    </button>
+    <div className="dx-doc-preview" style={{ '--c': d.color }}>
+      {d.preview === 'image' ? (
+        <div className="dx-doc-preview-image">
+          <span>{d.ext.toUpperCase()}</span>
+        </div>
+      ) : (
+        <>
+          <div className="dx-doc-preview-ic">
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em' }}>{d.ext.toUpperCase()}</span>
+          </div>
+          <div className="dx-doc-preview-thumb color">
+            <span className="ln title"/>
+            <span className="ln short"/>
+            <span className="ln"/>
+            <span className="ln shorter"/>
+            <span className="ln short"/>
+            <span className="ln"/>
+            <span className="ln short"/>
+          </div>
+        </>
+      )}
+    </div>
+    <div className="dx-doc-body">
+      <div className="dx-doc-name">{d.name}</div>
+      <div className="dx-doc-meta">
+        <span>{d.updated}</span>
+        <span className="sep">·</span>
+        <span>{d.size}</span>
+      </div>
+      <div className="dx-doc-foot">
+        <span className={`dx-status ${d.status}`}>
+          <span className="dot"/>{d.status}
+        </span>
+        {d.tag && <span className="dx-tag" style={{ '--tc': d.tag.c }}><span className="dot"/>{d.tag.l}</span>}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 16, height: 16, borderRadius: 999, background: d.avC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff' }}>{d.av}</span>
+        </span>
+      </div>
+    </div>
+  </article>
+);
+
+const ProposalsTab = () => {
+  const proposals = [
+    { id: 1, client: 'Mulberry Group',     pkg: 'Agency OS · 6w',     value: '$27.6K', status: 'sent',  when: 'Today',     prob: 65,  color: 'var(--accent)' },
+    { id: 2, client: 'Halcyon AI',          pkg: 'SaaS Foundations',    value: '$36K',   status: 'draft', when: 'Yesterday', prob: 30,  color: 'var(--sage)' },
+    { id: 3, client: 'Cremona Capital',     pkg: 'Strategy Sprint',     value: '$12K',   status: 'won',   when: 'May 14',    prob: 100, color: 'var(--sky)' },
+    { id: 4, client: 'Sable Loft',           pkg: 'Brand System · 4w',   value: '$18K',   status: 'sent',  when: 'May 12',    prob: 55,  color: 'var(--pink)' },
+    { id: 5, client: 'Boreal Beauty',        pkg: 'E-com Growth Stack',  value: '$26K',   status: 'draft', when: 'May 9',     prob: 20,  color: '#A855F7' },
+    { id: 6, client: 'Iron Path',            pkg: 'Consultant Toolkit',  value: '$14K',   status: 'lost',  when: 'May 4',     prob: 0,   color: 'var(--wine)' },
+  ];
+  const STATUS = { draft: 'var(--accent)', sent: 'var(--sky)', won: 'var(--ok)', lost: 'var(--err)' };
+  return (
+    <>
+      <div className="dx-section-head"><span className="label">Active proposals</span><span className="count">{proposals.filter(p=>p.status==='sent'||p.status==='draft').length}</span><span className="rule"/></div>
+      <div className="dx-grid">
+        {proposals.map(p => (
+          <article key={p.id} className="dx-doc" style={{ minHeight: 220 }}>
+            <div className="dx-doc-preview" style={{ '--c': p.color, aspectRatio: '5 / 2.5', alignItems: 'flex-end' }}>
+              <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 5, width: '100%' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: p.color, fontWeight: 600 }}>PROPOSAL</span>
+                <span style={{ fontSize: 18, fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--os-fg-0)' }}>{p.value}</span>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
+                  <div style={{ flex: 1, height: 4, background: 'var(--os-divider)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ width: `${p.prob}%`, height: '100%', background: p.color, borderRadius: 999 }}/>
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-2)' }}>{p.prob}%</span>
+                </div>
+              </div>
+            </div>
+            <div className="dx-doc-body">
+              <div className="dx-doc-name">{p.client}</div>
+              <div className="dx-doc-meta"><span>{p.pkg}</span><span className="sep">·</span><span>{p.when}</span></div>
+              <div className="dx-doc-foot">
+                <span className="dx-status" style={{ background: `color-mix(in oklab, ${STATUS[p.status]} 13%, transparent)`, color: STATUS[p.status] }}><span className="dot"/>{p.status}</span>
+                <button className="dx-btn" style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 11 }}>Open<OS_ICON name="arrow" size={10}/></button>
+              </div>
+            </div>
+          </article>
+        ))}
+        <button className="dx-new"><div className="dx-new-ic"><OS_ICON name="plus" size={16}/></div><span style={{ fontSize: 12.5, fontWeight: 500 }}>New proposal</span></button>
+      </div>
+    </>
+  );
+};
+
+const BlogTab = () => {
+  const posts = [
+    { id: 1, title: 'Why agencies miss their cadence (and the 3-step system to fix it)', author: 'Eneas', av: 'EN', avC: 'var(--accent)', status: 'live',      when: 'May 18', reads: '4.2K', cover: ['#C4A35A','#2C0405'] },
+    { id: 2, title: 'Pricing is positioning. Three brands that learned it the hard way',   author: 'Lucía', av: 'LU', avC: 'var(--sky)',     status: 'live',      when: 'May 12', reads: '2.8K', cover: ['#6DBEDC','#0F1B2D'] },
+    { id: 3, title: 'The system, not the brand · 90 days of Sunnyside content engine',     author: 'Mateo', av: 'MA', avC: 'var(--pink)',    status: 'scheduled', when: 'May 22', reads: '—',     cover: ['#F1ADD8','#23150E'] },
+    { id: 4, title: 'How we won Cremona Capital — patient capital meets operating systems', author: 'Eneas', av: 'EN', avC: 'var(--accent)', status: 'draft',     when: 'May 16', reads: '—',     cover: ['#769268','#1F2D1A'] },
+    { id: 5, title: 'Behind Mulberry · 18 people, one publishing rhythm',                   author: 'Lucía', av: 'LU', avC: 'var(--sky)',     status: 'review',    when: 'May 14', reads: '—',     cover: ['#8B5A2B','#F5E6D3'] },
+  ];
+  const STATUS = { draft: 'var(--accent)', review: 'var(--sky)', scheduled: '#A855F7', live: 'var(--ok)' };
+  return (
+    <>
+      <div className="dx-section-head"><span className="label">Published &amp; in-flight</span><span className="count">{posts.length}</span><span className="rule"/></div>
+      <div className="dx-grid">
+        {posts.map(p => (
+          <article key={p.id} className="dx-doc" style={{ minHeight: 240 }}>
+            <div className="dx-doc-preview" style={{ background: `linear-gradient(135deg, ${p.cover[0]}, ${p.cover[1]})`, aspectRatio: '5 / 3', padding: 18, alignItems: 'flex-end' }}>
+              <div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>POST · {p.when}</span>
+                <div style={{ fontSize: 14, fontWeight: 500, color: '#fff', marginTop: 6, letterSpacing: '-0.01em', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</div>
+              </div>
+            </div>
+            <div className="dx-doc-body">
+              <div className="dx-doc-meta" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 18, height: 18, borderRadius: 999, background: p.avC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 700, color: '#fff' }}>{p.av}</span>
+                <span style={{ color: 'var(--os-fg-1)' }}>{p.author}</span>
+                <span className="sep">·</span><span>{p.reads} reads</span>
+              </div>
+              <div className="dx-doc-foot">
+                <span className="dx-status" style={{ background: `color-mix(in oklab, ${STATUS[p.status]} 13%, transparent)`, color: STATUS[p.status] }}><span className="dot"/>{p.status}</span>
+                <button className="dx-btn" style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 11 }}>Edit<OS_ICON name="arrow" size={10}/></button>
+              </div>
+            </div>
+          </article>
+        ))}
+        <button className="dx-new"><div className="dx-new-ic"><OS_ICON name="plus" size={16}/></div><span style={{ fontSize: 12.5, fontWeight: 500 }}>New post</span></button>
+      </div>
+    </>
+  );
+};
+
+const PasswordsTab = () => {
+  const groups = [
+    { cat: 'Connections', items: [
+      { name: 'LinkedIn · @eneas',        kind: 'OAuth', updated: '12m ago', strength: 'strong', ic: 'in' },
+      { name: 'Instagram · @livvstudio',  kind: 'OAuth', updated: '24m ago', strength: 'strong', ic: 'IG' },
+      { name: 'Pinterest · API key',       kind: 'API',   updated: 'Just now', strength: 'strong', ic: 'P' },
+      { name: 'Higgsfield',                 kind: 'API',   updated: '15m ago', strength: 'strong', ic: 'H' },
+    ]},
+    { cat: 'Tools', items: [
+      { name: 'Stripe · livvvv',            kind: 'API',   updated: '2d ago',  strength: 'strong', ic: '$' },
+      { name: 'Figma · workspace',          kind: 'OAuth', updated: '2h ago',  strength: 'strong', ic: 'F' },
+      { name: 'Notion · workspace',          kind: 'OAuth', updated: '5d ago',  strength: 'medium', ic: 'N' },
+      { name: 'Loom · pro',                  kind: 'Pwd',   updated: '14d ago', strength: 'weak',   ic: 'L' },
+    ]},
+    { cat: 'Client access', items: [
+      { name: 'Mulberry · Figma share',     kind: 'Link', updated: '3d ago', strength: 'strong', ic: 'M' },
+      { name: 'Cremona · Notion vault',      kind: 'Link', updated: '7d ago', strength: 'strong', ic: 'C' },
+    ]},
+  ];
+  const STRENGTH = { weak: 'var(--err)', medium: 'var(--accent)', strong: 'var(--ok)' };
+  return (
+    <>
+      <div className="dx-stats" style={{ marginBottom: 18 }}>
+        {[
+          { l: 'Vault items', v: groups.reduce((s,g)=>s+g.items.length,0), c: 'var(--accent)', icon: 'cog' },
+          { l: 'Strong',       v: 8, c: 'var(--ok)', icon: 'check' },
+          { l: 'Weak',         v: 1, c: 'var(--err)', icon: 'alert' },
+          { l: 'Last unlock', v: '12m ago', c: 'var(--sky)', icon: 'clock' },
+        ].map((s, i) => (
+          <div key={i} className="dx-stat" style={{ '--c': s.c }}>
+            <span className="dx-stat-ic"><OS_ICON name={s.icon} size={13}/></span>
+            <div className="dx-stat-body"><div className="dx-stat-l">{s.l}</div><div className="dx-stat-v">{s.v}</div></div>
+          </div>
+        ))}
+      </div>
+      {groups.map(g => (
+        <React.Fragment key={g.cat}>
+          <div className="dx-section-head"><span className="label">{g.cat}</span><span className="count">{g.items.length}</span><span className="rule"/></div>
+          <section className="dx-list" style={{ marginBottom: 18 }}>
+            {g.items.map((it, i) => (
+              <div key={i} className="dx-list-row" style={{ gridTemplateColumns: '32px minmax(220px, 1fr) 90px 110px 100px 60px 22px' }}>
+                <span className="dx-list-ic" style={{ '--c': STRENGTH[it.strength] }}><strong style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700 }}>{it.ic}</strong></span>
+                <div className="dx-list-name"><strong>{it.name}</strong><small>•••••••••••</small></div>
+                <span className="dx-list-meta">{it.kind}</span>
+                <span className="dx-list-meta">{it.updated}</span>
+                <span className="dx-status" style={{ background: `color-mix(in oklab, ${STRENGTH[it.strength]} 13%, transparent)`, color: STRENGTH[it.strength], width: 'fit-content' }}><span className="dot"/>{it.strength}</span>
+                <button className="dx-list-action" title="Copy"><OS_ICON name="docs" size={11}/></button>
+                <button className="dx-list-action" title="View"><OS_ICON name="eye" size={11}/></button>
+              </div>
+            ))}
+          </section>
+        </React.Fragment>
+      ))}
+    </>
+  );
+};
+
+const SharedTab = () => {
+  const sharedByMe = [
+    { id: 1, name: 'Mulberry · proposal v2',    to: ['Camila Ortíz · Mulberry', 'Marco Ravelli · CFO'], when: 'Today',  perm: 'View', ic: 'doc',  c: 'var(--accent)' },
+    { id: 2, name: 'Sunnyside · case study',     to: ['Mireia Costa', 'team'],                            when: 'Yesterday', perm: 'Comment', ic: 'doc', c: 'var(--sage)' },
+    { id: 3, name: 'Cremona · onboarding pack',  to: ['Olga Bernal · Cremona'],                           when: '2d ago', perm: 'Edit', ic: 'doc',  c: 'var(--sky)' },
+    { id: 4, name: 'Brand kit · Christie King',  to: ['Christie King'],                                    when: '7d ago', perm: 'View', ic: 'image', c: 'var(--pink)' },
+  ];
+  const sharedWithMe = [
+    { id: 11, name: 'Mulberry · brand audit',         from: 'Camila Ortíz',  fromAv: 'CO', fromC: 'var(--accent)', when: '3h ago',  perm: 'Edit',    ic: 'doc',  c: 'var(--accent)' },
+    { id: 12, name: 'Cremona · pricing tier sheet',    from: 'Olga Bernal',   fromAv: 'OB', fromC: 'var(--sky)',     when: '1d ago',  perm: 'Comment', ic: 'doc',  c: 'var(--sky)' },
+    { id: 13, name: 'Sable Loft · design system v2',   from: 'Nora Vasquez',  fromAv: 'NV', fromC: 'var(--pink)',    when: '4d ago',  perm: 'View',    ic: 'image', c: 'var(--pink)' },
+  ];
+  const PERM = { View: 'var(--sky)', Comment: 'var(--accent)', Edit: 'var(--ok)' };
+  const Row = (r, dir) => (
+    <div key={r.id} className="dx-list-row" style={{ gridTemplateColumns: '32px minmax(220px, 1fr) 1fr 90px 90px 22px' }}>
+      <span className="dx-list-ic" style={{ '--c': r.c }}><OS_ICON name={r.ic === 'image' ? 'content' : 'docs'} size={13}/></span>
+      <div className="dx-list-name"><strong>{r.name}</strong><small>{dir === 'by' ? 'Shared by you' : `from ${r.from}`}</small></div>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--os-fg-1)' }}>
+        {dir === 'by' ? (
+          <>
+            <span style={{ display: 'inline-flex' }}>
+              {r.to.slice(0,3).map((t, i) => (
+                <span key={i} style={{ width: 18, height: 18, borderRadius: 999, background: ['var(--accent)','var(--sky)','var(--pink)'][i%3], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 700, color: '#fff', marginLeft: i === 0 ? 0 : -5, border: '1.5px solid var(--os-panel)' }}>{t.slice(0,2).toUpperCase()}</span>
+              ))}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)' }}>{r.to.length} {r.to.length === 1 ? 'person' : 'people'}</span>
+          </>
+        ) : (
+          <>
+            <span style={{ width: 20, height: 20, borderRadius: 999, background: r.fromC, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff' }}>{r.fromAv}</span>
+            {r.from}
+          </>
+        )}
+      </span>
+      <span className="dx-list-meta">{r.when}</span>
+      <span className="dx-status" style={{ background: `color-mix(in oklab, ${PERM[r.perm]} 13%, transparent)`, color: PERM[r.perm], width: 'fit-content' }}><span className="dot"/>{r.perm}</span>
+      <button className="dx-list-action"><OS_ICON name="chev" size={11}/></button>
+    </div>
+  );
+  return (
+    <>
+      <div className="dx-section-head"><span className="label">Shared with you</span><span className="count">{sharedWithMe.length}</span><span className="rule"/></div>
+      <section className="dx-list" style={{ marginBottom: 18 }}>{sharedWithMe.map(r => Row(r, 'with'))}</section>
+      <div className="dx-section-head"><span className="label">Shared by you</span><span className="count">{sharedByMe.length}</span><span className="rule"/></div>
+      <section className="dx-list">{sharedByMe.map(r => Row(r, 'by'))}</section>
+    </>
+  );
+};
+
+const ListView = ({ folders, docs }) => (
+  <section className="dx-list">
+    <div className="dx-list-head">
+      <span/>
+      <span>Name</span>
+      <span>Owner</span>
+      <span>Updated</span>
+      <span>Size</span>
+      <span>Status</span>
+      <span/>
+    </div>
+    {folders.map(f => (
+      <div key={`f-${f.id}`} className="dx-list-row">
+        <span className="dx-list-ic" style={{ '--c': f.color }}><OS_ICON name="docs" size={14}/></span>
+        <div className="dx-list-name">
+          <strong>{f.name}</strong>
+          <small>{f.items} items</small>
+        </div>
+        <span className="dx-list-meta">—</span>
+        <span className="dx-list-meta">{f.updated}</span>
+        <span className="dx-list-meta">—</span>
+        <span/>
+        <button className="dx-list-action"><OS_ICON name="chev" size={11}/></button>
+      </div>
+    ))}
+    {docs.map(d => (
+      <div key={`d-${d.id}`} className="dx-list-row">
+        <span className="dx-list-ic" style={{ '--c': d.color }}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700 }}>{d.ext.toUpperCase()}</span></span>
+        <div className="dx-list-name">
+          <strong>{d.name}</strong>
+          <small>{d.folder}</small>
+        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <span style={{ width: 18, height: 18, borderRadius: 999, background: d.avC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 700, color: '#fff' }}>{d.av}</span>
+          {d.owner}
+        </span>
+        <span className="dx-list-meta">{d.updated}</span>
+        <span className="dx-list-meta">{d.size}</span>
+        <span><span className={`dx-status ${d.status}`}><span className="dot"/>{d.status}</span></span>
+        <button className="dx-list-action"><OS_ICON name="chev" size={11}/></button>
+      </div>
+    ))}
+  </section>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

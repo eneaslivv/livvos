@@ -31,8 +31,12 @@ export default defineConfig(() => {
           // PWA assets that bloat the precache list (TipTap, Recharts, xlsx,
           // Supabase, framer-motion) skew the precache size past the default
           // 2MB warning. Bump the cap so the SW doesn't silently drop chunks.
+          // Exclude the static livv-bundle/ design mockup (9MB) — it's only
+          // viewed in BundlePreview via iframe and doesn't need to live offline.
           workbox: {
             maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+            globIgnores: ['**/livv-bundle/**'],
+            navigateFallbackDenylist: [/^\/livv-bundle\//],
           },
         }),
       ],
