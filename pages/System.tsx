@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Card } from '../components/ui/Card';
-import { Monitor, Server, Cpu, HardDrive, Wifi, AlertTriangle, CheckCircle, XCircle, Activity, Settings, RefreshCw, Power, Database, Cloud, Shield, Terminal } from 'lucide-react';
+import { Monitor, Server, Cpu, HardDrive, Wifi, AlertTriangle, CheckCircle, XCircle, Activity, Settings, RefreshCw, Power, Database, Cloud, Shield, Terminal, Sparkles } from 'lucide-react';
 import { useSystem } from '../context/SystemContext';
 import { useRBAC } from '../context/RBACContext';
 import { SkillsManager } from '../components/SkillsManager';
 import { ClusterManagement } from '../components/cluster/ClusterManagement';
+import { AiMetricsPanel } from '../components/system/AiMetricsPanel';
 
 export const System: React.FC = () => {
   const { 
@@ -25,7 +26,7 @@ export const System: React.FC = () => {
   } = useSystem();
 
   const { hasPermission } = useRBAC();
-  const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'alerts' | 'skills' | 'cluster'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'alerts' | 'skills' | 'cluster' | 'ai_metrics'>('overview');
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -129,6 +130,7 @@ export const System: React.FC = () => {
           { id: 'overview', label: 'Overview', icon: Monitor },
           { id: 'agents', label: 'Agents', icon: Cpu },
           { id: 'skills', label: 'Skills', icon: Terminal },
+          { id: 'ai_metrics', label: 'AI Metrics', icon: Sparkles },
           { id: 'cluster', label: 'Cluster', icon: Cloud }
         ].map(tab => (
           <button
@@ -321,6 +323,14 @@ export const System: React.FC = () => {
         <div className="space-y-6">
           <SkillsManager />
         </div>
+      )}
+
+      {/* AI Metrics Tab — per-agent quality + latency rollup. Reads
+          the agent_metrics table that Brief / AiAdvisor populate
+          via the orchestrator's logConversationTurn + feedback
+          RPCs. Tenant-scoped via RLS. */}
+      {activeTab === 'ai_metrics' && (
+        <AiMetricsPanel />
       )}
 
       {/* Cluster Tab */}
