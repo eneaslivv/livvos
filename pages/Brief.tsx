@@ -32,6 +32,7 @@ import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useLongPress, type LongPressPosition } from '../hooks/useLongPress';
 import { ContextMenu } from '../components/ui/ContextMenu';
 import { DailyBrief } from '../components/brief/DailyBrief';
+import { Markdown } from '../lib/markdown';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
@@ -518,11 +519,17 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               className={m.role === 'user' ? 'flex justify-end' : ''}
             >
               <div className="max-w-full">
-                <div className={`text-[13px] leading-relaxed whitespace-pre-wrap ${
-                  m.role === 'user'
-                    ? 'max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2 ml-auto'
-                    : 'text-zinc-800 dark:text-zinc-100'
-                }`}>{m.content}</div>
+                {/* User messages: plain text in a chat bubble. Assistant:
+                    rendered as markdown so the AI can emit **bold**,
+                    bullets, headings, callouts, etc. instead of leaking
+                    literal `**` characters into the chat. */}
+                {m.role === 'user' ? (
+                  <div className="max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2 ml-auto text-[13px] leading-relaxed whitespace-pre-wrap">
+                    {m.content}
+                  </div>
+                ) : (
+                  <Markdown source={m.content} className="text-zinc-800 dark:text-zinc-100" />
+                )}
                 {/* Action approval cards — render before the skill trace
                     so the user sees pending actions first. Each card
                     shows the human-readable label + Confirm/Skip; on
