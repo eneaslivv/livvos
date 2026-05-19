@@ -27,7 +27,25 @@ export interface Lead {
     temperature: LeadTemperature;
     summary: string;
     recommendation: string;
+    // ── Pipeline extras (optional) — stored alongside the AI analysis
+    //    JSONB so we don't need a schema migration. Power the new detail
+    //    panel's KPI tiles, AI advisor block, and inline-editable rows. ──
+    /** One-time implementation fee for this deal */
+    implementation_value?: number;
+    /** Monthly retainer amount */
+    retainer_value?: number;
+    /** Free-text "next concrete move" displayed in the Next action row */
+    next_action?: string;
+    /** ISO date string for the next action */
+    next_action_due?: string;
+    /** Free-text qualifier shown next to the Source chip (e.g. "via personal intro · Iris @ Sable Loft") */
+    source_detail?: string;
+    /** Free-text qualifier shown next to the ICP match chip (e.g. "+ Content Engine retainer") */
+    icp_match_detail?: string;
+    /** LinkedIn URL for the contact */
+    linkedin?: string;
   };
+  owner_id?: string | null;
   history: {
     id: string;
     type: 'email' | 'note' | 'status_change' | 'system';

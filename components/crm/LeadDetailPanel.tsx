@@ -1,11 +1,27 @@
+/**
+ * LeadDetailPanel — sales pipeline lead inspector.
+ *
+ * Structure (top → bottom) lifted from the Livv design handoff —
+ * the user wanted the customization power + AI intelligence layout
+ * but rendered in the warm cream/zinc palette the rest of the app uses.
+ *
+ *   • Header — avatar · company / contact · stage pill · contact line
+ *   • 3 KPI tiles — Implementation · Retainer · 12-mo ARR
+ *   • Tabs — Overview · Outreach (count) · Notes
+ *   • Overview body — inline-editable detail rows:
+ *       Owner · Source · ICP match · Next action · In stage
+ *   • AI Advisor block — context-aware narrative + suggested actions
+ *   • Footer — Convert to Project · Generate Invoice
+ *
+ * All extra fields (next action, implementation/retainer split, source
+ * detail, ICP detail, linkedin) live inside the existing `ai_analysis`
+ * JSONB column — no schema migration needed.
+ */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Lead } from '../../types';
+import { Lead, LeadStatus, LeadTemperature, LeadCategory } from '../../types';
 import { Icons } from '../ui/Icons';
-
-type LeadStatus = 'new' | 'contacted' | 'following' | 'closed' | 'lost';
-type LeadTemperature = 'cold' | 'warm' | 'hot';
-type LeadCategory = 'branding' | 'web-design' | 'ecommerce' | 'saas' | 'creators' | 'other';
+import { useTeam } from '../../context/TeamContext';
 
 interface LeadDetailPanelProps {
   lead: Lead | null;
@@ -17,23 +33,50 @@ interface LeadDetailPanelProps {
   onStatusChange: (id: string, status: LeadStatus) => Promise<void> | void;
 }
 
+// Stages — same set as before, with friendlier labels + tone tokens
+// so the header pill reads at a glance.
+const STAGE_META: Record<LeadStatus, { label: string; dot: string; pill: string }> = {
+  new:       { label: 'New lead',       dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+  contacted: { label: 'Contacted',      dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
+  following: { label: 'Call scheduled', dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
+  closed:    { label: 'Won',            dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  lost:      { label: 'Lost',           dot: 'bg-zinc-400',    pill: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' },
+};
+
 const statusOptions: LeadStatus[] = ['new', 'contacted', 'following', 'closed', 'lost'];
 const temperatureOptions: LeadTemperature[] = ['cold', 'warm', 'hot'];
 const categoryOptions: LeadCategory[] = ['branding', 'web-design', 'ecommerce', 'saas', 'creators', 'other'];
 
-const statusColors: Record<string, string> = {
-  new: 'bg-blue-500',
-  contacted: 'bg-amber-500',
-  following: 'bg-purple-500',
-  closed: 'bg-emerald-500',
-  lost: 'bg-zinc-400',
-};
-
 const tempColors: Record<string, string> = {
-  hot: 'text-rose-500',
+  hot:  'text-rose-500',
   warm: 'text-amber-500',
   cold: 'text-sky-500',
 };
+
+// Money formatter — short "K"/"M" with one decimal so the KPI tiles
+// stay legible at the 20px display size used by the design.
+function formatK(v: number | null | undefined): { val: string; suffix: '' | 'K' | 'M' } {
+  if (!v || v <= 0) return { val: '—', suffix: '' };
+  if (v >= 1_000_000) return { val: (v / 1_000_000).toFixed(1).replace(/\.0$/, ''), suffix: 'M' };
+  if (v >= 1_000)     return { val: (v / 1_000).toFixed(v < 10_000 ? 1 : 0).replace(/\.0$/, ''), suffix: 'K' };
+  return { val: String(Math.round(v)), suffix: '' };
+}
+
+// In-stage label: "2 days · entered May 17 after discovery call"
+function inStageLabel(lead: Lead): string {
+  if (!lead) return '';
+  // Latest status_change in history (newest), else fall back to lastInteraction / createdAt.
+  const history = Array.isArray(lead.history) ? lead.history : [];
+  const lastStatusChange = history
+    .filter(h => h.type === 'status_change')
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+  const stageStart = lastStatusChange?.date || lead.lastInteraction || lead.createdAt;
+  if (!stageStart) return '';
+  const ms = Date.now() - new Date(stageStart).getTime();
+  const days = Math.max(0, Math.floor(ms / 86400000));
+  const dateLabel = new Date(stageStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${days} ${days === 1 ? 'day' : 'days'} · entered ${dateLabel}`;
+}
 
 export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
   lead,
@@ -44,12 +87,15 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
   onAddComment,
   onStatusChange,
 }) => {
+  const { members } = useTeam();
+
   const [isVisible, setIsVisible] = useState(isOpen);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'outreach' | 'notes'>('overview');
   const [comment, setComment] = useState('');
   const [activityType, setActivityType] = useState<Lead['history'][number]['type']>('note');
-  const [showExtended, setShowExtended] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
+
   const [draft, setDraft] = useState({
     name: '',
     email: '',
@@ -62,10 +108,20 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
     category: 'other' as LeadCategory,
     source: '',
     origin: '',
+    owner_id: '' as string,
+    // ── Pipeline extras (persisted into ai_analysis JSONB) ──
+    implementation_value: '' as string,
+    retainer_value: '' as string,
+    next_action: '' as string,
+    next_action_due: '' as string,
+    source_detail: '' as string,
+    icp_match_detail: '' as string,
+    linkedin: '' as string,
   });
 
   useEffect(() => {
     if (!lead) return;
+    const extras = lead.aiAnalysis || ({} as any);
     setDraft({
       name: lead.name || '',
       email: lead.email || '',
@@ -74,11 +130,20 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
       budget: lead.budget ? String(lead.budget) : '',
       message: lead.message || '',
       status: (lead.status as LeadStatus) || 'new',
-      temperature: (lead.temperature || lead.aiAnalysis?.temperature || 'warm') as LeadTemperature,
-      category: (lead.category || lead.aiAnalysis?.category || 'other') as LeadCategory,
+      temperature: (lead.temperature || extras.temperature || 'warm') as LeadTemperature,
+      category: (lead.category || extras.category || 'other') as LeadCategory,
       source: lead.source || '',
       origin: lead.origin || '',
+      owner_id: lead.owner_id || '',
+      implementation_value: extras.implementation_value ? String(extras.implementation_value) : '',
+      retainer_value: extras.retainer_value ? String(extras.retainer_value) : '',
+      next_action: extras.next_action || '',
+      next_action_due: extras.next_action_due || '',
+      source_detail: extras.source_detail || '',
+      icp_match_detail: extras.icp_match_detail || '',
+      linkedin: extras.linkedin || '',
     });
+    setActiveTab('overview');
   }, [lead]);
 
   useEffect(() => {
@@ -89,34 +154,49 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
     }
     if (isVisible) {
       setIsAnimatingOut(true);
-      const timer = setTimeout(() => { setIsVisible(false); setIsAnimatingOut(false); }, 220);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => { setIsVisible(false); setIsAnimatingOut(false); }, 220);
+      return () => clearTimeout(t);
     }
   }, [isOpen, isVisible]);
-
-  useEffect(() => {
-    if (!isOpen || !lead) { setShowExtended(false); return; }
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const handle = (window as any).requestIdleCallback(() => setShowExtended(true), { timeout: 300 });
-      return () => (window as any).cancelIdleCallback?.(handle);
-    }
-    const timeoutId = setTimeout(() => setShowExtended(true), 80);
-    return () => clearTimeout(timeoutId);
-  }, [isOpen, lead?.id]);
 
   const historyItems = useMemo(() => {
     const items = Array.isArray((lead as any)?.history) ? (lead as any).history : [];
     return items.slice().sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
   }, [lead]);
 
+  const outreachItems = useMemo(
+    () => historyItems.filter((h: any) => h.type === 'email'),
+    [historyItems]
+  );
+
   const visibleHistory = useMemo(() => {
-    if (!showExtended) return [];
     if (showAllHistory) return historyItems;
-    return historyItems.slice(0, 5);
-  }, [historyItems, showAllHistory, showExtended]);
+    return historyItems.slice(0, 8);
+  }, [historyItems, showAllHistory]);
+
+  // ── KPI math ──
+  // implementation = explicit override OR 25% of budget by default
+  // retainer       = explicit override OR (budget / 12) * 0.7 default
+  // 12-mo ARR      = implementation + retainer * 12
+  const implementation = useMemo(() => {
+    const explicit = Number(draft.implementation_value);
+    if (explicit > 0) return explicit;
+    const budget = Number(draft.budget) || 0;
+    return Math.round(budget * 0.25);
+  }, [draft.implementation_value, draft.budget]);
+
+  const retainer = useMemo(() => {
+    const explicit = Number(draft.retainer_value);
+    if (explicit > 0) return explicit;
+    const budget = Number(draft.budget) || 0;
+    return Math.round((budget * 0.75) / 12);
+  }, [draft.retainer_value, draft.budget]);
+
+  const arr = useMemo(() => implementation + retainer * 12, [implementation, retainer]);
 
   const isDirty = useMemo(() => {
     if (!lead) return false;
+    const extras = lead.aiAnalysis || ({} as any);
     return (
       draft.name !== (lead.name || '') ||
       draft.email !== (lead.email || '') ||
@@ -125,318 +205,589 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
       Number(draft.budget || 0) !== Number(lead.budget || 0) ||
       draft.message !== (lead.message || '') ||
       draft.status !== (lead.status as LeadStatus) ||
-      draft.temperature !== (lead.temperature || lead.aiAnalysis?.temperature || 'warm') ||
-      draft.category !== (lead.category || lead.aiAnalysis?.category || 'other') ||
+      draft.temperature !== (lead.temperature || extras.temperature || 'warm') ||
+      draft.category !== (lead.category || extras.category || 'other') ||
       draft.source !== (lead.source || '') ||
-      draft.origin !== (lead.origin || '')
+      draft.origin !== (lead.origin || '') ||
+      draft.owner_id !== (lead.owner_id || '') ||
+      Number(draft.implementation_value || 0) !== Number(extras.implementation_value || 0) ||
+      Number(draft.retainer_value || 0) !== Number(extras.retainer_value || 0) ||
+      draft.next_action !== (extras.next_action || '') ||
+      draft.next_action_due !== (extras.next_action_due || '') ||
+      draft.source_detail !== (extras.source_detail || '') ||
+      draft.icp_match_detail !== (extras.icp_match_detail || '') ||
+      draft.linkedin !== (extras.linkedin || '')
     );
   }, [draft, lead]);
+
+  const handleSave = async () => {
+    if (!lead) return;
+    const supportsPhone = Object.prototype.hasOwnProperty.call(lead, 'phone');
+    const supportsBudget = Object.prototype.hasOwnProperty.call(lead, 'budget');
+    // Merge pipeline extras into the ai_analysis JSONB so we don't need
+    // to migrate the schema. Existing AI fields (summary/recommendation)
+    // are preserved.
+    const prevExtras = lead.aiAnalysis || ({} as any);
+    const nextAiAnalysis: Lead['aiAnalysis'] = {
+      category: draft.category,
+      temperature: draft.temperature,
+      summary: prevExtras.summary || '',
+      recommendation: prevExtras.recommendation || '',
+      implementation_value: draft.implementation_value ? Number(draft.implementation_value) : undefined,
+      retainer_value: draft.retainer_value ? Number(draft.retainer_value) : undefined,
+      next_action: draft.next_action || undefined,
+      next_action_due: draft.next_action_due || undefined,
+      source_detail: draft.source_detail || undefined,
+      icp_match_detail: draft.icp_match_detail || undefined,
+      linkedin: draft.linkedin || undefined,
+    };
+    await onSave(lead.id, {
+      name: draft.name,
+      email: draft.email,
+      company: draft.company,
+      ...(supportsPhone ? { phone: draft.phone } : {}),
+      ...(supportsBudget ? { budget: draft.budget ? Number(draft.budget) : undefined } : {}),
+      message: draft.message,
+      status: draft.status,
+      temperature: draft.temperature,
+      category: draft.category,
+      source: draft.source,
+      origin: draft.origin,
+      owner_id: draft.owner_id || null,
+      aiAnalysis: nextAiAnalysis,
+    } as Partial<Lead>);
+  };
 
   if (!isVisible || !lead) return null;
 
   const panelTranslate = isOpen && !isAnimatingOut ? 'translate-x-0' : 'translate-x-full';
   const overlayOpacity = isOpen && !isAnimatingOut ? 'opacity-100' : 'opacity-0';
 
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div>
-      <label className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1 block">{label}</label>
-      {children}
-    </div>
-  );
+  const stageMeta = STAGE_META[draft.status];
+  const ownerMember = members.find(m => m.id === draft.owner_id);
+  const contactInitials = (lead.company || lead.name || 'U')
+    .split(' ').map(p => p[0]).join('').slice(0, 3).toUpperCase();
 
-  const inputClass = 'w-full px-2.5 py-1.5 text-[13px] bg-zinc-50/80 dark:bg-zinc-900/50 border border-zinc-150 dark:border-zinc-800/60 rounded-lg outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-300 dark:placeholder:text-zinc-600';
-  const selectClass = 'w-full px-2 py-1.5 text-[13px] bg-zinc-50/80 dark:bg-zinc-900/50 border border-zinc-150 dark:border-zinc-800/60 rounded-lg outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors text-zinc-800 dark:text-zinc-200 appearance-none cursor-pointer';
+  const impFmt = formatK(implementation);
+  const retFmt = formatK(retainer);
+  const arrFmt = formatK(arr);
+
+  const aiRecommendation = lead.aiAnalysis?.recommendation || '';
+  const aiSummary = lead.aiAnalysis?.summary || '';
+
+  // Reusable bits ──────────────────────────────────────────────
+  const inputCls   = 'px-2 py-1 text-[12.5px] bg-transparent border border-zinc-200 dark:border-zinc-700/60 rounded-md outline-none focus:border-zinc-400 dark:focus:border-zinc-500 transition-colors text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600';
+  const selectCls  = inputCls + ' appearance-none cursor-pointer pr-6 bg-no-repeat bg-[length:10px_10px] bg-[position:right_8px_center]';
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
       <div
-        className={`absolute inset-0 bg-black/10 dark:bg-black/30 backdrop-blur-[2px] transition-opacity duration-250 ${overlayOpacity}`}
+        className={`absolute inset-0 bg-black/10 dark:bg-black/40 backdrop-blur-[2px] transition-opacity duration-250 ${overlayOpacity}`}
         onClick={onClose}
       />
       <aside
-        className={`relative h-full max-h-screen w-full max-w-md bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.3)] transition-transform duration-250 ease-out ${panelTranslate} motion-reduce:transition-none overflow-hidden`}
+        className={`relative h-full max-h-screen w-full max-w-md bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] transition-transform duration-250 ease-out ${panelTranslate} motion-reduce:transition-none overflow-hidden`}
       >
         <div className="h-full flex flex-col">
 
-          {/* Header — compact */}
-          <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800/40 shrink-0 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center text-[10px] font-semibold shrink-0">
-                {(lead.name || 'U').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+          {/* ── Header ──
+             Avatar (company-initial square) · company / contact name ·
+             stage pill · email · linkedin. Right-side icon buttons
+             (expand to full view, edit toggle for the description
+             tab, close). */}
+          <div className="px-5 pt-4 pb-3.5 border-b border-zinc-100 dark:border-zinc-800/50 shrink-0">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 shrink-0 tracking-wider">
+                {contactInitials}
               </div>
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-tight">{lead.name || 'Unknown'}</h3>
-                <p className="text-[11px] text-zinc-400 truncate leading-tight">{lead.company || lead.email || '—'}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-[15.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-tight tracking-[-0.012em]">
+                    {lead.company || lead.name || 'Unknown'}
+                  </h3>
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] ${stageMeta.pill}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${stageMeta.dot}`} />
+                    {stageMeta.label}
+                  </span>
+                </div>
+                <div className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1.5 flex-wrap leading-tight">
+                  {lead.company && lead.name && (
+                    <>
+                      <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.name}</span>
+                      <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                    </>
+                  )}
+                  {lead.email && (
+                    <a href={`mailto:${lead.email}`} className="hover:text-zinc-700 dark:hover:text-zinc-200 hover:underline truncate">
+                      {lead.email}
+                    </a>
+                  )}
+                  {draft.linkedin && (
+                    <>
+                      <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                      <a href={draft.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-700 dark:hover:text-zinc-200 hover:underline truncate">
+                        {draft.linkedin.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+                      </a>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${statusColors[draft.status] || 'bg-zinc-400'}`} title={draft.status} />
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-md text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
-              >
-                <Icons.X size={14} />
-              </button>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-md text-zinc-300 hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Close"
+                >
+                  <Icons.X size={14} />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Scrollable body */}
+          {/* ── 3 KPI tiles ──
+             Editable in place: click any value to fill the inline input.
+             Defaults split the existing `budget` field 25% implementation
+             / 75% retainer (÷12 = monthly). 12-mo ARR = imp + ret*12. */}
+          <div className="grid grid-cols-3 border-b border-zinc-100 dark:border-zinc-800/50 shrink-0">
+            <KpiTile
+              label="Implementation"
+              suffix="one-time"
+              value={impFmt.val}
+              valSuffix={impFmt.suffix}
+              editable={{
+                input: draft.implementation_value,
+                onChange: v => setDraft(d => ({ ...d, implementation_value: v })),
+              }}
+            />
+            <KpiTile
+              label="Retainer"
+              suffix="/ mo"
+              value={retFmt.val}
+              valSuffix={retFmt.suffix}
+              borderL
+              editable={{
+                input: draft.retainer_value,
+                onChange: v => setDraft(d => ({ ...d, retainer_value: v })),
+              }}
+            />
+            <KpiTile
+              label="12-mo ARR"
+              suffix=""
+              value={arrFmt.val}
+              valSuffix={arrFmt.suffix}
+              borderL
+              dim
+            />
+          </div>
+
+          {/* ── Tabs ── */}
+          <div className="px-5 border-b border-zinc-100 dark:border-zinc-800/50 shrink-0">
+            <div className="flex items-center gap-4 -mb-px">
+              {([
+                { id: 'overview', label: 'Overview' },
+                { id: 'outreach', label: 'Outreach', count: outreachItems.length },
+                { id: 'notes',    label: 'Notes',    count: historyItems.length },
+              ] as const).map(t => {
+                const active = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id as any)}
+                    className={`relative inline-flex items-center gap-1.5 py-2.5 px-1 text-[12.5px] font-medium transition-colors ${
+                      active
+                        ? 'text-zinc-900 dark:text-zinc-100'
+                        : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+                    }`}
+                  >
+                    {t.label}
+                    {'count' in t && t.count > 0 && (
+                      <span className={`text-[10px] font-mono tabular-nums px-1.5 rounded ${
+                        active
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {t.count}
+                      </span>
+                    )}
+                    {active && <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-zinc-900 dark:bg-zinc-100 rounded-full" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Body ── */}
           <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
-            <div className="px-5 py-4 pb-6 space-y-4">
 
-              {/* Status + Temperature row */}
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Field label="Status">
-                    <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as LeadStatus })} className={selectClass}>
-                      {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            {/* Overview tab */}
+            {activeTab === 'overview' && (
+              <div className="px-5 py-4 space-y-1">
+                {/* Owner */}
+                <DetailRow icon={<Icons.User size={12} />} label="Owner">
+                  <div className="inline-flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <select
+                      value={draft.owner_id}
+                      onChange={(e) => setDraft(d => ({ ...d, owner_id: e.target.value }))}
+                      className={selectCls}
+                    >
+                      <option value="">Unassigned</option>
+                      {members.map(m => (
+                        <option key={m.id} value={m.id}>{m.name || m.email}</option>
+                      ))}
                     </select>
-                  </Field>
+                  </div>
+                </DetailRow>
+
+                {/* Source */}
+                <DetailRow icon={<Icons.Mail size={12} />} label="Source">
+                  <div className="inline-flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {draft.source || 'Direct'}
+                    </span>
+                    <input
+                      value={draft.source_detail}
+                      onChange={e => setDraft(d => ({ ...d, source_detail: e.target.value }))}
+                      placeholder="via personal intro · Iris @ Sable Loft"
+                      className={`${inputCls} flex-1 min-w-[160px] border-0 hover:border hover:border-zinc-200 dark:hover:border-zinc-700/60 focus:border focus:border-zinc-400 dark:focus:border-zinc-500`}
+                    />
+                  </div>
+                </DetailRow>
+
+                {/* ICP match */}
+                <DetailRow icon={<Icons.Target size={12} />} label="ICP match">
+                  <div className="inline-flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                      <select
+                        value={draft.category}
+                        onChange={(e) => setDraft(d => ({ ...d, category: e.target.value as LeadCategory }))}
+                        className="bg-transparent border-0 outline-none cursor-pointer pr-2"
+                      >
+                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </span>
+                    <input
+                      value={draft.icp_match_detail}
+                      onChange={e => setDraft(d => ({ ...d, icp_match_detail: e.target.value }))}
+                      placeholder="+ Content Engine retainer"
+                      className={`${inputCls} flex-1 min-w-[160px] border-0 hover:border hover:border-zinc-200 dark:hover:border-zinc-700/60 focus:border focus:border-zinc-400 dark:focus:border-zinc-500`}
+                    />
+                  </div>
+                </DetailRow>
+
+                {/* Next action */}
+                <DetailRow icon={<Icons.ChevronRight size={12} />} label="Next action">
+                  <div className="inline-flex items-center gap-2 flex-wrap w-full">
+                    <input
+                      value={draft.next_action}
+                      onChange={e => setDraft(d => ({ ...d, next_action: e.target.value }))}
+                      placeholder="Build proposal v2"
+                      className={`${inputCls} flex-1 min-w-[160px]`}
+                    />
+                    <input
+                      type="date"
+                      value={draft.next_action_due}
+                      onChange={e => setDraft(d => ({ ...d, next_action_due: e.target.value }))}
+                      className={`${inputCls} font-mono text-[11.5px]`}
+                    />
+                  </div>
+                </DetailRow>
+
+                {/* In stage (read-only) */}
+                <DetailRow icon={<Icons.Clock size={12} />} label="In stage">
+                  <span className="text-[12.5px] text-zinc-600 dark:text-zinc-300">
+                    {inStageLabel(lead)}
+                  </span>
+                </DetailRow>
+
+                {/* Temperature row — small inline pill switcher */}
+                <DetailRow icon={<Icons.Activity size={12} />} label="Temperature">
+                  <div className="inline-flex items-center gap-1">
+                    {temperatureOptions.map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setDraft(d => ({ ...d, temperature: t }))}
+                        className={`px-2 py-0.5 rounded text-[10.5px] font-semibold uppercase tracking-wider transition-colors ${
+                          draft.temperature === t
+                            ? `bg-zinc-100 dark:bg-zinc-800 ${tempColors[t]}`
+                            : 'text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </DetailRow>
+
+                {/* AI Advisor block — context narrative + action chips.
+                   Reads from the existing aiAnalysis.recommendation +
+                   summary. The two action buttons fire a comment to the
+                   lead's activity so they're traceable. */}
+                <div className="mt-4 rounded-xl border border-amber-200/70 dark:border-amber-500/30 bg-gradient-to-br from-amber-50/70 via-white to-rose-50/40 dark:from-amber-950/20 dark:via-zinc-900 dark:to-rose-950/15 p-3.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                      <Icons.Sparkles size={13} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400 mb-1.5">
+                        AI Advisor
+                      </div>
+                      {aiRecommendation || aiSummary ? (
+                        <>
+                          <p className="text-[12.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed">
+                            {aiRecommendation || aiSummary}
+                          </p>
+                          {aiRecommendation && aiSummary && aiRecommendation !== aiSummary && (
+                            <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 leading-relaxed mt-1.5">
+                              {aiSummary}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-[12.5px] text-zinc-600 dark:text-zinc-300 leading-relaxed italic">
+                          No analysis yet for this lead. Use the suggestions below to start a thread.
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onAddComment(lead.id, draft.next_action ? `Draft: ${draft.next_action}` : 'Draft next email', 'note')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[11px] font-semibold hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-colors"
+                        >
+                          <Icons.Sparkles size={10} />
+                          {draft.next_action ? `Draft: ${draft.next_action.slice(0, 24)}${draft.next_action.length > 24 ? '…' : ''}` : 'Draft next email'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onAddComment(lead.id, 'Show similar deals', 'note')}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/80 dark:bg-zinc-800/60 text-zinc-700 dark:text-zinc-200 text-[11px] font-semibold border border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800 transition-colors"
+                        >
+                          Show similar deals
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <Field label="Temperature">
-                    <select value={draft.temperature} onChange={(e) => setDraft({ ...draft, temperature: e.target.value as LeadTemperature })} className={`${selectClass} ${tempColors[draft.temperature] || ''}`}>
-                      {temperatureOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <div className="flex-1">
-                  <Field label="Category">
-                    <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value as LeadCategory })} className={selectClass}>
-                      {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </Field>
-                </div>
+
+                {/* Quick edit grid — name / email / phone / linkedin /
+                   company / budget. Collapsed by default look — same
+                   inputs, just compact. Lets the user fix contact
+                   details without leaving the overview tab. */}
+                <details className="mt-4 group rounded-xl border border-zinc-200/70 dark:border-zinc-800/50">
+                  <summary className="cursor-pointer list-none px-3 py-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+                    <Icons.Settings size={11} />
+                    Contact details
+                    <Icons.ChevronDown size={11} className="ml-auto transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="grid grid-cols-2 gap-2.5 px-3 pb-3 pt-1">
+                    <FieldMini label="Contact name">
+                      <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} className={inputCls + ' w-full'} />
+                    </FieldMini>
+                    <FieldMini label="Company">
+                      <input value={draft.company} onChange={e => setDraft(d => ({ ...d, company: e.target.value }))} className={inputCls + ' w-full'} placeholder="—" />
+                    </FieldMini>
+                    <FieldMini label="Email">
+                      <input value={draft.email} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} className={inputCls + ' w-full'} type="email" />
+                    </FieldMini>
+                    <FieldMini label="Phone">
+                      <input value={draft.phone} onChange={e => setDraft(d => ({ ...d, phone: e.target.value }))} className={inputCls + ' w-full'} placeholder="+1 555 000 000" />
+                    </FieldMini>
+                    <FieldMini label="Budget">
+                      <input value={draft.budget} onChange={e => setDraft(d => ({ ...d, budget: e.target.value }))} className={inputCls + ' w-full'} placeholder="$0" inputMode="numeric" />
+                    </FieldMini>
+                    <FieldMini label="LinkedIn">
+                      <input value={draft.linkedin} onChange={e => setDraft(d => ({ ...d, linkedin: e.target.value }))} className={inputCls + ' w-full'} placeholder="linkedin.com/in/…" />
+                    </FieldMini>
+                    <FieldMini label="Status">
+                      <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as LeadStatus })} className={selectCls + ' w-full'}>
+                        {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </FieldMini>
+                    <FieldMini label="Landing">
+                      <input value={draft.source} onChange={e => setDraft(d => ({ ...d, source: e.target.value }))} className={inputCls + ' w-full'} placeholder="agencies-lp" />
+                    </FieldMini>
+                  </div>
+                </details>
               </div>
+            )}
 
-              {/* Contact info */}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Name">
-                  <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputClass} />
-                </Field>
-                <Field label="Company">
-                  <input value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} className={inputClass} placeholder="—" />
-                </Field>
-                <Field label="Email">
-                  <input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className={inputClass} type="email" />
-                </Field>
-                <Field label="Phone">
-                  <input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className={inputClass} placeholder="+1 555 000 000" />
-                </Field>
-                <Field label="Budget">
-                  <input value={draft.budget} onChange={(e) => setDraft({ ...draft, budget: e.target.value })} className={inputClass} placeholder="$0" inputMode="numeric" />
-                </Field>
-                <Field label="Landing (source)">
-                  <input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} className={inputClass} placeholder="agencies-lp, home" />
-                </Field>
-                <Field label="Form (origin)">
+            {/* Outreach tab — just the email-typed history items, plus a
+               quick "Log an outreach" form at the top. */}
+            {activeTab === 'outreach' && (
+              <div className="px-5 py-4 space-y-3">
+                <div className="flex items-center gap-1.5">
                   <input
-                    value={draft.origin}
-                    onChange={(e) => setDraft({ ...draft, origin: e.target.value })}
-                    className={inputClass}
-                    placeholder="Contact Form, Hero, Footer"
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && comment.trim()) {
+                        onAddComment(lead.id, comment.trim(), 'email');
+                        setComment('');
+                      }
+                    }}
+                    placeholder="Log an outreach (subject, channel, gist)…"
+                    className={`${inputCls} flex-1`}
                   />
-                </Field>
-              </div>
-
-              {/* Quick actions — inline, subtle */}
-              {(lead.email || lead.phone) && (
-                <div className="flex gap-2">
-                  {lead.email && (
-                    <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200/80 dark:border-zinc-800/50 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                      <Icons.Mail size={11} /> Email
-                    </a>
-                  )}
-                  {lead.phone && (
-                    <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 border border-zinc-200/80 dark:border-zinc-800/50 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                      <Icons.Phone size={11} /> Call
-                    </a>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!comment.trim()) return;
+                      onAddComment(lead.id, comment.trim(), 'email');
+                      setComment('');
+                    }}
+                    disabled={!comment.trim()}
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-30 hover:opacity-80 transition-opacity"
+                  >
+                    Log
+                  </button>
                 </div>
-              )}
+                {outreachItems.length === 0 ? (
+                  <div className="text-[11.5px] text-zinc-400 py-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
+                    No outreach logged yet
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {outreachItems.map((item: any) => (
+                      <div key={item.id} className="flex gap-2.5 py-2 px-3 rounded-lg bg-zinc-50/60 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800/40">
+                        <Icons.Mail size={11} className="text-zinc-400 mt-1 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[10px] text-zinc-400 shrink-0 font-mono">
+                              {item.date ? new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Now'}
+                            </span>
+                          </div>
+                          <p className="text-[12px] text-zinc-700 dark:text-zinc-200 leading-relaxed mt-0.5">{item.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {/* Message */}
-              <Field label="Notes">
+            {/* Notes tab — combined free-text notes + full activity log */}
+            {activeTab === 'notes' && (
+              <div className="px-5 py-4 space-y-3">
                 <textarea
                   value={draft.message}
                   onChange={(e) => setDraft({ ...draft, message: e.target.value })}
-                  className={`${inputClass} min-h-[200px] max-h-[480px] resize-y leading-relaxed`}
-                  placeholder="Add notes about this lead..."
+                  className={`${inputCls} w-full min-h-[140px] max-h-[320px] resize-y leading-relaxed`}
+                  placeholder="Long-form notes about this lead…"
                 />
-              </Field>
 
-              {/* AI Insight — only if data exists */}
-              {showExtended && (lead.aiAnalysis?.summary || lead.aiAnalysis?.recommendation) && (
-                <div className="rounded-lg px-3 py-2.5 bg-zinc-50/80 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800/40">
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1.5 flex items-center gap-1">
-                    <Icons.Zap size={9} /> AI Insight
+                {/* Activity feed */}
+                <div className="pt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-400">Activity</h4>
+                    {historyItems.length > 8 && (
+                      <button onClick={() => setShowAllHistory(p => !p)} className="text-[10px] text-zinc-400 hover:text-zinc-600 transition-colors">
+                        {showAllHistory ? 'Recent' : `All (${historyItems.length})`}
+                      </button>
+                    )}
                   </div>
-                  {lead.aiAnalysis?.summary && <p className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{lead.aiAnalysis.summary}</p>}
-                  {lead.aiAnalysis?.recommendation && <p className="text-[12px] text-zinc-400 mt-1 leading-relaxed">{lead.aiAnalysis.recommendation}</p>}
-                </div>
-              )}
 
-              {/* Attribution — UTM + landing page + click IDs (from leads.utm JSONB) */}
-              {showExtended && (lead.utm?.source || lead.utm?.campaign || lead.utm?.medium || (lead.utm as any)?.page_url || (lead.utm as any)?.landing || (lead.utm as any)?.first_landing_page || (lead.utm as any)?.gclid || (lead.utm as any)?.fbclid) && (
-                <div className="space-y-1 text-[11px] rounded-lg px-3 py-2 bg-zinc-50/60 dark:bg-zinc-900/20 border border-zinc-100 dark:border-zinc-800/30">
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 mb-1">Attribution</div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {lead.utm?.source && <div><span className="text-zinc-400">utm_source:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.source}</span></div>}
-                    {lead.utm?.medium && <div><span className="text-zinc-400">utm_medium:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.medium}</span></div>}
-                    {lead.utm?.campaign && <div><span className="text-zinc-400">utm_campaign:</span> <span className="text-zinc-700 dark:text-zinc-200 font-medium">{lead.utm.campaign}</span></div>}
-                    {(lead.utm as any)?.gclid && <div><span className="text-zinc-400">gclid:</span> <span className="text-zinc-700 dark:text-zinc-200 font-mono">{String((lead.utm as any).gclid).slice(0, 16)}…</span></div>}
-                    {(lead.utm as any)?.fbclid && <div><span className="text-zinc-400">fbclid:</span> <span className="text-zinc-700 dark:text-zinc-200 font-mono">{String((lead.utm as any).fbclid).slice(0, 16)}…</span></div>}
-                  </div>
-                  {((lead.utm as any)?.page_url || (lead.utm as any)?.landing || (lead.utm as any)?.first_landing_page || (lead.utm as any)?.last_landing_page) && (() => {
-                    const pageUrl = (lead.utm as any).page_url || (lead.utm as any).landing || (lead.utm as any).first_landing_page || (lead.utm as any).last_landing_page;
-                    const isAbsolute = /^https?:\/\//i.test(pageUrl);
-                    return (
-                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800/30 mt-1">
-                        <div className="text-zinc-400 text-[10px] mb-0.5">Page submitted from (what the user saw)</div>
-                        {isAbsolute ? (
-                          <a
-                            href={pageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-zinc-700 dark:text-zinc-200 font-mono text-[11px] break-all hover:text-zinc-900 dark:hover:text-zinc-50 underline decoration-zinc-300 dark:decoration-zinc-600 underline-offset-2"
-                          >
-                            <Icons.External size={10} className="shrink-0" />
-                            {pageUrl}
-                          </a>
-                        ) : (
-                          <div className="text-zinc-700 dark:text-zinc-200 font-mono text-[11px] break-all">{pageUrl}</div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {(lead.utm as any)?.referrer && (
-                    <div className="pt-1">
-                      <span className="text-zinc-400 text-[10px]">Referrer:</span> <span className="text-zinc-600 dark:text-zinc-300 text-[11px] break-all">{(lead.utm as any).referrer}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Divider */}
-              <div className="border-t border-zinc-100 dark:border-zinc-800/40" />
-
-              {/* Activity */}
-              <div>
-                <div className="flex items-center justify-between mb-2.5">
-                  <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Activity</h4>
-                  {showExtended && historyItems.length > 5 && (
-                    <button onClick={() => setShowAllHistory(p => !p)} className="text-[10px] text-zinc-400 hover:text-zinc-600 transition-colors">
-                      {showAllHistory ? 'Recent' : `All (${historyItems.length})`}
-                    </button>
-                  )}
-                </div>
-
-                {/* Add note — inline, at the top */}
-                <div className="flex gap-1.5 mb-3">
-                  <select
-                    value={activityType}
-                    onChange={(e) => setActivityType(e.target.value as Lead['history'][number]['type'])}
-                    className="px-1.5 py-1 text-[10px] bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-150 dark:border-zinc-800/50 rounded-md outline-none text-zinc-500 shrink-0"
-                  >
-                    <option value="note">Note</option>
-                    <option value="email">Email</option>
-                    <option value="status_change">Status</option>
-                    <option value="system">System</option>
-                  </select>
-                  <input
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && comment.trim()) {
-                        onAddComment(lead.id, comment.trim(), activityType);
+                  <div className="flex gap-1.5 mb-2.5">
+                    <select
+                      value={activityType}
+                      onChange={(e) => setActivityType(e.target.value as Lead['history'][number]['type'])}
+                      className={selectCls + ' w-[80px]'}
+                    >
+                      <option value="note">Note</option>
+                      <option value="email">Email</option>
+                      <option value="status_change">Status</option>
+                      <option value="system">System</option>
+                    </select>
+                    <input
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && comment.trim()) {
+                          onAddComment(lead.id, comment.trim(), activityType);
+                          setComment('');
+                          setActivityType('note');
+                        }
+                      }}
+                      className={inputCls + ' flex-1'}
+                      placeholder="Add a note…"
+                    />
+                    <button
+                      onClick={() => {
+                        const trimmed = comment.trim();
+                        if (!trimmed) return;
+                        onAddComment(lead.id, trimmed, activityType);
                         setComment('');
                         setActivityType('note');
-                      }
-                    }}
-                    className="flex-1 px-2.5 py-1 text-[12px] bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-150 dark:border-zinc-800/50 rounded-md outline-none focus:border-zinc-300 dark:focus:border-zinc-600 transition-colors placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
-                    placeholder="Add a note..."
-                  />
-                  <button
-                    onClick={() => {
-                      const trimmed = comment.trim();
-                      if (!trimmed) return;
-                      onAddComment(lead.id, trimmed, activityType);
-                      setComment('');
-                      setActivityType('note');
-                    }}
-                    disabled={!comment.trim()}
-                    className="px-2.5 py-1 text-[10px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-30 hover:opacity-80 transition-opacity shrink-0"
-                  >
-                    Add
-                  </button>
-                </div>
+                      }}
+                      disabled={!comment.trim()}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-30 hover:opacity-80 transition-opacity shrink-0"
+                    >
+                      Add
+                    </button>
+                  </div>
 
-                {/* History list */}
-                <div className="space-y-1">
-                  {!showExtended && <div className="text-[11px] text-zinc-300 dark:text-zinc-600 py-2">Loading...</div>}
-                  {showExtended && historyItems.length === 0 && (
-                    <p className="text-[11px] text-zinc-400 py-3 text-center">No activity yet</p>
-                  )}
-                  {showExtended && visibleHistory.map((item: any) => (
-                    <div key={item.id} className="flex gap-2 py-1.5 group">
-                      <div className="mt-1.5 w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[10px] text-zinc-400 shrink-0">{item.date ? new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Now'}</span>
-                          <span className="text-[9px] uppercase tracking-wider text-zinc-300 dark:text-zinc-600 font-medium">{item.type || 'note'}</span>
+                  <div className="space-y-1">
+                    {historyItems.length === 0 && (
+                      <p className="text-[11px] text-zinc-400 py-3 text-center">No activity yet</p>
+                    )}
+                    {visibleHistory.map((item: any) => (
+                      <div key={item.id} className="flex gap-2 py-1.5">
+                        <div className="mt-1.5 w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[10px] text-zinc-400 shrink-0 font-mono">
+                              {item.date ? new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Now'}
+                            </span>
+                            <span className="text-[9px] uppercase tracking-wider text-zinc-300 dark:text-zinc-600 font-medium">{item.type || 'note'}</span>
+                          </div>
+                          <p className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{item.content}</p>
                         </div>
-                        <p className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{item.content}</p>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
-
-            </div>
+            )}
           </div>
 
-          {/* Footer — always visible */}
-          <div className="border-t border-zinc-100 dark:border-zinc-800/40 px-5 py-2.5 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-950">
-            <span className="text-[10px] text-zinc-300 dark:text-zinc-600">
-              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : ''}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {draft.status === 'new' && (
-                <button
-                  onClick={() => {
-                    setDraft(d => ({ ...d, status: 'contacted' }));
-                    onStatusChange(lead.id, 'contacted');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  Mark Contacted
-                </button>
-              )}
+          {/* ── Footer — CTAs ──
+             Convert to Project = dark primary button (workflow advance).
+             Generate Invoice   = neutral border button (creates a draft).
+             Save changes is a small secondary button on the left so the
+             primary actions get the spotlight. */}
+          <div className="border-t border-zinc-100 dark:border-zinc-800/50 px-5 py-3 shrink-0 bg-white dark:bg-zinc-950">
+            <div className="flex items-center gap-2">
               <button
-                onClick={async () => {
-                  if (!lead) return;
-                  const supportsPhone = Object.prototype.hasOwnProperty.call(lead, 'phone');
-                  const supportsBudget = Object.prototype.hasOwnProperty.call(lead, 'budget');
-                  await onSave(lead.id, {
-                    name: draft.name,
-                    email: draft.email,
-                    company: draft.company,
-                    ...(supportsPhone ? { phone: draft.phone } : {}),
-                    ...(supportsBudget ? { budget: draft.budget ? Number(draft.budget) : undefined } : {}),
-                    message: draft.message,
-                    status: draft.status,
-                    temperature: draft.temperature,
-                    category: draft.category,
-                    source: draft.source,
-                    origin: draft.origin,
-                  } as Partial<Lead>);
-                }}
+                onClick={handleSave}
                 disabled={!isDirty || isSaving}
-                className="px-3 py-1 text-[11px] font-semibold rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-30 hover:opacity-80 transition-opacity"
+                className="px-2.5 py-1.5 text-[11px] font-semibold rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors shrink-0"
+                title={isDirty ? 'Save unsaved changes' : 'Nothing to save'}
               >
-                {isSaving ? 'Saving...' : 'Save'}
+                {isSaving ? 'Saving…' : isDirty ? 'Save changes' : 'Saved'}
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={() => onAddComment(lead.id, 'Generate invoice triggered', 'system')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <Icons.File size={12} />
+                Generate Invoice
+              </button>
+              <button
+                onClick={() => onStatusChange(lead.id, 'closed')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
+              >
+                <Icons.Briefcase size={12} />
+                Convert to Project
               </button>
             </div>
+            {ownerMember && (
+              <div className="mt-2 text-[10px] text-zinc-400 font-mono tracking-wider">
+                Owner: {ownerMember.name || ownerMember.email}
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -444,3 +795,78 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
     document.body
   );
 };
+
+// ── KPI tile ─────────────────────────────────────────────────────────
+const KpiTile: React.FC<{
+  label: string;
+  suffix: string;
+  value: string;
+  valSuffix: '' | 'K' | 'M';
+  borderL?: boolean;
+  dim?: boolean;
+  editable?: { input: string; onChange: (v: string) => void };
+}> = ({ label, suffix, value, valSuffix, borderL, dim, editable }) => {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div
+      className={`px-4 py-3 ${borderL ? 'border-l border-zinc-100 dark:border-zinc-800/50' : ''} ${dim ? 'bg-zinc-50/40 dark:bg-zinc-900/20' : ''}`}
+    >
+      <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500 truncate">{label}</div>
+      {editable && editing ? (
+        <div className="mt-1 flex items-baseline gap-1">
+          <span className="text-zinc-400 text-[13px]">$</span>
+          <input
+            autoFocus
+            type="number"
+            value={editable.input}
+            onChange={e => editable.onChange(e.target.value)}
+            onBlur={() => setEditing(false)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }}
+            placeholder="0"
+            className="w-full bg-transparent border-b border-zinc-300 dark:border-zinc-600 outline-none text-[18px] font-light text-zinc-900 dark:text-zinc-100 tracking-[-0.03em] tabular-nums"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={!editable}
+          onClick={() => editable && setEditing(true)}
+          className={`mt-1 flex items-baseline gap-1 leading-none text-left ${editable ? 'hover:opacity-80 cursor-text' : 'cursor-default'}`}
+          title={editable ? 'Click to edit' : undefined}
+        >
+          <span className="text-zinc-400 text-[13px]">$</span>
+          <span className="text-[20px] font-light text-zinc-900 dark:text-zinc-100 tracking-[-0.03em] tabular-nums">
+            {value}
+          </span>
+          {valSuffix && (
+            <span className="text-[13px] font-medium text-zinc-700 dark:text-zinc-300">{valSuffix}</span>
+          )}
+          {suffix && (
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 ml-1">{suffix}</span>
+          )}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ── Detail row (label on left, editable value on right) ──────────────
+const DetailRow: React.FC<{ icon: React.ReactNode; label: string; children: React.ReactNode }> = ({ icon, label, children }) => (
+  <div className="flex items-center gap-3 py-1.5 group min-h-[32px]">
+    <div className="inline-flex items-center gap-1.5 w-[110px] shrink-0 text-zinc-400">
+      {icon}
+      <span className="text-[11.5px] font-medium text-zinc-500 dark:text-zinc-400">{label}</span>
+    </div>
+    <div className="flex-1 min-w-0">
+      {children}
+    </div>
+  </div>
+);
+
+// ── Small field for the collapsed details panel ──────────────────────
+const FieldMini: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div>
+    <label className="text-[9.5px] font-mono uppercase tracking-[0.18em] text-zinc-400 mb-1 block">{label}</label>
+    {children}
+  </div>
+);
