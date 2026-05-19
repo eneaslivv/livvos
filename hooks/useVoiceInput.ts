@@ -33,14 +33,25 @@ interface VoiceInputOptions {
   /** Fired once when recognition ends (user stopped or silence
    *  timeout). Receives the final concatenated transcript. */
   onFinal?: (text: string) => void;
+  /** When set, fired right after onFinal in hold-to-talk mode so the
+   *  caller can auto-send the message (vs. waiting for the user to
+   *  hit Send). Distinct from onFinal because toggle-to-talk callers
+   *  do NOT want auto-send — only press-and-hold UX does. */
+  onAutoSend?: (text: string) => void;
 }
 
 interface VoiceInputState {
   isListening: boolean;
   isSupported: boolean;
   error: string | null;
+  /** Toggle mode: tap to start, tap again to stop. No auto-send. */
   start: () => void;
   stop: () => void;
+  /** Hold mode: press-down starts listening; release stops AND
+   *  fires onAutoSend(transcript) so the message goes out without
+   *  a separate Send click. Mirrors WhatsApp's voice button. */
+  startHold: () => void;
+  stopHold: () => void;
 }
 
 export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputState {
@@ -55,6 +66,11 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputState {
   // Accumulate the running transcript outside of React state so we can
   // hand the final string to onFinal without an extra render.
   const transcriptRef = useRef('');
+  // When the current listening session was started by startHold(),
+  // the eventual onend should also fire onAutoSend. We track this via
+  // a ref because the SpeechRecognition.onend callback only sees
+  // closure-stale state otherwise.
+  const holdModeRef = useRef(false);
 
   const isSupported = typeof window !== 'undefined' && !!(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -114,9 +130,16 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputState {
     recog.onend = () => {
       setIsListening(false);
       recogRef.current = null;
-      if (transcriptRef.current) {
-        optsRef.current.onFinal?.(transcriptRef.current);
+      const text = transcriptRef.current;
+      if (text) {
+        optsRef.current.onFinal?.(text);
+        // Hold-mode sessions also fire onAutoSend so the message ships
+        // without a separate Send click. Toggle-mode never auto-sends.
+        if (holdModeRef.current) {
+          optsRef.current.onAutoSend?.(text);
+        }
       }
+      holdModeRef.current = false;
     };
 
     try {
@@ -133,5 +156,22 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputState {
   // mic if the component disappears mid-listen.
   useEffect(() => () => stop(), [stop]);
 
-  return { isListening, isSupported, error, start, stop };
+  // Hold-to-talk variants. Implementation is identical to start/stop
+  // but flips holdModeRef so onend dispatches onAutoSend. The UI
+  // button binds startHold to pointerdown and stopHold to pointerup
+  // (+ pointerleave/cancel) so accidental finger-slide-off still
+  // ends the recording cleanly.
+  const startHold = useCallback(() => {
+    holdModeRef.current = true;
+    start();
+  }, [start]);
+
+  const stopHold = useCallback(() => {
+    // Don't reset holdModeRef here — onend will fire and we need the
+    // flag still set when it does, so onAutoSend dispatches. Cleared
+    // inside onend itself.
+    stop();
+  }, [stop]);
+
+  return { isListening, isSupported, error, start, stop, startHold, stopHold };
 }

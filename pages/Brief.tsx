@@ -121,6 +121,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const voice = useVoiceInput({
     lang: voiceLang,
     onPartial: (text) => setInput(text),
+    // Hold-mode (WhatsApp-style press-and-talk) fires onAutoSend so
+    // the message ships immediately on release — no separate Send
+    // click. Toggle-mode (tap to start/stop) is unaffected.
+    onAutoSend: (text) => {
+      const trimmed = text.trim();
+      if (trimmed) handleSend(trimmed);
+    },
   });
 
   // ── Task groupings ───────────────────────────────────────────────
@@ -704,36 +711,12 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 title that reflects the current language so the user
                 knows what locale is being dictated. */}
             {voice.isSupported && (
-              <motion.button
-                onClick={() => voice.isListening ? voice.stop() : voice.start()}
+              <MicButton
+                voice={voice}
+                voiceLang={voiceLang}
                 disabled={sending}
-                title={voice.isListening ? 'Stop listening' : `Dictate (${voiceLang})`}
-                aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
-                whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-                animate={voice.isListening
-                  ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
-                  : { scale: 1 }
-                }
-                className={`p-2 rounded-xl border transition-colors relative ${
-                  voice.isListening
-                    ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
-                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
-                }`}
-              >
-                <Icons.Mic size={14} />
-                {/* Soft pulsing halo when listening — radiates out then
-                    fades. Subtle vs the obvious red dot, but reads
-                    instantly as "I'm hearing you". */}
-                {voice.isListening && !reduceMotion && (
-                  <motion.span
-                    aria-hidden
-                    className="absolute inset-0 rounded-xl bg-rose-500/30"
-                    initial={{ scale: 1, opacity: 0.6 }}
-                    animate={{ scale: 1.6, opacity: 0 }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
-                  />
-                )}
-              </motion.button>
+                reduceMotion={!!reduceMotion}
+              />
             )}
             <motion.button
               onClick={() => handleSend()}
@@ -1193,6 +1176,102 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         </div>
       </motion.div>
     </motion.div>
+  );
+};
+
+// ── MicButton ─────────────────────────────────────────────────────
+// Dual-mode mic. Quick tap = toggle dictation (transcript stays in
+// the textarea for review before sending). Press-and-hold (≥250ms)
+// flips into WhatsApp-style hold-to-talk: keep holding to speak,
+// release to auto-send. Reuses useVoiceInput's startHold / stopHold
+// so the auto-send wiring lives in the hook, not here.
+const MicButton: React.FC<{
+  voice: ReturnType<typeof useVoiceInput>;
+  voiceLang: string;
+  disabled: boolean;
+  reduceMotion: boolean;
+}> = ({ voice, voiceLang, disabled, reduceMotion }) => {
+  // Track whether the current press should become hold-mode (true
+  // after 250ms still held). If the user releases before that, we
+  // treat it as a tap and toggle instead.
+  const holdTimerRef = useRef<number | null>(null);
+  const becameHoldRef = useRef(false);
+
+  const clearTimer = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    if (voice.isListening) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    becameHoldRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      becameHoldRef.current = true;
+      voice.startHold();
+    }, 250);
+  };
+
+  const onPointerUp = () => {
+    clearTimer();
+    if (becameHoldRef.current) {
+      // Was hold mode → end the recording + auto-send (handled by
+      // onAutoSend in the hook).
+      voice.stopHold();
+      becameHoldRef.current = false;
+    } else if (voice.isListening) {
+      voice.stop();
+    } else {
+      voice.start();
+    }
+  };
+
+  const onPointerLeave = () => {
+    if (holdTimerRef.current !== null || becameHoldRef.current) {
+      clearTimer();
+      if (becameHoldRef.current) {
+        voice.stopHold();
+        becameHoldRef.current = false;
+      }
+    }
+  };
+
+  return (
+    <motion.button
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+      onPointerCancel={onPointerLeave}
+      disabled={disabled}
+      title={voice.isListening
+        ? 'Listening — release to send (hold) or tap to stop'
+        : `Tap to dictate · hold to speak + auto-send (${voiceLang})`}
+      aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
+      whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+      animate={voice.isListening
+        ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
+        : { scale: 1 }
+      }
+      className={`p-2 rounded-xl border transition-colors relative select-none ${
+        voice.isListening
+          ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
+          : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
+      }`}
+    >
+      <Icons.Mic size={14} />
+      {voice.isListening && !reduceMotion && (
+        <motion.span
+          aria-hidden
+          className="absolute inset-0 rounded-xl bg-rose-500/30"
+          initial={{ scale: 1, opacity: 0.6 }}
+          animate={{ scale: 1.6, opacity: 0 }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
+        />
+      )}
+    </motion.button>
   );
 };
 

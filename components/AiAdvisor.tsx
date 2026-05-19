@@ -384,6 +384,97 @@ const ActionCard: React.FC<{
   );
 };
 
+// ── AdvisorMicButton ──────────────────────────────────────────────
+// Dual-mode mic (tap=toggle, hold≥250ms=press-and-talk-with-auto-send).
+// Mirrors the MicButton pattern in pages/Brief.tsx — kept inline here
+// rather than shared because the AiAdvisor design uses p-2.5 padding
+// vs Brief's p-2 and the file is heavily isolated already.
+const AdvisorMicButton: React.FC<{
+  voice: ReturnType<typeof useVoiceInput>;
+  voiceLang: string;
+  busy: boolean;
+  reduceMotion: boolean;
+}> = ({ voice, voiceLang, busy, reduceMotion }) => {
+  const holdTimerRef = useRef<number | null>(null);
+  const becameHoldRef = useRef(false);
+
+  const clearTimer = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (busy) return;
+    if (voice.isListening) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    becameHoldRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      becameHoldRef.current = true;
+      voice.startHold();
+    }, 250);
+  };
+
+  const onPointerUp = () => {
+    clearTimer();
+    if (becameHoldRef.current) {
+      voice.stopHold();
+      becameHoldRef.current = false;
+    } else if (voice.isListening) {
+      voice.stop();
+    } else {
+      voice.start();
+    }
+  };
+
+  const onPointerLeave = () => {
+    if (holdTimerRef.current !== null || becameHoldRef.current) {
+      clearTimer();
+      if (becameHoldRef.current) {
+        voice.stopHold();
+        becameHoldRef.current = false;
+      }
+    }
+  };
+
+  return (
+    <motion.button
+      type="button"
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+      onPointerCancel={onPointerLeave}
+      disabled={busy}
+      title={voice.isListening
+        ? 'Listening — release to send (hold) or tap to stop'
+        : `Tap to dictate · hold to speak + auto-send (${voiceLang})`}
+      aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
+      whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+      animate={voice.isListening
+        ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
+        : { scale: 1 }
+      }
+      className={`p-2.5 rounded-xl border transition-colors relative select-none ${
+        voice.isListening
+          ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
+          : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
+      }`}
+    >
+      <Icons.Mic size={13} />
+      {voice.isListening && !reduceMotion && (
+        <motion.span
+          aria-hidden
+          className="absolute inset-0 rounded-xl bg-rose-500/30"
+          initial={{ scale: 1, opacity: 0.6 }}
+          animate={{ scale: 1.6, opacity: 0 }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
+        />
+      )}
+    </motion.button>
+  );
+};
+
 export const AiAdvisor: React.FC = () => {
   const { user } = useAuth();
   const { user: profile } = useRBAC();
@@ -432,7 +523,18 @@ export const AiAdvisor: React.FC = () => {
   const voice = useVoiceInput({
     lang: voiceLang,
     onPartial: (text) => setInput(text),
+    // Hold-mode (press-and-hold the mic) → auto-send on release.
+    // Same UX as Brief; sendQuestion is defined below so we
+    // reference it lazily via a ref to avoid a TDZ.
+    onAutoSend: (text) => {
+      const trimmed = text.trim();
+      if (trimmed) sendQuestionRef.current?.(trimmed);
+    },
   });
+  // ref bridge for the hold-mode auto-send — sendQuestion is defined
+  // far below in this large component and the callback closure here
+  // would otherwise capture an undefined reference.
+  const sendQuestionRef = useRef<((q: string) => void) | null>(null);
 
   // ── Daily persistence: load on mount, save on every change ────────
   // Keyed per user + per day. Older days quietly stay in localStorage —
@@ -878,6 +980,11 @@ export const AiAdvisor: React.FC = () => {
       setSending(false);
     }
   }, [sending, user, currentTenant?.id, buildContextSummary, chatHistoryForApi]);
+
+  // Bridge sendQuestion → the voice hook's onAutoSend (defined above
+  // sendQuestion in component order). Updated on every render so the
+  // hook always sees the freshest closure.
+  sendQuestionRef.current = sendQuestion;
 
   // ── Action approval / rejection ────────────────────────────────────
   // Updates the message in-place with the new status. The actual mutation
@@ -1534,34 +1641,7 @@ export const AiAdvisor: React.FC = () => {
                       doesn't support SpeechRecognition, red+pulsing
                       while listening, halo radiates out. */}
                   {voice.isSupported && (
-                    <motion.button
-                      type="button"
-                      onClick={() => voice.isListening ? voice.stop() : voice.start()}
-                      disabled={busy}
-                      title={voice.isListening ? 'Stop listening' : `Dictate (${voiceLang})`}
-                      aria-label={voice.isListening ? 'Stop dictation' : 'Start dictation'}
-                      whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-                      animate={voice.isListening
-                        ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } }
-                        : { scale: 1 }
-                      }
-                      className={`p-2.5 rounded-xl border transition-colors relative ${
-                        voice.isListening
-                          ? 'bg-rose-500 border-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.18)]'
-                          : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40'
-                      }`}
-                    >
-                      <Icons.Mic size={13} />
-                      {voice.isListening && !reduceMotion && (
-                        <motion.span
-                          aria-hidden
-                          className="absolute inset-0 rounded-xl bg-rose-500/30"
-                          initial={{ scale: 1, opacity: 0.6 }}
-                          animate={{ scale: 1.6, opacity: 0 }}
-                          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }}
-                        />
-                      )}
-                    </motion.button>
+                    <AdvisorMicButton voice={voice} voiceLang={voiceLang} busy={busy} reduceMotion={!!reduceMotion} />
                   )}
                   <motion.button
                     type="submit"
