@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Icons } from './ui/Icons';
+import './AiAdvisor.css';
 // Shared motion presets — same iOS-feel springs as Brief, so the
 // floating advisor and the Brief page belong to one design system.
 import { SPRING_TAP, SPRING_ENTER, TAP_SCALE } from '../lib/ui/motion';
@@ -71,16 +72,19 @@ const getIconComponent = (iconName: string) => {
   return map[iconName] || Icons.Sparkles;
 };
 
-const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Icons; kind: 'chat' | 'insights' }[] = [
-  { label: 'Strategic overview', prompt: '__INSIGHTS__', icon: 'Sparkles', kind: 'insights' },
-  { label: 'Plan my week', prompt: 'Plan my week: pick 4-6 priority tasks spread Mon-Fri across my active projects. Propose the actions so I can approve them.', icon: 'Calendar', kind: 'chat' },
-  { label: 'Where to focus', prompt: 'What projects and tasks should I focus on this week, considering deadlines and priorities?', icon: 'Target', kind: 'chat' },
-  { label: 'Team workload', prompt: 'Who on the team is most loaded right now and who has bandwidth? Cite open task counts and overdue items per person.', icon: 'Users', kind: 'chat' },
-  { label: 'Follow up on a teammate', prompt: 'Pick one teammate who looks stuck (overdue tasks or no movement this week) and propose a short follow-up task assigned to them so I can approve it.', icon: 'ListChecks', kind: 'chat' },
-  { label: 'Financial health', prompt: 'Analyze my current financial health: paid vs pending income, expenses, and balance.', icon: 'TrendingUp', kind: 'chat' },
-  { label: 'Project risks', prompt: 'What projects are at risk or behind, and what can I do? If something should be delegated, suggest it.', icon: 'Flag', kind: 'chat' },
-  { label: 'Break project into tasks', prompt: 'Pick my most urgent project and break it into 5-8 concrete tasks I can approve to create at once.', icon: 'List', kind: 'chat' },
-  { label: 'Log expense', prompt: 'Log an expense of $X concept Y to category Z. If you are missing info, ask me before proposing the action.', icon: 'DollarSign', kind: 'chat' },
+// Per-prompt tone color drives the suggestion card's left accent bar +
+// icon-badge tint (mapped to Livv design system tokens: gold/sage/sky/
+// pink/wine/violet). Strictly cosmetic — `color` is not used by logic.
+const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Icons; kind: 'chat' | 'insights'; color: string }[] = [
+  { label: 'Strategic overview', prompt: '__INSIGHTS__', icon: 'Sparkles', kind: 'insights', color: '#E8BC59' },
+  { label: 'Plan my week', prompt: 'Plan my week: pick 4-6 priority tasks spread Mon-Fri across my active projects. Propose the actions so I can approve them.', icon: 'Calendar', kind: 'chat', color: '#5c1d18' },
+  { label: 'Where to focus', prompt: 'What projects and tasks should I focus on this week, considering deadlines and priorities?', icon: 'Target', kind: 'chat', color: '#769268' },
+  { label: 'Team workload', prompt: 'Who on the team is most loaded right now and who has bandwidth? Cite open task counts and overdue items per person.', icon: 'Users', kind: 'chat', color: '#E8BC59' },
+  { label: 'Follow up on a teammate', prompt: 'Pick one teammate who looks stuck (overdue tasks or no movement this week) and propose a short follow-up task assigned to them so I can approve it.', icon: 'ListChecks', kind: 'chat', color: '#F1ADD8' },
+  { label: 'Financial health', prompt: 'Analyze my current financial health: paid vs pending income, expenses, and balance.', icon: 'TrendingUp', kind: 'chat', color: '#769268' },
+  { label: 'Project risks', prompt: 'What projects are at risk or behind, and what can I do? If something should be delegated, suggest it.', icon: 'Flag', kind: 'chat', color: '#6DBEDC' },
+  { label: 'Break project into tasks', prompt: 'Pick my most urgent project and break it into 5-8 concrete tasks I can approve to create at once.', icon: 'List', kind: 'chat', color: '#6DBEDC' },
+  { label: 'Log expense', prompt: 'Log an expense of $X concept Y to category Z. If you are missing info, ask me before proposing the action.', icon: 'DollarSign', kind: 'chat', color: '#769268' },
 ];
 
 // Each chat message is either a user line, an assistant text reply, an
@@ -1328,7 +1332,10 @@ export const AiAdvisor: React.FC = () => {
           <div className="fixed inset-0 z-[60] overflow-hidden">
             {/* Backdrop — quick crossfade. Slightly faster than the
                 panel slide so the dimming reads as "instant" while the
-                panel takes the spotlight. */}
+                panel takes the spotlight. Behind the dim layer, three
+                slow-drifting blurred blobs (gold / sage / pink) tint
+                the background with the Livv brand palette — adds a
+                cinematic warm-glow halo around the panel. */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1336,83 +1343,107 @@ export const AiAdvisor: React.FC = () => {
               transition={{ duration: 0.22 }}
               className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-[2px]"
               onClick={() => setIsOpen(false)}
-            />
+            >
+              <div className="aiad-backdrop">
+                <div className="aiad-blob a" />
+                <div className="aiad-blob b" />
+                <div className="aiad-blob c" />
+              </div>
+            </motion.div>
 
             {/* Panel — slides in from the right with the shared spring.
-                Was a cubic-bezier tween; spring physics give it the
-                iOS-native arrival (decelerates naturally instead of
-                landing on a curve). */}
+                Frosted glass chrome (backdrop-blur 50px + saturate 150%)
+                with a dramatic soft-shadow halo, matching the design
+                bundle. Width bumped to max-w-lg so the suggestion grid
+                + message bubbles breathe a bit more. */}
             <motion.div
               initial={reduceMotion ? false : { x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%', transition: { type: 'spring', stiffness: 360, damping: 32 } }}
               transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-              className="absolute inset-y-0 right-0 w-screen max-w-md max-h-screen bg-white dark:bg-zinc-900 border-l border-zinc-200/60 dark:border-zinc-800 shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_-10px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden"
+              className="aiad-panel absolute inset-y-0 right-0 w-screen max-w-lg max-h-screen flex flex-col overflow-hidden"
             >
-              {/* ── Header ── */}
-              <div className="px-4 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-md flex items-center justify-center relative overflow-hidden"
-                      style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}
-                    >
-                      <Icons.Sparkles size={14} className="text-white relative z-10" />
+              {/* ── Header ──
+                 Refined per the design bundle: 38px wine-gradient
+                 avatar with a slow conic halo + green online dot,
+                 title with an ONLINE pulsing pill, subtitle that
+                 names the context the advisor knows about, and three
+                 icon buttons (new conversation / settings / close)
+                 with the cleaner ai-iconbtn style. */}
+              <div className="px-5 pt-5 pb-4 border-b border-zinc-200/40 dark:border-zinc-800/60 shrink-0 relative">
+                <div className="flex items-center justify-between mb-3 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="aiad-avatar w-[38px] h-[38px] rounded-xl shrink-0">
+                      <Icons.Sparkles size={16} />
+                      <span className="aiad-online-dot" aria-hidden />
                     </div>
-                    <div>
-                      <h2 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">AI Advisor</h2>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-                        {busy ? 'Thinking...' : 'Chat about your business'}
+                    <div className="min-w-0">
+                      <h2 className="text-[15.5px] font-medium text-zinc-900 dark:text-zinc-100 leading-tight tracking-[-0.012em] flex items-center gap-2 flex-wrap">
+                        AI Advisor
+                        <span className="aiad-online-pill">
+                          <span />
+                          {busy ? 'thinking' : 'online'}
+                        </span>
+                      </h2>
+                      <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-0.5 tracking-[-0.003em] truncate">
+                        Knows your projects, finances &amp; team
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-0.5 shrink-0">
                     {messages.length > 0 && (
                       <button
                         onClick={() => setMessages([])}
-                        className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                        className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-zinc-500 hover:bg-zinc-900/[0.04] dark:hover:bg-white/[0.06] hover:text-zinc-800 dark:hover:text-zinc-200 active:scale-[0.94]"
                         title="New conversation"
                       >
-                        <Icons.RefreshCw size={13} />
+                        <Icons.Plus size={14} />
                       </button>
                     )}
                     <button
                       onClick={() => setIsOpen(false)}
-                      className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                      className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 active:scale-[0.94]"
+                      title="Close"
                     >
-                      <Icons.X size={13} />
+                      <Icons.X size={14} />
                     </button>
                   </div>
                 </div>
 
-                {/* Quick stats bar */}
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                {/* Quick stats bar — kept; restyled as warmer mono pills
+                   that read like an at-a-glance context strip. */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/60 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-700/40">
                     <Icons.Briefcase size={10} className="text-zinc-400" />
-                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">{activeCount} activos</span>
+                    <span className="text-[10.5px] font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{activeCount} active</span>
                   </div>
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/60 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-700/40">
                     <Icons.TrendingUp size={10} className="text-zinc-400" />
-                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">${totalIncome.toLocaleString()}</span>
+                    <span className="text-[10.5px] font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">${totalIncome.toLocaleString()}</span>
                   </div>
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100/70 dark:bg-zinc-800/50">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/60 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-700/40">
                     <Icons.Users size={10} className="text-zinc-400" />
-                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">{members.length}</span>
+                    <span className="text-[10.5px] font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{members.length}</span>
                   </div>
                 </div>
               </div>
 
               {/* ── Chat scroll area ── */}
               <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-3">
-                {/* Empty state: greeting + suggested prompts */}
+                {/* Empty state: greeting + suggested prompts.
+                   Restyled per the design bundle — bot avatar uses the
+                   wine-gradient + conic halo, greeting bubble has a
+                   subtle frosted bg, and each suggestion card carries
+                   its own tone color via --aiad-c (drives a left
+                   accent bar + the icon-badge tint). */}
                 {isEmpty && (
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}>
-                        <Icons.Sparkles size={12} className="text-white" />
+                  <div className="space-y-5 aiad-empty-in">
+                    <div className="flex items-start gap-3">
+                      <div className="aiad-avatar w-8 h-8 rounded-[10px] shrink-0">
+                        <Icons.Sparkles size={13} />
                       </div>
-                      <div className="flex-1 px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-zinc-100 dark:bg-zinc-800 text-[12px] leading-[1.55] text-zinc-700 dark:text-zinc-200">
-                        Hi, I'm your AI advisor. I have context on your projects, finances, and team. What would you like to talk about?
+                      <div className="flex-1 px-3.5 py-2.5 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 text-[13px] leading-[1.55] text-zinc-800 dark:text-zinc-100">
+                        Hi — I have context on your <strong className="font-medium">projects</strong>, <strong className="font-medium">finances</strong> and <strong className="font-medium">team</strong>. Ask anything below, or pick a starter.
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 pt-1">
@@ -1426,14 +1457,22 @@ export const AiAdvisor: React.FC = () => {
                             initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.97 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             transition={{ ...SPRING_ENTER, delay: 0.08 + pi * 0.035 }}
-                            whileTap={{ scale: 0.96, transition: SPRING_TAP }}
+                            whileTap={{ scale: 0.98, transition: SPRING_TAP }}
                             whileHover={{ y: -1, transition: SPRING_TAP }}
-                            className="flex items-start gap-2 p-2.5 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left disabled:opacity-50"
+                            style={{ ['--aiad-c' as any]: p.color }}
+                            className="aiad-sugg flex items-center gap-2.5 p-2.5 rounded-[13px] border border-zinc-200/60 dark:border-zinc-700/50 bg-white/75 dark:bg-zinc-800/40 hover:bg-white/95 dark:hover:bg-zinc-800/70 text-left disabled:opacity-50"
                           >
-                            <IconComp size={12} className="text-zinc-400 shrink-0 mt-0.5" />
-                            <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 leading-tight">
+                            <span className="aiad-sugg-icon w-7 h-7 rounded-[9px] flex items-center justify-center shrink-0">
+                              <IconComp size={12} />
+                            </span>
+                            <span className="text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 leading-tight tracking-[-0.005em] truncate flex-1">
                               {p.label}
                             </span>
+                            <span
+                              aria-hidden
+                              className="w-1.5 h-1.5 rounded-full opacity-70 shrink-0"
+                              style={{ background: p.color }}
+                            />
                           </motion.button>
                         );
                       })}
@@ -1456,12 +1495,14 @@ export const AiAdvisor: React.FC = () => {
                   </div>
                 )}
 
-                {/* Messages */}
+                {/* Messages — user bubbles right-aligned (dark wine),
+                   bot bubbles left with the wine-gradient avatar and
+                   the frosted bot-tail bubble from the design. */}
                 {messages.map((msg, idx) => {
                   if (msg.role === 'user') {
                     return (
                       <div key={idx} className="flex justify-end">
-                        <div className="max-w-[85%] px-3.5 py-2 rounded-2xl rounded-br-sm bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] leading-[1.55] [&_a]:text-amber-300 dark:[&_a]:text-amber-700 [&_a]:underline">
+                        <div className="max-w-[85%] px-3.5 py-2 rounded-2xl aiad-bubble-user-tail bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[13px] leading-[1.55] tracking-[-0.003em] shadow-[0_2px_8px_-2px_rgba(9,9,11,0.18)] [&_a]:text-amber-300 dark:[&_a]:text-amber-700 [&_a]:underline">
                           <LinkifiedText text={msg.content} />
                         </div>
                       </div>
@@ -1475,11 +1516,11 @@ export const AiAdvisor: React.FC = () => {
                   const msgActions = (msg as any).actions as ProposedAction[] | undefined;
                   return (
                     <div key={idx} className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}>
-                        <Icons.Sparkles size={12} className="text-white" />
+                      <div className="aiad-avatar w-7 h-7 rounded-[9px] shrink-0">
+                        <Icons.Sparkles size={12} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`${isInsightsMsg ? '' : 'px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-zinc-100 dark:bg-zinc-800 text-[12px] leading-[1.55] text-zinc-700 dark:text-zinc-200'}`}>
+                        <div className={`${isInsightsMsg ? '' : 'px-3.5 py-2.5 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 text-[13px] leading-[1.55] tracking-[-0.003em] text-zinc-800 dark:text-zinc-100'}`}>
                           {isInsightsMsg ? (
                             <InsightsBlock greeting={(msg as any).greeting} insights={(msg as any).insights} />
                           ) : (
@@ -1551,13 +1592,15 @@ export const AiAdvisor: React.FC = () => {
                   );
                 })}
 
-                {/* Typing indicator */}
+                {/* Typing indicator — same wine-gradient avatar so the
+                   "AI is replying" state looks consistent with sent
+                   messages instead of jumping back to a generic look. */}
                 {busy && (
                   <div className="flex items-start gap-2.5">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'conic-gradient(from 135deg, #3b82f6, #10b981, #f59e0b, #ec4899, #06b6d4, #3b82f6)' }}>
-                      <Icons.Sparkles size={12} className="text-white" />
+                    <div className="aiad-avatar w-7 h-7 rounded-[9px] shrink-0">
+                      <Icons.Sparkles size={12} />
                     </div>
-                    <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-zinc-100 dark:bg-zinc-800">
+                    <div className="px-3.5 py-2.5 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50">
                       <motion.div
                         className="flex items-center gap-1"
                         animate={{ opacity: [0.4, 1, 0.4] }}
@@ -1604,12 +1647,22 @@ export const AiAdvisor: React.FC = () => {
                 </div>
               )}
 
-              {/* ── Chat input ── */}
+              {/* ── Chat input ──
+                 Single frosted shell wrapping the textarea + actions,
+                 with a focus-within glow ring. The send button scales
+                 from 0.7→1 with a small spring when the input goes
+                 from empty → has-text (aiad-send-ready class). */}
               <form
                 onSubmit={handleSubmit}
-                className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0"
+                className="px-4 py-4 border-t border-zinc-200/40 dark:border-zinc-800/60 shrink-0"
               >
-                <div className="flex items-end gap-2">
+                <div
+                  className={`flex items-end gap-2 pl-3.5 pr-1.5 py-1.5 rounded-2xl border transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] focus-within:bg-white dark:focus-within:bg-zinc-900 focus-within:shadow-[0_0_0_4px_rgba(9,9,11,0.03)] ${
+                    voice.isListening
+                      ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
+                      : 'bg-white/60 dark:bg-zinc-800/40 border-zinc-200/55 dark:border-zinc-700/50 focus-within:border-zinc-300 dark:focus-within:border-zinc-600'
+                  }`}
+                >
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -1628,38 +1681,44 @@ export const AiAdvisor: React.FC = () => {
                         handleSubmit();
                       }
                     }}
-                    placeholder={voice.isListening ? 'Listening…' : 'Ask anything, or ask it to create a task, plan the week...'}
+                    placeholder={voice.isListening ? 'Listening…' : 'Ask anything, or ask me to create a task, plan the week…'}
                     disabled={busy}
                     rows={1}
-                    className={`flex-1 px-3.5 py-2.5 text-[12px] rounded-xl border focus:outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors disabled:opacity-60 resize-none leading-snug ${
-                      voice.isListening
-                        ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
-                        : 'bg-zinc-100 dark:bg-zinc-800 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
-                    }`}
+                    className="flex-1 bg-transparent border-0 outline-none text-[13.5px] leading-[1.5] text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 disabled:opacity-60 resize-none py-1.5 tracking-[-0.003em]"
                   />
-                  {/* Mic — same UX as Brief: hidden when browser
-                      doesn't support SpeechRecognition, red+pulsing
-                      while listening, halo radiates out. */}
-                  {voice.isSupported && (
-                    <AdvisorMicButton voice={voice} voiceLang={voiceLang} busy={busy} reduceMotion={!!reduceMotion} />
-                  )}
-                  <motion.button
-                    type="submit"
-                    disabled={busy || !input.trim()}
-                    whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-                    className="p-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                    title="Send (Enter)"
-                  >
-                    <Icons.Send size={13} />
-                  </motion.button>
+                  <div className="flex items-center gap-0.5 shrink-0 self-end pb-0.5">
+                    {/* Mic — same UX as Brief: hidden when browser
+                        doesn't support SpeechRecognition, red+pulsing
+                        while listening, halo radiates out. */}
+                    {voice.isSupported && (
+                      <AdvisorMicButton voice={voice} voiceLang={voiceLang} busy={busy} reduceMotion={!!reduceMotion} />
+                    )}
+                    <motion.button
+                      type="submit"
+                      disabled={busy || !input.trim()}
+                      whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                        input.trim() && !busy
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-[0_2px_6px_-1px_rgba(9,9,11,0.18)] hover:scale-105 hover:bg-[#5c1d18] dark:hover:bg-[#5c1d18] aiad-send-ready'
+                          : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400 cursor-not-allowed'
+                      }`}
+                      title="Send (Enter)"
+                    >
+                      <Icons.Send size={13} />
+                    </motion.button>
+                  </div>
                 </div>
                 {voice.error && (
-                  <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">
+                  <div className="mt-2 text-[10.5px] text-rose-600 dark:text-rose-400">
                     {voice.error}
                   </div>
                 )}
-                <div className="text-[9px] text-zinc-400 mt-1.5 text-right">
-                  Enter to send · Shift+Enter for new line · History is saved per day
+                <div className="flex items-center justify-between mt-2.5 px-1.5 text-[10px] text-zinc-500 dark:text-zinc-500 font-mono tracking-[0.04em]">
+                  <span>
+                    <kbd className="px-1 py-px rounded text-[9px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-zinc-700/40">↵</kbd>
+                    {' '}send · <kbd className="px-1 py-px rounded text-[9px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-zinc-700/40">⇧↵</kbd>{' '}new line
+                  </span>
+                  <span>Saved per day</span>
                 </div>
               </form>
             </motion.div>

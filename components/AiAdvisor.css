@@ -1,0 +1,240 @@
+/* ============================================================
+   AiAdvisor — design tokens from Livv Studio handoff
+   Source: inicio-web-dash-livv/project/ai-advisor.html
+   ------------------------------------------------------------
+   Only the visual layer — all logic + handlers stay in
+   AiAdvisor.tsx. Classes here describe:
+     • the wine-gradient avatar with spinning conic halo
+     • the green "online" pulse indicator
+     • cinematic backdrop blobs (gold / sage / pink) drifting
+     • message fade-in, send-button scale-in, blob float
+   ============================================================ */
+
+:root {
+  --aiad-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --aiad-ios-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Avatar (wine gradient + conic halo + online dot) ───── */
+.aiad-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fdfbf7;
+  background: linear-gradient(135deg, #2c0405 0%, #5c1d18 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 14px -4px rgba(44, 4, 5, 0.22),
+    0 1px 2px rgba(44, 4, 5, 0.1);
+}
+
+.aiad-avatar::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, #e8bc59, #769268, #6dbedc, #f1add8, #e8bc59);
+  z-index: -1;
+  filter: blur(7px);
+  opacity: 0.4;
+  animation: aiad-spin 8s linear infinite;
+}
+
+@keyframes aiad-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Online indicator — small green dot on bottom-right of avatar */
+.aiad-online-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #769268;
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 0 rgba(118, 146, 104, 0.2);
+  animation: aiad-pulse-online 2.4s ease-in-out infinite;
+}
+
+@keyframes aiad-pulse-online {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(118, 146, 104, 0.25); }
+  50%      { box-shadow: 0 0 0 5px rgba(118, 146, 104, 0.05); }
+}
+
+/* "ONLINE" pill — small mono badge next to the title */
+.aiad-online-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 7px;
+  border-radius: 9999px;
+  background: rgba(118, 146, 104, 0.1);
+  color: #769268;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.aiad-online-pill > span {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: aiad-dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes aiad-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ── Cinematic backdrop blobs ───────────────────────────── */
+.aiad-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aiad-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.28;
+  animation: aiad-blob-float 30s ease-in-out infinite;
+}
+
+.aiad-blob.a {
+  width: 560px;
+  height: 560px;
+  top: -160px;
+  left: 8%;
+  background: radial-gradient(circle, #e8bc59 0%, transparent 65%);
+}
+
+.aiad-blob.b {
+  width: 480px;
+  height: 480px;
+  top: 30%;
+  left: -160px;
+  background: radial-gradient(circle, #769268 0%, transparent 65%);
+  animation-delay: -10s;
+}
+
+.aiad-blob.c {
+  width: 440px;
+  height: 440px;
+  bottom: -140px;
+  left: 30%;
+  background: radial-gradient(circle, #f1add8 0%, transparent 65%);
+  animation-delay: -20s;
+}
+
+@keyframes aiad-blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(50px, -30px) scale(1.05); }
+  66%      { transform: translate(-25px, 40px) scale(0.97); }
+}
+
+/* ── Frosted panel chrome ───────────────────────────────── */
+.aiad-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(253, 251, 247, 0.88) 100%);
+  -webkit-backdrop-filter: blur(50px) saturate(150%);
+  backdrop-filter: blur(50px) saturate(150%);
+  border-left: 0.5px solid rgba(214, 209, 199, 0.4);
+  box-shadow:
+    -40px 0 100px -36px rgba(44, 4, 5, 0.07),
+    -8px 0 24px -12px rgba(44, 4, 5, 0.025),
+    inset -1px 0 0 rgba(255, 255, 255, 0.6);
+}
+
+:is(.dark) .aiad-panel {
+  background:
+    linear-gradient(180deg, rgba(24, 24, 27, 0.94) 0%, rgba(15, 15, 17, 0.88) 100%);
+  border-left-color: rgba(63, 63, 70, 0.4);
+  box-shadow:
+    -40px 0 100px -36px rgba(0, 0, 0, 0.45),
+    -8px 0 24px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Empty-state fade-in ────────────────────────────────── */
+.aiad-empty-in {
+  animation: aiad-empty-fade-in 0.6s var(--aiad-ios-ease);
+}
+
+@keyframes aiad-empty-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Send button scale-in when ready ────────────────────── */
+.aiad-send-ready {
+  animation: aiad-send-appear 0.4s var(--aiad-ios-ease);
+}
+
+@keyframes aiad-send-appear {
+  from { transform: scale(0.7); opacity: 0.6; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* ── Suggestion card (colored left accent + hover lift) ─── */
+.aiad-sugg {
+  position: relative;
+  overflow: hidden;
+  transition:
+    background 0.35s var(--aiad-ios-ease),
+    border-color 0.35s var(--aiad-ios-ease),
+    transform 0.25s var(--aiad-ios-ease);
+}
+
+.aiad-sugg::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: var(--aiad-c, #a8a29a);
+  opacity: 0.3;
+  border-radius: 0 9999px 9999px 0;
+  transition: opacity 0.3s var(--aiad-ios-ease);
+}
+
+.aiad-sugg:hover::before {
+  opacity: 0.75;
+}
+
+.aiad-sugg-icon {
+  background: color-mix(in oklab, var(--aiad-c, #a8a29a) 9%, #fff);
+  color: color-mix(in oklab, var(--aiad-c, #a8a29a) 75%, #27272a);
+  transition:
+    background 0.35s var(--aiad-ios-ease),
+    color 0.35s var(--aiad-ios-ease),
+    transform 0.35s var(--aiad-ios-ease);
+}
+
+.aiad-sugg:hover .aiad-sugg-icon {
+  background: color-mix(in oklab, var(--aiad-c, #a8a29a) 18%, #fff);
+  color: var(--aiad-c, #a8a29a);
+  transform: scale(1.05);
+}
+
+:is(.dark) .aiad-sugg-icon {
+  background: color-mix(in oklab, var(--aiad-c, #a8a29a) 22%, #18181b);
+  color: color-mix(in oklab, var(--aiad-c, #a8a29a) 85%, #fff);
+}
+
+:is(.dark) .aiad-sugg:hover .aiad-sugg-icon {
+  background: color-mix(in oklab, var(--aiad-c, #a8a29a) 32%, #18181b);
+  color: var(--aiad-c, #a8a29a);
+}
+
+/* Per-bubble user/bot tail shaping (kept here for one-line reuse) */
+.aiad-bubble-user-tail { border-bottom-right-radius: 5px; }
+.aiad-bubble-bot-tail  { border-bottom-left-radius: 5px; }
