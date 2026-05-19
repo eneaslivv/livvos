@@ -26,6 +26,8 @@ import { useTenant } from '../context/TenantContext';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
+import { SalesPipelineStats } from '../components/sales/SalesPipelineStats';
+import '../components/sales/SalesDesign.css';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 type LeadStatus = 'new' | 'contacted' | 'call_scheduled' | 'call_done'
@@ -213,7 +215,14 @@ export const SalesPipeline: React.FC = () => {
         </motion.button>
       </header>
 
-      {/* Top totals — 4 quick metrics across the active funnel. */}
+      {/* KPI Stats strip — bundle design with sparklines + deltas.
+         Computed from live leads (not seed data). 4 high-signal metrics:
+         Pipeline value, Won this month, Win rate (30d), Avg cycle. */}
+      <SalesPipelineStats leads={leads} />
+
+      {/* Detailed totals — granular breakdown for the funnel (active vs won)
+         These complement the headline stats above with per-tone splits. */}
+      <div className="spd-section-title">Funnel breakdown</div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-5">
         <TotalCard label="Active leads" value={totals.activeCount} hint={`${totals.lostCount} lost · ${totals.nurturingCount} nurturing`} tone="zinc" />
         <TotalCard label="Pipeline implementation $" value={fmtMoney(totals.implValue)} hint="active leads" tone="violet" />
@@ -359,6 +368,27 @@ const PipelineColumn: React.FC<{
           <AnimatePresence initial={false}>
             {leads.slice(0, 30).map((lead, i) => {
               const icp = lead.icp_id ? icpMap.get(lead.icp_id) : null;
+              const icpColor = (icp as any)?.color || '#c4a35a';
+              // Age in days since created
+              const ageMs = lead.created_at ? (Date.now() - new Date(lead.created_at).getTime()) : 0;
+              const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+              const ageClass = ageDays > 14 ? 'bad' : ageDays > 7 ? 'warn' : '';
+              // Next-action urgency
+              const naMs = lead.next_action_date ? (new Date(lead.next_action_date).getTime() - Date.now()) : null;
+              const naDays = naMs != null ? Math.floor(naMs / (1000 * 60 * 60 * 24)) : null;
+              const whenClass = naDays != null && naDays <= 0 ? 'hot' : naDays != null && naDays > 7 ? 'cold' : '';
+              const naLabel = naDays != null
+                ? naDays < 0 ? `${Math.abs(naDays)}d overdue`
+                  : naDays === 0 ? 'today'
+                  : naDays === 1 ? 'tomorrow'
+                  : `${naDays}d`
+                : null;
+              // Owner initials
+              const ownerName = (lead as any).owner_name || (lead as any).owner || '';
+              const ownerInitials = ownerName
+                ? ownerName.split(/\s+/).slice(0, 2).map((s: string) => s[0]?.toUpperCase() || '').join('')
+                : 'E';
+              const ownerColor = ownerInitials.startsWith('E') ? '#c4a35a' : '#6dbedc';
               return (
                 <motion.div
                   key={lead.id}
@@ -367,27 +397,56 @@ const PipelineColumn: React.FC<{
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
                   transition={{ ...SPRING_ENTER, delay: i < 8 ? i * 0.02 : 0 }}
-                  className="group rounded-lg border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 p-2.5 cursor-pointer transition-colors"
+                  className="group relative rounded-lg border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 p-2.5 pl-3 cursor-pointer transition-colors"
+                  style={{ ['--icp-color' as any]: icpColor }}
                   onClick={() => onOpenLead(lead)}
                 >
-                  <div className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{lead.company_name}</div>
-                  {lead.contact_name && (
-                    <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{lead.contact_name}</div>
+                  {/* ICP color bar (left edge) — drives identity */}
+                  <span className="spd-icp-bar" aria-hidden />
+
+                  {/* Age badge (top right) — warn/bad coloring kicks in past thresholds */}
+                  {ageDays > 0 && (
+                    <span className={`spd-age ${ageClass}`}>{ageDays}d</span>
                   )}
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-zinc-400">
-                    {lead.deal_value_implementation && (
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{fmtMoney(lead.deal_value_implementation)}</span>
-                    )}
-                    {lead.deal_value_monthly && (
-                      <span className="tabular-nums">+ {fmtMoney(lead.deal_value_monthly)}/mo</span>
-                    )}
+
+                  {/* Header — company + ICP pill */}
+                  <div className="flex items-start justify-between gap-1.5 pr-7">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{lead.company_name}</div>
+                      {lead.contact_name && (
+                        <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{lead.contact_name}</div>
+                      )}
+                    </div>
                     {icp && (
-                      <span className="ml-auto truncate max-w-[80px]" title={icp.name}>{icp.name}</span>
+                      <span className="spd-icp-pill truncate max-w-[60px]" title={icp.name}>
+                        {(icp as any).short || icp.name.slice(0, 5)}
+                      </span>
                     )}
                   </div>
-                  {lead.next_action && lead.next_action_date && (
-                    <div className="mt-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/60 text-[10px] text-amber-700 dark:text-amber-400 truncate">
-                      ⏰ {lead.next_action_date.slice(5)} · {lead.next_action}
+
+                  {/* Deal value pill (ARR-style: impl + mrr) */}
+                  {(lead.deal_value_implementation || lead.deal_value_monthly) && (
+                    <div className="spd-deal">
+                      {lead.deal_value_implementation && (
+                        <span className="spd-deal-impl">{fmtMoney(lead.deal_value_implementation)}</span>
+                      )}
+                      {lead.deal_value_implementation && lead.deal_value_monthly && (
+                        <span className="spd-deal-sep">·</span>
+                      )}
+                      {lead.deal_value_monthly && (
+                        <span className="spd-deal-mrr">{fmtMoney(lead.deal_value_monthly)}/mo</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Foot — action + when + owner avatar */}
+                  {(lead.next_action || naLabel) && (
+                    <div className="spd-lc-foot">
+                      <span className="spd-lc-action">{lead.next_action || '—'}</span>
+                      {naLabel && (
+                        <span className={`spd-lc-when ${whenClass}`}>{naLabel}</span>
+                      )}
+                      <span className="spd-lc-av" style={{ background: ownerColor }}>{ownerInitials.slice(0, 2)}</span>
                     </div>
                   )}
                   {/* Hover-revealed status nav */}

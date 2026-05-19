@@ -1,0 +1,330 @@
+/* ============================================================
+   Sales — LIVV OS design tokens (Pipeline + Overview)
+   Source: livv-update bundle (livv-os-pipeline.jsx + growth.jsx
+   + livv-os-styles.css sections .kpi / .lc / .kanban / .so-*)
+   ------------------------------------------------------------
+   Layered on top of the existing Sales pages — additions only.
+   No existing functionality is removed.
+   Scoped to .spd-* so no bleed.
+   ============================================================ */
+
+/* ── KPI Stats strip (Pipeline value · Won · Win rate · Avg cycle) ── */
+.spd-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 880px) {
+  .spd-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.spd-stat {
+  position: relative;
+  padding: 18px 20px;
+  background: #ffffff;
+  border: 0.5px solid rgba(214, 209, 199, 0.55);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+:is(.dark) .spd-stat {
+  background: rgba(24, 24, 27, 0.5);
+  border-color: rgba(63, 63, 70, 0.45);
+}
+
+.spd-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 12px 24px -8px rgba(44, 4, 5, 0.08);
+  border-color: rgba(90, 62, 62, 0.22);
+}
+
+.spd-stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.spd-stat-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+:is(.dark) .spd-stat-lbl { color: #a1a1aa; }
+
+.spd-stat-lbl .ic { color: #a1a1aa; }
+
+.spd-stat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.spd-stat-v {
+  font-weight: 300;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #18181b;
+}
+
+:is(.dark) .spd-stat-v { color: #fafafa; }
+
+.spd-stat-target {
+  font-size: 11.5px;
+  color: #a1a1aa;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+
+.spd-stat-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.spd-stat-delta.up   { background: rgba(118, 146, 104, 0.13); color: #4d6b4d; }
+.spd-stat-delta.down { background: rgba(239, 68, 68, 0.1);    color: #b91c1c; }
+.spd-stat-delta.flat { background: rgba(82, 82, 91, 0.08);    color: #71717a; }
+
+:is(.dark) .spd-stat-delta.up   { background: rgba(118, 146, 104, 0.2); color: #a4c4a0; }
+:is(.dark) .spd-stat-delta.down { background: rgba(239, 68, 68, 0.18);  color: #fca5a5; }
+:is(.dark) .spd-stat-delta.flat { background: rgba(82, 82, 91, 0.2);    color: #d4d4d8; }
+
+.spd-stat-spark {
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.spd-stat-spark .bar {
+  flex: 1;
+  background: #a1a1aa;
+  border-radius: 2px;
+  transition: background 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.45;
+}
+
+.spd-stat:hover .spd-stat-spark .bar { opacity: 0.8; }
+
+.spd-stat-spark .bar.peak {
+  background: #c4a35a;
+  opacity: 1;
+}
+
+/* ── Lead card additions (overlay on existing card) ─────────── */
+
+/* ICP color bar — 2px vertical accent on left edge */
+.spd-icp-bar {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 0 9999px 9999px 0;
+  background: var(--icp-color, #a1a1aa);
+  opacity: 0.85;
+}
+
+/* Age pill — top right corner */
+.spd-age {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  color: #a1a1aa;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 1px 5px;
+  border-radius: 4px;
+  backdrop-filter: blur(2px);
+}
+
+:is(.dark) .spd-age {
+  background: rgba(24, 24, 27, 0.7);
+}
+
+.spd-age.warn { color: #c4a35a; font-weight: 600; }
+.spd-age.bad  { color: #b91c1c; font-weight: 700; }
+
+/* ICP pill — small mono uppercase chip */
+.spd-icp-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  background: color-mix(in oklab, var(--icp-color, #c4a35a) 14%, transparent);
+  color: color-mix(in oklab, var(--icp-color, #c4a35a) 75%, #18181b);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+:is(.dark) .spd-icp-pill {
+  color: color-mix(in oklab, var(--icp-color, #c4a35a) 75%, #fafafa);
+}
+
+/* Deal value pill */
+.spd-deal {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 9px;
+  background: rgba(82, 82, 91, 0.06);
+  border-radius: 7px;
+  margin: 6px 0;
+}
+
+:is(.dark) .spd-deal {
+  background: rgba(82, 82, 91, 0.16);
+}
+
+.spd-deal-impl {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+}
+
+:is(.dark) .spd-deal-impl { color: #fafafa; }
+
+.spd-deal-mrr {
+  font-size: 11px;
+  color: color-mix(in oklab, var(--icp-color, #71717a) 70%, #3f3f46);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:is(.dark) .spd-deal-mrr {
+  color: color-mix(in oklab, var(--icp-color, #71717a) 70%, #d4d4d8);
+}
+
+.spd-deal-sep {
+  color: #d4d4d8;
+  margin: 0 2px;
+}
+
+:is(.dark) .spd-deal-sep { color: #52525b; }
+
+/* Foot row — action + when + owner avatar */
+.spd-lc-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #71717a;
+}
+
+:is(.dark) .spd-lc-foot { color: #a1a1aa; }
+
+.spd-lc-action {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #3f3f46;
+}
+
+:is(.dark) .spd-lc-action { color: #d4d4d8; }
+
+.spd-lc-action::before {
+  content: '→';
+  color: #a1a1aa;
+  margin-right: 5px;
+}
+
+.spd-lc-when {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #71717a;
+  flex-shrink: 0;
+}
+
+.spd-lc-when.hot {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.spd-lc-when.cold {
+  color: #6dbedc;
+  font-weight: 600;
+}
+
+.spd-lc-av {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex-shrink: 0;
+}
+
+/* ── Kanban column accent (top marker dot) ─────────────────── */
+.spd-col-marker {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #a1a1aa;
+  flex-shrink: 0;
+}
+
+.spd-col-marker.active {
+  background: #c4a35a;
+  box-shadow: 0 0 6px rgba(196, 163, 90, 0.5);
+}
+
+.spd-col-marker.won  { background: #769268; }
+.spd-col-marker.lost { background: #b91c1c; }
+.spd-col-marker.warm { background: #6dbedc; }
+
+/* ── Section title (Sales Overview KPI block label) ───────── */
+.spd-section-title {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #71717a;
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:is(.dark) .spd-section-title { color: #a1a1aa; }
+
+.spd-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(82, 82, 91, 0.18), transparent);
+  min-width: 60px;
+}
