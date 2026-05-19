@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icons } from '../ui/Icons';
 import { ToggleGroup } from './ToggleGroup';
+import { ViewSwitcher } from './ViewSwitcher';
 
 interface ContentPlatformConfig {
   label: string;
@@ -148,19 +149,12 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           </div>
         )}
 
-        {/* View toggle: Day / Week / Month / Board / List — extra modes
-            give a Notion/ClickUp-style way to look at the same data. */}
-        <ToggleGroup
-          options={[
-            { id: 'day' as const, label: 'Day' },
-            { id: 'week' as const, label: 'Week' },
-            { id: 'month' as const, label: 'Month' },
-            { id: 'board' as const, label: 'Board' },
-            { id: 'list' as const, label: 'List' },
-          ]}
-          value={view}
-          onChange={setView}
-        />
+        {/* View toggle: Day / Week / Month / Board / List — Livv Studio
+            icon-only animated thumb with per-view tone color, conic-glow
+            on hover, and D/W/M/B/L keyboard shortcuts. Drop-in for the
+            previous ToggleGroup; richer visually + carries kbd hints
+            in the tooltip so users discover the shortcuts on hover. */}
+        <ViewSwitcher value={view} onChange={setView} />
 
         {/* Navigation */}
         <div className="flex items-center gap-0.5">
