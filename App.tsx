@@ -2,7 +2,6 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DebugPanel } from './components/DebugPanel';
 import { Layout } from './components/Layout';
-import { BundlePreviewLauncher } from './components/BundlePreviewLauncher';
 import { PageView, AppMode, NavParams } from './types';
 import { ensureAuthSession } from './lib/auth';
 import { supabase, cleanupLocalStorage } from './lib/supabase';
@@ -921,10 +920,6 @@ const AppContent: React.FC<{
           )}
         </>
       )}
-      {/* Floating launcher — always visible (except while inside the
-         bundle preview itself). Anchored bottom-right, gold→wine
-         gradient + breathing pulse so it's impossible to miss. */}
-      <BundlePreviewLauncher currentPage={currentPage} onNavigate={handleNavigate} />
     </Layout>
   );
 };

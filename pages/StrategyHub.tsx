@@ -29,6 +29,7 @@ import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import { CoachFlow } from '../components/livv/CoachFlow';
 import { ICP_CREATION_FLOW, type IcpData } from '../components/livv/flows/IcpCreationFlow';
+import '../components/livv/bundle-strategy.css';
 
 // ── Types mirroring the DB schema ─────────────────────────────────
 interface ICP {
@@ -178,71 +179,67 @@ export const StrategyHub: React.FC = () => {
   }), [icps.length, packages.length, positioning.length]);
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Strategy</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Target audiences, service packages, and positioning principles. The single source of truth
-          that feeds content production, sales, and delivery.
-        </p>
+    <div className="max-w-[1320px] mx-auto px-6 py-6">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="bdl-page-title">Strategy</h1>
+          <p className="bdl-page-sub">
+            Target audiences · Service packages · Positioning principles
+          </p>
+        </div>
       </header>
 
-      {/* Tab strip */}
-      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 mb-6">
-        {([
-          { id: 'icps' as const,        label: 'ICPs',        icon: 'Target' },
-          { id: 'packages' as const,    label: 'Packages',    icon: 'Briefcase' },
-          { id: 'positioning' as const, label: 'Positioning', icon: 'Sparkles' },
-        ]).map(t => {
-          const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
-          const active = tab === t.id;
-          return (
-            <motion.button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              whileTap={{ scale: 0.96, transition: SPRING_TAP }}
-              className={`relative px-3 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors ${
-                active
-                  ? 'text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-              }`}
-            >
-              <IconCmp size={13} />
-              {t.label}
-              <span className={`text-[9px] tabular-nums font-mono px-1 py-0.5 rounded ${
-                active ? 'bg-zinc-900/10 dark:bg-zinc-100/10' : 'bg-zinc-100 dark:bg-zinc-800'
-              }`}>{counts[t.id]}</span>
-              {active && <span className="absolute -bottom-px left-2 right-2 h-0.5 bg-zinc-900 dark:bg-zinc-100 rounded-full" />}
-            </motion.button>
-          );
-        })}
-        {/* Guided wizard — opens the CoachFlow with the matching flow.
-           Only ICPs has a flow defined yet — Packages / Principles to follow. */}
+      {/* Bundle-style pill tab strip + action buttons */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="bdl-tabs">
+          {([
+            { id: 'icps' as const,        label: 'ICPs',        icon: 'Target' },
+            { id: 'packages' as const,    label: 'Packages',    icon: 'Briefcase' },
+            { id: 'positioning' as const, label: 'Positioning', icon: 'Sparkles' },
+          ]).map(t => {
+            const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`bdl-tab ${active ? 'active' : ''}`}
+              >
+                <IconCmp size={13} />
+                {t.label}
+                <span className="count">{counts[t.id]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Guided wizard — gold pill, only on ICPs tab */}
         {tab === 'icps' && (
-          <motion.button
+          <button
             onClick={() => setCoachOpen(true)}
-            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-            whileHover={{ y: -1, transition: SPRING_TAP }}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg border border-amber-300/60 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-500/20 transition-colors mb-1.5"
+            className="bdl-action ml-auto"
+            style={{
+              borderColor: 'rgba(196,163,90,0.5)',
+              color: '#8b6a17',
+              background: 'rgba(196,163,90,0.08)',
+            }}
             title="Step-by-step wizard with live preview"
           >
             <Icons.Sparkles size={12} />
             Guided
-          </motion.button>
+          </button>
         )}
-        <motion.button
+        <button
           onClick={() => {
             if (tab === 'icps') setEditingIcp('new');
             else if (tab === 'packages') setEditingPackage('new');
             else setEditingPositioning('new');
           }}
-          whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-          whileHover={{ y: -1, transition: SPRING_TAP }}
-          className={`${tab === 'icps' ? '' : 'ml-auto'} inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 transition-opacity mb-1.5`}
+          className={`bdl-action primary ${tab === 'icps' ? '' : 'ml-auto'}`}
         >
           <Icons.Plus size={12} />
           New {tab === 'icps' ? 'ICP' : tab === 'packages' ? 'Package' : 'Principle'}
-        </motion.button>
+        </button>
       </div>
 
       {loading && (
@@ -325,6 +322,28 @@ const STATUS_TONE: Record<string, string> = {
 const fmtMoney = (n: number | null | undefined): string =>
   n == null ? '—' : `$${n.toLocaleString('en-US')}`;
 
+// Palette for ICP color when the row has no explicit color set
+const ICP_PALETTE = ['#C4A35A', '#6DBEDC', '#769268', '#F1ADD8', '#A855F7', '#5C1D18', '#8B5A2B'];
+
+function icpColor(icp: ICP): string {
+  // If the table has a color column (added by the CoachFlow), use it; else hash
+  const fromRow = (icp as any).color as string | undefined;
+  if (fromRow && /^#[0-9A-Fa-f]{3,8}$/.test(fromRow)) return fromRow;
+  let hash = 0;
+  for (const ch of icp.name) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  return ICP_PALETTE[Math.abs(hash) % ICP_PALETTE.length];
+}
+
+function icpInitials(icp: ICP): string {
+  // Honor short_code (CoachFlow stores it) when present; otherwise derive
+  const sc = (icp as any).short_code as string | undefined;
+  if (sc && sc.length >= 2 && sc.length <= 4) return sc.toUpperCase();
+  const parts = (icp.name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '·';
+  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
+  return (parts[0][0] + parts[1][0] + (parts[2]?.[0] || '')).toUpperCase();
+}
+
 const ICPGrid: React.FC<{
   icps: ICP[];
   onEdit: (icp: ICP) => void;
@@ -342,56 +361,112 @@ const ICPGrid: React.FC<{
     );
   }
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {icps.map((icp, idx) => (
-        <motion.button
-          key={icp.id}
-          onClick={() => onEdit(icp)}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
-          whileTap={{ scale: 0.98, transition: SPRING_TAP }}
-          whileHover={{ y: -2, transition: SPRING_TAP }}
-          className="text-left p-4 rounded-xl border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 transition-colors"
-        >
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100">{icp.name}</h3>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${STATUS_TONE[icp.status]}`}>
-              {icp.status}
-            </span>
-          </div>
-          {icp.description && (
-            <p className="text-[12px] text-zinc-600 dark:text-zinc-400 line-clamp-2 mb-3">{icp.description}</p>
-          )}
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Implementation</div>
-              <div className="text-zinc-800 dark:text-zinc-200 tabular-nums font-semibold mt-0.5">{fmtMoney(icp.ticket_implementation)}</div>
+    <div className="bdl-icp-grid">
+      {icps.map((icp, idx) => {
+        const color = icpColor(icp);
+        // Compose modules list: entry_module + expansion_path, dedup
+        const modules = Array.from(new Set([
+          ...(icp.entry_module ? [icp.entry_module] : []),
+          ...(icp.expansion_path || []),
+          ...(((icp as any).modules as string[] | undefined) || []),
+        ]));
+        return (
+          <motion.button
+            key={icp.id}
+            onClick={() => onEdit(icp)}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING_ENTER, delay: idx * 0.03 }}
+            whileTap={{ scale: 0.98, transition: SPRING_TAP }}
+            className="bdl-icp-card"
+            style={{ ['--icp-color' as any]: color }}
+          >
+            {/* Header — avatar + name + status */}
+            <div className="bdl-icp-head">
+              <span className="bdl-icp-av">{icpInitials(icp)}</span>
+              <h3 className="bdl-icp-name">{icp.name}</h3>
+              <span className={`bdl-icp-status ${icp.status}`}>{icp.status}</span>
             </div>
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Retainer / mo</div>
-              <div className="text-zinc-800 dark:text-zinc-200 tabular-nums font-semibold mt-0.5">{fmtMoney(icp.ticket_retainer_monthly)}</div>
+
+            {/* Description or pains */}
+            {icp.pain_points.length > 0 ? (
+              <div className="bdl-icp-pains">
+                {icp.pain_points.slice(0, 3).map((p, i) => (
+                  <div key={i} className="bdl-icp-pain">
+                    <span className="bdl-icp-pain-dot" />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p}</span>
+                  </div>
+                ))}
+                {icp.pain_points.length > 3 && (
+                  <div className="bdl-icp-pain" style={{ opacity: 0.6 }}>
+                    <span className="bdl-icp-pain-dot" />
+                    <span>+{icp.pain_points.length - 3} more</span>
+                  </div>
+                )}
+              </div>
+            ) : icp.description ? (
+              <p className="bdl-icp-desc">{icp.description}</p>
+            ) : (
+              <p className="bdl-icp-desc" style={{ fontStyle: 'italic', opacity: 0.6 }}>
+                No pain points defined yet. Click to add them.
+              </p>
+            )}
+
+            {/* Stats — 3 cells with grid divider */}
+            <div className="bdl-icp-stats">
+              <div className="bdl-icp-stat">
+                <div className="bdl-icp-stat-l">Impl</div>
+                <div className="bdl-icp-stat-v">
+                  {icp.ticket_implementation == null ? '—' : `$${(icp.ticket_implementation / 1000).toFixed(icp.ticket_implementation >= 10000 ? 0 : 1)}K`}
+                </div>
+              </div>
+              <div className="bdl-icp-stat">
+                <div className="bdl-icp-stat-l">Retainer</div>
+                <div className="bdl-icp-stat-v" style={{ color }}>
+                  {icp.ticket_retainer_monthly == null ? '—' : `$${(icp.ticket_retainer_monthly / 1000).toFixed(1)}K`}
+                  {icp.ticket_retainer_monthly != null && <small>/mo</small>}
+                </div>
+              </div>
+              <div className="bdl-icp-stat">
+                <div className="bdl-icp-stat-l">12mo ARR</div>
+                <div className="bdl-icp-stat-v">
+                  {icp.ticket_implementation == null && icp.ticket_retainer_monthly == null
+                    ? '—'
+                    : `$${(((icp.ticket_implementation || 0) + (icp.ticket_retainer_monthly || 0) * 12) / 1000).toFixed(0)}K`}
+                </div>
+              </div>
             </div>
-          </div>
-          {(icp.pain_points.length > 0 || icp.market_geo.length > 0) && (
-            <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
-              {icp.market_geo.map(g => (
-                <span key={g} className="text-[9.5px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-mono uppercase">
-                  {g}
-                </span>
-              ))}
-              {icp.pain_points.slice(0, 3).map(p => (
-                <span key={p} className="text-[9.5px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 truncate max-w-[160px]" title={p}>
-                  {p}
-                </span>
-              ))}
-              {icp.pain_points.length > 3 && (
-                <span className="text-[9.5px] text-zinc-400">+{icp.pain_points.length - 3}</span>
-              )}
-            </div>
-          )}
-        </motion.button>
-      ))}
+
+            {/* Foot — module pills */}
+            {modules.length > 0 && (
+              <div className="bdl-icp-foot">
+                <span className="bdl-icp-foot-l">Modules</span>
+                {modules.slice(0, 5).map(m => (
+                  <span key={m} className="bdl-icp-mod">{m}</span>
+                ))}
+                {modules.length > 5 && (
+                  <span className="bdl-icp-mod" style={{ opacity: 0.6 }}>+{modules.length - 5}</span>
+                )}
+              </div>
+            )}
+          </motion.button>
+        );
+      })}
+
+      {/* + Define new ICP card */}
+      <motion.button
+        onClick={onNew}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...SPRING_ENTER, delay: icps.length * 0.03 }}
+        className="bdl-icp-add"
+      >
+        <span className="bdl-icp-add-ic">
+          <Icons.Plus size={16} />
+        </span>
+        <span className="bdl-icp-add-label">Define new ICP</span>
+        <span className="bdl-icp-add-hint">or use the Guided wizard</span>
+      </motion.button>
     </div>
   );
 };
