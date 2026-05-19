@@ -67,7 +67,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, cu
                     {currentPage !== 'bundle_preview' && (
                         <button
                             onClick={() => onNavigate('bundle_preview')}
-                            className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-50 to-rose-50 dark:from-amber-500/15 dark:to-rose-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-300/40 hover:from-amber-100 hover:to-rose-100 dark:hover:from-amber-500/25 dark:hover:to-rose-500/25 transition-colors"
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-100 to-rose-100 dark:from-amber-500/20 dark:to-rose-500/20 text-amber-800 dark:text-amber-200 ring-1 ring-amber-400/50 hover:from-amber-200 hover:to-rose-200 dark:hover:from-amber-500/30 dark:hover:to-rose-500/30 transition-colors"
                             title="Preview new design bundle — Strategy/Content/Scaling/Growth/Toolkit/Agent/Partners + all modals/wizards"
                         >
                             <Icons.Sparkles size={10} /> Preview
