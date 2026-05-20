@@ -34,6 +34,8 @@ import { useAutomations } from '../hooks/useAutomations';
 import type { Partner, Automation } from '../types';
 import '../components/livv/bundle-growth.css';
 import { ThisWeekCard, ActivityFeedCard, WeeklySnapshotCard } from '../components/livv/GrowthWidgets';
+import { CoachFlow } from '../components/livv/CoachFlow';
+import { PHASE_FLOW, PARTNER_FLOW, AUTOMATION_FLOW, savePhase, savePartner, saveAutomation } from '../components/livv/flows/SetupFlows';
 
 interface Phase {
   id: string;
@@ -344,7 +346,20 @@ export const GrowthDashboard: React.FC = () => {
 
           <Section title="Growth phases"
             cta={<motion.button onClick={() => setEditingPhase('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Add phase</motion.button>}>
-            <PhasesList phases={phases} onEdit={p => setEditingPhase(p)} />
+            {phases.length === 0 && currentTenant?.id ? (
+              <CoachFlow
+                flow={{ ...PHASE_FLOW, initial: { ...PHASE_FLOW.initial, phase_number: 1 } }}
+                onComplete={async (data) => {
+                  await savePhase(currentTenant.id, data);
+                  await refetch();
+                }}
+                onClose={() => setEditingPhase('new')}
+                inline
+                skipLabel="Skip — open empty form"
+              />
+            ) : (
+              <PhasesList phases={phases} onEdit={p => setEditingPhase(p)} />
+            )}
           </Section>
 
           {/* Pipeline metrics — bundle's GrowthMetrics view. Funnel +
@@ -362,20 +377,46 @@ export const GrowthDashboard: React.FC = () => {
               is publicly accessible (no auth) for partners themselves. */}
           <Section title="Partners"
             cta={<motion.button onClick={() => setEditingPartner('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Invite partner</motion.button>}>
-            <PartnersGrid partners={partners} widgetsCount={widgets.length} onOpen={p => setEditingPartner(p)} onNew={() => setEditingPartner('new')} />
+            {partners.length === 0 && currentTenant?.id ? (
+              <CoachFlow
+                flow={PARTNER_FLOW}
+                onComplete={async (data) => {
+                  await savePartner(currentTenant.id, data);
+                  window.location.reload(); // simplest way to repopulate usePartners hook
+                }}
+                onClose={() => setEditingPartner('new')}
+                inline
+                skipLabel="Skip — open empty form"
+              />
+            ) : (
+              <PartnersGrid partners={partners} widgetsCount={widgets.length} onOpen={p => setEditingPartner(p)} onNew={() => setEditingPartner('new')} />
+            )}
           </Section>
 
           {/* Automations — user-defined cross-module rules. The 4 built-in
               triggers (lead won → project / project done → case study /
               etc.) still run unconditionally; these are extras on top. */}
           <Section title="Automations"
-            hint={automations.length === 0 ? 'No custom automations yet. Built-in cross-module triggers still run (lead won → project, project done → case study, outreach response → status, content published → metric placeholder).' : null}>
-            <AutomationsList
-              automations={automations}
-              logs={automationLogs}
-              onToggle={toggleAutomation}
-              onDelete={deleteAutomation}
-            />
+            hint={automations.length > 0 ? null : null}>
+            {automations.length === 0 && currentTenant?.id ? (
+              <CoachFlow
+                flow={AUTOMATION_FLOW}
+                onComplete={async (data) => {
+                  await saveAutomation(currentTenant.id, data);
+                  window.location.reload();
+                }}
+                onClose={() => { /* no-op fallback — hide wizard */ }}
+                inline
+                skipLabel="Skip — use built-in triggers only"
+              />
+            ) : (
+              <AutomationsList
+                automations={automations}
+                logs={automationLogs}
+                onToggle={toggleAutomation}
+                onDelete={deleteAutomation}
+              />
+            )}
           </Section>
         </>
       )}

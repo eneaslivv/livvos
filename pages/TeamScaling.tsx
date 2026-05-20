@@ -24,6 +24,8 @@ import { useTenant } from '../context/TenantContext';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import '../components/livv/bundle-strategy.css';
+import { CoachFlow } from '../components/livv/CoachFlow';
+import { ROLE_FLOW, TEAM_MEMBER_FLOW, saveRole, saveTeamMember } from '../components/livv/flows/SetupFlows';
 
 interface Role {
   id: string;
@@ -210,10 +212,36 @@ export const TeamScaling: React.FC = () => {
       {loading && <div className="flex items-center justify-center py-16"><Icons.Loader className="animate-spin text-zinc-400" size={20} /></div>}
 
       {!loading && tab === 'roles' && (
-        <RolesGrid roles={roles} members={members} onEdit={r => setEditingRole(r)} onNew={() => setEditingRole('new')} />
+        roles.length === 0 && currentTenant?.id ? (
+          <CoachFlow
+            flow={ROLE_FLOW}
+            onComplete={async (data) => {
+              await saveRole(currentTenant.id, data);
+              await refetch();
+            }}
+            onClose={() => setEditingRole('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <RolesGrid roles={roles} members={members} onEdit={r => setEditingRole(r)} onNew={() => setEditingRole('new')} />
+        )
       )}
       {!loading && tab === 'people' && (
-        <PeopleGrid members={members} roles={roles} onEdit={m => setEditingMember(m)} onNew={() => setEditingMember('new')} />
+        members.length === 0 && currentTenant?.id ? (
+          <CoachFlow
+            flow={TEAM_MEMBER_FLOW}
+            onComplete={async (data) => {
+              await saveTeamMember(currentTenant.id, data);
+              await refetch();
+            }}
+            onClose={() => setEditingMember('new')}
+            inline
+            skipLabel="Skip — open empty form"
+          />
+        ) : (
+          <PeopleGrid members={members} roles={roles} onEdit={m => setEditingMember(m)} onNew={() => setEditingMember('new')} />
+        )
       )}
       {!loading && tab === 'kpis' && (
         <KpisList kpis={kpis} members={members} roles={roles} onEdit={k => setEditingKpi(k)} onNew={() => setEditingKpi('new')} />

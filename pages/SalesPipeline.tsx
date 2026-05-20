@@ -23,6 +23,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { supabase } from '../lib/supabase';
 import { useTenant } from '../context/TenantContext';
+import { CoachFlow } from '../components/livv/CoachFlow';
+import { SALES_SETUP_FLOW, saveSalesSetup } from '../components/livv/flows/SetupFlows';
 import { useAuth } from '../hooks/useAuth';
 import { errorLogger } from '../lib/errorLogger';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
@@ -237,28 +239,17 @@ export const SalesPipeline: React.FC = () => {
         </div>
       )}
 
-      {!loading && leads.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={SPRING_ENTER}
-          className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700 p-12 text-center max-w-xl mx-auto"
-        >
-          <Icons.Target size={32} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-3" />
-          <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">No leads yet</h3>
-          <p className="text-[12.5px] text-zinc-500 dark:text-zinc-400 mt-2 max-w-md mx-auto">
-            Track every prospect from first DM to signed contract. Each lead carries its source,
-            target ICP, proposed package, and a full outreach log.
-          </p>
-          <motion.button
-            onClick={() => setCreating(true)}
-            whileTap={{ scale: 0.97, transition: SPRING_TAP }}
-            className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold"
-          >
-            <Icons.Plus size={12} />
-            Add your first lead
-          </motion.button>
-        </motion.div>
+      {!loading && leads.length === 0 && currentTenant?.id && (
+        <CoachFlow
+          flow={SALES_SETUP_FLOW}
+          onComplete={async (data) => {
+            await saveSalesSetup(currentTenant.id, data);
+            setCreating(true);
+          }}
+          onClose={() => setCreating(true)}
+          inline
+          skipLabel="Skip — add a lead directly"
+        />
       )}
 
       {!loading && leads.length > 0 && (
