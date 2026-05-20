@@ -63,6 +63,7 @@ const loadGrowthDashboard = () => retryDynamicImport(() => import('./pages/Growt
 const loadStrategyToolkit = () => retryDynamicImport(() => import('./pages/StrategyToolkit').then(m => ({ default: m.StrategyToolkit })), 'StrategyToolkit');
 const loadBundlePreview = () => retryDynamicImport(() => import('./pages/BundlePreview').then(m => ({ default: m.BundlePreview })), 'BundlePreview');
 const loadAgent = () => retryDynamicImport(() => import('./pages/Agent').then(m => ({ default: m.Agent })), 'Agent');
+const loadProducts = () => retryDynamicImport(() => import('./pages/Products').then(m => ({ default: m.Products })), 'Products');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -100,6 +101,7 @@ const GrowthDashboard = React.lazy(loadGrowthDashboard);
 const StrategyToolkit = React.lazy(loadStrategyToolkit);
 const BundlePreview = React.lazy(loadBundlePreview);
 const Agent = React.lazy(loadAgent);
+const Products = React.lazy(loadProducts);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -929,6 +931,14 @@ const AppContent: React.FC<{
               <Agent />
             </KeepAlivePage>
           )}
+
+          {/* Products — productized apps + systems + templates marketplace.
+             Bundle source: livv-os-products.jsx. */}
+          {visitedPages.has('products') && (
+            <KeepAlivePage page="products" active={currentPage === 'products'}>
+              <Products />
+            </KeepAlivePage>
+          )}
         </>
       )}
       {/* Bottom-right floating: "Force refresh" pill (always visible) +
@@ -950,7 +960,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
-  'bundle_preview', 'agent',
+  'bundle_preview', 'agent', 'products',
 ]);
 
 const readLastPage = (): PageView => {

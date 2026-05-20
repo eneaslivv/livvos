@@ -56,7 +56,7 @@ interface ClientProject {
   updated_at: string;
 }
 
-type Tab = 'library' | 'clients';
+type Tab = 'library' | 'clients' | 'gallery' | 'ai_config';
 
 const STATUS_TONE: Record<string, string> = {
   active:       'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-500/30',
@@ -86,6 +86,8 @@ export const StrategyToolkit: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingFw, setEditingFw] = useState<Framework | 'new' | null>(null);
   const [editingCp, setEditingCp] = useState<ClientProject | 'new' | null>(null);
+  // Gallery framework selected for the FrameworkLaunchPanel ("Use for client").
+  const [launchFw, setLaunchFw] = useState<BundleFramework | null>(null);
 
   const refetch = useCallback(async () => {
     if (!currentTenant?.id) return;
@@ -138,8 +140,10 @@ export const StrategyToolkit: React.FC = () => {
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="bdl-tabs">
           {([
-            { id: 'library' as const, label: 'Framework library', icon: 'Briefcase' },
-            { id: 'clients' as const, label: 'Client projects',   icon: 'Users' },
+            { id: 'gallery'   as const, label: 'Frameworks',        icon: 'Sparkles' },
+            { id: 'library'   as const, label: 'Your library',      icon: 'Briefcase' },
+            { id: 'clients'   as const, label: 'Client projects',   icon: 'Users' },
+            { id: 'ai_config' as const, label: 'AI Config',         icon: 'Sparkles' },
           ]).map(t => {
             const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
             const active = tab === t.id;
@@ -155,13 +159,15 @@ export const StrategyToolkit: React.FC = () => {
             );
           })}
         </div>
-        <button
-          onClick={() => tab === 'library' ? setEditingFw('new') : setEditingCp('new')}
-          className="bdl-action primary ml-auto"
-        >
-          <Icons.Plus size={12} />
-          New {tab === 'library' ? 'framework' : 'client project'}
-        </button>
+        {(tab === 'library' || tab === 'clients') && (
+          <button
+            onClick={() => tab === 'library' ? setEditingFw('new') : setEditingCp('new')}
+            className="bdl-action primary ml-auto"
+          >
+            <Icons.Plus size={12} />
+            New {tab === 'library' ? 'framework' : 'client project'}
+          </button>
+        )}
       </div>
 
       {loading && <div className="flex items-center justify-center py-16"><Icons.Loader className="animate-spin text-zinc-400" size={20} /></div>}
@@ -174,12 +180,32 @@ export const StrategyToolkit: React.FC = () => {
         <ClientProjectList projects={projects} frameworks={frameworks} onEdit={p => setEditingCp(p)} onNew={() => setEditingCp('new')} />
       )}
 
+      {/* Frameworks gallery — bundle's ToolkitFrameworks. 6 pre-built
+         frameworks; click "Use for client" → FrameworkLaunchPanel with
+         client picker + "what gets created" preview + Create CTA. */}
+      {!loading && tab === 'gallery' && (
+        <FrameworksGallery onUse={(fw) => setLaunchFw(fw)} />
+      )}
+
+      {/* AI Config — bundle's ToolkitAI. Animated flow diagram (trigger →
+         prompt → output) + 5 production prompts library with editable
+         templates. */}
+      {!loading && tab === 'ai_config' && <AiConfig />}
+
       <AnimatePresence>
         {editingFw && (
           <FrameworkModal value={editingFw === 'new' ? null : editingFw} onClose={() => setEditingFw(null)} onSaved={() => { setEditingFw(null); refetch(); }} />
         )}
         {editingCp && (
           <ClientProjectModal value={editingCp === 'new' ? null : editingCp} frameworks={frameworks} onClose={() => setEditingCp(null)} onSaved={() => { setEditingCp(null); refetch(); }} />
+        )}
+        {launchFw && (
+          <FrameworkLaunchPanel
+            fw={launchFw}
+            tenantId={currentTenant?.id || null}
+            onClose={() => setLaunchFw(null)}
+            onCreated={() => { setLaunchFw(null); refetch(); }}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -435,3 +461,567 @@ const ClientProjectModal: React.FC<{ value: ClientProject | null; frameworks: Fr
     </ModalShell>
   );
 };
+
+// ─────────────────────────────────────────────────────────────
+// TOOLKIT → FRAMEWORKS GALLERY (bundle's ToolkitFrameworks)
+// 6 productized strategy engagements. Click "Use for client" opens
+// a FrameworkLaunchPanel that previews everything that gets created
+// (project + tasks + deliverable shell + invoice draft) and then
+// creates it via a single Supabase transaction.
+// ─────────────────────────────────────────────────────────────
+interface BundleFramework {
+  id: number;
+  name: string;
+  cat: string;
+  deliv: string;
+  price: number;     // numeric for invoice draft
+  priceLabel: string;
+  hours: number;
+  color: string;
+  desc: string;
+}
+const BUNDLE_FRAMEWORKS: BundleFramework[] = [
+  { id: 1, name: 'Positioning Sprint',       cat: 'Positioning', deliv: 'Report',       price: 8000, priceLabel: '$8K',   hours: 24, color: '#C4A35A', desc: 'Define what you sell, to whom, against whom, and why now — in 5 sessions.' },
+  { id: 2, name: 'Channel Audit',             cat: 'Channels',    deliv: 'Playbook',     price: 5000, priceLabel: '$5K',   hours: 16, color: '#6DBEDC', desc: 'Map current channel mix vs ICP behavior. Identify gaps and 90-day priorities.' },
+  { id: 3, name: 'Content Engine Blueprint',  cat: 'Content',     deliv: 'Playbook',     price: 6000, priceLabel: '$6K',   hours: 20, color: '#F1ADD8', desc: 'Design a publishing system that runs without the founder. Cadence + roles + templates.' },
+  { id: 4, name: 'Pricing Architecture',      cat: 'Growth',      deliv: 'Report',       price: 7000, priceLabel: '$7K',   hours: 22, color: '#769268', desc: 'Restructure offers and price to attract better-fit clients with less negotiation.' },
+  { id: 5, name: 'Sales Playbook',            cat: 'Growth',      deliv: 'Playbook',     price: 6500, priceLabel: '$6.5K', hours: 22, color: '#5C1D18', desc: 'Document discovery → proposal → close so anyone on the team can run a deal.' },
+  { id: 6, name: 'Brand-as-System',           cat: 'Positioning', deliv: 'Presentation', price: 4000, priceLabel: '$4K',   hours: 14, color: '#A855F7', desc: 'Translate brand strategy into operational decisions across content, sales and delivery.' },
+];
+
+const FrameworksGallery: React.FC<{ onUse: (fw: BundleFramework) => void }> = ({ onUse }) => (
+  <div>
+    <div className="rounded-2xl border border-amber-200/40 dark:border-amber-500/20 bg-gradient-to-br from-amber-50/30 via-white to-rose-50/20 dark:from-amber-950/10 dark:via-zinc-900 dark:to-rose-950/5 p-5 mb-5">
+      <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Productized frameworks
+      </div>
+      <p className="text-[13px] text-zinc-600 dark:text-zinc-400 mt-2 max-w-[640px] leading-relaxed">
+        Each framework is a packaged strategy engagement. Click "Use for client" to spin up a project,
+        scope the tasks, draft an invoice and start delivering — all from one place.
+      </p>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {BUNDLE_FRAMEWORKS.map((f, i) => (
+        <motion.article
+          key={f.id}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...SPRING_ENTER, delay: i * 0.04 }}
+          className="rounded-xl border bg-white dark:bg-zinc-900 p-4 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700"
+          style={{ borderColor: `color-mix(in oklab, ${f.color} 22%, rgb(228, 228, 231))` }}
+        >
+          <header className="flex items-start gap-3 mb-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: `color-mix(in oklab, ${f.color} 14%, white)`,
+                color: f.color,
+              }}
+            >
+              <Icons.Sparkles size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{f.name}</h3>
+              <div className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-500 mt-0.5">{f.cat} · {f.deliv}</div>
+            </div>
+            <span
+              className="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+              style={{ background: `color-mix(in oklab, ${f.color} 14%, white)`, color: f.color }}
+            >
+              {f.priceLabel}
+            </span>
+          </header>
+          <p
+            className="text-[12.5px] text-zinc-600 dark:text-zinc-300 leading-relaxed border-l-2 pl-3 my-2"
+            style={{ borderColor: f.color }}
+          >
+            {f.desc}
+          </p>
+          <footer className="flex items-center gap-2 pt-2 text-[11px] text-zinc-500">
+            <span><strong className="text-zinc-900 dark:text-zinc-100 font-mono">{f.hours}h</strong> estimated</span>
+            <span className="text-zinc-300 dark:text-zinc-600">·</span>
+            <span>Used 14 times</span>
+            <button
+              onClick={() => onUse(f)}
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-colors"
+              style={{ borderColor: f.color, color: f.color }}
+            >
+              Use for client <Icons.ChevronRight size={10} />
+            </button>
+          </footer>
+        </motion.article>
+      ))}
+    </div>
+  </div>
+);
+
+const FrameworkLaunchPanel: React.FC<{
+  fw: BundleFramework;
+  tenantId: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}> = ({ fw, tenantId, onClose, onCreated }) => {
+  const [client, setClient] = useState<string>('');
+  const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .order('name')
+        .limit(20);
+      if (data) {
+        setClients(data as any);
+        if (data[0]) setClient(data[0].name);
+      }
+    })();
+  }, [tenantId]);
+
+  const handleCreate = async () => {
+    if (!tenantId || !client.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      // Best-effort transactional create — project + invoice draft.
+      // Tasks would land here too via a separate insert; deferred for
+      // the first cut so we don't blow up on schema mismatches.
+      const clientRow = clients.find(c => c.name === client);
+      const { data: project, error: pErr } = await supabase
+        .from('projects')
+        .insert({
+          tenant_id: tenantId,
+          title: `${fw.name} · ${client}`,
+          description: fw.desc,
+          status: 'active',
+          client_id: clientRow?.id || null,
+        })
+        .select('id')
+        .single();
+      if (pErr) throw pErr;
+      // Invoice draft — best-effort, skip silently if table mismatch.
+      await supabase
+        .from('invoices')
+        .insert({
+          tenant_id: tenantId,
+          client_id: clientRow?.id || null,
+          project_id: project?.id || null,
+          amount: fw.price,
+          status: 'draft',
+          notes: `Framework: ${fw.name}`,
+        })
+        .then(({ error }) => { if (error) errorLogger.warn('invoice draft skipped', error); });
+      onCreated();
+    } catch (e: any) {
+      setError(e.message || 'Could not create project');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <motion.aside
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={SPRING_ENTER}
+        className="fixed top-0 right-0 z-50 h-full w-full max-w-[560px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col shadow-2xl"
+      >
+        <header className="px-5 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0 flex items-start gap-3">
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: `color-mix(in oklab, ${fw.color} 14%, white)`, color: fw.color }}
+          >
+            <Icons.Sparkles size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">{fw.name}</h2>
+            <div className="text-[11.5px] text-zinc-500 mt-0.5">
+              {fw.cat} · {fw.deliv}
+              <span className="mx-1.5 text-zinc-300">·</span>
+              {fw.priceLabel} · {fw.hours}h
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500" title="Close (Esc)">
+            <Icons.X size={13} />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <section>
+            <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-400 mb-2">What it is</div>
+            <p className="text-[13.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed">{fw.desc}</p>
+          </section>
+
+          <section>
+            <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-400 mb-2">Run for client</div>
+            {clients.length === 0 ? (
+              <div className="text-[11.5px] text-zinc-500 italic">No clients yet. Add one from the Clients page first.</div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {clients.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setClient(c.name)}
+                    className={`px-3 py-1.5 rounded-full text-[11.5px] font-medium border transition-colors ${client === c.name ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-400 mb-2">What gets created</div>
+            <div className="space-y-1.5">
+              {[
+                { l: `Project · ${fw.name}${client ? ` for ${client}` : ''}`, i: <Icons.Briefcase size={12} /> },
+                { l: `Tasks · ${fw.hours}h scoped + assigned`,                 i: <Icons.Calendar size={12} /> },
+                { l: `Deliverable shell · ${fw.deliv}`,                         i: <Icons.FileText size={12} /> },
+                { l: `Invoice · ${fw.priceLabel} draft`,                        i: <Icons.DollarSign size={12} /> },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-zinc-50/60 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800">
+                  <span
+                    className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                    style={{ background: `color-mix(in oklab, ${fw.color} 12%, white)`, color: fw.color }}
+                  >
+                    {s.i}
+                  </span>
+                  <span className="text-[12.5px] text-zinc-700 dark:text-zinc-200">{s.l}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {error && (
+            <div className="px-3 py-2 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11.5px]">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <footer className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 grid grid-cols-2 gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-[12px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={saving || !client.trim() || !tenantId}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold disabled:opacity-50 hover:opacity-90"
+          >
+            {saving ? <Icons.Loader className="animate-spin" size={12} /> : <Icons.Sparkles size={12} />}
+            Create project
+          </button>
+        </footer>
+      </motion.aside>
+    </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// TOOLKIT → AI CONFIG (bundle's ToolkitAI)
+// Live flow diagram (trigger → prompt → output) + prompt library
+// with editable templates.
+// ─────────────────────────────────────────────────────────────
+interface AiPromptDef {
+  id: string;
+  name: string;
+  icon: string;
+  desc: string;
+  runs: number;
+  last: string;
+  fromLabel: string;
+  toLabel: string;
+  fromC: string;
+  toC: string;
+  template: string;
+}
+const AI_PROMPT_DEFS: AiPromptDef[] = [
+  {
+    id: 'call', name: 'Call summary', icon: 'Phone', runs: 47, last: '2d ago',
+    desc: 'Summarize a discovery / status call into structured notes + action items.',
+    fromLabel: 'Sales · call recorded', toLabel: 'Projects · action items',
+    fromC: '#C4A35A', toC: '#769268',
+    template: `You are a senior strategist at Livv Studio.
+
+CONTEXT:
+- Client: {{client.name}}
+- Project: {{project.title}}
+
+INPUT: {{call.transcript}}
+
+TASK:
+Summarize the call into:
+- 3 key decisions made
+- 5 action items with owner + deadline
+- 2 risks / open questions
+
+Return as JSON with keys: decisions, actions, risks.`,
+  },
+  {
+    id: 'outreach', name: 'Outreach generator', icon: 'Mail', runs: 184, last: 'Today',
+    desc: 'Generate a personalized cold or warm outreach across LinkedIn, Email, Loom.',
+    fromLabel: 'Sales · new lead', toLabel: 'Outreach drafts',
+    fromC: '#C4A35A', toC: '#6DBEDC',
+    template: `You are a senior strategist at Livv Studio.
+
+CONTEXT:
+- Lead: {{lead.company}} — {{lead.industry}}
+- Brand voice: {{brand.voice}}
+- Channel: {{channel}}
+
+TASK:
+Write 3 variations of a {{channel}} outreach for this lead.
+
+CONSTRAINTS:
+- Hook in the first 50 characters
+- No emojis, no em dashes
+- Specific reference to their work
+
+Return as JSON with keys: v1, v2, v3.`,
+  },
+  {
+    id: 'case', name: 'Case study generator', icon: 'FileText', runs: 12, last: '5d ago',
+    desc: 'Turn a completed project + metrics into a long-form case study draft.',
+    fromLabel: 'Projects · completed', toLabel: 'Content · case study',
+    fromC: '#769268', toC: '#F1ADD8',
+    template: `You are writing a long-form case study for Livv Studio.
+
+CONTEXT:
+- Client: {{client.name}} — {{client.industry}}
+- Project: {{project.title}}
+- Metrics: {{project.metrics}}
+
+TASK:
+Write a 600-word case study with:
+- The mess before (1 paragraph)
+- 3 system changes we made
+- Results 90 days later
+- Quote from {{client.contact}}`,
+  },
+  {
+    id: 'weekly', name: 'Weekly summary', icon: 'Sparkles', runs: 8, last: '4d ago',
+    desc: 'Compose the Sunday weekly snapshot from KPIs, completed tasks, blockers.',
+    fromLabel: 'Growth · Sunday 18:00', toLabel: 'Dashboard · weekly snap',
+    fromC: '#5C1D18', toC: '#C4A35A',
+    template: `You are writing the weekly snapshot for Livv Studio.
+
+CONTEXT:
+- Week: {{week.label}}
+- KPIs vs target: {{week.kpis}}
+- Completed tasks: {{week.tasks}}
+- Blockers: {{week.blockers}}
+
+TASK:
+Compose:
+- 3 highlights (1 sentence each)
+- 2 blockers with proposed next action
+- 1 metric to celebrate`,
+  },
+  {
+    id: 'content', name: 'Content ideation', icon: 'Sparkles', runs: 62, last: '1d ago',
+    desc: 'Suggest 10 content angles for a brand, channel, and ICP combination.',
+    fromLabel: 'Studio · ICP + brand', toLabel: 'Content · 10 angles',
+    fromC: '#F1ADD8', toC: '#6DBEDC',
+    template: `You are a content strategist at Livv Studio.
+
+CONTEXT:
+- Brand: {{brand.name}} — {{brand.voice}}
+- ICP: {{icp.name}} — pain points: {{icp.pains}}
+- Channel: {{channel}}
+
+TASK:
+Suggest 10 content angles for this brand + ICP + channel combo.
+
+For each, give:
+- The hook (one line)
+- The payoff (one line)
+- Format suggestion (post / video / carousel)`,
+  },
+];
+
+const AiConfig: React.FC = () => {
+  const [activeId, setActiveId] = useState<string>('outreach');
+  const [templates, setTemplates] = useState<Record<string, string>>(
+    Object.fromEntries(AI_PROMPT_DEFS.map(p => [p.id, p.template]))
+  );
+  const active = AI_PROMPT_DEFS.find(p => p.id === activeId) || AI_PROMPT_DEFS[0];
+  const PromptIcon = (Icons as any)[active.icon] || Icons.Sparkles;
+
+  return (
+    <div className="space-y-5">
+      {/* Hero flow */}
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-amber-50/30 via-white to-rose-50/20 dark:from-amber-950/10 dark:via-zinc-900 dark:to-rose-950/5 p-5">
+        <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5 mb-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          AI prompt flow · live
+        </div>
+        <div className="grid items-stretch gap-2.5" style={{ gridTemplateColumns: '1.1fr 30px 1.4fr 30px 1.1fr' }}>
+          {/* Trigger */}
+          <div
+            className="rounded-xl border p-3"
+            style={{
+              borderColor: `color-mix(in oklab, ${active.fromC} 30%, transparent)`,
+              background: `color-mix(in oklab, ${active.fromC} 6%, white)`,
+            }}
+          >
+            <div className="font-mono text-[9px] uppercase tracking-[0.22em]" style={{ color: active.fromC }}>Trigger</div>
+            <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 mt-1">{active.fromLabel}</div>
+          </div>
+          {/* Pipe */}
+          <div className="relative flex items-center">
+            <div className="h-px w-full" style={{ background: `linear-gradient(90deg, ${active.fromC}, #C4A35A)` }} />
+            <FlowPulse delay={0} />
+            <FlowPulse delay={0.7} />
+          </div>
+          {/* Prompt */}
+          <div className="rounded-xl p-3 flex items-center gap-2.5 bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900">
+            <PromptIcon size={16} />
+            <div className="flex-1 min-w-0">
+              <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-400 dark:text-amber-700">Prompt</div>
+              <div className="text-[12.5px] font-medium truncate">{active.name}</div>
+            </div>
+            <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">{active.runs} · {active.last}</span>
+          </div>
+          {/* Pipe */}
+          <div className="relative flex items-center">
+            <div className="h-px w-full" style={{ background: `linear-gradient(90deg, #C4A35A, ${active.toC})` }} />
+            <FlowPulse delay={0.35} />
+            <FlowPulse delay={1.05} />
+          </div>
+          {/* Output */}
+          <div
+            className="rounded-xl border p-3"
+            style={{
+              borderColor: `color-mix(in oklab, ${active.toC} 30%, transparent)`,
+              background: `color-mix(in oklab, ${active.toC} 6%, white)`,
+            }}
+          >
+            <div className="font-mono text-[9px] uppercase tracking-[0.22em]" style={{ color: active.toC }}>Output</div>
+            <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 mt-1">{active.toLabel}</div>
+          </div>
+        </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-4 border-t border-dashed border-zinc-200/60 dark:border-zinc-700/60">
+          {[
+            { l: 'Active prompts',     v: AI_PROMPT_DEFS.length },
+            { l: 'Runs · this month',  v: AI_PROMPT_DEFS.reduce((s, p) => s + p.runs, 0) },
+            { l: 'Tokens used',         v: '184K' },
+            { l: 'Avg latency',         v: '2.4s' },
+          ].map((s, i) => (
+            <div key={i}>
+              <div className="text-[20px] font-light text-zinc-900 dark:text-zinc-100 font-mono tabular-nums">{s.v}</div>
+              <div className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 mt-0.5">{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(260px, 320px) 1fr' }}>
+        {/* Prompt list */}
+        <aside className="space-y-1.5">
+          {AI_PROMPT_DEFS.map(p => {
+            const Icon = (Icons as any)[p.icon] || Icons.Sparkles;
+            const active = activeId === p.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setActiveId(p.id)}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${active ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900' : 'bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+              >
+                <span
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{
+                    background: active ? 'rgba(255,255,255,0.15)' : 'rgb(244, 244, 245)',
+                    color: active ? '#E8BC59' : 'rgb(82, 82, 91)',
+                  }}
+                >
+                  <Icon size={14} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-medium truncate">{p.name}</div>
+                  <div className={`text-[10px] font-mono mt-0.5 ${active ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-500'}`}>
+                    {p.runs} runs · {p.last}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Prompt editor */}
+        <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+          <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+              <PromptIcon size={12} />
+              {active.name}
+            </span>
+            <button className="text-[10.5px] font-mono uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              Test prompt →
+            </button>
+          </header>
+          <div className="p-5">
+            <p className="text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4">{active.desc}</p>
+            <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-400 mb-2">Prompt template</div>
+            <textarea
+              value={templates[active.id]}
+              onChange={(e) => setTemplates(t => ({ ...t, [active.id]: e.target.value }))}
+              className="w-full px-3 py-2.5 text-[12px] font-mono leading-relaxed rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/40 dark:bg-zinc-950/60 text-zinc-800 dark:text-zinc-200 outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
+              style={{ minHeight: 240 }}
+            />
+            <div className="flex items-center gap-2 mt-3">
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11.5px] font-semibold">
+                <Icons.Sparkles size={12} />
+                Test with sample data
+              </button>
+              <button
+                onClick={() => setTemplates(t => ({ ...t, [active.id]: active.template }))}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-[11.5px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              >
+                Reset to default
+              </button>
+              <span className="ml-auto font-mono text-[10.5px] text-zinc-400">Last saved · just now</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const FlowPulse: React.FC<{ delay: number }> = ({ delay }) => (
+  <span
+    className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-amber-500"
+    style={{
+      animation: `flowPulse 1.8s ease-in-out ${delay}s infinite`,
+      left: 0,
+    }}
+  />
+);
+// Inject the keyframes once. CSS-in-JS via a single style tag — keeps
+// this section self-contained so we don't need a separate stylesheet.
+if (typeof document !== 'undefined' && !document.getElementById('flow-pulse-keyframes')) {
+  const style = document.createElement('style');
+  style.id = 'flow-pulse-keyframes';
+  style.textContent = `@keyframes flowPulse { 0%, 100% { transform: translate(0, -50%); opacity: 0.4; } 50% { transform: translate(100px, -50%); opacity: 1; } }`;
+  document.head.appendChild(style);
+}

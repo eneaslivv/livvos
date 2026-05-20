@@ -107,6 +107,10 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
   const [comment, setComment] = useState('');
   const [activityType, setActivityType] = useState<Lead['history'][number]['type']>('note');
   const [showAllHistory, setShowAllHistory] = useState(false);
+  // Expand-to-full-page — bundle's so-iconbtn "expand" affordance. Lets
+  // the user blow up the slide-over to a full overlay when they want
+  // more breathing room for the editor / outreach timeline.
+  const [expanded, setExpanded] = useState(false);
 
   const [draft, setDraft] = useState({
     name: '',
@@ -298,7 +302,7 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
         onClick={onClose}
       />
       <aside
-        className={`relative h-full max-h-screen w-full max-w-md bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] transition-transform duration-250 ease-out ${panelTranslate} motion-reduce:transition-none overflow-hidden`}
+        className={`relative h-full max-h-screen w-full ${expanded ? 'max-w-none' : 'max-w-md'} bg-white dark:bg-zinc-950 border-l border-zinc-200/60 dark:border-zinc-800/50 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_24px_rgba(0,0,0,0.4)] transition-[transform,max-width] duration-250 ease-out ${panelTranslate} motion-reduce:transition-none overflow-hidden`}
       >
         <div className="h-full flex flex-col">
 
@@ -345,10 +349,27 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
+                {onExpand ? (
+                  <button
+                    onClick={() => lead && onExpand(lead)}
+                    className="p-1.5 rounded-md text-zinc-300 hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title="Open in full page"
+                  >
+                    <Icons.External size={14} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setExpanded(e => !e)}
+                    className="p-1.5 rounded-md text-zinc-300 hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title={expanded ? 'Collapse' : 'Expand to full width'}
+                  >
+                    <Icons.Maximize size={14} />
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="p-1.5 rounded-md text-zinc-300 hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  title="Close"
+                  title="Close (Esc)"
                 >
                   <Icons.X size={14} />
                 </button>

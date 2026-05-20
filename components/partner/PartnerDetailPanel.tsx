@@ -72,6 +72,8 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
   // Activity feed — referred leads with status + value + commission accrued.
   // Pulled lazily when the panel opens (same pattern as payouts).
   const [activity, setActivity] = useState<Array<{ id: string; lead_name: string | null; lead_company: string | null; status: string; value: number | null; commission: number | null; created_at: string }>>([]);
+  // Expand-to-full-width — bundle's "expand" icon affordance on slide-overs.
+  const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [widgetBuilderOpen, setWidgetBuilderOpen] = useState(false);
@@ -206,7 +208,10 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
         transition={{ type: 'spring', stiffness: 380, damping: 36 }}
         onClick={(e) => e.stopPropagation()}
         className="bdl-so"
-        style={{ ['--icp-color' as any]: partnerColor }}
+        style={{
+          ['--icp-color' as any]: partnerColor,
+          ...(expanded ? { width: '100vw', maxWidth: '100vw' } : {}),
+        }}
       >
           {/* Header — bundle design */}
           <header className="bdl-so-head">
@@ -273,6 +278,13 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
                 <option value="paused">Paused</option>
                 <option value="archived">Archived</option>
               </select>
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="bdl-so-iconbtn"
+                title={expanded ? 'Collapse' : 'Expand to full width'}
+              >
+                <Icons.Maximize size={14} />
+              </button>
               <button onClick={onClose} className="bdl-so-iconbtn" title="Close (Esc)">
                 <Icons.X size={14} />
               </button>
