@@ -602,24 +602,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
       { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
     ],
-    // Growth engine — strategy hub + content production + team
-    // planning. Per the strategy spec, these are the foundation for
-    // everything sales + marketing + scaling related; they live in OS
-    // mode because they're internal work surfaces (vs Sales mode
-    // which is pipeline-only).
-    [
-      { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
-      { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
-      { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
-      { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
-      // Toolkit — sells the agency's strategy work as a productized
-      // client deliverable. Distinct revenue line from system retainers.
-      { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
-      // Agent — AI workspace (Ask / Workflows / Reports). Cross-module
-      // surface that reads from everything else and runs automated rules.
-      { id: 'agent',            label: 'Agent',     icon: <Icons.Sparkles /> },
-    ],
   ];
+  // NOTE: Strategy / Content / Scaling / Growth / Toolkit / Agent USED to live
+  // in the OS sidebar's "Growth engine" group, but per Eneas the user spec
+  // these are revenue/business-growth surfaces that belong next to Sales
+  // Pipeline + Finance. They were moved to the Sales mode sidebar (below).
+  // OS mode now stays clean as the daily-work surface (Home/Brief/Activity/
+  // Calendar/Docs + Clients tree).
   // Inbox (Communications Hub — unified Gmail + Slack + leads inbox) was
   // previously in OS mode. Moved into Sales mode so it lives next to
   // Leads Inbox + Finance, which is where the user actually does
@@ -631,22 +620,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const showProjectsModule = hasFeature('projects_module') && (!isInitialized || hasPermission('projects', 'view'));
 
   const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
-    // Sales Overview now hosts both the pipeline AND a leads-list toggle
-    // inside the page. The standalone 'Leads Inbox' entry was removed —
-    // it was 95% the same data as the overview, just in table form.
-    // The 'sales_leads' PageView still works for deep links / legacy URLs
-    // and renders the same Sales page with the inbox sub-view selected.
+    // ── Active selling work (top of sidebar) ─────────────────────────
     { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
-    // Pipeline — the growth-engine sales funnel: leads kanban + outreach
-    // log. Distinct from "Sales Overview" (which is the BI dashboard of
-    // historical revenue + proposals). Pipeline is the WORK surface for
-    // active prospecting.
-    { id: 'sales_pipeline', label: 'Pipeline', icon: <Icons.Target /> },
-    // Inbox (Communications Hub) — moved here from OS mode. Sits next to
-    // Sales Overview so all incoming-message surfaces live together.
-    { id: 'communications', label: 'Inbox', icon: <Icons.Mail /> },
-    { id: 'finance', label: 'Financial Center', icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
-    { id: 'sales_analytics', label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
+    { id: 'sales_pipeline',  label: 'Pipeline',       icon: <Icons.Target /> },
+    { id: 'communications',  label: 'Inbox',          icon: <Icons.Mail /> },
+    { id: 'finance',         label: 'Finance',        icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
+    { id: 'sales_analytics', label: 'Analytics',      icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
+    // ── Growth engine (moved from OS sidebar) ────────────────────────
+    // These are the bundle's main surfaces — Strategy / Content / Scaling /
+    // Growth / Toolkit / Agent. They sit BELOW the active-selling block
+    // because they're "operating-system" work surfaces: less daily, more
+    // foundational. Same workspace as Sales because revenue + scale = same
+    // mental model for Eneas.
+    { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
+    { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
+    { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
+    { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
+    { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
+    { id: 'agent',            label: 'Agent',     icon: <Icons.Sparkles /> },
   ];
 
   // Master mode (platform admin) sidebar. No permission gates — the entire

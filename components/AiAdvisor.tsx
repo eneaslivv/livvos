@@ -93,6 +93,55 @@ const SUGGESTED_PROMPTS: { label: string; prompt: string; icon: keyof typeof Ico
   { label: 'Log expense', prompt: 'Log an expense of $X concept Y to category Z. If you are missing info, ask me before proposing the action.', icon: 'DollarSign', kind: 'chat', color: '#769268' },
 ];
 
+// Bundle's grouped suggestion structure (Plan / Analyze / Do) — each
+// prompt has a topic, and items are filtered by which topics the user
+// has active. This is what the user originally wanted: the empty state
+// shows organized prompts by intent, not a flat 2x2 grid.
+// Source: livv-update / ai-advisor.jsx :: SUGGESTIONS
+const SUGGESTION_GROUPS: Array<{
+  group: string;
+  items: Array<{ id: string; label: string; desc: string; icon: keyof typeof Icons; topic: string; prompt: string; kind?: 'chat' | 'insights' }>;
+}> = [
+  {
+    group: 'Plan',
+    items: [
+      { id: 'overview', label: 'Strategic overview', desc: 'Where you are this month', icon: 'Sparkles', topic: 'projects', prompt: '__INSIGHTS__', kind: 'insights' },
+      { id: 'week',     label: 'Plan my week',       desc: 'Balance load across days', icon: 'Calendar', topic: 'time',     prompt: 'Plan my week: pick 4-6 priority tasks spread Mon-Fri.' },
+      { id: 'focus',    label: 'Where to focus',     desc: 'Highest-impact next moves', icon: 'Target',  topic: 'goals',    prompt: 'What should I focus on this week considering deadlines and priorities?' },
+      { id: 'quarter',  label: 'Quarterly OKRs',     desc: 'Progress against your goals', icon: 'Star',  topic: 'goals',    prompt: 'How are we tracking against quarterly OKRs?' },
+    ],
+  },
+  {
+    group: 'Analyze',
+    items: [
+      { id: 'finance',  label: 'Financial health',   desc: 'Cash flow, pending, runway', icon: 'TrendingUp', topic: 'finance',  prompt: 'Analyze my current financial health: paid vs pending income, expenses, runway.' },
+      { id: 'risks',    label: 'Project risks',      desc: 'Blockers across projects',   icon: 'Flag',       topic: 'projects', prompt: 'What projects are at risk or behind? What can I delegate?' },
+      { id: 'load',     label: 'Team workload',      desc: 'Who is over / under-booked', icon: 'Users',      topic: 'team',     prompt: 'Who on the team is most loaded right now and who has bandwidth?' },
+      { id: 'retention',label: 'Client retention',   desc: 'At-risk relationships',      icon: 'Users',      topic: 'clients',  prompt: 'Which clients show signs of disengagement and need attention?' },
+    ],
+  },
+  {
+    group: 'Do',
+    items: [
+      { id: 'followup', label: 'Follow up on teammate', desc: 'Auto-drafted nudges', icon: 'ListChecks', topic: 'team', prompt: 'Pick one teammate who looks stuck and draft a short follow-up.' },
+      { id: 'break',    label: 'Break project into tasks', desc: 'From brief → checklist', icon: 'List', topic: 'projects', prompt: 'Pick my most urgent project and break it into 5-8 concrete tasks.' },
+      { id: 'expense',  label: 'Log expense',          desc: 'Parsed + categorized', icon: 'DollarSign', topic: 'finance', prompt: 'Log an expense — ask me amount, concept, category.' },
+      { id: 'invoice',  label: 'Draft invoice',        desc: 'From hours + scope',   icon: 'Docs',       topic: 'finance', prompt: 'Draft an invoice from a project — ask me which one.' },
+    ],
+  },
+];
+
+// User-configurable topics the AI tracks. Toggle adjusts which suggestion
+// items show up in the empty state grid.
+const AI_TOPICS = [
+  { id: 'finance',  label: 'Finance',  icon: 'DollarSign', color: '#769268' },
+  { id: 'projects', label: 'Projects', icon: 'Briefcase',  color: '#6DBEDC' },
+  { id: 'team',     label: 'Team',     icon: 'Users',      color: '#E8BC59' },
+  { id: 'clients',  label: 'Clients',  icon: 'Users',      color: '#F1ADD8' },
+  { id: 'time',     label: 'Time',     icon: 'Calendar',   color: '#5c1d18' },
+  { id: 'goals',    label: 'Goals',    icon: 'Star',       color: '#C4A35A' },
+] as const;
+
 // Each chat message is either a user line, an assistant text reply, an
 // assistant insights card, OR an assistant action proposal that the user
 // can approve/reject in-line. Action statuses persist with the message
@@ -499,6 +548,24 @@ export const AiAdvisor: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
+  // Bundle's Topics — user can toggle which topics the AI watches.
+  // Filters which suggestion items show in the empty state grid.
+  // Persisted in localStorage so the choice survives page reloads.
+  const [activeTopics, setActiveTopics] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('aiad:topics');
+      return raw ? JSON.parse(raw) : ['finance', 'projects', 'team', 'time'];
+    } catch {
+      return ['finance', 'projects', 'team', 'time'];
+    }
+  });
+  const toggleAiTopic = (id: string) => {
+    setActiveTopics(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      try { localStorage.setItem('aiad:topics', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const [sending, setSending] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
 
@@ -1443,46 +1510,130 @@ export const AiAdvisor: React.FC = () => {
                    its own tone color via --aiad-c (drives a left
                    accent bar + the icon-badge tint). */}
                 {isEmpty && (
-                  <div className="space-y-5 aiad-empty-in">
+                  <div className="space-y-4 aiad-empty-in">
+                    {/* Bundle's Topics rail — "I watch" + 6 toggleable chips */}
+                    <div className="px-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400 font-semibold">
+                          <Icons.Sparkles size={10} />
+                          I watch
+                        </span>
+                        <span className="text-[9.5px] font-mono text-zinc-400 tracking-[0.04em]">
+                          {activeTopics.length}/{AI_TOPICS.length} topics
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {AI_TOPICS.map(t => {
+                          const active = activeTopics.includes(t.id);
+                          const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => toggleAiTopic(t.id)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                                active
+                                  ? 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm'
+                                  : 'bg-transparent border border-zinc-200/50 dark:border-zinc-700/40 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                              }`}
+                              style={active ? { boxShadow: `inset 0 0 0 1px ${t.color}40` } : undefined}
+                            >
+                              <span
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ background: active ? t.color : '#a1a1aa' }}
+                              />
+                              {t.label}
+                              {active && <Icons.Check size={9} className="text-emerald-500" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Greeting bubble */}
                     <div className="flex items-start gap-3">
                       <div className="aiad-avatar w-8 h-8 rounded-[10px] shrink-0">
                         <Icons.Sparkles size={13} />
                       </div>
                       <div className="flex-1 px-3.5 py-2.5 rounded-2xl aiad-bubble-bot-tail bg-white/85 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 text-[13px] leading-[1.55] text-zinc-800 dark:text-zinc-100">
-                        Hi — I have context on your <strong className="font-medium">projects</strong>, <strong className="font-medium">finances</strong> and <strong className="font-medium">team</strong>. Ask anything below, or pick a starter.
+                        {activeTopics.length === 0 ? (
+                          <>Pick at least one topic above and I'll tailor my suggestions.</>
+                        ) : (
+                          <>I'm watching <strong className="font-medium">{activeTopics.length} topic{activeTopics.length === 1 ? '' : 's'}</strong>. Ask anything below, or pick a starter from {SUGGESTION_GROUPS.length} groups.</>
+                        )}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      {SUGGESTED_PROMPTS.map((p, pi) => {
-                        const IconComp = (Icons as any)[p.icon] || Icons.Sparkles;
-                        return (
-                          <motion.button
-                            key={p.label}
-                            onClick={() => handlePrompt(p)}
-                            disabled={busy}
-                            initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.97 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{ ...SPRING_ENTER, delay: 0.08 + pi * 0.035 }}
-                            whileTap={{ scale: 0.98, transition: SPRING_TAP }}
-                            whileHover={{ y: -1, transition: SPRING_TAP }}
-                            style={{ ['--aiad-c' as any]: p.color }}
-                            className="aiad-sugg flex items-center gap-2.5 p-2.5 rounded-[13px] border border-zinc-200/60 dark:border-zinc-700/50 bg-white/75 dark:bg-zinc-800/40 hover:bg-white/95 dark:hover:bg-zinc-800/70 text-left disabled:opacity-50"
-                          >
-                            <span className="aiad-sugg-icon w-7 h-7 rounded-[9px] flex items-center justify-center shrink-0">
-                              <IconComp size={12} />
+
+                    {/* Bundle's grouped suggestions: Plan / Analyze / Do.
+                       Each group filtered by active topics. Each item carries
+                       a tone color derived from its topic — drives the left
+                       accent + icon-badge tint. */}
+                    {SUGGESTION_GROUPS.map(g => {
+                      const groupItems = g.items.filter(it => activeTopics.includes(it.topic));
+                      if (groupItems.length === 0) return null;
+                      return (
+                        <section key={g.group} className="space-y-2">
+                          <div className="flex items-center gap-2 px-1">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400 font-semibold">
+                              {g.group}
                             </span>
-                            <span className="text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 leading-tight tracking-[-0.005em] truncate flex-1">
-                              {p.label}
+                            <span className="text-[9.5px] font-mono text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                              {groupItems.length}
                             </span>
-                            <span
-                              aria-hidden
-                              className="w-1.5 h-1.5 rounded-full opacity-70 shrink-0"
-                              style={{ background: p.color }}
-                            />
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+                            <span className="flex-1 h-px bg-gradient-to-r from-zinc-200/60 to-transparent dark:from-zinc-700/40" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {groupItems.map((it, pi) => {
+                              const IconComp = (Icons as any)[it.icon] || Icons.Sparkles;
+                              const topic = AI_TOPICS.find(t => t.id === it.topic);
+                              const color = topic?.color || '#A8A29A';
+                              return (
+                                <motion.button
+                                  key={it.id}
+                                  onClick={() => handlePrompt({
+                                    label: it.label, prompt: it.prompt, icon: it.icon,
+                                    kind: it.kind || 'chat', color,
+                                  })}
+                                  disabled={busy}
+                                  initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.97 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  transition={{ ...SPRING_ENTER, delay: 0.06 + pi * 0.035 }}
+                                  whileTap={{ scale: 0.98, transition: SPRING_TAP }}
+                                  whileHover={{ y: -1, transition: SPRING_TAP }}
+                                  style={{ ['--aiad-c' as any]: color }}
+                                  className="aiad-sugg flex items-start gap-2.5 p-2.5 rounded-[13px] border border-zinc-200/60 dark:border-zinc-700/50 bg-white/75 dark:bg-zinc-800/40 hover:bg-white/95 dark:hover:bg-zinc-800/70 text-left disabled:opacity-50"
+                                >
+                                  <span
+                                    className="aiad-sugg-icon w-7 h-7 rounded-[9px] flex items-center justify-center shrink-0 mt-px"
+                                  >
+                                    <IconComp size={12} />
+                                  </span>
+                                  <span className="flex-1 min-w-0">
+                                    <span className="block text-[11.5px] font-medium text-zinc-800 dark:text-zinc-100 leading-tight tracking-[-0.005em] truncate">
+                                      {it.label}
+                                    </span>
+                                    <span className="block text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 truncate">
+                                      {it.desc}
+                                    </span>
+                                  </span>
+                                  <span
+                                    aria-hidden
+                                    className="w-1.5 h-1.5 rounded-full opacity-70 shrink-0 mt-2"
+                                    style={{ background: color }}
+                                  />
+                                </motion.button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      );
+                    })}
+
+                    {activeTopics.length > 0 && SUGGESTION_GROUPS.every(g => g.items.filter(it => activeTopics.includes(it.topic)).length === 0) && (
+                      <div className="px-3 py-4 text-center text-[12px] text-zinc-500 dark:text-zinc-400 italic">
+                        No prompts for the topics you selected. Ask anything below — I'll still answer.
+                      </div>
+                    )}
 
                     {/* Quick tools row — shortcuts that don't go through
                         the chat. "Draft email" opens a slim composer with
