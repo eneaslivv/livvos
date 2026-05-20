@@ -122,6 +122,8 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
   // Tabs (bundle design) instead of accordion sections — only one is visible at a time.
   type BrandTab = 'identity' | 'visual' | 'voice' | 'rules' | 'refs' | 'gen';
   const [activeTab, setActiveTab] = useState<BrandTab>('identity');
+  // Expand-to-full-width — bundle's "expand" icon affordance on slide-overs.
+  const [expanded, setExpanded] = useState(false);
   // openSections kept as a derived map for legacy section toggle callsites — only
   // the active tab is "open"; everything else collapsed. Old `toggle()` becomes a no-op.
   const openSections = useMemo(() => ({
@@ -243,7 +245,10 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
         transition={{ type: 'spring', stiffness: 380, damping: 36 }}
         onClick={(e) => e.stopPropagation()}
         className="bdl-so"
-        style={{ ['--icp-color' as any]: brandColor }}
+        style={{
+          ['--icp-color' as any]: brandColor,
+          ...(expanded ? { width: '100vw', maxWidth: '100vw' } : {}),
+        }}
       >
           {/* Header — bundle design with logo block + editable title + status + close */}
           <header className="bdl-so-head">
@@ -305,6 +310,13 @@ export const BrandDetailPanel: React.FC<Props> = ({ brand, isOpen, onClose }) =>
                 <option value="active">Active</option>
                 <option value="archived">Archived</option>
               </select>
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="bdl-so-iconbtn"
+                title={expanded ? 'Collapse' : 'Expand to full width'}
+              >
+                <Icons.Maximize size={14} />
+              </button>
               <button onClick={onClose} className="bdl-so-iconbtn" title="Close (Esc)">
                 <Icons.X size={14} />
               </button>
