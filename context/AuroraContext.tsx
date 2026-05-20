@@ -54,7 +54,10 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [agent, setAgentState] = useState<AgentSlug>(() => {
     try {
       const v = localStorage.getItem(STORAGE_KEY_AGENT);
-      const valid: AgentSlug[] = ['atlas', 'solara', 'marina', 'nova', 'lumen', 'vega', 'orion', 'iris'];
+      const valid: AgentSlug[] = [
+        'atlas', 'solara', 'marina', 'nova', 'lumen', 'vega', 'orion', 'iris',
+        'halo', 'cobra', 'selva', 'rune', 'echo', 'pulse',
+      ];
       if (v && (valid as string[]).includes(v)) return v as AgentSlug;
     } catch {}
     return 'orion';
@@ -175,5 +178,11 @@ function openerFor(a: AgentSlug): string {
   if (a === 'vega')   return `${auroraAgents.vega.display_name}. Voice + canal + ICP — pedime drafts o cadence.`;
   if (a === 'orion')  return `${auroraAgents.orion.display_name}. Buenos días. Qué cambió overnight y qué movemos hoy.`;
   if (a === 'iris')   return `${auroraAgents.iris.display_name}. Decime el cliente y el framework — armo todo (project + tasks + invoice).`;
+  if (a === 'halo')   return `${auroraAgents.halo.display_name}. 12 mensajes nuevos. ¿Triage por VIP, patrón repetido, o draft de respuesta?`;
+  if (a === 'cobra')  return `${auroraAgents.cobra.display_name}. 4 retainers — 1 en rojo. ¿Veamos health, churn risk o expansion?`;
+  if (a === 'selva')  return `${auroraAgents.selva.display_name}. Lucía al 110% por 3 semanas. ¿Vemos capacity, hire window o burnout signals?`;
+  if (a === 'rune')   return `${auroraAgents.rune.display_name}. Pulse Studio está 22% abajo de market. ¿Pricing, tier psych o conversion?`;
+  if (a === 'echo')   return `${auroraAgents.echo.display_name}. 8 partners dormidos +60d. ¿Top performers, re-engagement, attribution?`;
+  if (a === 'pulse')  return `${auroraAgents.pulse.display_name}. 1 tenant en riesgo de churn — ventana cierra en 10d. ¿Veamos?`;
   return 'Hola.';
 }

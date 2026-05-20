@@ -16,8 +16,13 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
     case 'sales_dashboard':
     case 'sales_leads':
     case 'sales_pipeline':
-    case 'communications':
       return 'solara';
+
+    // ── Communications inbox → Halo (triage) ─────────────────────
+    // Halo owns inbox decisions; Solara takes over once a thread
+    // becomes a sales conversation.
+    case 'communications':
+      return 'halo';
 
     // ── Finance → Marina ─────────────────────────────────────────
     case 'finance':
@@ -28,14 +33,16 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
     case 'sales_analytics':
       return 'nova';
 
-    // ── Strategy → Lumen ──────────────────────────────────────────
-    // Strategy Hub + Clients (CRM at strategic level) get Lumen as
-    // the default — she's the one watching ICP/package/positioning
-    // drift.
+    // ── Strategy Hub → Lumen ─────────────────────────────────────
     case 'strategy_hub':
+      return 'lumen';
+
+    // ── Clients / CSM surfaces → Cobra ───────────────────────────
+    // Cobra owns relationship health day-to-day. Lumen takes over
+    // when the question is "is this the right ICP for us" (strategic).
     case 'clients':
     case 'team_clients':
-      return 'lumen';
+      return 'cobra';
 
     // ── Content surfaces → Vega ──────────────────────────────────
     case 'content_engine':
@@ -43,13 +50,29 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
     case 'docs':
       return 'vega';
 
-    // ── Toolkit / Products → Iris ────────────────────────────────
-    // Engagement design — frameworks, scoping, deliverables. Also
-    // covers Products because productized services + engagements are
-    // the same mental model.
+    // ── Toolkit → Iris ───────────────────────────────────────────
+    // Engagement design — frameworks, scoping, deliverables.
     case 'strategy_toolkit':
-    case 'products':
       return 'iris';
+
+    // ── Products → Rune ──────────────────────────────────────────
+    // Pricing strategist, tier design, embed conversion. Different
+    // mental model from Iris (recurring SaaS vs done-with-you).
+    case 'products':
+      return 'rune';
+
+    // ── Team scaling → Selva ─────────────────────────────────────
+    case 'team_scaling':
+    case 'team':
+      return 'selva';
+
+    // ── Master mode (platform admin) → Pulse ─────────────────────
+    case 'platform_admin':
+    case 'platform_customers':
+    case 'platform_roles':
+    case 'platform_features':
+    case 'platform_audit':
+      return 'pulse';
 
     // ── Daily ops → Orion ────────────────────────────────────────
     // Home, Brief, Calendar, Activity — anything that lives on the
@@ -70,13 +93,19 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
 }
 
 export const auroraRegistry = [
-  auroraAgents.solara,
-  auroraAgents.marina,
-  auroraAgents.nova,
-  auroraAgents.lumen,
-  auroraAgents.vega,
-  auroraAgents.orion,
-  auroraAgents.iris,
+  auroraAgents.orion,   // Daily ops — surfaced first because it's the morning default
+  auroraAgents.lumen,   // Strategy
+  auroraAgents.vega,    // Content
+  auroraAgents.solara,  // Sales
+  auroraAgents.halo,    // Communications
+  auroraAgents.cobra,   // Clients
+  auroraAgents.marina,  // Finance
+  auroraAgents.nova,    // Growth
+  auroraAgents.iris,    // Toolkit
+  auroraAgents.rune,    // Products
+  auroraAgents.selva,   // Team / Scaling
+  auroraAgents.echo,    // Partners
+  auroraAgents.pulse,   // Master / platform
 ];
 
 // Used as a fallback when the response is unknown/garbled.

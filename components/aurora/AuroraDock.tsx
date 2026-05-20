@@ -185,6 +185,12 @@ function openerFor(a: AgentSlug): string {
   if (a === 'vega')   return 'Vega. Voice + canal + ICP — pedime drafts.';
   if (a === 'orion')  return 'Orion. Buenos días. ¿Qué movemos hoy?';
   if (a === 'iris')   return 'Iris. Decime cliente + framework — armo todo.';
+  if (a === 'halo')   return 'Halo. 12 mensajes — 1 hot. ¿Triage?';
+  if (a === 'cobra')  return 'Cobra. 4 retainers, 1 rojo. ¿Health o expansion?';
+  if (a === 'selva')  return 'Selva. Lucía al 110% por 3 semanas. ¿Capacity?';
+  if (a === 'rune')   return 'Rune. Pulse Studio -22% vs market. ¿Pricing?';
+  if (a === 'echo')   return 'Echo. 8 partners dormidos. ¿Re-engagement?';
+  if (a === 'pulse')  return 'Pulse. 1 tenant en riesgo. ¿Veamos?';
   return 'Atlas. Decime qué necesitás y te paso con quien lo lleva.';
 }
 
@@ -224,6 +230,42 @@ function chipsFor(a: AgentSlug): string[] {
     'Mostrame los frameworks',
     'Usar Positioning Sprint con Mulberry',
     'Editar prompt de Outreach generator',
+  ];
+  if (a === 'halo') return [
+    'Qué tengo en el inbox',
+    'Patrones repetidos esta semana',
+    'Draft de respuesta para Mulberry',
+    'VIPs sin tocar hace +7 días',
+  ];
+  if (a === 'cobra') return [
+    'Salud de los retainers',
+    'Quién está en riesgo de churn?',
+    'Señales de expansion',
+    'Touchpoint gaps',
+  ];
+  if (a === 'selva') return [
+    'Capacity del team esta semana',
+    'Hay burnout signals?',
+    'Cuándo hire?',
+    'Comp benchmark para Designer',
+  ];
+  if (a === 'rune') return [
+    'Pulse está bien priced?',
+    'Distribución de tiers',
+    'Top sellers',
+    'Quién está embedeando?',
+  ];
+  if (a === 'echo') return [
+    'Quién es mi top partner?',
+    'Partners dormidos',
+    'Cómo va la attribution?',
+    'Payouts pendientes',
+  ];
+  if (a === 'pulse') return [
+    'Tenants en riesgo de churn',
+    'Señales de expansion',
+    'Onboarding health',
+    'Platform stats — cómo va?',
   ];
   return ['Mostrame el pipeline', 'AR aging', 'Funnel', 'Plan del día'];
 }

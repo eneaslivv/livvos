@@ -1,7 +1,21 @@
 // Aurora multi-agent chat — shared types.
 // Used by client (context + components) and Supabase Edge Function aurora-chat.
 
-export type AgentSlug = 'atlas' | 'solara' | 'marina' | 'nova' | 'lumen' | 'vega' | 'orion' | 'iris';
+export type AgentSlug =
+  | 'atlas'   // Orchestrator
+  | 'solara'  // Sales
+  | 'marina'  // Finance
+  | 'nova'    // Growth
+  | 'lumen'   // Strategy
+  | 'vega'    // Content
+  | 'orion'   // Daily ops
+  | 'iris'    // Toolkit / Engagements
+  | 'halo'    // Triage Assistant (Communications / Inbox)
+  | 'cobra'   // Relationship Curator (Clients / CSM)
+  | 'selva'   // Org Designer (TeamScaling)
+  | 'rune'    // Product Marketer (Products marketplace)
+  | 'echo'    // Partner Activator (Partners portal)
+  | 'pulse';  // Tenant Health Monitor (Master mode)
 export type AuroraMode = 'multi' | 'unified';
 
 export interface AgentMeta {
