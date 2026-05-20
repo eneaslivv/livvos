@@ -72,7 +72,7 @@ interface KpiLog {
   created_at: string;
 }
 
-type Tab = 'roles' | 'people' | 'kpis';
+type Tab = 'roles' | 'people' | 'kpis' | 'roadmap' | 'costs';
 
 const STATUS_TONE: Record<string, string> = {
   active:     'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-500/30',
@@ -167,9 +167,11 @@ export const TeamScaling: React.FC = () => {
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="bdl-tabs">
           {([
-            { id: 'roles' as const,  label: 'Roles',  icon: 'Briefcase' },
-            { id: 'people' as const, label: 'People', icon: 'Users' },
-            { id: 'kpis' as const,   label: 'KPIs',   icon: 'Chart' },
+            { id: 'roles' as const,    label: 'Roles',    icon: 'Briefcase' },
+            { id: 'people' as const,   label: 'People',   icon: 'Users' },
+            { id: 'roadmap' as const,  label: 'Roadmap',  icon: 'Calendar' },
+            { id: 'costs' as const,    label: 'Costs',    icon: 'DollarSign' },
+            { id: 'kpis' as const,     label: 'KPIs',     icon: 'Chart' },
           ]).map(t => {
             const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
             const active = tab === t.id;
@@ -185,17 +187,24 @@ export const TeamScaling: React.FC = () => {
             );
           })}
         </div>
-        <button
-          onClick={() => {
-            if (tab === 'roles') setEditingRole('new');
-            else if (tab === 'people') setEditingMember('new');
-            else setEditingKpi('new');
-          }}
-          className="bdl-action primary ml-auto"
-        >
-          <Icons.Plus size={12} />
-          New {tab === 'roles' ? 'role' : tab === 'people' ? 'person' : 'KPI log'}
-        </button>
+        {(tab === 'roles' || tab === 'people' || tab === 'kpis') && (
+          <button
+            onClick={() => {
+              if (tab === 'roles') setEditingRole('new');
+              else if (tab === 'people') setEditingMember('new');
+              else setEditingKpi('new');
+            }}
+            className="bdl-action primary ml-auto"
+          >
+            <Icons.Plus size={12} />
+            New {tab === 'roles' ? 'role' : tab === 'people' ? 'person' : 'KPI log'}
+          </button>
+        )}
+        {tab === 'roadmap' && (
+          <button onClick={() => setEditingRole('new')} className="bdl-action primary ml-auto">
+            <Icons.Plus size={12} /> Add next hire
+          </button>
+        )}
       </div>
 
       {loading && <div className="flex items-center justify-center py-16"><Icons.Loader className="animate-spin text-zinc-400" size={20} /></div>}
@@ -208,6 +217,12 @@ export const TeamScaling: React.FC = () => {
       )}
       {!loading && tab === 'kpis' && (
         <KpisList kpis={kpis} members={members} roles={roles} onEdit={k => setEditingKpi(k)} onNew={() => setEditingKpi('new')} />
+      )}
+      {!loading && tab === 'roadmap' && (
+        <ScalingRoadmap roles={roles} members={members} onEditRole={r => setEditingRole(r)} />
+      )}
+      {!loading && tab === 'costs' && (
+        <ScalingCosts roles={roles} members={members} />
       )}
 
       <AnimatePresence>
@@ -597,5 +612,211 @@ const KpiModal: React.FC<{ value: KpiLog | null; members: Member[]; roles: Role[
       </div>
       <Field label="Notes"><textarea rows={2} className={inputClass} value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value || null }))} /></Field>
     </ModalShell>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// SCALING → ROADMAP (12-month hire gantt)
+// Bundle reference: livv-os-remaining.jsx ScalingRoadmap.
+// We render bars on a 12-month grid; each role's left + width is
+// computed from `hire_phase` ("M3", "M5", …). Roles without a
+// phase pin to M1 by convention.
+// ─────────────────────────────────────────────────────────────
+const ROADMAP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ROADMAP_STATUS_COLOR: Record<string, string> = {
+  filled:  'rgb(118, 146, 104)',     // sage
+  hiring:  'rgb(196, 163, 90)',      // gold
+  planned: 'rgb(161, 161, 170)',     // zinc-400
+  paused:  'rgb(228, 121, 121)',     // wine-light
+};
+const parsePhaseMonth = (phase: string | null): number => {
+  if (!phase) return 0;
+  const m = phase.match(/M?(\d+)/i);
+  if (!m) return 0;
+  return Math.min(11, Math.max(0, parseInt(m[1], 10) - 1));
+};
+
+const ScalingRoadmap: React.FC<{
+  roles: Role[];
+  members: Member[];
+  onEditRole: (r: Role) => void;
+}> = ({ roles, members, onEditRole }) => {
+  if (roles.length === 0) {
+    return <EmptyState icon="Calendar" title="No roadmap yet" body="Add roles with a hire_phase (M1–M12) to see the 12-month roadmap." cta="Add a role" onClick={() => onEditRole({} as Role)} />;
+  }
+  const totalMonthly = members.filter(m => m.status === 'active').reduce((s, m) => s + (m.rate_monthly || 0), 0);
+  const projectedM12 = roles
+    .filter(r => r.status !== 'paused')
+    .reduce((s, r) => s + (r.estimated_cost_monthly || 0), 0);
+  const filledCount = roles.filter(r => r.status === 'filled').length;
+  const hiringCount = roles.filter(r => r.status === 'hiring').length;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4 text-[10.5px] font-mono uppercase tracking-wider text-zinc-500">
+        {[
+          { l: 'Filled',  c: ROADMAP_STATUS_COLOR.filled },
+          { l: 'Hiring',  c: ROADMAP_STATUS_COLOR.hiring },
+          { l: 'Planned', c: ROADMAP_STATUS_COLOR.planned },
+          { l: 'Paused',  c: ROADMAP_STATUS_COLOR.paused },
+        ].map(l => (
+          <span key={l.l} className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: l.c }} />
+            {l.l}
+          </span>
+        ))}
+      </div>
+
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <div className="grid border-b border-zinc-100 dark:border-zinc-800/60" style={{ gridTemplateColumns: '200px repeat(12, minmax(0, 1fr))' }}>
+          <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 bg-zinc-50/60 dark:bg-zinc-950/40">Role</div>
+          {ROADMAP_MONTHS.map((m, i) => (
+            <div key={m} className="px-1 py-2 text-center text-[10px] font-mono text-zinc-400 border-l border-zinc-100 dark:border-zinc-800/40">
+              M{i + 1}<br /><span className="text-zinc-500 dark:text-zinc-500 text-[9px]">{m}</span>
+            </div>
+          ))}
+        </div>
+        {roles.map((r, idx) => {
+          const startIdx = parsePhaseMonth(r.hire_phase);
+          const widthMonths = 12 - startIdx;
+          const leftPct = (startIdx / 12) * 100;
+          const widthPct = (widthMonths / 12) * 100;
+          const color = ROADMAP_STATUS_COLOR[r.status] || ROADMAP_STATUS_COLOR.planned;
+          return (
+            <motion.div
+              key={r.id}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...SPRING_ENTER, delay: idx * 0.02 }}
+              className="grid items-center border-b border-zinc-50 dark:border-zinc-800/40 last:border-b-0 cursor-pointer hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20"
+              style={{ gridTemplateColumns: '200px 1fr' }}
+              onClick={() => onEditRole(r)}
+            >
+              <div className="px-4 py-2.5">
+                <div className="text-[12px] font-medium text-zinc-900 dark:text-zinc-100 truncate">{r.title}</div>
+                <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                  {r.department || '—'} · {r.type.replace('_', ' ')}
+                </div>
+              </div>
+              <div className="relative h-9">
+                {ROADMAP_MONTHS.map((_, i) => (
+                  <div key={i} className="absolute top-0 bottom-0 border-l border-zinc-100 dark:border-zinc-800/30" style={{ left: `${(i / 12) * 100}%` }} />
+                ))}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 h-6 rounded-md flex items-center justify-between px-2 text-[10.5px] font-medium text-white shadow-sm transition-all hover:opacity-95"
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `calc(${widthPct}% - 4px)`,
+                    background: color,
+                  }}
+                  title={`${r.title} · ${r.status} · ${r.hire_phase || 'M1'}`}
+                >
+                  <span className="truncate">{r.title.split(' ')[0]}</span>
+                  {r.estimated_cost_monthly != null && (
+                    <span className="text-[10px] font-mono opacity-90 shrink-0 ml-1">{fmtMoney(r.estimated_cost_monthly)}</span>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+        <div className="px-4 py-3 bg-zinc-50/60 dark:bg-zinc-950/40 border-t border-zinc-100 dark:border-zinc-800/60 text-[11px] text-zinc-600 dark:text-zinc-400 flex items-center gap-3 flex-wrap">
+          <span><strong className="text-zinc-900 dark:text-zinc-100">{roles.length}</strong> roles defined</span>
+          <span className="text-zinc-300 dark:text-zinc-600">·</span>
+          <span><strong className="text-zinc-900 dark:text-zinc-100">{filledCount}</strong> filled</span>
+          <span className="text-zinc-300 dark:text-zinc-600">·</span>
+          <span><strong className="text-zinc-900 dark:text-zinc-100">{hiringCount}</strong> hiring</span>
+          <span className="text-zinc-300 dark:text-zinc-600">·</span>
+          <span>
+            <strong className="text-zinc-900 dark:text-zinc-100">{fmtMoney(totalMonthly)}</strong> current monthly · projected{' '}
+            <strong className="text-zinc-900 dark:text-zinc-100">{fmtMoney(projectedM12)}</strong> at M12
+          </span>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// SCALING → COSTS (revenue vs cost dual-bar)
+// Bundle reference: livv-os-remaining.jsx ScalingCosts.
+// ─────────────────────────────────────────────────────────────
+const ScalingCosts: React.FC<{ roles: Role[]; members: Member[] }> = ({ roles, members }) => {
+  const currentMonthlyCost = members
+    .filter(m => m.status === 'active')
+    .reduce((s, m) => s + (m.rate_monthly || 0), 0);
+  const projectedM12Cost = currentMonthlyCost + roles
+    .filter(r => r.status === 'planned' || r.status === 'hiring')
+    .reduce((s, r) => s + (r.estimated_cost_monthly || 0), 0);
+  // Placeholder revenue projection. TODO: wire to finance actuals.
+  const revenueRamp = Array.from({ length: 12 }, (_, i) =>
+    Math.round((currentMonthlyCost * 2.4) * (1 + i * 0.07))
+  );
+  const costRamp = Array.from({ length: 12 }, (_, monthIdx) => {
+    return currentMonthlyCost + roles
+      .filter(r => r.status !== 'paused' && parsePhaseMonth(r.hire_phase) <= monthIdx)
+      .reduce((s, r) => s + (r.estimated_cost_monthly || 0), 0);
+  });
+  const maxBar = Math.max(...revenueRamp, ...costRamp) || 1;
+  const margin = revenueRamp[5] > 0 ? Math.round(((revenueRamp[5] - costRamp[5]) / revenueRamp[5]) * 100) : 0;
+  const m12Delta = revenueRamp[11] - costRamp[11];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {[
+          { l: 'Team cost · monthly', v: fmtMoney(currentMonthlyCost), tone: 'rose' as const },
+          { l: 'Revenue · monthly',    v: fmtMoney(revenueRamp[5]),    tone: 'emerald' as const },
+          { l: 'Margin',                v: `${margin}%`,                tone: 'violet' as const },
+          { l: 'Projected M12 Δ',  v: (m12Delta >= 0 ? '+' : '') + fmtMoney(m12Delta), tone: 'zinc' as const },
+        ].map((k, i) => (
+          <StatCard key={i} label={k.l} value={k.v} tone={k.tone} />
+        ))}
+      </div>
+
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+          <div className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+            <Icons.Chart size={13} />
+            Cost vs revenue · 12 months
+          </div>
+          <span className="text-[10.5px] font-mono text-zinc-400">linear projection · wire to finance for actuals</span>
+        </header>
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-end gap-2" style={{ height: 200 }}>
+            {ROADMAP_MONTHS.map((m, i) => {
+              const rH = (revenueRamp[i] / maxBar) * 170;
+              const cH = (costRamp[i] / maxBar) * 170;
+              return (
+                <div key={m} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div className="flex items-end gap-0.5" style={{ height: 170 }}>
+                    <div
+                      className="rounded-t-sm transition-all"
+                      style={{ width: 10, height: rH, background: 'rgb(118, 146, 104)', opacity: 0.85 }}
+                      title={`Revenue ${fmtMoney(revenueRamp[i])}`}
+                    />
+                    <div
+                      className="rounded-t-sm transition-all"
+                      style={{ width: 10, height: cH, background: 'rgb(92, 29, 24)', opacity: 0.85 }}
+                      title={`Cost ${fmtMoney(costRamp[i])}`}
+                    />
+                  </div>
+                  <div className="text-[9.5px] font-mono text-zinc-400">{m}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-center gap-5 pt-3 mt-2 border-t border-dashed border-zinc-200 dark:border-zinc-700">
+            <span className="text-[11px] font-mono text-zinc-500 inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'rgb(118, 146, 104)' }} />
+              Revenue
+            </span>
+            <span className="text-[11px] font-mono text-zinc-500 inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'rgb(92, 29, 24)' }} />
+              Team cost
+            </span>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 };

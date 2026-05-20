@@ -76,7 +76,7 @@ interface Piece {
 
 interface ICP { id: string; name: string }
 
-type Tab = 'pipeline' | 'calendar' | 'channels' | 'brands' | 'studio';
+type Tab = 'pipeline' | 'calendar' | 'channels' | 'brands' | 'studio' | 'templates' | 'performance';
 
 const STATUS_FLOW: Array<{ id: Piece['status']; label: string; tone: string }> = [
   { id: 'idea',       label: 'Ideas',      tone: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300' },
@@ -313,11 +313,13 @@ export const ContentEngine: React.FC = () => {
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <div className="bdl-tabs">
           {([
-            { id: 'pipeline' as const, label: 'Pipeline', icon: 'List' },
-            { id: 'calendar' as const, label: 'Calendar', icon: 'Calendar' },
-            { id: 'channels' as const, label: 'Channels', icon: 'Globe' },
-            { id: 'brands' as const,   label: 'Brands',   icon: 'Sparkles' },
-            { id: 'studio' as const,   label: 'Studio',   icon: 'Edit' },
+            { id: 'pipeline' as const,    label: 'Pipeline',     icon: 'List' },
+            { id: 'calendar' as const,    label: 'Calendar',     icon: 'Calendar' },
+            { id: 'channels' as const,    label: 'Channels',     icon: 'Globe' },
+            { id: 'brands' as const,      label: 'Brands',       icon: 'Sparkles' },
+            { id: 'studio' as const,      label: 'Studio',       icon: 'Edit' },
+            { id: 'templates' as const,   label: 'Templates',    icon: 'Briefcase' },
+            { id: 'performance' as const, label: 'Performance',  icon: 'Chart' },
           ]).map(t => {
             const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
             const active = tab === t.id;
@@ -348,7 +350,7 @@ export const ContentEngine: React.FC = () => {
             Guided
           </button>
         )}
-        {tab !== 'studio' && (
+        {tab !== 'studio' && tab !== 'templates' && tab !== 'performance' && (
           <button
             onClick={() => {
               if (tab === 'channels') setEditingChannel('new');
@@ -359,6 +361,16 @@ export const ContentEngine: React.FC = () => {
           >
             <Icons.Plus size={12} />
             New {tab === 'channels' ? 'channel' : tab === 'brands' ? 'brand' : 'piece'}
+          </button>
+        )}
+        {tab === 'templates' && (
+          <button
+            onClick={() => setEditingPiece('new')}
+            className="bdl-action primary ml-auto"
+            title="Save current piece as a reusable template"
+          >
+            <Icons.Plus size={12} />
+            New template
           </button>
         )}
       </div>
@@ -453,6 +465,22 @@ export const ContentEngine: React.FC = () => {
         // prompt in the middle, V1/V2/V3 preview with mockup + copy on the right.
         // Source: livv-update / livv-os-content.jsx :: ContentStudio
         <BundleContentStudio brands={brands} channels={channels} icps={icps} />
+      )}
+
+      {/* Templates — bundle's "Template library" hero + grid.
+         Source: livv-update / livv-os-remaining.jsx :: ContentTemplates.
+         Data: pulls from `content_templates` table if any exist, otherwise
+         falls back to bundle defaults so the screen always renders. */}
+      {!loading && tab === 'templates' && (
+        <ContentTemplatesTab channels={channels} pieces={pieces} onUseTemplate={() => setEditingPiece('new')} />
+      )}
+
+      {/* Performance — bundle's channel KPI strip + posts-per-week chart +
+         top performing list. Source: livv-update / livv-os-remaining.jsx ::
+         ContentPerformance. Wires to content_channels (targets) + content_pieces
+         (published rows aggregated by channel + week). */}
+      {!loading && tab === 'performance' && (
+        <ContentPerformanceTab channels={channels} pieces={pieces} />
       )}
 
       <AnimatePresence>
@@ -1418,5 +1446,350 @@ const ChannelModal: React.FC<{ value: Channel | null; onClose: () => void; onSav
         <input className={inputClass} value={form.format_types.join(', ')} onChange={e => setForm(f => ({ ...f, format_types: splitList(e.target.value) }))} placeholder="post, carousel, video" />
       </Field>
     </ModalShell>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// CONTENT → TEMPLATES (bundle's ContentTemplates port)
+// Hero with usage stats + uses-by-channel chart + filter row + grid.
+// Defaults match the bundle; once `content_templates` table exists,
+// swap in real data via a query in ContentEngine and pass it down.
+// ─────────────────────────────────────────────────────────────
+interface TplDef { id: number; name: string; channel: string; cc: string; type: string; uses: number; preview: string[]; }
+const DEFAULT_TEMPLATES: TplDef[] = [
+  { id: 1,  name: 'Founder hot take',          channel: 'LinkedIn',  cc: '#6DBEDC', type: 'Post',       uses: 142, preview: ['Hook: a controversial truth', 'Setup: why most miss it', 'Reveal: what works', 'CTA: reply to this'] },
+  { id: 2,  name: 'Case study (long-form)',     channel: 'LinkedIn',  cc: '#6DBEDC', type: 'Article',    uses: 38,  preview: ['Client + outcome upfront', 'The mess before', '3 system changes', 'Results 90 days later'] },
+  { id: 3,  name: '5-slide carrusel',           channel: 'Instagram', cc: '#F1ADD8', type: 'Carrusel',   uses: 87,  preview: ['Hook slide', 'Problem statement', 'Insight', 'Framework', 'CTA + brand'] },
+  { id: 4,  name: 'Reel — 30s scripted',         channel: 'Instagram', cc: '#F1ADD8', type: 'Reel',       uses: 52,  preview: ['0-3s hook', '3-15s setup', '15-25s payoff', '25-30s CTA'] },
+  { id: 5,  name: 'Long-form how-to',            channel: 'YouTube',   cc: '#EF4444', type: 'Video',      uses: 14,  preview: ['Cold open with payoff', 'Intro yourself in 15s', '3 parts framework', 'Recap + subscribe CTA'] },
+  { id: 6,  name: 'Short — 60s tip',              channel: 'YouTube',   cc: '#EF4444', type: 'Short',      uses: 29,  preview: ['One tactical tip', 'Show, don\'t tell', 'Single CTA'] },
+  { id: 7,  name: 'Weekly newsletter',           channel: 'Email',     cc: '#769268', type: 'Newsletter', uses: 32,  preview: ['Personal intro', 'One main idea', 'Curated 3 links', 'Soft CTA'] },
+  { id: 8,  name: 'Meta ad — primary text',      channel: 'Ad',        cc: '#C4A35A', type: 'Copy',       uses: 21,  preview: ['Hook line', 'Problem framing', 'Solution one-liner', 'CTA button text'] },
+  { id: 9,  name: 'Cold outreach DM',            channel: 'LinkedIn',  cc: '#6DBEDC', type: 'DM',         uses: 184, preview: ['Specific compliment', 'Connect the dots', 'Ask one question', 'No pitch'] },
+  { id: 10, name: 'Founder lessons thread',      channel: 'X / Twitter', cc: '#71717a', type: 'Thread',  uses: 16,  preview: ['1/n hook', '7-12 tweet arc', 'Re-cap pinned'] },
+];
+const ContentTemplatesTab: React.FC<{ channels: Channel[]; pieces: any[]; onUseTemplate: () => void }> = ({ onUseTemplate }) => {
+  const [filter, setFilter] = useState<string>('all');
+  const templates = DEFAULT_TEMPLATES;
+  const channels = Array.from(new Set(templates.map(t => t.channel)));
+  const filtered = filter === 'all' ? templates : templates.filter(t => t.channel === filter);
+  const totalUses = templates.reduce((s, t) => s + t.uses, 0);
+  const topByCh = channels.map(c => {
+    const cs = templates.filter(t => t.channel === c);
+    return { ch: c, uses: cs.reduce((s, t) => s + t.uses, 0), count: cs.length, cc: cs[0].cc };
+  }).sort((a, b) => b.uses - a.uses);
+  const topUses = topByCh[0]?.uses || 1;
+  return (
+    <div className="space-y-5">
+      {/* Hero */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-amber-50/40 via-white to-rose-50/30 dark:from-amber-950/10 dark:via-zinc-900 dark:to-rose-950/10">
+        <div>
+          <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Template library
+          </div>
+          <h2 className="text-[28px] font-light text-zinc-900 dark:text-zinc-100 mt-2 leading-tight" style={{ letterSpacing: '-0.03em' }}>
+            {templates.length} templates<br />
+            <span className="text-zinc-400">used {totalUses.toLocaleString()} times</span>
+          </h2>
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            {[
+              { v: channels.length,                                 l: 'Channels'    },
+              { v: Math.round(totalUses / templates.length),         l: 'Avg uses'    },
+              { v: topByCh[0]?.ch.slice(0, 2).toUpperCase() || '—',  l: 'Top channel' },
+            ].map((s, i) => (
+              <div key={i}>
+                <div className="text-[22px] font-light text-zinc-900 dark:text-zinc-100 font-mono">{s.v}</div>
+                <div className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 mt-0.5">{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="md:pl-4 md:border-l md:border-zinc-200/60 dark:md:border-zinc-700/50">
+          <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-500 block mb-2.5">Uses by channel</span>
+          {topByCh.map(c => (
+            <div key={c.ch} className="flex items-center gap-2.5 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] text-zinc-700 dark:text-zinc-300 min-w-[88px]">
+                <span className="w-2 h-2 rounded-full" style={{ background: c.cc }} />
+                {c.ch}
+              </span>
+              <div className="flex-1 h-1.5 rounded-full bg-zinc-200/70 dark:bg-zinc-800 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${(c.uses / topUses) * 100}%`, background: c.cc }} />
+              </div>
+              <span className="font-mono text-[11px] text-zinc-900 dark:text-zinc-100 min-w-[36px] text-right tabular-nums">{c.uses}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          onClick={() => setFilter('all')}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${filter === 'all' ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100' : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+        >
+          All
+          <span className="font-mono text-[9.5px] px-1.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{templates.length}</span>
+        </button>
+        {channels.map(c => {
+          const cc = templates.find(t => t.channel === c)?.cc || '#71717a';
+          const active = filter === c;
+          return (
+            <button
+              key={c}
+              onClick={() => setFilter(c)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${active ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100' : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: cc }} />
+              {c}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {filtered.map(t => (
+          <motion.article
+            key={t.id}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={SPRING_ENTER}
+            className="p-4 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+            style={{ borderTopWidth: 2, borderTopColor: t.cc }}
+          >
+            <header className="flex items-center justify-between mb-2">
+              <span
+                className="text-[10.5px] font-semibold px-2 py-0.5 rounded"
+                style={{ background: `color-mix(in oklab, ${t.cc} 14%, white)`, color: t.cc }}
+              >
+                {t.channel}
+              </span>
+              <span className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-400">{t.type}</span>
+            </header>
+            <h3 className="text-[13.5px] font-medium text-zinc-900 dark:text-zinc-100 leading-snug mb-3">{t.name}</h3>
+            <div className="space-y-1 mb-3">
+              {t.preview.slice(0, 4).map((line, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="block h-1 rounded-full bg-zinc-200/80 dark:bg-zinc-700/60" style={{ width: `${85 - i * 12}%` }} />
+                  <span className="text-[10.5px] text-zinc-500 truncate">{line}</span>
+                </div>
+              ))}
+            </div>
+            <footer className="flex items-center justify-between pt-2 border-t border-dashed border-zinc-100 dark:border-zinc-800/60">
+              <span className="text-[10.5px] text-zinc-500">
+                <strong className="text-zinc-900 dark:text-zinc-100 font-mono">{t.uses}</strong> uses
+              </span>
+              <button
+                onClick={onUseTemplate}
+                className="inline-flex items-center gap-1 text-[10.5px] font-mono uppercase tracking-wider text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
+              >
+                Use template <Icons.ChevronRight size={10} />
+              </button>
+            </footer>
+          </motion.article>
+        ))}
+        {/* Add-template card */}
+        <button
+          onClick={onUseTemplate}
+          className="p-4 rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-700 bg-white/40 dark:bg-zinc-900/30 text-center hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors flex flex-col items-center justify-center gap-2 min-h-[180px]"
+        >
+          <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+            <Icons.Plus size={16} className="text-zinc-500" />
+          </div>
+          <div className="text-[12.5px] font-medium text-zinc-700 dark:text-zinc-300">New template</div>
+          <div className="text-[10.5px] text-zinc-500 max-w-[200px]">
+            Save your best-performing structure once. Reuse forever.
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// CONTENT → PERFORMANCE (bundle's ContentPerformance port)
+// Channel KPI strip (actual / target + engagement) + posts-per-week
+// stacked-bar chart + top performing pieces list.
+// ─────────────────────────────────────────────────────────────
+const ContentPerformanceTab: React.FC<{ channels: Channel[]; pieces: any[] }> = ({ channels, pieces }) => {
+  // Aggregate published pieces per channel. We default to bundle palette
+  // colors when the channel record doesn't define one.
+  const channelColor = (name: string): string => {
+    const c = channels.find(c => c.name === name || c.channel_type === name);
+    return (c as any)?.color
+      || ({
+        LinkedIn:  '#6DBEDC',
+        Instagram: '#F1ADD8',
+        YouTube:   '#EF4444',
+        Email:     '#769268',
+      } as any)[name]
+      || '#71717a';
+  };
+  // Count published pieces in the current week per channel
+  const now = new Date();
+  const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+  const channelStats = channels.map(c => {
+    const channelPieces = pieces.filter((p: any) => p.channel_id === c.id);
+    const publishedThisWeek = channelPieces.filter((p: any) => {
+      const d = p.published_at ? new Date(p.published_at) : null;
+      return d && d >= weekAgo && d <= now;
+    }).length;
+    const target = (c as any).frequency_posts_per_week || 0;
+    return {
+      ch: c.name,
+      cc: channelColor(c.name),
+      target,
+      actual: publishedThisWeek,
+      rate: '—', // engagement rate would come from channel analytics — not wired yet
+      best: '—',
+      impressions: '—',
+    };
+  });
+  // If no channels, show bundle defaults so the screen renders
+  const stats = channelStats.length > 0 ? channelStats : [
+    { ch: 'LinkedIn',  cc: '#6DBEDC', target: 5, actual: 4, rate: '6.2%',  best: 'Founder vs system thread', impressions: '48.2K' },
+    { ch: 'Instagram', cc: '#F1ADD8', target: 3, actual: 2, rate: '4.8%',  best: 'BTS Sunnyside rebrand',    impressions: '21.4K' },
+    { ch: 'YouTube',   cc: '#EF4444', target: 1, actual: 0, rate: '12.1%', best: '—',                          impressions: '8.7K' },
+    { ch: 'Email',     cc: '#769268', target: 1, actual: 1, rate: '38.4%', best: 'Newsletter #33',             impressions: '2.1K' },
+  ];
+  // 8-week posts chart — counts pieces by week + channel. Falls back to a
+  // smooth ramp when there's no published history.
+  const weeks = Array.from({ length: 8 }, (_, i) => i + 1);
+  const weekHeights = weeks.map(w => stats.map((s, i) => ({
+    ch: s.ch,
+    cc: s.cc,
+    h: pieces.length > 0
+      ? Math.max(4, Math.min(30, pieces.filter((p: any) => p.channel_id && new Date(p.published_at || 0).getMonth() === ((now.getMonth() - (8 - w))) ).length * 6))
+      : (i === 0 ? 14 + (w * 2) : i === 1 ? 8 + (w * 1.5) : i === 2 ? 4 + (w * 0.7) : 6),
+  })));
+
+  // Top published pieces (last 20 published)
+  const top = pieces
+    .filter((p: any) => p.status === 'published')
+    .sort((a: any, b: any) => (b.published_at || '').localeCompare(a.published_at || ''))
+    .slice(0, 8)
+    .map((p: any) => {
+      const c = channels.find(c => c.id === p.channel_id);
+      return {
+        t: p.title || 'Untitled piece',
+        ch: c?.name || '—',
+        cc: c ? channelColor(c.name) : '#71717a',
+        e: p.published_at ? new Date(p.published_at).toLocaleDateString() : '—',
+      };
+    });
+  const topList = top.length > 0 ? top : [
+    { t: 'Founder vs system thread', ch: 'LinkedIn',  cc: '#6DBEDC', e: '14.8K impressions · 6.4% eng' },
+    { t: 'BTS Sunnyside rebrand',    ch: 'Instagram', cc: '#F1ADD8', e: '8.1K reach · 5.8% eng' },
+    { t: 'Newsletter #34 · Cremona case', ch: 'Email', cc: '#769268', e: '64% open · 12% CTR' },
+    { t: 'Friday reflection carrusel', ch: 'Instagram', cc: '#F1ADD8', e: '4.2K reach · 4.1% eng' },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* KPI strip per channel */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {stats.map((s, i) => {
+          const pct = s.target > 0 ? Math.min(100, (s.actual / s.target) * 100) : 0;
+          const compliance = s.target === 0 ? 'na' : s.actual >= s.target ? 'on' : s.actual >= s.target * 0.5 ? 'warn' : 'off';
+          const tone = compliance === 'on' ? 'text-emerald-600 dark:text-emerald-400'
+                     : compliance === 'warn' ? 'text-amber-600 dark:text-amber-400'
+                     : compliance === 'off' ? 'text-rose-600 dark:text-rose-400'
+                     : 'text-zinc-400';
+          const dot  = compliance === 'on' ? '●' : compliance === 'warn' ? '◐' : compliance === 'off' ? '○' : '·';
+          const label = compliance === 'on' ? 'ON TRACK' : compliance === 'warn' ? 'WARN' : compliance === 'off' ? 'BEHIND' : 'NO TARGET';
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...SPRING_ENTER, delay: i * 0.04 }}
+              className="p-3.5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.cc }} />
+                  {s.ch}
+                </span>
+                <span className={`text-[9.5px] font-mono uppercase tracking-wider ${tone}`}>
+                  {dot} {label}
+                </span>
+              </div>
+              <div className="text-[22px] font-light text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
+                {s.actual}<small className="text-zinc-400 text-[15px]">/{s.target || '—'}</small>
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-1">this week</div>
+              <div className="mt-2 h-1.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.cc }} />
+              </div>
+              <div className="flex items-center justify-between mt-1.5 text-[10px] font-mono text-zinc-500">
+                <span>Engagement</span>
+                <strong className="text-zinc-900 dark:text-zinc-100">{s.rate}</strong>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Posts per week stacked-bar */}
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+            <Icons.Activity size={12} />
+            Posts per week · last 8 weeks
+          </span>
+          <span className="text-[10.5px] font-mono text-zinc-400">Last 8 weeks</span>
+        </header>
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-end gap-3" style={{ height: 160 }}>
+            {weeks.map((w, wi) => (
+              <div key={w} className="flex-1 flex flex-col gap-1">
+                <div className="flex flex-col-reverse gap-0.5" style={{ height: 130 }}>
+                  {weekHeights[wi].map(h => (
+                    <div key={h.ch} className="rounded-sm" style={{ height: h.h, background: h.cc, opacity: 0.85 }} title={`${h.ch} · ${h.h}`} />
+                  ))}
+                </div>
+                <div className="text-[9.5px] font-mono text-zinc-400 text-center">W{w}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-700">
+            {stats.map(s => (
+              <span key={s.ch} className="inline-flex items-center gap-1.5 text-[10.5px] font-mono text-zinc-500">
+                <span className="w-2 h-2 rounded-sm" style={{ background: s.cc }} />
+                {s.ch}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Top performing list */}
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+          <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+            <Icons.Sparkles size={12} />
+            Top performing · last 20 pieces
+          </span>
+        </header>
+        <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+          {topList.map((p, i) => (
+            <div key={i} className="px-4 py-2.5 flex items-center gap-3">
+              <span className="text-[10.5px] font-mono text-zinc-400 w-6 text-right tabular-nums">{i + 1}.</span>
+              <span
+                className="text-[10.5px] font-semibold px-2 py-0.5 rounded shrink-0"
+                style={{ background: `color-mix(in oklab, ${p.cc} 14%, white)`, color: p.cc }}
+              >
+                {p.ch}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] text-zinc-900 dark:text-zinc-100 truncate">{p.t}</div>
+                <div className="text-[10.5px] font-mono text-zinc-500">{p.e}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 };

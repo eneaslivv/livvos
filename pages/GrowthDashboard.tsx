@@ -141,6 +141,9 @@ export const GrowthDashboard: React.FC = () => {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [thisWeekTasks, setThisWeekTasks] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  // Leads — feeds the Pipeline metrics section (funnel + sources + forecast).
+  // Loaded in the same refetch cycle as everything else for one render pass.
+  const [pipelineLeads, setPipelineLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [recomputing, setRecomputing] = useState(false);
   const [editingPhase, setEditingPhase] = useState<Phase | 'new' | null>(null);
@@ -165,13 +168,11 @@ export const GrowthDashboard: React.FC = () => {
       const weekEndDate = new Date(weekStartDate);
       weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 7);
 
-      const [phRes, kpiRes, snapRes, tasksRes, actRes] = await Promise.all([
+      const [phRes, kpiRes, snapRes, tasksRes, actRes, leadsRes] = await Promise.all([
         supabase.from('growth_phases').select('*').eq('tenant_id', currentTenant.id).order('phase_number', { ascending: true }),
         supabase.from('growth_kpis').select('*').eq('tenant_id', currentTenant.id).order('category', { ascending: true, nullsFirst: false }).order('metric_name'),
         supabase.from('growth_weekly_snapshots').select('*').eq('tenant_id', currentTenant.id).eq('week_start', weekStart).maybeSingle(),
-        // Tasks due this week (or undated) for the ThisWeekCard. Limit
-        // generously so the widget can pick 5–7 most relevant. We sort
-        // overdue/today first via due_date ascending.
+        // Tasks due this week (or undated) for the ThisWeekCard.
         supabase.from('tasks')
           .select('id,title,due_date,priority,project_title,status')
           .eq('tenant_id', currentTenant.id)
@@ -186,12 +187,20 @@ export const GrowthDashboard: React.FC = () => {
           .eq('tenant_id', currentTenant.id)
           .order('created_at', { ascending: false })
           .limit(8),
+        // Leads — for the Pipeline metrics section (funnel/sources/forecast).
+        // 90-day window matches the bundle's "Last 90 days" eyebrow.
+        supabase.from('leads')
+          .select('id,status,source,budget,created_at,name,company')
+          .eq('tenant_id', currentTenant.id)
+          .gte('created_at', new Date(Date.now() - 90 * 86400000).toISOString())
+          .order('created_at', { ascending: false }),
       ]);
       setPhases((phRes.data || []) as Phase[]);
       setKpis((kpiRes.data || []) as Kpi[]);
       setSnapshot((snapRes.data as Snapshot) || null);
       setThisWeekTasks(tasksRes.data || []);
       setRecentActivity(actRes.data || []);
+      setPipelineLeads(leadsRes.data || []);
     } catch (e) {
       errorLogger.warn('growth dashboard load failed', e);
     } finally {
@@ -336,6 +345,15 @@ export const GrowthDashboard: React.FC = () => {
           <Section title="Growth phases"
             cta={<motion.button onClick={() => setEditingPhase('new')} whileTap={{ scale: 0.97 }} className="text-[10.5px] font-semibold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 px-2 py-1 rounded-md inline-flex items-center gap-1"><Icons.Plus size={10} /> Add phase</motion.button>}>
             <PhasesList phases={phases} onEdit={p => setEditingPhase(p)} />
+          </Section>
+
+          {/* Pipeline metrics — bundle's GrowthMetrics view. Funnel +
+              source effectiveness + weighted revenue forecast. Pulls from
+              the leads table (90-day window). Source: livv-update /
+              livv-os-remaining.jsx :: GrowthMetrics. */}
+          <Section title="Pipeline metrics"
+            hint={pipelineLeads.length === 0 ? 'No leads in the last 90 days — once leads start flowing, the funnel + source table + revenue forecast will populate here.' : null}>
+            <PipelineMetrics leads={pipelineLeads} />
           </Section>
 
           {/* Partners — external referrers / affiliates / agencies.
@@ -908,5 +926,182 @@ const PhaseModal: React.FC<{ value: Phase | null; nextNumber: number; onClose: (
         </div>
       </div>
     </ModalShell>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// PIPELINE METRICS (bundle's GrowthMetrics port)
+// Funnel + Source effectiveness + Weighted revenue forecast.
+// All three computed from `leads` rows (90-day window). Stage codes
+// inferred from `status` + the lead's lifecycle history.
+// Source: livv-update / livv-os-remaining.jsx :: GrowthMetrics.
+// ─────────────────────────────────────────────────────────────
+interface LeadLite { id: string; status: string; source: string | null; budget: number | null; created_at: string; name?: string | null; company?: string | null; }
+
+const FUNNEL_STAGES = [
+  { id: 'new',         label: 'New',         status: 'new' },
+  { id: 'contacted',   label: 'Contacted',   status: 'contacted' },
+  { id: 'following',   label: 'Call done',   status: 'following' },
+  { id: 'proposal',    label: 'Proposal',    status: 'following' },   // we don't have a dedicated proposal status; share with following
+  { id: 'negotiating', label: 'Negotiating', status: 'following' },
+  { id: 'closed',      label: 'Won',         status: 'closed' },
+];
+
+const PipelineMetrics: React.FC<{ leads: LeadLite[] }> = ({ leads }) => {
+  if (leads.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-8 text-center bg-white/40 dark:bg-zinc-900/30">
+        <p className="text-[12px] text-zinc-500">No leads yet. Add leads from <strong>Sales → Pipeline</strong> to see the funnel here.</p>
+      </div>
+    );
+  }
+  // Count by status — every lead counts in 'New' (top of funnel), then in
+  // the deeper stage if it advanced past it. Closed deals always sit at
+  // the bottom regardless of intermediate moves.
+  const countAt = (statusId: string): number => {
+    if (statusId === 'new')       return leads.length;
+    if (statusId === 'contacted') return leads.filter(l => l.status !== 'new').length;
+    if (statusId === 'following') return leads.filter(l => l.status === 'following' || l.status === 'closed').length;
+    if (statusId === 'closed')    return leads.filter(l => l.status === 'closed').length;
+    return 0;
+  };
+  // Map FUNNEL_STAGES to actual counts with a decreasing gradient.
+  const funnel = [
+    { stage: 'New',         n: countAt('new'),        w: 100 },
+    { stage: 'Contacted',   n: countAt('contacted'),  w: 82 },
+    { stage: 'Call done',   n: countAt('following'),  w: 62 },
+    { stage: 'Won',         n: countAt('closed'),     w: 36 },
+  ].map((f, i, arr) => ({
+    ...f,
+    conv: i === 0 ? null : arr[i - 1].n > 0 ? `${Math.round((f.n / arr[i - 1].n) * 100)}%` : '—',
+    totalPct: arr[0].n > 0 ? Math.round((f.n / arr[0].n) * 100) : 0,
+  }));
+
+  // Source effectiveness — group by lead.source, count + conversion rate
+  // (% closed) + average deal size.
+  const sourceMap = new Map<string, { leads: number; closed: number; revenue: number }>();
+  leads.forEach(l => {
+    const src = (l.source || 'unknown').trim() || 'unknown';
+    const entry = sourceMap.get(src) || { leads: 0, closed: 0, revenue: 0 };
+    entry.leads += 1;
+    if (l.status === 'closed') {
+      entry.closed += 1;
+      entry.revenue += l.budget || 0;
+    }
+    sourceMap.set(src, entry);
+  });
+  const sources = Array.from(sourceMap.entries())
+    .map(([name, e]) => ({
+      l: name === 'unknown' ? 'Unknown' : name.charAt(0).toUpperCase() + name.slice(1),
+      c: name === 'LinkedIn' ? '#6DBEDC' : name === 'Referral' ? '#C4A35A' : name === 'Inbound' ? '#769268' : '#F1ADD8',
+      leads: e.leads,
+      rate: e.leads > 0 ? `${Math.round((e.closed / e.leads) * 100)}%` : '0%',
+      adv: `$${Math.round((e.revenue / Math.max(1, e.closed)) / 1000)}K`,
+    }))
+    .sort((a, b) => b.leads - a.leads);
+  const totalLeads = sources.reduce((s, x) => s + x.leads, 0) || 1;
+
+  // Weighted revenue forecast — by stage with bundle's % weights.
+  const forecast = [
+    { stage: 'Call done · 30%',   weight: 0.30, count: leads.filter(l => l.status === 'following').length,                                    },
+    { stage: 'Proposal · 55%',     weight: 0.55, count: 0 },  // not tracked
+    { stage: 'Negotiating · 75%',  weight: 0.75, count: 0 },  // not tracked
+    { stage: 'Won · 100%',          weight: 1.00, count: leads.filter(l => l.status === 'closed').length },
+  ].map(f => {
+    const avgDeal = leads.filter(l => l.status === 'closed' && l.budget).reduce((s, l) => s + (l.budget || 0), 0)
+                    / Math.max(1, leads.filter(l => l.status === 'closed' && l.budget).length);
+    const totalValue = f.count * (avgDeal || 0);
+    return { ...f, v: totalValue / 1000, w: (totalValue / 1000) * f.weight };
+  });
+  const totalForecast = forecast.reduce((s, f) => s + f.w, 0);
+  const maxWeighted = Math.max(...forecast.map(f => f.w), 1);
+
+  return (
+    <div className="space-y-4">
+      {/* Funnel */}
+      <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+            <Icons.Chart size={12} />
+            Pipeline funnel · last 90 days
+          </span>
+          <span className="text-[10.5px] font-mono text-zinc-400">Last 90 days</span>
+        </header>
+        <div className="px-5 py-5 space-y-2">
+          {funnel.map((f, i) => (
+            <div key={f.stage} className="grid items-center gap-3" style={{ gridTemplateColumns: '110px 1fr 90px 70px' }}>
+              <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{f.stage}</span>
+              <div className="h-8 relative flex items-center">
+                <div
+                  className="h-full rounded-md flex items-center pl-3 text-[12px] font-mono font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums transition-all"
+                  style={{
+                    width: `${f.w}%`,
+                    background: `linear-gradient(90deg, color-mix(in oklab, rgb(196,163,90) ${30 + i * 8}%, white), color-mix(in oklab, rgb(196,163,90) ${20 + i * 8}%, white))`,
+                  }}
+                >
+                  {f.n}
+                </div>
+              </div>
+              <span className="text-[11px] font-mono text-zinc-500">{f.conv ? `${f.conv} conv` : 'entered'}</span>
+              <span className="text-[11px] font-mono text-zinc-400 text-right">{f.totalPct}% total</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Source effectiveness */}
+        <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+          <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+            <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+              <Icons.Target size={12} />
+              Source effectiveness
+            </span>
+          </header>
+          <div>
+            {sources.map((s, i) => (
+              <div key={s.l} className={`px-4 py-2.5 grid items-center gap-3 ${i < sources.length - 1 ? 'border-b border-dashed border-zinc-100 dark:border-zinc-800/60' : ''}`} style={{ gridTemplateColumns: '90px 1fr 70px 70px' }}>
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-zinc-700 dark:text-zinc-300">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.c }} />
+                  {s.l}
+                </span>
+                <div className="h-1.5 rounded-full bg-zinc-200/70 dark:bg-zinc-800 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(s.leads / totalLeads) * 100}%`, background: s.c }} />
+                </div>
+                <span className="text-[11.5px] font-mono text-zinc-700 dark:text-zinc-300 text-right">{s.leads} leads</span>
+                <span className="text-[11.5px] font-mono font-semibold text-zinc-900 dark:text-zinc-100 text-right">{s.rate}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Revenue forecast */}
+        <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+          <header className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+            <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 inline-flex items-center gap-2">
+              <Icons.DollarSign size={12} />
+              Revenue forecast · weighted
+            </span>
+          </header>
+          <div className="p-4 space-y-3">
+            {forecast.map((r, i) => (
+              <div key={i} className={`pb-2 ${i < forecast.length - 1 ? 'border-b border-dashed border-zinc-100 dark:border-zinc-800/60' : ''}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{r.stage}</span>
+                  <span className="text-[11.5px] font-mono text-zinc-900 dark:text-zinc-100 font-medium">${r.w.toFixed(0)}K weighted</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-zinc-200/70 dark:bg-zinc-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-amber-500" style={{ width: `${(r.w / maxWeighted) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+            <div className="mt-3 p-3 rounded-xl flex items-baseline justify-between" style={{ background: '#2C0405', color: '#FDFBF7' }}>
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] opacity-60">Total forecast · 90d</span>
+              <span className="text-[22px] font-light tracking-tight tabular-nums">${Math.round(totalForecast)}K</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
   );
 };

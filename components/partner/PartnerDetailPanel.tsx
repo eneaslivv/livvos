@@ -57,7 +57,7 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
 
   const [draft, setDraft] = useState<Partner | null>(null);
   // Bundle design: tabs instead of accordion. Single active tab visible at a time.
-  type PartnerTab = 'identity' | 'referral' | 'commission' | 'settings' | 'widgets' | 'payouts';
+  type PartnerTab = 'identity' | 'referral' | 'commission' | 'settings' | 'widgets' | 'payouts' | 'activity' | 'materials';
   const [activeTab, setActiveTab] = useState<PartnerTab>('identity');
   const open = useMemo(() => ({
     identity:   activeTab === 'identity',
@@ -66,7 +66,12 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
     settings:   activeTab === 'settings',
     widgets:    activeTab === 'widgets',
     payouts:    activeTab === 'payouts',
+    activity:   activeTab === 'activity',
+    materials:  activeTab === 'materials',
   }), [activeTab]);
+  // Activity feed — referred leads with status + value + commission accrued.
+  // Pulled lazily when the panel opens (same pattern as payouts).
+  const [activity, setActivity] = useState<Array<{ id: string; lead_name: string | null; lead_company: string | null; status: string; value: number | null; commission: number | null; created_at: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [widgetBuilderOpen, setWidgetBuilderOpen] = useState(false);
@@ -102,6 +107,39 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
       if (!error) setPayouts(data as any[]);
     })();
   }, [partner?.id]);
+
+  // Load referred leads — partners are tied to leads via `partner_id` on the
+  // leads table. Status + value drive what shows in the Activity timeline.
+  useEffect(() => {
+    if (!partner?.id) { setActivity([]); return; }
+    (async () => {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, name, company, status, budget, created_at')
+        .eq('partner_id', partner.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!error && data) {
+        // Compute commission accrued per row from the partner's commission_model.
+        const model = partner.commission_model as PartnerCommissionModel | null;
+        const commissionFor = (value: number | null): number => {
+          if (!value || !model) return 0;
+          if (model.kind === 'flat') return model.amount || 0;
+          if (model.kind === 'percent') return Math.round(value * ((model.amount || 0) / 100));
+          return 0;
+        };
+        setActivity(data.map((l: any) => ({
+          id: l.id,
+          lead_name: l.name,
+          lead_company: l.company,
+          status: l.status,
+          value: l.budget,
+          commission: l.status === 'closed' ? commissionFor(l.budget) : 0,
+          created_at: l.created_at,
+        })));
+      }
+    })();
+  }, [partner?.id, partner?.commission_model]);
 
   const partnerWidgets = useMemo(() => partner ? widgets.filter(w => w.partner_id === partner.id) : [], [partner, widgets]);
 
@@ -249,6 +287,8 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
               { id: 'commission', label: 'Commission', icon: <Icons.DollarSign size={11} /> },
               { id: 'settings',   label: 'Settings',   icon: <Icons.Settings size={11} /> },
               { id: 'widgets',    label: 'Widgets',    icon: <Icons.Sparkles size={11} />, badge: widgets.filter(w => partner && w.partner_id === partner.id).length },
+              { id: 'activity',   label: 'Activity',   icon: <Icons.Activity size={11} />, badge: activity.length },
+              { id: 'materials',  label: 'Materials',  icon: <Icons.Briefcase size={11} /> },
               { id: 'payouts',    label: 'Payouts',    icon: <Icons.Chart size={11} />, badge: payouts.length },
             ] as { id: PartnerTab; label: string; icon: React.ReactNode; badge?: number }[]).map(t => (
               <button
@@ -467,7 +507,176 @@ export const PartnerDetailPanel: React.FC<Props> = ({ partner, isOpen, onClose }
               </motion.div>
             )}</AnimatePresence>
 
-            {/* 6 — Payouts */}
+            {/* 6 — Activity (referred leads timeline) */}
+            <SectionHeader
+              icon={<Icons.Activity size={12} />}
+              title={`Referred leads · ${activity.length}`}
+              open={open.activity}
+              onToggle={() => toggle('activity')}
+            />
+            <AnimatePresence initial={false}>{open.activity && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="py-3 space-y-2">
+                  {activity.length === 0 ? (
+                    <div className="text-center py-6 text-[11px] text-zinc-400 italic font-mono">no referred leads yet</div>
+                  ) : (
+                    activity.map(a => {
+                      const tone = a.status === 'closed'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : a.status === 'lost'
+                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                        : 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300';
+                      const statusLabel = a.status === 'closed' ? 'Won' : a.status === 'lost' ? 'Lost' : 'In motion';
+                      return (
+                        <div key={a.id} className="rounded-lg border border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/40 dark:bg-zinc-900/40 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                                {a.lead_company || a.lead_name || 'Untitled lead'}
+                              </div>
+                              <div className="text-[10.5px] text-zinc-500 font-mono">
+                                {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {a.lead_name && a.lead_company && ` · ${a.lead_name}`}
+                              </div>
+                            </div>
+                            <span className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${tone}`}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-dashed border-zinc-200/60 dark:border-zinc-700/60">
+                            <span className="text-[11.5px] text-zinc-500">
+                              {a.value
+                                ? <>Deal value <strong className="text-zinc-900 dark:text-zinc-100 font-mono tabular-nums">${a.value.toLocaleString()}</strong></>
+                                : 'In motion'}
+                            </span>
+                            {(a.commission ?? 0) > 0 && (
+                              <span className="font-mono text-[11.5px] text-amber-600 dark:text-amber-400 font-semibold">
+                                + ${(a.commission || 0).toLocaleString()} commission
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}</AnimatePresence>
+
+            {/* 7 — Materials (landing + widgets + downloadable assets) */}
+            <SectionHeader
+              icon={<Icons.Briefcase size={12} />}
+              title="Materials & assets"
+              open={open.materials}
+              onToggle={() => toggle('materials')}
+            />
+            <AnimatePresence initial={false}>{open.materials && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="py-3 space-y-4">
+                  {/* Landing page preview */}
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1.5">Landing page</div>
+                    <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 overflow-hidden">
+                      <div
+                        className="relative h-32 flex items-end p-3"
+                        style={{
+                          background: `linear-gradient(135deg, ${draft.brand_color || '#5C1D18'} 0%, #2c0405 100%)`,
+                        }}
+                      >
+                        <span className="text-[10.5px] font-mono text-white/80 bg-black/30 backdrop-blur px-2 py-0.5 rounded">
+                          {portalUrl ? portalUrl.replace(/^https?:\/\//, '') : '—'}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <div className="text-[12.5px] font-medium text-zinc-900 dark:text-zinc-100">Branded landing</div>
+                        <div className="text-[11px] text-zinc-500 mt-0.5">Auto-configured with partner logo + LIVV services.</div>
+                        <div className="flex gap-1.5 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('settings')}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                          >
+                            <Icons.Settings size={11} /> Customize
+                          </button>
+                          {portalUrl && (
+                            <a
+                              href={portalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                            >
+                              <Icons.Link size={11} /> Preview
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Embeddable widgets — links into the existing Widgets tab */}
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1.5">Embeddable widgets</div>
+                    <div className="space-y-1.5">
+                      {[
+                        { name: 'Referral button', icon: <Icons.Link size={12} />,       desc: '"Powered by LIVV" CTA' },
+                        { name: 'Service card',    icon: <Icons.Briefcase size={12} />,  desc: 'Package highlight with CTA' },
+                        { name: 'Contact form',    icon: <Icons.Mail size={12} />,       desc: 'Inline form → creates lead' },
+                        { name: 'Pricing strip',   icon: <Icons.DollarSign size={12} />, desc: '3-package comparison' },
+                      ].map(w => (
+                        <div key={w.name} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-zinc-50/60 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800">
+                          <span className="w-6 h-6 rounded-md bg-white dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300">
+                            {w.icon}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100">{w.name}</div>
+                            <div className="text-[10.5px] text-zinc-500">{w.desc}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('widgets')}
+                            className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-100"
+                          >
+                            Embed →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Asset library — placeholders linked to the brand kit */}
+                  <div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-zinc-400 mb-1.5">Assets · ready to share</div>
+                    <div className="space-y-1">
+                      {[
+                        { name: 'Capabilities deck', size: '4.2 MB · PDF',           icon: <Icons.FileText size={12} /> },
+                        { name: 'Short pitch copy',  size: 'Plain text · 80 words', icon: <Icons.Message size={12} /> },
+                        { name: 'Pricing reference', size: 'Approved tiers',         icon: <Icons.DollarSign size={12} /> },
+                        { name: 'Logo + brand kit',  size: 'ZIP · SVG/PNG',          icon: <Icons.Image size={12} /> },
+                      ].map(a => (
+                        <div key={a.name} className="flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-zinc-50/40 dark:bg-zinc-900/30">
+                          <span className="w-6 h-6 rounded-md bg-white dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
+                            {a.icon}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] font-medium text-zinc-800 dark:text-zinc-100">{a.name}</div>
+                            <div className="text-[10px] font-mono text-zinc-500">{a.size}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 text-[10.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                            title="Coming soon"
+                          >
+                            <Icons.FileText size={11} /> Download
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}</AnimatePresence>
+
+            {/* 8 — Payouts */}
             <SectionHeader
               icon={<Icons.DollarSign size={12} />}
               title="Payouts"

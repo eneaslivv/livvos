@@ -31,6 +31,15 @@ interface LeadDetailPanelProps {
   onSave: (id: string, updates: Partial<Lead>) => Promise<void> | void;
   onAddComment: (id: string, comment: string, type?: Lead['history'][number]['type']) => Promise<void> | void;
   onStatusChange: (id: string, status: LeadStatus) => Promise<void> | void;
+  /** Footer action — convert this lead to a Project (creates project, optionally invoice).
+   *  When undefined, the CTA is hidden so the panel stays usable from any host. */
+  onConvert?: (lead: Lead) => void | Promise<void>;
+  /** Footer action — start a draft Invoice for this lead.
+   *  When undefined, falls back to dispatching a global 'app-navigate' to /finance?new=invoice. */
+  onGenerateInvoice?: (lead: Lead) => void | Promise<void>;
+  /** Footer action — Expand-to-full-page (open the lead in a dedicated view).
+   *  Optional — when omitted the icon button hides. */
+  onExpand?: (lead: Lead) => void;
 }
 
 // Stages — same set as before, with friendlier labels + tone tokens
@@ -86,6 +95,9 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
   onSave,
   onAddComment,
   onStatusChange,
+  onConvert,
+  onGenerateInvoice,
+  onExpand,
 }) => {
   const { members } = useTeam();
 
@@ -611,6 +623,53 @@ export const LeadDetailPanel: React.FC<LeadDetailPanelProps> = ({
                     </FieldMini>
                   </div>
                 </details>
+
+                {/* ── Footer action row (so-action-row from bundle) ──
+                   Primary CTA = Convert to Project (creates project + closes
+                   the lead). Secondary = Generate Invoice (opens Finance with
+                   a draft for this lead's value). When neither callback is
+                   wired, both buttons hide so the panel stays usable when
+                   hosted outside Sales. */}
+                {(onConvert || onGenerateInvoice) && lead && (
+                  <div className="mt-5 grid grid-cols-2 gap-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+                    {onConvert && (
+                      <button
+                        type="button"
+                        onClick={() => onConvert(lead)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12.5px] font-semibold shadow-sm hover:opacity-90 transition-all hover:translate-y-[-1px]"
+                      >
+                        <Icons.CheckCircle size={13} />
+                        Convert to Project
+                      </button>
+                    )}
+                    {onGenerateInvoice ? (
+                      <button
+                        type="button"
+                        onClick={() => onGenerateInvoice(lead)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 text-[12.5px] font-semibold border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <Icons.DollarSign size={13} />
+                        Generate Invoice
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Fallback — fire a global nav event so any host
+                          // can pick up the request even without an explicit
+                          // callback. Finance page listens to ?new=invoice.
+                          window.dispatchEvent(new CustomEvent('app-navigate', {
+                            detail: { page: 'finance', params: { leadId: lead.id, intent: 'new_invoice' } },
+                          }));
+                        }}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 text-[12.5px] font-semibold border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <Icons.DollarSign size={13} />
+                        Generate Invoice
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

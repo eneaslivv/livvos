@@ -304,6 +304,15 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
         onSave={handleSaveLead}
         onAddComment={handleAddComment}
         onStatusChange={handleStatusChange}
+        onConvert={(l) => handleConvertToProject(l)}
+        onGenerateInvoice={(l) => {
+          // Hop to Finance with the lead context — Finance reads
+          // navParams.leadId + intent='new_invoice' to pre-seed an invoice
+          // draft. Keeps the cross-page handoff explicit.
+          window.dispatchEvent(new CustomEvent('app-navigate', {
+            detail: { page: 'finance', params: { leadId: l.id, intent: 'new_invoice' } },
+          }));
+        }}
       />
     </Suspense>
   );
