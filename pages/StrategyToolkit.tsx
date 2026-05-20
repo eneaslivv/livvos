@@ -56,7 +56,7 @@ interface ClientProject {
   updated_at: string;
 }
 
-type Tab = 'library' | 'clients' | 'gallery' | 'ai_config';
+type Tab = 'library' | 'clients' | 'gallery' | 'ai_config' | 'connections';
 
 const STATUS_TONE: Record<string, string> = {
   active:       'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-500/30',
@@ -140,10 +140,11 @@ export const StrategyToolkit: React.FC = () => {
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="bdl-tabs">
           {([
-            { id: 'gallery'   as const, label: 'Frameworks',        icon: 'Sparkles' },
-            { id: 'library'   as const, label: 'Your library',      icon: 'Briefcase' },
-            { id: 'clients'   as const, label: 'Client projects',   icon: 'Users' },
-            { id: 'ai_config' as const, label: 'AI Config',         icon: 'Sparkles' },
+            { id: 'gallery'     as const, label: 'Frameworks',        icon: 'Sparkles' },
+            { id: 'library'     as const, label: 'Your library',      icon: 'Briefcase' },
+            { id: 'clients'     as const, label: 'Client projects',   icon: 'Users' },
+            { id: 'connections' as const, label: 'Connections',       icon: 'Link' },
+            { id: 'ai_config'   as const, label: 'AI Config',         icon: 'Sparkles' },
           ]).map(t => {
             const IconCmp = (Icons as any)[t.icon] || Icons.Sparkles;
             const active = tab === t.id;
@@ -191,6 +192,11 @@ export const StrategyToolkit: React.FC = () => {
          prompt → output) + 5 production prompts library with editable
          templates. */}
       {!loading && tab === 'ai_config' && <AiConfig />}
+
+      {/* Connections — bundle's AIVisionSection + general connections grid.
+         Higgsfield + Pinterest-pro are the headline integrations; the rest
+         (Slack/Notion/Stripe/etc) live as placeholders until OAuth lands. */}
+      {!loading && tab === 'connections' && <ConnectionsTab />}
 
       <AnimatePresence>
         {editingFw && (
@@ -1025,3 +1031,159 @@ if (typeof document !== 'undefined' && !document.getElementById('flow-pulse-keyf
   style.textContent = `@keyframes flowPulse { 0%, 100% { transform: translate(0, -50%); opacity: 0.4; } 50% { transform: translate(100px, -50%); opacity: 1; } }`;
   document.head.appendChild(style);
 }
+
+// ─────────────────────────────────────────────────────────────
+// TOOLKIT → CONNECTIONS (bundle's AIVisionSection + general grid)
+// Headline integrations: Higgsfield + Pinterest-pro for AI Vision.
+// The rest of the catalog (LinkedIn, Slack, Gmail, Figma, Stripe, etc.)
+// renders as a grouped grid of placeholders that link to the existing
+// CONNECTION_FLOW wizard for OAuth setup once that lands.
+// ─────────────────────────────────────────────────────────────
+interface ConnDef {
+  id: string;
+  name: string;
+  cat: string;
+  status: 'connected' | 'available';
+  account?: string;
+  permissions: string[];
+  capabilities?: string[];
+  sync?: string;
+  color: string;
+  highlight?: boolean;
+}
+const AI_VISION_CONNS: ConnDef[] = [
+  {
+    id: 'higgsfield', name: 'Higgsfield', cat: 'AI Vision · Style Replication',
+    status: 'connected', account: '@livvstudio · 12 styles trained',
+    permissions: ['Image generation', 'Style transfer', 'Storyboard synthesis'],
+    capabilities: [
+      'Replicate visual style from any image or pin',
+      'Generate storyboard frames for video / carousel scripts',
+      'Train custom style models per brand kit',
+      'Compose prompts using brand + reference fusion',
+    ],
+    sync: '15m ago', color: '#7C5CFF', highlight: true,
+  },
+  {
+    id: 'pinterest-pro', name: 'Pinterest · style sync', cat: 'AI Vision · Style Replication',
+    status: 'connected', account: '6 boards · 482 pins indexed',
+    permissions: ['Read pins', 'Vector index', 'Style extraction'],
+    capabilities: [
+      'Auto-index every new pin into your brand moodboard',
+      'Extract color + texture + composition signatures',
+      'Surface "this pin → use this style" prompts in Studio',
+      'Build storyboard scenes from pin sequences',
+    ],
+    sync: '3m ago', color: '#E60023', highlight: true,
+  },
+];
+const SOCIAL_CONNS: ConnDef[] = [
+  { id: 'linkedin',  name: 'LinkedIn',    cat: 'Social & Publishing',   status: 'connected', account: '@eneas',         permissions: ['Read posts', 'Publish', 'Analytics'], sync: '12m ago', color: '#0A66C2' },
+  { id: 'instagram', name: 'Instagram',   cat: 'Social & Publishing',   status: 'connected', account: '@livvstudio',    permissions: ['Read posts', 'Publish', 'Insights'],  sync: '24m ago', color: '#E1306C' },
+  { id: 'meta-ads',  name: 'Meta Ads',    cat: 'Social & Publishing',   status: 'available', permissions: ['Create ads', 'Read campaigns', 'Analytics'], color: '#1877F2' },
+  { id: 'google-ads',name: 'Google Ads',  cat: 'Social & Publishing',   status: 'available', permissions: ['Create ads', 'Read campaigns'],              color: '#4285F4' },
+  { id: 'youtube',   name: 'YouTube',     cat: 'Social & Publishing',   status: 'available', permissions: ['Upload', 'Analytics'],                       color: '#FF0000' },
+];
+const DESIGN_CONNS: ConnDef[] = [
+  { id: 'figma',     name: 'Figma',      cat: 'Design & Assets', status: 'connected', account: 'Eneas · Livv Studio', permissions: ['Read frames', 'Import tokens'], sync: '2h ago', color: '#A259FF' },
+  { id: 'canva',     name: 'Canva',      cat: 'Design & Assets', status: 'available', permissions: ['Export to Canva'],   color: '#00C4CC' },
+  { id: 'cloudinary',name: 'Cloudinary', cat: 'Design & Assets', status: 'available', permissions: ['Upload', 'Transform'], color: '#3448C5' },
+];
+const DATA_CONNS: ConnDef[] = [
+  { id: 'ga',       name: 'Google Analytics', cat: 'Data & CRM', status: 'connected', account: 'livv.studio', permissions: ['Read sessions', 'Read events'], sync: '5m ago', color: '#F9AB00' },
+  { id: 'webhooks', name: 'Webhooks',         cat: 'Data & CRM', status: 'available', permissions: ['Custom endpoints'],                                   color: '#52525b' },
+];
+
+const ConnCard: React.FC<{ c: ConnDef }> = ({ c }) => (
+  <motion.article
+    initial={{ opacity: 0, y: 4 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={SPRING_ENTER}
+    className={`rounded-xl border p-4 bg-white dark:bg-zinc-900 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 ${c.highlight ? 'border-violet-300 dark:border-violet-500/40' : 'border-zinc-200/70 dark:border-zinc-800'}`}
+  >
+    <header className="flex items-start gap-3 mb-3">
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-semibold text-[13px]"
+        style={{ background: `color-mix(in oklab, ${c.color} 14%, white)`, color: c.color }}
+      >
+        {c.id === 'higgsfield' ? <Icons.Sparkles size={16} /> : c.name[0]}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h4 className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{c.name}</h4>
+          {c.highlight && (
+            <span className="text-[9px] font-mono uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300">
+              NEW
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-zinc-500 font-mono mt-0.5 truncate">{c.account || c.cat}</div>
+      </div>
+      <span
+        className={`text-[9.5px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${c.status === 'connected' ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15' : 'text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800'}`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${c.status === 'connected' ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+        {c.status === 'connected' ? 'Connected' : 'Available'}
+      </span>
+    </header>
+
+    <div className="flex flex-wrap gap-1 mb-2">
+      {c.permissions.map(p => (
+        <span key={p} className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+          {p}
+        </span>
+      ))}
+    </div>
+
+    {c.capabilities && (
+      <div className="mt-2 pt-2 border-t border-dashed border-zinc-100 dark:border-zinc-800">
+        <span className="text-[9.5px] font-mono uppercase tracking-[0.22em] text-zinc-500">What it powers</span>
+        <ul className="mt-1 space-y-0.5">
+          {c.capabilities.map(cap => (
+            <li key={cap} className="text-[11.5px] text-zinc-600 dark:text-zinc-300 leading-snug pl-3 relative before:content-['→'] before:absolute before:left-0 before:text-[9.5px] before:top-1" style={{ color: 'inherit' }}>
+              {cap}
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    <footer className="flex items-center mt-3 pt-2 border-t border-dashed border-zinc-100 dark:border-zinc-800">
+      <span className="text-[10.5px] font-mono text-zinc-500 inline-flex items-center gap-1.5">
+        {c.sync ? (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Last sync: {c.sync}
+          </>
+        ) : (
+          'Not connected'
+        )}
+      </span>
+      <button className="ml-auto text-[11px] font-mono uppercase tracking-wider text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+        {c.status === 'connected' ? 'Manage' : 'Connect'} →
+      </button>
+    </footer>
+  </motion.article>
+);
+
+const ConnGroup: React.FC<{ title: string; dotColor: string; conns: ConnDef[]; cols?: 1 | 2 }> = ({ title, dotColor, conns, cols = 2 }) => (
+  <section className="mb-6">
+    <h3 className="flex items-center gap-2 text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
+      <span className="w-2 h-2 rounded-full" style={{ background: dotColor }} />
+      {title}
+      <span className="ml-1.5 text-[10.5px] font-mono text-zinc-400 tracking-wider">{conns.length}</span>
+    </h3>
+    <div className={`grid grid-cols-1 ${cols === 2 ? 'md:grid-cols-2' : ''} gap-3`}>
+      {conns.map(c => <ConnCard key={c.id} c={c} />)}
+    </div>
+  </section>
+);
+
+const ConnectionsTab: React.FC = () => (
+  <div>
+    <ConnGroup title="AI Vision · Style replication" dotColor="#7C5CFF" conns={AI_VISION_CONNS} />
+    <ConnGroup title="Social & Publishing"           dotColor="#0A66C2" conns={SOCIAL_CONNS} />
+    <ConnGroup title="Design & Assets"                dotColor="#A259FF" conns={DESIGN_CONNS} />
+    <ConnGroup title="Data & CRM"                     dotColor="#769268" conns={DATA_CONNS} />
+  </div>
+);

@@ -125,6 +125,37 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   // and is shared by everyone in the workspace.
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
+  // Bundle's 3-preset banner switcher (Leaf / Art / Rainbow). Persisted in
+  // localStorage per-user since this is a cosmetic preference, not a
+  // tenant-wide setting. Click a swatch to swap the hero gradient; the
+  // setting is overridden by an uploaded image.
+  type BannerPreset = 'rainbow' | 'leaf' | 'art';
+  const BANNER_PRESETS: Record<BannerPreset, { label: string; gradient: string; dot: string }> = {
+    rainbow: {
+      label: 'Rainbow',
+      gradient: 'linear-gradient(120deg, #f9a8d4 0%, #fbcfe8 15%, #fde68a 35%, #fed7aa 55%, #fda4af 75%, #c4b5fd 100%)',
+      dot: '#f9a8d4',
+    },
+    leaf: {
+      label: 'Leaf',
+      gradient: 'linear-gradient(120deg, #d9f99d 0%, #bbf7d0 30%, #a7f3d0 55%, #67e8f9 100%)',
+      dot: '#769268',
+    },
+    art: {
+      label: 'Art',
+      gradient: 'linear-gradient(135deg, #2C0405 0%, #5C1D18 35%, #C4A35A 75%, #FDFBF7 100%)',
+      dot: '#C4A35A',
+    },
+  };
+  const [bannerPreset, setBannerPreset] = useState<BannerPreset>(() => {
+    try {
+      const stored = localStorage.getItem('home:bannerPreset');
+      return (stored === 'leaf' || stored === 'art' || stored === 'rainbow') ? stored : 'rainbow';
+    } catch { return 'rainbow'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('home:bannerPreset', bannerPreset); } catch {}
+  }, [bannerPreset]);
   const handleCoverUpload = useCallback(async (file: File | undefined) => {
     if (!file || !currentTenant) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -384,9 +415,29 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         style={
           currentTenant?.banner_url
             ? undefined
-            : { background: 'linear-gradient(120deg, #f9a8d4 0%, #fbcfe8 15%, #fde68a 35%, #fed7aa 55%, #fda4af 75%, #c4b5fd 100%)' }
+            : { background: BANNER_PRESETS[bannerPreset].gradient }
         }
       >
+        {/* Preset switcher — only when no custom image is uploaded. Tiny
+           swatches in the bottom-left corner, hidden until hover. */}
+        {!currentTenant?.banner_url && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            {(Object.entries(BANNER_PRESETS) as Array<[BannerPreset, typeof BANNER_PRESETS[BannerPreset]]>).map(([key, p]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setBannerPreset(key);
+                }}
+                title={p.label}
+                className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${bannerPreset === key ? 'border-white shadow-md scale-110' : 'border-white/60'}`}
+                style={{ background: p.gradient }}
+              />
+            ))}
+          </div>
+        )}
         {currentTenant?.banner_url && (
           <img
             src={currentTenant.banner_url}
