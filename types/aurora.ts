@@ -1,0 +1,110 @@
+// Aurora multi-agent chat — shared types.
+// Used by client (context + components) and Supabase Edge Function aurora-chat.
+
+export type AgentSlug = 'atlas' | 'solara' | 'marina' | 'nova' | 'lumen' | 'vega' | 'orion' | 'iris';
+export type AuroraMode = 'multi' | 'unified';
+
+export interface AgentMeta {
+  slug: AgentSlug;
+  display_name: string;
+  tagline: string;
+  domain: string;
+  accent_hex: string;
+  accent_soft: string;
+  accent_text: string;
+  glyph: string;
+}
+
+export type CanvasType = 'display' | 'workflow' | 'interactive' | 'route';
+
+export interface StatCardItem {
+  label: string;
+  value: string;
+  sublabel?: string;
+  trend?: string;
+  tone?: 'ok' | 'warn' | 'err' | 'neutral';
+}
+export interface LeadListItem {
+  id: string;
+  name: string;
+  company?: string;
+  status?: string;
+  ai_score?: number;
+  last_touch?: string;
+}
+export interface ProjectGridItem {
+  id: string;
+  title: string;
+  client?: string;
+  health?: string;
+  profit_margin?: number;
+  total_agreed?: number;
+  total_collected?: number;
+}
+export interface ChartPoint { x: string; y: number }
+export interface DonutPoint  { label: string; value: number }
+export interface AttributionRow {
+  source: string;
+  leads_n: number;
+  qualified_n: number;
+  won_n: number;
+  revenue: number;
+}
+
+export type CanvasBlock =
+  | { kind: 'stat_cards'; items: StatCardItem[] }
+  | { kind: 'lead_list'; items: LeadListItem[] }
+  | { kind: 'project_grid'; items: ProjectGridItem[] }
+  | { kind: 'bar_chart'; title?: string; data: ChartPoint[] }
+  | { kind: 'donut_chart'; title?: string; data: DonutPoint[] }
+  | { kind: 'attribution_table'; rows: AttributionRow[] }
+  | { kind: 'markdown_block'; body: string };
+
+export interface CanvasStep { name: string; status: 'pending' | 'done' | 'failed' }
+export interface CanvasDiff { table: string; row_id: string; field: string; from: any; to: any }
+export interface CanvasControl {
+  kind: 'textarea' | 'slider' | 'toggle';
+  id: string;
+  label: string;
+  value: any;
+  min?: number; max?: number; step?: number;
+}
+
+export interface Canvas {
+  type: CanvasType;
+  agent: AgentSlug;
+  blocks?: CanvasBlock[];
+  stepper?: CanvasStep[];
+  diff?: CanvasDiff[];
+  controls?: CanvasControl[];
+  submit?: { label: string };
+  cta?: { confirm_label: string; cancel_label: string };
+  cooldown_seconds?: number;
+  confirm_phrase?: string;
+  idempotency_key?: string;
+  target_agent?: AgentSlug;
+  reason?: string;
+}
+
+export interface AgentResponse {
+  agent: AgentSlug;
+  text: string;
+  canvas: Canvas | null;
+  request_id?: string;
+}
+
+export interface AuroraMessage {
+  id: string;
+  role: 'user' | 'agent';
+  agent?: AgentSlug;
+  text: string;
+  canvas?: Canvas | null;
+  createdAt: number;
+}
+
+export interface AuroraSendOptions {
+  /** Force the next user message to this agent (overrides current active). */
+  agent?: AgentSlug;
+  /** Module the user is currently looking at — Atlas uses for routing hints. */
+  moduleContext?: string;
+}

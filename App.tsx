@@ -21,6 +21,8 @@ import { ProjectsProvider } from './context/ProjectsContext';
 import { AnalyticsProvider } from './context/AnalyticsContext';
 import { SystemProvider } from './context/SystemContext';
 import { PresenceProvider } from './context/PresenceContext';
+import { AuroraProvider } from './context/AuroraContext';
+import { AuroraFab } from './components/aurora/AuroraFab';
 import { LiveCursors } from './components/presence/LiveCursors';
 import { NotificationToaster } from './components/NotificationToaster';
 import { retryDynamicImport, isChunkLoadError, clearChunkReloadFlag } from './lib/lazyWithRetry';
@@ -1280,19 +1282,23 @@ const App: React.FC = () => {
                           <ProjectsProvider>
                             <AnalyticsProvider>
                               <SystemProvider>
-                                <AppContent
-                                  currentPage={currentPage}
-                                  appMode={appMode}
-                                  handleNavigate={handleNavigate}
-                                  handleSwitchMode={handleSwitchMode}
-                                  showDebug={showDebug}
-                                  navParams={navParams}
-                                />
-                                <NotificationToaster onNavigate={(p) => handleNavigate(p as PageView)} />
-                                <LiveCursors currentPage={currentPage} />
-                                {showDebug && (
-                                  <DebugPanel visible={showDebug} />
-                                )}
+                                <AuroraProvider>
+                                  <AppContent
+                                    currentPage={currentPage}
+                                    appMode={appMode}
+                                    handleNavigate={handleNavigate}
+                                    handleSwitchMode={handleSwitchMode}
+                                    showDebug={showDebug}
+                                    navParams={navParams}
+                                  />
+                                  <NotificationToaster onNavigate={(p) => handleNavigate(p as PageView)} />
+                                  <LiveCursors currentPage={currentPage} />
+                                  {/* Aurora multi-agent FAB — persistent across all admin pages */}
+                                  <AuroraFab />
+                                  {showDebug && (
+                                    <DebugPanel visible={showDebug} />
+                                  )}
+                                </AuroraProvider>
                               </SystemProvider>
                             </AnalyticsProvider>
                           </ProjectsProvider>
