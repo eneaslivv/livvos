@@ -33,6 +33,7 @@ import { PartnerDetailPanel } from '../components/partner/PartnerDetailPanel';
 import { useAutomations } from '../hooks/useAutomations';
 import type { Partner, Automation } from '../types';
 import '../components/livv/bundle-growth.css';
+import { ThisWeekCard, ActivityFeedCard, WeeklySnapshotCard } from '../components/livv/GrowthWidgets';
 
 interface Phase {
   id: string;
@@ -88,11 +89,58 @@ const EMPTY_KPI: Omit<Kpi, 'id' | 'tenant_id'> = {
   last_updated: null, trend: null, category: null,
 };
 
+// Map a tasks row → the bundle widget's ThisWeekItem. Module is inferred
+// from project category / type so the colored left bar matches what the
+// rest of the dashboard uses.
+const inferTaskModule = (raw: any): string => {
+  const t = `${raw.project_title || ''} ${raw.title || ''}`.toLowerCase();
+  if (/proposal|lead|deal|outreach|sale/.test(t)) return 'Sales';
+  if (/content|post|video|youtube|publish/.test(t)) return 'Content';
+  if (/strategy|positioning|icp/.test(t)) return 'Strategy';
+  if (/hire|role|onboarding|scaling/.test(t)) return 'Scaling';
+  if (/invoice|cash|finance|budget|expense/.test(t)) return 'Finance';
+  return 'Delivery';
+};
+
+const inferActivityModule = (entity: string | null): string => {
+  switch ((entity || '').toLowerCase()) {
+    case 'clients': case 'leads': case 'lead': return 'Sales';
+    case 'content_pieces': case 'content': return 'Content';
+    case 'strategy_icps': case 'strategy_packages': return 'Strategy';
+    case 'team_members': case 'roles': return 'Scaling';
+    case 'invoices': case 'expenses': case 'finance': return 'Finance';
+    default: return 'Delivery';
+  }
+};
+
+const inferActivityIcon = (action: string | null): string => {
+  const a = (action || '').toLowerCase();
+  if (/complete|done|finish|won/.test(a)) return 'CheckCircle';
+  if (/publish|send/.test(a)) return 'Edit';
+  if (/create|add|new/.test(a)) return 'Plus';
+  if (/delete|remove/.test(a)) return 'X';
+  if (/flag|alert|warn/.test(a)) return 'AlertCircle';
+  return 'Activity';
+};
+
+const fmtRelative = (iso: string): string => {
+  const d = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, Math.floor((now - d) / 1000));
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 2) return 'Yesterday';
+  return `${Math.floor(diff / 86400)}d ago`;
+};
+
 export const GrowthDashboard: React.FC = () => {
   const { currentTenant } = useTenant();
   const [phases, setPhases] = useState<Phase[]>([]);
   const [kpis, setKpis] = useState<Kpi[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [thisWeekTasks, setThisWeekTasks] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [recomputing, setRecomputing] = useState(false);
   const [editingPhase, setEditingPhase] = useState<Phase | 'new' | null>(null);
@@ -110,14 +158,40 @@ export const GrowthDashboard: React.FC = () => {
     if (!currentTenant?.id) return;
     setLoading(true);
     try {
-      const [phRes, kpiRes, snapRes] = await Promise.all([
+      // Week boundaries for the ThisWeek widget — Monday → Sunday of the
+      // displayed week. Done off `weekStart` so it stays in sync with the
+      // snapshot row.
+      const weekStartDate = new Date(weekStart + 'T00:00:00Z');
+      const weekEndDate = new Date(weekStartDate);
+      weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 7);
+
+      const [phRes, kpiRes, snapRes, tasksRes, actRes] = await Promise.all([
         supabase.from('growth_phases').select('*').eq('tenant_id', currentTenant.id).order('phase_number', { ascending: true }),
         supabase.from('growth_kpis').select('*').eq('tenant_id', currentTenant.id).order('category', { ascending: true, nullsFirst: false }).order('metric_name'),
         supabase.from('growth_weekly_snapshots').select('*').eq('tenant_id', currentTenant.id).eq('week_start', weekStart).maybeSingle(),
+        // Tasks due this week (or undated) for the ThisWeekCard. Limit
+        // generously so the widget can pick 5–7 most relevant. We sort
+        // overdue/today first via due_date ascending.
+        supabase.from('tasks')
+          .select('id,title,due_date,priority,project_title,status')
+          .eq('tenant_id', currentTenant.id)
+          .neq('status', 'completed')
+          .or(`due_date.gte.${weekStartDate.toISOString()},due_date.is.null`)
+          .lt('due_date', weekEndDate.toISOString())
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .limit(8),
+        // Recent cross-module activity for the ActivityFeedCard.
+        supabase.from('activity_logs')
+          .select('id,user_name,action,target,entity_type,created_at')
+          .eq('tenant_id', currentTenant.id)
+          .order('created_at', { ascending: false })
+          .limit(8),
       ]);
       setPhases((phRes.data || []) as Phase[]);
       setKpis((kpiRes.data || []) as Kpi[]);
       setSnapshot((snapRes.data as Snapshot) || null);
+      setThisWeekTasks(tasksRes.data || []);
+      setRecentActivity(actRes.data || []);
     } catch (e) {
       errorLogger.warn('growth dashboard load failed', e);
     } finally {
@@ -181,10 +255,74 @@ export const GrowthDashboard: React.FC = () => {
 
       {!loading && (
         <>
-          {/* This-week snapshot */}
-          <Section title="This week" hint={snapshot ? null : 'No snapshot yet — recompute to populate.'}>
-            {snapshot ? <SnapshotGrid snapshot={snapshot} /> : null}
-          </Section>
+          {/* Bundle widgets — top of dashboard. Two-col row first
+              (ThisWeek priorities + recent activity), then full-width
+              Weekly snapshot card. These mirror the bundle's editorial
+              dashboard layout. */}
+          <div className="bdg-w-row-2 mb-6">
+            <ThisWeekCard
+              items={thisWeekTasks.map(t => ({
+                id: String(t.id),
+                title: t.title || 'Untitled task',
+                mod: inferTaskModule(t),
+                when: t.due_date
+                  ? new Date(t.due_date).toLocaleDateString('en-US', { weekday: 'short' })
+                  : 'Anytime',
+                hot: t.due_date ? new Date(t.due_date).getTime() <= Date.now() + 86400000 : false,
+                taskId: String(t.id),
+              }))}
+              onItemClick={(item) => {
+                if (item.taskId) {
+                  window.dispatchEvent(new CustomEvent('app-navigate', {
+                    detail: { page: 'calendar', params: { taskId: item.taskId } },
+                  }));
+                }
+              }}
+              onViewAll={() => {
+                window.dispatchEvent(new CustomEvent('app-navigate', {
+                  detail: { page: 'calendar' },
+                }));
+              }}
+            />
+            <ActivityFeedCard
+              items={recentActivity.map(a => ({
+                who: a.user_name || 'System',
+                what: `${a.action || 'updated'} ${a.target ? `"${a.target}"` : ''}`.trim(),
+                mod: inferActivityModule(a.entity_type),
+                icon: inferActivityIcon(a.action) as any,
+                when: a.created_at ? fmtRelative(a.created_at) : '—',
+              }))}
+              onOpenFeed={() => {
+                window.dispatchEvent(new CustomEvent('app-navigate', {
+                  detail: { page: 'activity' },
+                }));
+              }}
+            />
+          </div>
+
+          {/* This-week snapshot — bundle's 3-cell editorial card. Maps
+              from the same `snapshot` row the existing NotesEditor edits
+              below, so this is read-only display + editor still works. */}
+          <div className="mb-6">
+            <WeeklySnapshotCard
+              metrics={snapshot?.metrics && Array.isArray((snapshot.metrics as any).rows)
+                ? (snapshot.metrics as any).rows
+                : kpis.slice(0, 5).map(k => ({
+                    l: k.metric_name,
+                    v: k.current_value != null ? `${k.current_value}${k.target_unit || ''}` : '—',
+                    p: '—',
+                    d: k.trend === 'up' ? '↑' : k.trend === 'down' ? '↓' : '—',
+                    dir: (k.trend || 'flat') as 'up' | 'down' | 'flat',
+                  }))}
+              highlights={snapshot?.highlights
+                ? snapshot.highlights.split('\n').filter(Boolean)
+                : undefined}
+              blockers={snapshot?.blockers
+                ? snapshot.blockers.split('\n').filter(Boolean)
+                : undefined}
+              onAiSummary={handleRecompute}
+            />
+          </div>
 
           <Section title="Weekly notes">
             <NotesEditor snapshot={snapshot} onSave={handleSnapshotNotes} />
