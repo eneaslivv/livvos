@@ -325,7 +325,48 @@ export const Agent: React.FC = () => {
 
       {/* ─── WORKFLOWS TAB ─── */}
       {tab === 'workflows' && (
-        <div className="bdl-ag-wf-grid">
+        <>
+          {/* Hero — bundle's prod-hero pattern with anatomy diagram on the right */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5 mb-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-amber-50/40 via-white to-rose-50/20 dark:from-amber-950/10 dark:via-zinc-900 dark:to-rose-950/10">
+            <div>
+              <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Agent workflows
+              </div>
+              <h2 className="text-[26px] font-light text-zinc-900 dark:text-zinc-100 mt-2 leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                {wfList.filter(w => w.on).length} workflows running<br />
+                <span className="text-zinc-400">{wfList.reduce((s, w) => s + (w.runs || 0), 0)} executions this quarter</span>
+              </h2>
+              <p className="text-[13px] text-zinc-600 dark:text-zinc-400 mt-3 max-w-[420px] leading-relaxed">
+                Multi-step recipes Agent runs on a schedule or trigger. Each step can call modules,
+                draft outputs, or pause for your approval.
+              </p>
+              <button className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold hover:opacity-90">
+                <Icons.Plus size={12} />
+                Build workflow
+              </button>
+            </div>
+            <div className="lg:pl-5 lg:border-l lg:border-zinc-200/60 dark:lg:border-zinc-700/50">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-500 block mb-3">Workflow anatomy</span>
+              <div className="space-y-1.5">
+                {['Trigger', 'Read context', 'Reason', 'Draft', 'Approve', 'Execute'].map((s, i, a) => (
+                  <React.Fragment key={s}>
+                    <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
+                      <span className="font-mono text-[10px] tabular-nums text-zinc-400 w-6">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="text-[12px] text-zinc-800 dark:text-zinc-200">{s}</span>
+                      {i === 0 && <span className="ml-auto text-[9.5px] font-mono uppercase tracking-wider text-amber-700 dark:text-amber-300">start</span>}
+                      {i === a.length - 1 && <span className="ml-auto text-[9.5px] font-mono uppercase tracking-wider text-emerald-700 dark:text-emerald-300">end</span>}
+                    </div>
+                    {i < a.length - 1 && (
+                      <div className="flex justify-center text-zinc-300 dark:text-zinc-700 text-[14px] leading-none">↓</div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <div className="bdl-ag-wf-grid">
           {wfList.map((w, idx) => (
             <motion.button
               key={w.id}
@@ -359,12 +400,55 @@ export const Agent: React.FC = () => {
               </div>
             </motion.button>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       {/* ─── REPORTS TAB ─── */}
-      {tab === 'reports' && (
-        <div className="bdl-ag-rp-grid">
+      {tab === 'reports' && (() => {
+        const byTag: Record<string, number> = {};
+        SEED_REPORTS.forEach(r => r.tags.forEach(t => { byTag[t] = (byTag[t] || 0) + 1; }));
+        const tagRows = Object.entries(byTag).sort((a, b) => b[1] - a[1]).map(([l, n], i) => ({
+          l, n,
+          c: ['#C4A35A', '#F1ADD8', '#6DBEDC', '#769268', '#5C1D18'][i % 5],
+        }));
+        const maxN = Math.max(...tagRows.map(t => t.n), 1);
+        return (
+        <>
+          {/* Hero — reports library overview + by-tag chart */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5 mb-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-amber-50/40 via-white to-rose-50/20 dark:from-amber-950/10 dark:via-zinc-900 dark:to-rose-950/10">
+            <div>
+              <div className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Reports library
+              </div>
+              <h2 className="text-[26px] font-light text-zinc-900 dark:text-zinc-100 mt-2 leading-tight" style={{ letterSpacing: '-0.03em' }}>
+                {SEED_REPORTS.length} reports<br />
+                <span className="text-zinc-400">generated & saved by Agent</span>
+              </h2>
+              <p className="text-[13px] text-zinc-600 dark:text-zinc-400 mt-3 max-w-[420px] leading-relaxed">
+                Every output Agent produces lands here — re-runnable, shareable, exportable. Yesterday's
+                report becomes today's snapshot.
+              </p>
+            </div>
+            <div className="lg:pl-5 lg:border-l lg:border-zinc-200/60 dark:lg:border-zinc-700/50">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] text-zinc-500 block mb-3">By tag</span>
+              {tagRows.map(t => (
+                <div key={t.l} className="flex items-center gap-2.5 py-1.5">
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-zinc-700 dark:text-zinc-300 min-w-[110px]">
+                    <span className="w-2 h-2 rounded-full" style={{ background: t.c }} />
+                    {t.l}
+                  </span>
+                  <div className="flex-1 h-1.5 rounded-full bg-zinc-200/70 dark:bg-zinc-800 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(t.n / maxN) * 100}%`, background: t.c }} />
+                  </div>
+                  <span className="font-mono text-[11px] text-zinc-900 dark:text-zinc-100 min-w-[28px] text-right tabular-nums">{t.n}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="bdl-ag-rp-grid">
           {SEED_REPORTS.map((r, idx) => (
             <motion.button
               key={r.id}
@@ -394,11 +478,23 @@ export const Agent: React.FC = () => {
                     <span key={t} className="bdl-ag-rp-tag">{t}</span>
                   ))}
                 </div>
+                {/* Re-run / Open actions row — bundle parity */}
+                <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-dashed border-zinc-100 dark:border-zinc-800">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-zinc-500 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+                    <Icons.Eye size={10} /> Open
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-zinc-500 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+                    <Icons.Loader size={10} /> Re-run
+                  </span>
+                  <span className="ml-auto text-[9.5px] font-mono text-zinc-400">PDF · MD · JSON</span>
+                </div>
               </div>
             </motion.button>
           ))}
-        </div>
-      )}
+          </div>
+        </>
+        );
+      })()}
     </div>
   );
 };
