@@ -6,9 +6,10 @@ import { X, Send, Eraser } from 'lucide-react';
 import { useAurora } from '../../context/AuroraContext';
 import { auroraAgents, cssVarsForAgent } from '../../lib/aurora/tokens';
 import { auroraRegistry, livvStudioRegistry } from '../../lib/aurora/agents';
-import type { AgentSlug } from '../../types/aurora';
+import type { AgentSlug, AgentMeta } from '../../types/aurora';
 import { AuroraCanvas } from './AuroraCanvas';
 import { usePlatformAdmin } from '../../hooks/usePlatformAdmin';
+import { AgentPopover } from './AgentPopover';
 
 export const AuroraDock: React.FC = () => {
   const { open, setOpen, agent, setAgent, mode, setMode, messages, status, send, clear } = useAurora();
@@ -72,23 +73,15 @@ export const AuroraDock: React.FC = () => {
         <div className="px-5 py-2.5 flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-900">
           {/* Aurora chips — product-level agents (always visible) */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {auroraRegistry.map(a => {
-              const active = a.slug === agent;
-              return (
-                <button
-                  key={a.slug}
-                  onClick={() => setAgent(a.slug as AgentSlug)}
-                  className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                    active
-                      ? 'text-white border-transparent'
-                      : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
-                  }`}
-                  style={active ? { background: a.accent_hex } : undefined}
-                >
-                  {a.display_name}
-                </button>
-              );
-            })}
+            {auroraRegistry.map(a => (
+              <AgentChip
+                key={a.slug}
+                agent={a}
+                active={a.slug === agent}
+                onClick={() => setAgent(a.slug as AgentSlug)}
+                onExamplePick={(prompt) => { setInput(prompt); setAgent(a.slug as AgentSlug); }}
+              />
+            ))}
             <div className="ml-auto">
               <button
                 onClick={() => setMode(mode === 'multi' ? 'unified' : 'multi')}
@@ -103,24 +96,15 @@ export const AuroraDock: React.FC = () => {
           {isPlatformAdmin && (
             <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-zinc-100 dark:border-zinc-900">
               <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-400 mr-1">livv OS</span>
-              {livvStudioRegistry.map(a => {
-                const active = a.slug === agent;
-                return (
-                  <button
-                    key={a.slug}
-                    onClick={() => setAgent(a.slug as AgentSlug)}
-                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                      active
-                        ? 'text-white border-transparent'
-                        : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
-                    }`}
-                    style={active ? { background: a.accent_hex } : undefined}
-                    title={a.domain}
-                  >
-                    {a.display_name}
-                  </button>
-                );
-              })}
+              {livvStudioRegistry.map(a => (
+                <AgentChip
+                  key={a.slug}
+                  agent={a}
+                  active={a.slug === agent}
+                  onClick={() => setAgent(a.slug as AgentSlug)}
+                  onExamplePick={(prompt) => { setInput(prompt); setAgent(a.slug as AgentSlug); }}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -301,3 +285,34 @@ function chipsFor(a: AgentSlug): string[] {
   ];
   return ['Mostrame el pipeline', 'AR aging', 'Funnel', 'Plan del día'];
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// AgentChip — chip individual con hover popover.
+// El popover muestra: pitch marketinero + tagline + dominio + 3-4
+// example prompts clickables que prefill el input del chat.
+// ─────────────────────────────────────────────────────────────────────
+const AgentChip: React.FC<{
+  agent: AgentMeta;
+  active: boolean;
+  onClick: () => void;
+  onExamplePick: (prompt: string) => void;
+}> = ({ agent, active, onClick, onExamplePick }) => {
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        ref={ref}
+        onClick={onClick}
+        className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+          active
+            ? 'text-white border-transparent'
+            : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+        }`}
+        style={active ? { background: agent.accent_hex } : undefined}
+      >
+        {agent.display_name}
+      </button>
+      <AgentPopover agent={agent} anchorRef={ref} onExamplePick={onExamplePick} />
+    </>
+  );
+};

@@ -41,6 +41,15 @@ export interface AgentMeta {
   accent_soft: string;
   accent_text: string;
   glyph: string;
+  /** Long-form marketing copy explaining who the agent is, what they do
+   *  particularly well, and when you would talk to them vs another agent.
+   *  Shown on hover popover in the chip rail. Aim for 2-3 sentences. */
+  pitch?: string;
+  /** 3-4 concrete example prompts a user can click to seed the chat input.
+   *  Each should be a real query in español rioplatense, not generic. */
+  example_prompts?: string[];
+  /** Group label for the chip rail (helps visual separation Aurora vs livv OS). */
+  group?: 'aurora' | 'livv_os';
 }
 
 export type CanvasType = 'display' | 'workflow' | 'interactive' | 'route';
