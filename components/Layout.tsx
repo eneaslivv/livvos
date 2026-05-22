@@ -619,27 +619,51 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   const clientsActive = currentPage === 'clients' || currentPage === 'projects';
   const showProjectsModule = hasFeature('projects_module') && (!isInitialized || hasPermission('projects', 'view'));
 
-  const salesNavItems: { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] }[] = [
-    // ── Active selling work (top of sidebar) ─────────────────────────
-    { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
-    { id: 'sales_pipeline',  label: 'Pipeline',       icon: <Icons.Target /> },
-    { id: 'communications',  label: 'Inbox',          icon: <Icons.Mail /> },
-    { id: 'finance',         label: 'Finance',        icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
-    { id: 'sales_analytics', label: 'Analytics',      icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
-    // ── Growth engine (moved from OS sidebar) ────────────────────────
-    // These are the bundle's main surfaces — Strategy / Content / Scaling /
-    // Growth / Toolkit / Agent. They sit BELOW the active-selling block
-    // because they're "operating-system" work surfaces: less daily, more
-    // foundational. Same workspace as Sales because revenue + scale = same
-    // mental model for Eneas.
-    { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
-    { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
-    { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
-    { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
-    { id: 'products',         label: 'Products',  icon: <Icons.Briefcase /> },
-    { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
-    { id: 'agent',            label: 'Agent',     icon: <Icons.Sparkles /> },
+  // Sales sidebar reorganizada en grupos lógicos para reducir cognitive
+  // load — antes era 12 items en lista plana, ahora 3 grupos visuales:
+  //
+  //   Run     — operativa diaria de venta (4 items, top)
+  //   Insights — medir resultados (2 items)
+  //   Build    — construir el sistema que escala (5 items)
+  //
+  //   Agent queda separado al final con un divider más grueso porque es
+  //   un "asistente transversal" que no compite con ningún módulo.
+  //
+  // Cada grupo tiene un micro-label uppercase que se muestra sólo cuando
+  // el sidebar está expandido. Cuando colapsado, sólo se ven los dividers.
+  type SalesNavGroupDef = { label: string; items: NavItemDef[] };
+  const salesNavGroups: SalesNavGroupDef[] = [
+    {
+      label: 'Run',
+      items: [
+        { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
+        { id: 'sales_pipeline',  label: 'Pipeline',       icon: <Icons.Target /> },
+        { id: 'communications',  label: 'Inbox',          icon: <Icons.Mail /> },
+        { id: 'finance',         label: 'Finance',        icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
+      ],
+    },
+    {
+      label: 'Insights',
+      items: [
+        { id: 'sales_analytics',  label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
+        { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
+      ],
+    },
+    {
+      label: 'Build',
+      items: [
+        { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
+        { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
+        { id: 'products',         label: 'Products',  icon: <Icons.Briefcase /> },
+        { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
+        { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
+      ],
+    },
   ];
+  // Agent — surfaced solo, separated. Aurora dock cubre la mayoría de los
+  // casos, pero la página Agent sigue valiendo como home del workspace IA.
+  const salesAgent: NavItemDef = { id: 'agent', label: 'Agent', icon: <Icons.Sparkles /> };
+  const salesNavItems: NavItemDef[] = [...salesNavGroups.flatMap(g => g.items), salesAgent];
 
   // Master mode (platform admin) sidebar. No permission gates — the entire
   // mode is gated at the switch level by `isPlatformAdmin`. Each page also
@@ -820,9 +844,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
             ));
           })()}
 
-          {/* Sales / Master modes: flat nav. masterNavItems carries the
-              platform pages (Dashboard / Customers / Features / Audit). */}
-          {isInitialized && currentMode !== 'os' && currentNavItems.map(item => (
+          {/* Master mode: flat nav. masterNavItems carries the platform pages. */}
+          {isInitialized && currentMode === 'master' && masterNavItems.map(item => (
             <NavItem
               key={item.id}
               id={item.id}
@@ -833,6 +856,59 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               onClick={() => onNavigate(item.id)}
             />
           ))}
+
+          {/* Sales mode: 3 grupos (Run / Insights / Build) + Agent separado.
+              Mismo patrón visual que OS mode — micro-labels uppercase entre
+              groups cuando el sidebar está expandido, dividers cuando colapsado. */}
+          {isInitialized && currentMode === 'sales' && (() => {
+            const visibleGroups = salesNavGroups
+              .map(g => ({
+                ...g,
+                items: g.items.filter(item => {
+                  if (item.feature && !hasFeature(item.feature)) return false;
+                  if (!item.permission) return true;
+                  return hasPermission(item.permission.module, item.permission.action);
+                }),
+              }))
+              .filter(g => g.items.length > 0);
+            return (
+              <>
+                {visibleGroups.map((group, gi) => (
+                  <React.Fragment key={`sales-group-${gi}`}>
+                    {gi > 0 && (
+                      <div className={`shrink-0 ${isSidebarExpanded ? 'w-[calc(100%-24px)] mx-3' : 'w-8 mx-auto'} my-1.5 h-px bg-zinc-100 dark:bg-zinc-800/60`} />
+                    )}
+                    {isSidebarExpanded && (
+                      <div className="w-[calc(100%-24px)] mx-3 mt-0.5 mb-1 text-[8.5px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">
+                        {group.label}
+                      </div>
+                    )}
+                    {group.items.map(item => (
+                      <NavItem
+                        key={item.id}
+                        id={item.id}
+                        icon={item.icon}
+                        label={item.label}
+                        active={currentPage === item.id}
+                        expanded={isSidebarExpanded}
+                        onClick={() => onNavigate(item.id)}
+                      />
+                    ))}
+                  </React.Fragment>
+                ))}
+                {/* Agent — separated with a thicker spacer + subtle label */}
+                <div className={`shrink-0 ${isSidebarExpanded ? 'w-[calc(100%-24px)] mx-3' : 'w-8 mx-auto'} mt-2 mb-1 h-px bg-zinc-200/60 dark:bg-zinc-700/40`} />
+                <NavItem
+                  id={salesAgent.id}
+                  icon={salesAgent.icon}
+                  label={salesAgent.label}
+                  active={currentPage === salesAgent.id}
+                  expanded={isSidebarExpanded}
+                  onClick={() => onNavigate(salesAgent.id)}
+                />
+              </>
+            );
+          })()}
 
           {/* Clients tree — sits in flow under the calendar/docs group with
               its own divider above (no longer pushed to the bottom of the
