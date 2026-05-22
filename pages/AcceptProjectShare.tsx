@@ -21,12 +21,16 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
   }, [token]);
 
   const checkAuth = async () => {
-    // First verify the token exists
-    const { data: share, error: shareErr } = await supabase
-      .from('project_shares')
-      .select('id, email, status, project_id')
-      .eq('token', token)
-      .single();
+    // Lookup via RPC `lookup_project_share_by_token` — SECURITY DEFINER, evita
+    // RLS bypass por SELECT directo. La policy USING(true) de project_shares
+    // que permitía esta query desde anon fue removida 2026-05-22 (P0.1 RLS
+    // audit). La RPC valida que el token tenga longitud mínima y retorna
+    // 0 o 1 fila con el project_title incluido (ya no hace falta segundo
+    // round-trip a `projects`).
+    const { data: rows, error: shareErr } = await supabase
+      .rpc('lookup_project_share_by_token', { p_token: token });
+
+    const share = Array.isArray(rows) ? rows[0] : rows;
 
     if (shareErr || !share) {
       setStatus('error');
@@ -47,14 +51,7 @@ export const AcceptProjectShare: React.FC<AcceptProjectShareProps> = ({ token, o
     }
 
     setEmail(share.email);
-
-    // Fetch project name
-    const { data: project } = await supabase
-      .from('projects')
-      .select('title')
-      .eq('id', share.project_id)
-      .single();
-    if (project) setProjectName(project.title);
+    if (share.project_title) setProjectName(share.project_title);
 
     // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
