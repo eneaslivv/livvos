@@ -511,7 +511,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <h1 className="text-[32px] md:text-[40px] font-light text-zinc-900 dark:text-zinc-100 leading-[1.05] tracking-[-0.035em]">
                 {partOfDay}, <span className="capitalize">{userFirstName}</span>.
               </h1>
-              <ModeTabs mode={mode} onChange={persistMode} />
+              {/* ModeTabs (Thoughts / Vision / Deep work) removed by request —
+                  el toggle ocupaba espacio sin generar valor. El mode queda
+                  fijo en 'deep' (default). Si querés volverlo, descomentar:
+                  <ModeTabs mode={mode} onChange={persistMode} /> */}
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3 text-[10px] font-mono text-zinc-400 uppercase tracking-[0.22em]">
               <Icons.Sparkles size={11} className="text-zinc-300 dark:text-zinc-700" />
