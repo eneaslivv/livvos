@@ -17,7 +17,7 @@
  *         - Pending counter
  *         - Done today counter
  *         - Monthly profit sparkline
- *         - AI Insights pills
+ *         - Quick tasks (overdue + today, with checkbox to mark done)
  *
  * The previous detailed Home is preserved at pages/HomeLegacy.tsx
  * (still wired in routing if we want to expose it later).
@@ -222,25 +222,30 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const lastMonthProfit = profitSeries[profitSeries.length - 2]?.profit || 0;
   const profitDelta = currentMonthProfit - lastMonthProfit;
 
-  // ── Insights — quick auto-derived bullets ───────────────────────
-  // Each insight carries a `navigateTo` page so clicking the pill
-  // jumps to the relevant module. Filtering happens inside the
-  // component — pills with zero values are dropped before render.
-  type Insight = { label: string; tone: 'rose' | 'amber' | 'emerald' | 'violet' | 'blue'; navigateTo: PageView };
-  const insights = useMemo<Insight[]>(() => {
-    const out: Insight[] = [];
-    const monthIso = todayIso.slice(0, 7);
-    const monthPending = incomes.reduce((s, inc) => s + (inc.installments || [])
-      .filter(i => i.status === 'pending' && i.due_date?.startsWith(monthIso))
-      .reduce((ss, i) => ss + (i.amount || 0), 0), 0);
-    if (monthPending > 0)        out.push({ label: `$${monthPending.toLocaleString()} pending`,       tone: 'amber',   navigateTo: 'finance' });
-    if (currentMonthProfit > 0)  out.push({ label: `+$${currentMonthProfit.toLocaleString()} profit`, tone: 'emerald', navigateTo: 'finance' });
-    if (overdueCount > 0)        out.push({ label: `${overdueCount} overdue`,                          tone: 'rose',    navigateTo: 'brief' });
-    const activeProjects = projects.filter((p: any) => p.status === 'Active' || p.status === 'Pending').length;
-    if (activeProjects > 0)      out.push({ label: `${activeProjects} active projects`,                tone: 'blue',    navigateTo: 'projects' });
-    if (clients.length > 0)      out.push({ label: `${clients.length} clients`,                        tone: 'violet',  navigateTo: 'clients' });
-    return out;
-  }, [currentMonthProfit, overdueCount, incomes, projects, clients, todayIso]);
+  // ── Quick tasks — overdue + due today, sorted by due ASC ──────────
+  // Replaces the generic Insights card in the sidebar. The user asked
+  // for actionable items (real tasks they can check off) instead of
+  // counter pills.
+  const quickTasks = useMemo(() => {
+    const mine = (allTasks || []).filter((t: any) => {
+      const isMine = t.assignee_ids?.includes(user?.id || '') || t.owner_id === user?.id;
+      if (!isMine) return false;
+      if (t.completed) return false;
+      if (t.status === 'cancelled') return false;
+      if (!t.start_date) return false;
+      return t.start_date <= todayIso;  // overdue + today
+    });
+    mine.sort((a: any, b: any) => (a.start_date || '').localeCompare(b.start_date || ''));
+    return mine.slice(0, 6);
+  }, [allTasks, user?.id, todayIso]);
+
+  const handleToggleTask = useCallback(async (taskId: string) => {
+    try {
+      await updateTask(taskId, { completed: true, completed_at: new Date().toISOString() });
+    } catch (err: any) {
+      errorLogger.warn('quick-task toggle failed', err);
+    }
+  }, [updateTask]);
 
   // ── Voice input ─────────────────────────────────────────────────
   const voice = useVoiceInput({
@@ -647,12 +652,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             onClick={() => onNavigate('finance')}
           />
 
-          {/* Insights — colored pills + bullets */}
-          <InsightsCard
-            insights={insights}
+          {/* Quick tasks — overdue + today con checkbox.
+              Reemplaza el bloque de Insights genérico (no servía). */}
+          <QuickTasksCard
+            tasks={quickTasks}
+            todayIso={todayIso}
             overdueCount={overdueCount}
-            pendingMsgs={pendingMsgs}
-            onNavigate={(page) => onNavigate(page)}
+            dueTodayCount={dueTodayCount}
+            onToggle={handleToggleTask}
+            onOpen={(taskId) => onNavigate('calendar', { taskId } as NavParams)}
+            onSeeAll={() => onNavigate('calendar')}
           />
 
           {/* Workspace shortcut — opens the legacy detailed dashboard */}
@@ -797,27 +806,40 @@ const MonthlyProfitCard: React.FC<{
   );
 };
 
-// ── InsightsCard ─────────────────────────────────────────────────
-const INSIGHT_TONE: Record<string, string> = {
-  rose:    'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300',
-  amber:   'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  emerald: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-  violet:  'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300',
-  blue:    'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300',
+// ── QuickTasksCard — actionable list (overdue + today) ──────────────
+// Replaces the InsightsCard. The user asked for "tareas a hacer hoy o
+// cosas así en vez de insights generales" — this is exactly that. Each
+// row has a checkbox to mark done + click navigates to the calendar
+// with that task pre-opened.
+const PRIORITY_DOT: Record<string, string> = {
+  Urgent: 'bg-rose-500',
+  High:   'bg-amber-500',
+  Medium: 'bg-zinc-400',
+  Low:    'bg-zinc-300 dark:bg-zinc-600',
 };
-const InsightsCard: React.FC<{
-  insights: Array<{ label: string; tone: keyof typeof INSIGHT_TONE; navigateTo?: PageView }>;
+
+const formatDueLabel = (start: string | null | undefined, todayIso: string): { text: string; tone: 'rose' | 'amber' | 'zinc' } => {
+  if (!start) return { text: '—', tone: 'zinc' };
+  const due = start.slice(0, 10);
+  if (due < todayIso) {
+    const a = new Date(todayIso); const b = new Date(due);
+    const days = Math.max(1, Math.round((a.getTime() - b.getTime()) / 86400000));
+    return { text: days === 1 ? '1d overdue' : `${days}d overdue`, tone: 'rose' };
+  }
+  if (due === todayIso) return { text: 'today', tone: 'amber' };
+  return { text: due.slice(5), tone: 'zinc' };
+};
+
+const QuickTasksCard: React.FC<{
+  tasks: any[];
+  todayIso: string;
   overdueCount: number;
-  pendingMsgs: number;
-  onNavigate?: (page: PageView) => void;
-}> = ({ insights, overdueCount, pendingMsgs, onNavigate }) => {
-  // Synthetic bullet copy at the bottom — quick narrative based on
-  // the same data the pills come from.
-  const bullets: string[] = [];
-  const pendingPill = insights.find(i => i.label.includes('pending'));
-  if (pendingPill) bullets.push(`${pendingPill.label.split(' ')[0]} in pending payments — follow up to improve cash flow.`);
-  if (overdueCount > 5) bullets.push(`${overdueCount} overdue tasks need attention today.`);
-  if (pendingMsgs > 10) bullets.push(`${pendingMsgs} pending messages — sweep your inbox before deep work.`);
+  dueTodayCount: number;
+  onToggle: (id: string) => void;
+  onOpen: (id: string) => void;
+  onSeeAll: () => void;
+}> = ({ tasks, todayIso, overdueCount, dueTodayCount, onToggle, onOpen, onSeeAll }) => {
+  const total = overdueCount + dueTodayCount;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -825,30 +847,59 @@ const InsightsCard: React.FC<{
       transition={SPRING_ENTER}
       className="p-3.5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900"
     >
-      <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 inline-flex items-center gap-1 mb-2">
-        <Icons.Sparkles size={9} />
-        Insights
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 inline-flex items-center gap-1">
+          <Icons.Check size={9} />
+          Today&apos;s tasks
+        </div>
+        <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-zinc-400">
+          {overdueCount > 0 && <span className="text-rose-500">{overdueCount} overdue</span>}
+          {overdueCount > 0 && dueTodayCount > 0 && <span className="text-zinc-300 dark:text-zinc-700">·</span>}
+          {dueTodayCount > 0 && <span className="text-amber-500">{dueTodayCount} today</span>}
+          {total === 0 && <span>0</span>}
+        </div>
       </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {insights.length === 0 ? (
-          <span className="text-[10.5px] text-zinc-400 italic">Nothing to flag yet.</span>
-        ) : insights.map((i, idx) => (
-          i.navigateTo && onNavigate ? (
-            <motion.button
-              key={idx}
-              onClick={() => onNavigate(i.navigateTo!)}
-              whileTap={{ scale: 0.94, transition: SPRING_TAP }}
-              className={`text-[10.5px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-80 ${INSIGHT_TONE[i.tone]}`}
-            >{i.label}</motion.button>
-          ) : (
-            <span key={idx} className={`text-[10.5px] px-2 py-0.5 rounded-full ${INSIGHT_TONE[i.tone]}`}>{i.label}</span>
-          )
-        ))}
-      </div>
-      {bullets.length > 0 && (
-        <ul className="space-y-1 text-[10.5px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          {bullets.map((b, i) => <li key={i} className="leading-snug">· {b}</li>)}
+
+      {tasks.length === 0 ? (
+        <div className="text-[11px] text-zinc-400 italic py-3 text-center">
+          {total === 0 ? 'Nothing on your plate today.' : 'Nothing assigned to you — check the team board.'}
+        </div>
+      ) : (
+        <ul className="space-y-1">
+          {tasks.map((t: any) => {
+            const due = formatDueLabel(t.start_date, todayIso);
+            const dueColor = due.tone === 'rose' ? 'text-rose-500' : due.tone === 'amber' ? 'text-amber-500' : 'text-zinc-400';
+            return (
+              <li key={t.id} className="group flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggle(t.id); }}
+                  className="flex-shrink-0 w-3.5 h-3.5 rounded-full border border-zinc-300 dark:border-zinc-600 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center justify-center"
+                  title="Mark as done"
+                >
+                  <Icons.Check size={9} className="opacity-0 group-hover:opacity-100 text-emerald-500 transition-opacity" />
+                </button>
+                <span className={`w-1 h-1 rounded-full flex-shrink-0 ${PRIORITY_DOT[t.priority] || PRIORITY_DOT.Medium}`} />
+                <button
+                  onClick={() => onOpen(t.id)}
+                  className="flex-1 min-w-0 text-left text-[11.5px] text-zinc-800 dark:text-zinc-200 truncate hover:text-zinc-900 dark:hover:text-white"
+                  title={t.title}
+                >
+                  {t.title}
+                </button>
+                <span className={`text-[9.5px] font-mono whitespace-nowrap ${dueColor}`}>{due.text}</span>
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {total > tasks.length && (
+        <button
+          onClick={onSeeAll}
+          className="w-full mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors text-center py-1"
+        >
+          See all {total} →
+        </button>
       )}
     </motion.div>
   );
