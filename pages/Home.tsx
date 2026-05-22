@@ -6,7 +6,7 @@
  *
  * Layout (top → bottom, left → right):
  *   • Gradient hero ribbon — purely cosmetic, sets the daily-ritual tone
- *   • Header row: date + greeting on the left, ModeTabs on the right
+ *   • Header row: date + greeting
  *   • Two columns:
  *       LEFT (main):
  *         - 4 stat cards (overdue / due today / events / pending msgs)
@@ -21,11 +21,6 @@
  *
  * The previous detailed Home is preserved at pages/HomeLegacy.tsx
  * (still wired in routing if we want to expose it later).
- *
- * Three "modes" (Thoughts / Vision / Deep work) — each swaps the
- * prompt chips + the placeholder + the brief synthesis tone so the
- * surface feels like it adapts to what you're trying to do, instead
- * of being a fixed dashboard.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -49,56 +44,6 @@ import type { PageView, NavParams } from '../types';
 interface HomeProps {
   onNavigate: (page: PageView, params?: NavParams) => void;
 }
-
-// ── Mode definitions ───────────────────────────────────────────────
-// Each mode reshapes the conversational surface for a different kind
-// of working session. Chips + placeholder + a hint string that the
-// brief synthesis tone reads (concise/warm/direct/coaching are the
-// underlying brief synthesis_tone values).
-type Mode = 'thoughts' | 'vision' | 'deep';
-interface ModeConfig {
-  id: Mode;
-  label: string;
-  icon: keyof typeof Icons;
-  placeholder: string;
-  chips: Array<{ label: string; prompt: string }>;
-}
-const MODES: ModeConfig[] = [
-  {
-    id: 'thoughts',
-    label: 'Thoughts',
-    icon: 'Sparkles',
-    placeholder: "What's on your mind?",
-    chips: [
-      { label: 'Brainstorm',     prompt: 'Help me brainstorm — give me 5 angles on the topic I describe next.' },
-      { label: 'Reflect on this week', prompt: 'Reflect on this week with me — what shipped, what stalled, what to repeat.' },
-      { label: 'Write something', prompt: 'Help me write a short note about something I want to say publicly. Ask 2 quick questions first.' },
-    ],
-  },
-  {
-    id: 'vision',
-    label: 'Vision',
-    icon: 'Eye',
-    placeholder: 'What are we building toward?',
-    chips: [
-      { label: 'Strategy check',  prompt: 'Read the strategy hub and tell me where I am drifting from the ICPs I defined.' },
-      { label: 'Roadmap status',  prompt: 'Where are we against the growth phases? Which milestones are slipping?' },
-      { label: 'Big bets',        prompt: 'If I could only do 3 things this quarter to move the business forward, what should they be?' },
-    ],
-  },
-  {
-    id: 'deep',
-    label: 'Deep work',
-    icon: 'Zap',
-    placeholder: "Let's focus — what's the first thing?",
-    chips: [
-      { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
-      { label: "What's blocked?", prompt: "What's blocked or waiting on someone else right now?" },
-      { label: 'Follow-ups',      prompt: "Show me pending follow-ups across clients + inbox I haven't replied to." },
-      { label: 'Catch me up',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
-    ],
-  },
-];
 
 type ActionState = 'pending' | 'executing' | 'done' | 'skipped' | 'failed';
 type ChatAction = ProposedAction & { state: ActionState; error?: string };
@@ -197,44 +142,23 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { incomes, expenses } = useFinance();
   const { clients } = useClients();
   const { projects } = useProjects();
-  const [mode, setMode] = useState<Mode>('deep');
-  // Persist mode in brief_preferences.home_mode so the user's
-  // workspace context survives reloads. Load once on mount; save
-  // optimistically + persist in background on every change.
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('brief_preferences')
-          .select('home_mode')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        const persisted = (data as any)?.home_mode as Mode | undefined;
-        if (!cancelled && persisted) setMode(persisted);
-      } catch { /* default 'deep' is fine */ }
-    })();
-    return () => { cancelled = true; };
-  }, [user?.id]);
-  const persistMode = useCallback(async (next: Mode) => {
-    setMode(next);  // optimistic
-    if (!user?.id || !currentTenant?.id) return;
-    try {
-      await supabase.from('brief_preferences').upsert({
-        user_id: user.id,
-        tenant_id: currentTenant.id,
-        home_mode: next,
-      });
-    } catch { /* non-fatal */ }
-  }, [user?.id, currentTenant?.id]);
+  // ModeTabs (Thoughts / Vision / Deep work) sistema removido — el toggle
+  // ocupaba espacio sin generar valor. Los chips + placeholder del Deep
+  // work mode están hardcodeados abajo como defaults universales.
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [pendingMsgs, setPendingMsgs] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const modeConfig = MODES.find(m => m.id === mode)!;
+  // Hardcoded chips + placeholder — antes venía del modeConfig dinámico.
+  const HOME_PLACEHOLDER = "Let's focus — what's the first thing?";
+  const HOME_CHIPS = [
+    { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
+    { label: "What's blocked?", prompt: "What's blocked or waiting on someone else right now?" },
+    { label: 'Follow-ups',      prompt: "Show me pending follow-ups across clients + inbox I haven't replied to." },
+    { label: 'Catch me up',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+  ];
 
   // ── Derived counts for the top stat cards ───────────────────────
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
@@ -511,10 +435,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <h1 className="text-[32px] md:text-[40px] font-light text-zinc-900 dark:text-zinc-100 leading-[1.05] tracking-[-0.035em]">
                 {partOfDay}, <span className="capitalize">{userFirstName}</span>.
               </h1>
-              {/* ModeTabs (Thoughts / Vision / Deep work) removed by request —
-                  el toggle ocupaba espacio sin generar valor. El mode queda
-                  fijo en 'deep' (default). Si querés volverlo, descomentar:
-                  <ModeTabs mode={mode} onChange={persistMode} /> */}
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3 text-[10px] font-mono text-zinc-400 uppercase tracking-[0.22em]">
               <Icons.Sparkles size={11} className="text-zinc-300 dark:text-zinc-700" />
@@ -545,13 +465,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] text-zinc-900 dark:text-zinc-100 leading-snug">
                   {partOfDay.replace('Good ', 'Buen ').replace('morning', 'mañana').replace('afternoon', 'tarde').replace('evening', 'noche')}, <span className="capitalize">{userFirstName}</span>.
-                  <span className="text-zinc-500 dark:text-zinc-400 font-normal ml-1">{modeConfig.placeholder}</span>
+                  <span className="text-zinc-500 dark:text-zinc-400 font-normal ml-1">{HOME_PLACEHOLDER}</span>
                 </div>
               </div>
             </div>
             {/* Prompt chips for the current mode */}
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {modeConfig.chips.map(c => {
+              {HOME_CHIPS.map(c => {
                 const IconCmp = (Icons as any)[
                   c.label.includes('week') ? 'Calendar' :
                   c.label.includes('blocked') ? 'AlertTriangle' :
@@ -749,31 +669,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     </div>
   );
 };
-
-// ── ModeTabs ──────────────────────────────────────────────────────
-const ModeTabs: React.FC<{ mode: Mode; onChange: (m: Mode) => void }> = ({ mode, onChange }) => (
-  <div className="inline-flex items-center gap-0.5 rounded-full border border-zinc-200/70 dark:border-zinc-800 p-0.5 bg-white dark:bg-zinc-900">
-    {MODES.map(m => {
-      const IconCmp = (Icons as any)[m.icon] || Icons.Sparkles;
-      const active = mode === m.id;
-      return (
-        <motion.button
-          key={m.id}
-          onClick={() => onChange(m.id)}
-          whileTap={{ scale: 0.96, transition: SPRING_TAP }}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-colors ${
-            active
-              ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
-          }`}
-        >
-          <IconCmp size={11} />
-          {m.label}
-        </motion.button>
-      );
-    })}
-  </div>
-);
 
 // ── StatCard ──────────────────────────────────────────────────────
 const STAT_TONE: Record<string, { text: string; mute: string }> = {
