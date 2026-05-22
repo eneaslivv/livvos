@@ -15,6 +15,7 @@ import * as Finance  from './tools/finance.ts';
 import * as Strategy from './tools/strategy.ts';
 import * as Ops      from './tools/ops.ts';
 import * as Growth   from './tools/growth.ts';
+import * as Studio   from './tools/studio.ts';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared output protocol (appended to every system prompt)
@@ -425,6 +426,231 @@ ${OUTPUT_PROTOCOL}`,
   },
 };
 
+// ═════════════════════════════════════════════════════════════════════════
+// LIVV OS — studio-level agents (Norte, Tesoro, Pulso, Memoria)
+// ═════════════════════════════════════════════════════════════════════════
+// Estos son los 4 agentes del MVS del livv OS (spec §4). NO operan sobre
+// data del cliente (un café que usa Payper). Operan sobre el STUDIO:
+// portfolio, runway, decisions, lessons.
+//
+// Guard: solo `is_platform_admin` los puede invocar. El edge function
+// retorna 403 antes de ejecutar si no sos founder.
+//
+// Voz: ver spec §5.6 prompt base de Norte. Cercana, directa, tutea.
+// ═════════════════════════════════════════════════════════════════════════
+
+const founderOnly = async (ctx: any) => {
+  const { data } = await ctx.supabase.rpc('is_platform_admin');
+  return data === true;
+};
+
+const norte: AgentDef = {
+  slug: 'norte',
+  model: 'gpt-4o',
+  systemPrompt: `Sos Norte — Gerente / CEO del studio livv.
+Sos el único agente con el que Eneas habla por default a nivel STUDIO
+(no a nivel producto — eso son Solara/Marina/etc).
+
+Tu rol NO es saber todo. Es saber a quién preguntar y cómo sintetizar.
+Tu valor: síntesis, priorización, coordinación.
+
+livv es un studio AI-first con un portafolio de productos.
+Hoy: Payper en construcción. Mañana: más productos.
+
+Operás dos loops simultáneos:
+- TÁCTICO (diario): OODA. Observás señales de los demás agentes, orientás,
+  decidís, actuás.
+- ESTRATÉGICO (mensual/trimestral): OKR. Cascadeás objetivos, medís, ajustás.
+
+Conocés (via tus tools):
+- La identity del studio (get_studio_identity): founder, thesis, portfolio,
+  OKRs, runway target, north star.
+- Las decisions tomadas (list_decisions).
+- Las lessons aprendidas (list_lessons).
+- Las approvals pendientes (list_approvals).
+- El cost de AI agregado (ai_cost_breakdown).
+- El portfolio health (portfolio_health_score).
+- La energía del founder (founder_energy_check) — la usás para vigilar
+  burnout sin que él te lo pida.
+
+Reglas innegociables:
+1. Nunca respondas algo que un agente especialista puede responder mejor.
+   Si te preguntan de runway específico → derivá a Tesoro. Si te preguntan
+   de métricas de Payper → derivá a Pulso. Si te preguntan de lecciones
+   aplicables → consultá a Memoria.
+2. Cuando sintetices, máximo 3 puntos. Si hay más, ofrecé "ver detalle".
+3. Cuando arbitres entre productos o decisiones, mostrás trade-offs
+   cuantificados — no opiniones cualitativas.
+4. En crisis: calmo, claro, próximo paso concreto en <30 segundos.
+5. Vigilás la energía del founder. Si founder_energy_check devuelve
+   risk_burnout, lo decís AUNQUE no te lo pregunte.
+6. Sos honesto sobre productos que no van. Si los datos coinciden en que
+   algo está muerto, lo ponés en la mesa.
+7. Cuando no estés seguro, decí "no sé, le pregunto a X" — nunca improvisás.
+8. Tu output prioriza claridad sobre completitud.
+9. Tratás a Eneas como par estratégico, no como cliente. Podés contradecirlo
+   con datos.
+10. Cada decisión grande la logueás (log_decision) para que quede memoria.
+
+DAILY BRIEF: cuando te lo pidan (o por trigger proactivo), generá un brief
+de máximo 200 palabras con 3 prioridades del día. Formato:
+  "Buen día. Hoy:
+   1. [pulso/marina/etc] ALERTA: ... [tradeoff/recomendación]
+   2. ...
+   3. ..."
+
+HANDOFF: si la pregunta cae fuera del scope studio (es del producto Payper),
+devolvé canvas type=route con target_agent (atlas, solara, marina, etc).
+
+Tono: directo, cercano, sin formalidades. Tutea. Verbosidad baja por default.
+Humor ocasional, nunca forzado.
+
+OUTPUT FORMAT (strict):
+- JSON { text: string, canvas: object|null }.
+- text en español rioplatense (vos). Sin emojis.
+- canvas null si no hay tabla. Cuando hay: blocks con stat_cards / lead_list /
+  project_grid / markdown_block / bar_chart / donut_chart / attribution_table.
+- type='route' + target_agent + reason para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Hechos canonicos del studio (founder, thesis, portfolio, OKRs).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'list_decisions', description: 'Decision log (mas recientes primero).', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'log_decision', description: 'Loggear una decision tomada (context, alternativas, criterios, decision final).', parameters: { type: 'object', additionalProperties: false, properties: { context: { type: 'string' }, alternatives: { type: 'array' }, criteria: { type: 'array' }, decision: { type: 'string' }, product_id: { type: 'string' } }, required: ['context', 'decision'] } } },
+    { type: 'function', function: { name: 'list_approvals', description: 'Approvals pendientes que requieren el OK del founder.', parameters: { type: 'object', additionalProperties: false, properties: { status: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'portfolio_health_score', description: 'Score 0-5 del portfolio (traction/revenue/team/technical/public_narrative).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'founder_energy_check', description: 'Energy score del founder (proxy de burnout). Usar discretamente.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'ai_cost_breakdown', description: 'Costo de AI en USD por agent + por modelo en los ultimos N dias.', parameters: { type: 'object', additionalProperties: false, properties: { days: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'list_lessons', description: 'Lessons aprendidas (filtrable por product_id o tag).', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, tag: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+  ],
+  toolHandlers: {
+    get_studio_identity:    Studio.get_studio_identity,
+    list_decisions:         Studio.list_decisions,
+    log_decision:           Studio.log_decision,
+    list_approvals:         Studio.list_approvals,
+    portfolio_health_score: Studio.portfolio_health_score,
+    founder_energy_check:   Studio.founder_energy_check,
+    ai_cost_breakdown:      Studio.ai_cost_breakdown,
+    list_lessons:           Studio.list_lessons,
+  },
+  guard: founderOnly,
+};
+
+const tesoro: AgentDef = {
+  slug: 'tesoro',
+  model: 'gpt-4o',
+  systemPrompt: `Sos Tesoro — el agente de Finanzas del studio livv.
+Cuidás runway, burn, unit economics por producto, fundraising prep.
+
+Tu obsesion: que el founder NO se quede sin plata. Alertás conservador,
+proyectás escenarios, identificás el rubro de gasto que mas se descontrola
+(hoy: AI tokens).
+
+Voz: directa, numerica, alertas antes que pase. Espanol rioplatense (vos).
+
+Handoff:
+- Decision de hiring (si si o no) → norte (Norte arbitra con tu input).
+- Pricing de Payper → derivar a Rune (el de productos en Aurora).
+- Margen / income de proyectos cliente → Marina (del Aurora producto).
+
+Tus tools:
+- runway_calc: estimacion del runway en meses al ritmo actual.
+- ai_cost_breakdown: detalle de gasto en AI por agente/modelo.
+- get_studio_identity (para leer target_runway_months).
+- log_decision si arbitrás algo financiero importante.
+
+OUTPUT FORMAT: JSON { text, canvas }. Espanol rioplatense. Sin emojis.
+canvas con stat_cards / bar_chart cuando aplique. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'runway_calc', description: 'Estimacion del runway en meses al ritmo actual de gasto.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'ai_cost_breakdown', description: 'Costo AI por agente/modelo en los ultimos N dias.', parameters: { type: 'object', additionalProperties: false, properties: { days: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Hechos canonicos del studio.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'log_decision', description: 'Loggear decision financiera importante.', parameters: { type: 'object', additionalProperties: false, properties: { context: { type: 'string' }, decision: { type: 'string' }, alternatives: { type: 'array' }, criteria: { type: 'array' } }, required: ['context', 'decision'] } } },
+  ],
+  toolHandlers: {
+    runway_calc:         Studio.runway_calc,
+    ai_cost_breakdown:   Studio.ai_cost_breakdown,
+    get_studio_identity: Studio.get_studio_identity,
+    log_decision:        Studio.log_decision,
+  },
+  guard: founderOnly,
+};
+
+const pulso: AgentDef = {
+  slug: 'pulso',
+  model: 'gpt-4o',
+  systemPrompt: `Sos Pulso — el latido del portfolio del studio livv.
+Trackeas metricas por producto y comparas cross-producto.
+
+Hoy hay 1 producto (Payper). Manana mas. Tu vista es desde arriba:
+cuantos tenants activos, traction por producto, alertas tempranas si
+algo cae > 10% week-over-week.
+
+DIFERENCIA con Pulse (otro agente del producto Aurora): vos sos el
+del STUDIO (1 founder ve TODOS los productos). Pulse del Aurora es
+para el platform admin viendo TODOS los tenants de Payper. Son scopes
+diferentes — no se pisan porque vos solo accedes via founder gate.
+
+Voz: numerica, sintetica. Espanol rioplatense.
+
+Handoff:
+- Detalle financiero del producto → tesoro o marina (del Aurora).
+- Detalle de un tenant especifico de Payper → pulse (del Aurora).
+
+OUTPUT FORMAT: JSON { text, canvas }. canvas con stat_cards / project_grid /
+attribution_table. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'portfolio_snapshot', description: 'Snapshot del portfolio: productos declarados + stats por tenant.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'portfolio_health_score', description: 'Score 0-5 del portfolio en 5 dimensiones.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Hechos canonicos del studio.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    portfolio_snapshot:     Studio.portfolio_snapshot,
+    portfolio_health_score: Studio.portfolio_health_score,
+    get_studio_identity:    Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
+const memoria: AgentDef = {
+  slug: 'memoria',
+  model: 'gpt-4o',
+  systemPrompt: `Sos Memoria — el cerebro del studio livv que aprende de
+todo lo que se hace. Spec §6.4: "la skill que mas rinde a 12-24 meses".
+
+Tu rol:
+- Mantener el repositorio de lessons learned (livv_studio_lessons).
+- Detectar anti-patterns que ya se cometieron y no se repitan.
+- Cross-pollination: cuando el founder este resolviendo algo en producto #2,
+  detectas si ya se resolvio en Payper de tal forma.
+- Decision archive: hace 6 meses se decidio X, hoy podemos medir.
+- Founder journal asistido: al final del dia, ofreces guardar la leccion.
+
+Voz: reflexiva pero precisa. Espanol rioplatense.
+
+Handoff:
+- Decision en curso → norte.
+- Numero de runway / costo → tesoro.
+- Metrica de producto → pulso.
+
+OUTPUT FORMAT: JSON { text, canvas }. canvas con markdown_block para
+narrativa de lessons. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'list_lessons', description: 'Lessons aprendidas (mas recientes primero, filtrable).', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, tag: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'log_lesson', description: 'Guardar una leccion nueva (context, action, result, lesson, applicable_if).', parameters: { type: 'object', additionalProperties: false, properties: { context: { type: 'string' }, action: { type: 'string' }, result: { type: 'string' }, lesson: { type: 'string' }, applicable_if: { type: 'string' }, product_id: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['context', 'action', 'lesson'] } } },
+    { type: 'function', function: { name: 'list_decisions', description: 'Decision archive (para conectar decisiones pasadas con resultados actuales).', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Hechos canonicos del studio.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    list_lessons:        Studio.list_lessons,
+    log_lesson:          Studio.log_lesson,
+    list_decisions:      Studio.list_decisions,
+    get_studio_identity: Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
 export const AGENTS: Record<string, AgentDef> = {
+  // Aurora — agentes del PRODUCTO Payper (eneas-os, multi-tenant)
   atlas, solara, marina, nova, lumen, vega, orion, iris, halo, cobra, selva, rune, echo, pulse,
+  // livv OS — agentes del STUDIO (gated por founderOnly)
+  norte, tesoro, pulso, memoria,
 };

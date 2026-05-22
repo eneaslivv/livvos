@@ -182,6 +182,51 @@ export const auroraAgents: Record<AgentSlug, AgentMeta> = {
     accent_text: '#1E293B',
     glyph: 'activity',
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // LIVV OS — studio-level agents (founder only)
+  // Naming theme: navegacional / arquitectónico (vs Aurora astronómico).
+  // Paleta más sobria, "ejecutiva" — distinguible visualmente del producto.
+  // ═══════════════════════════════════════════════════════════════════
+  norte: {
+    slug: 'norte',
+    display_name: 'Norte',
+    tagline: 'Tu único punto de contacto',
+    domain: 'CEO/Manager del studio livv · síntesis, priorización, coordinación',
+    accent_hex: '#1F2937',
+    accent_soft: '#E5E7EB',
+    accent_text: '#0F172A',
+    glyph: 'compass',
+  },
+  tesoro: {
+    slug: 'tesoro',
+    display_name: 'Tesoro',
+    tagline: 'Cuida la plata',
+    domain: 'Finanzas del studio — runway, burn, AI cost, unit economics',
+    accent_hex: '#B45309',
+    accent_soft: '#FEF3C7',
+    accent_text: '#78350F',
+    glyph: 'droplet',
+  },
+  pulso: {
+    slug: 'pulso',
+    display_name: 'Pulso',
+    tagline: 'Latido del portafolio',
+    domain: 'Product portfolio metrics — cross-product, alertas tempranas',
+    accent_hex: '#7C3AED',
+    accent_soft: '#EDE9FE',
+    accent_text: '#4C1D95',
+    glyph: 'pulse',
+  },
+  memoria: {
+    slug: 'memoria',
+    display_name: 'Memoria',
+    tagline: 'El moat que se construye solo',
+    domain: 'Lessons cross-producto — decision archive, anti-patterns, cross-pollination',
+    accent_hex: '#475569',
+    accent_soft: '#F1F5F9',
+    accent_text: '#1E293B',
+    glyph: 'rune',
+  },
 };
 
 export function cssVarsForAgent(slug: AgentSlug): CSSProperties {

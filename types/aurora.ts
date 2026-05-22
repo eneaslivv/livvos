@@ -2,6 +2,7 @@
 // Used by client (context + components) and Supabase Edge Function aurora-chat.
 
 export type AgentSlug =
+  // ── Aurora — product-level agents (Payper / eneas-os) ───────────────
   | 'atlas'   // Orchestrator
   | 'solara'  // Sales
   | 'marina'  // Finance
@@ -15,7 +16,12 @@ export type AgentSlug =
   | 'selva'   // Org Designer (TeamScaling)
   | 'rune'    // Product Marketer (Products marketplace)
   | 'echo'    // Partner Activator (Partners portal)
-  | 'pulse';  // Tenant Health Monitor (Master mode)
+  | 'pulse'   // Tenant Health Monitor (Master mode, cross-tenant)
+  // ── livv OS — studio-level agents (founder only, gated server-side) ──
+  | 'norte'   // CEO / Manager del studio (único punto de contacto cotidiano)
+  | 'tesoro'  // Finanzas / Runway / Treasury del studio
+  | 'pulso'   // Product portfolio metrics (cross-product, NOT cross-tenant)
+  | 'memoria'; // Knowledge / Lessons learned cross-producto (el moat)
 export type AuroraMode = 'multi' | 'unified';
 
 export interface AgentMeta {

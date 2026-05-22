@@ -68,8 +68,11 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const v = localStorage.getItem(STORAGE_KEY_AGENT);
       const valid: AgentSlug[] = [
+        // Aurora — product
         'atlas', 'solara', 'marina', 'nova', 'lumen', 'vega', 'orion', 'iris',
         'halo', 'cobra', 'selva', 'rune', 'echo', 'pulse',
+        // livv OS — studio (founder only, server-side gated)
+        'norte', 'tesoro', 'pulso', 'memoria',
       ];
       if (v && (valid as string[]).includes(v)) return v as AgentSlug;
     } catch {}
@@ -268,5 +271,10 @@ function openerFor(a: AgentSlug): string {
   if (a === 'rune')   return `${auroraAgents.rune.display_name}. Pulse Studio está 22% abajo de market. ¿Pricing, tier psych o conversion?`;
   if (a === 'echo')   return `${auroraAgents.echo.display_name}. 8 partners dormidos +60d. ¿Top performers, re-engagement, attribution?`;
   if (a === 'pulse')  return `${auroraAgents.pulse.display_name}. 1 tenant en riesgo de churn — ventana cierra en 10d. ¿Veamos?`;
+  // ── livv OS openers (studio level — founder only) ─────────────────
+  if (a === 'norte')   return `${auroraAgents.norte.display_name}. ¿Empezamos por el daily brief o vamos a algo puntual?`;
+  if (a === 'tesoro')  return `${auroraAgents.tesoro.display_name}. Runway, burn, AI cost — ¿qué número querés ver?`;
+  if (a === 'pulso')   return `${auroraAgents.pulso.display_name}. Portfolio snapshot listo. ¿Vemos health score o stats por producto?`;
+  if (a === 'memoria') return `${auroraAgents.memoria.display_name}. ¿Buscamos una lección de Payper o registramos una nueva?`;
   return 'Hola.';
 }

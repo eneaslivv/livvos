@@ -5,14 +5,19 @@ import { motion } from 'framer-motion';
 import { X, Send, Eraser } from 'lucide-react';
 import { useAurora } from '../../context/AuroraContext';
 import { auroraAgents, cssVarsForAgent } from '../../lib/aurora/tokens';
-import { auroraRegistry } from '../../lib/aurora/agents';
+import { auroraRegistry, livvStudioRegistry } from '../../lib/aurora/agents';
 import type { AgentSlug } from '../../types/aurora';
 import { AuroraCanvas } from './AuroraCanvas';
+import { usePlatformAdmin } from '../../hooks/usePlatformAdmin';
 
 export const AuroraDock: React.FC = () => {
   const { open, setOpen, agent, setAgent, mode, setMode, messages, status, send, clear } = useAurora();
   const [input, setInput] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Gate the livv OS agents (Norte/Tesoro/Pulso/Memoria) to founders only.
+  // Server-side guard also blocks non-admins, but hiding the chips avoids
+  // confusion for tenant users who would just get 403s.
+  const { isPlatformAdmin } = usePlatformAdmin();
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -64,33 +69,60 @@ export const AuroraDock: React.FC = () => {
 
       {/* Agent switcher (only in multi mode) */}
       {mode === 'multi' && (
-        <div className="px-5 py-2.5 flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-900">
-          {auroraRegistry.map(a => {
-            const active = a.slug === agent;
-            return (
+        <div className="px-5 py-2.5 flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-900">
+          {/* Aurora chips — product-level agents (always visible) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {auroraRegistry.map(a => {
+              const active = a.slug === agent;
+              return (
+                <button
+                  key={a.slug}
+                  onClick={() => setAgent(a.slug as AgentSlug)}
+                  className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                    active
+                      ? 'text-white border-transparent'
+                      : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+                  }`}
+                  style={active ? { background: a.accent_hex } : undefined}
+                >
+                  {a.display_name}
+                </button>
+              );
+            })}
+            <div className="ml-auto">
               <button
-                key={a.slug}
-                onClick={() => setAgent(a.slug as AgentSlug)}
-                className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                  active
-                    ? 'text-white border-transparent'
-                    : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
-                }`}
-                style={active ? { background: a.accent_hex } : undefined}
+                onClick={() => setMode(mode === 'multi' ? 'unified' : 'multi')}
+                className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                title="Cambiar entre multi y unificado"
               >
-                {a.display_name}
+                modo: {mode}
               </button>
-            );
-          })}
-          <div className="ml-auto">
-            <button
-              onClick={() => setMode(mode === 'multi' ? 'unified' : 'multi')}
-              className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-              title="Cambiar entre multi y unificado"
-            >
-              modo: {mode}
-            </button>
+            </div>
           </div>
+          {/* livv OS chips — studio-level agents (founder only) */}
+          {isPlatformAdmin && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-zinc-100 dark:border-zinc-900">
+              <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-400 mr-1">livv OS</span>
+              {livvStudioRegistry.map(a => {
+                const active = a.slug === agent;
+                return (
+                  <button
+                    key={a.slug}
+                    onClick={() => setAgent(a.slug as AgentSlug)}
+                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      active
+                        ? 'text-white border-transparent'
+                        : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900'
+                    }`}
+                    style={active ? { background: a.accent_hex } : undefined}
+                    title={a.domain}
+                  >
+                    {a.display_name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {mode === 'unified' && (

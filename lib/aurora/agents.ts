@@ -66,8 +66,14 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
     case 'team':
       return 'selva';
 
-    // ── Master mode (platform admin) → Pulse ─────────────────────
+    // ── Master mode (platform admin) ─────────────────────────────
+    // Pulse = product-side admin (tenant health across Payper customers).
+    // Norte = STUDIO-side founder agent (portfolio of products, runway,
+    //         lessons). When Eneas is in Master mode, the question is
+    //         usually studio-level — default to Norte. Pulse stays
+    //         accessible via the chip rail.
     case 'platform_admin':
+      return 'norte';
     case 'platform_customers':
     case 'platform_roles':
     case 'platform_features':
@@ -105,7 +111,16 @@ export const auroraRegistry = [
   auroraAgents.rune,    // Products
   auroraAgents.selva,   // Team / Scaling
   auroraAgents.echo,    // Partners
-  auroraAgents.pulse,   // Master / platform
+  auroraAgents.pulse,   // Master / platform (product-side)
+];
+
+// livv OS — studio-level agents. Solo se renderean en el chip rail cuando
+// el user es is_platform_admin. Server-side los gateía igual via guard.
+export const livvStudioRegistry = [
+  auroraAgents.norte,   // CEO / Manager del studio
+  auroraAgents.tesoro,  // Finance del studio
+  auroraAgents.pulso,   // Portfolio metrics
+  auroraAgents.memoria, // Lessons / decision archive
 ];
 
 // Used as a fallback when the response is unknown/garbled.
