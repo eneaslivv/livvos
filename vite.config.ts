@@ -3,8 +3,18 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Build-time constants — Vercel inyecta VERCEL_GIT_COMMIT_SHA en CI.
+// En local cae a 'dev'. Estos se exponen al cliente via `define` para que
+// la app pueda mostrar qué commit está vivo (DevTools console + meta tags).
+const BUILD_COMMIT = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'dev').slice(0, 7);
+const BUILD_TIME = new Date().toISOString();
+
 export default defineConfig(() => {
     return {
+      define: {
+        __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+        __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+      },
       server: {
         port: 3000,
         host: true,
