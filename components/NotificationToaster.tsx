@@ -6,9 +6,42 @@ import {
   formatNotificationClock,
   formatNotificationFullDate,
 } from '../lib/notificationTime';
+import type { NavParams, PageView } from '../types';
 
 interface NotificationToasterProps {
-  onNavigate?: (path: string) => void;
+  // Accepts (path, params) so the toaster can deep-link to a specific
+  // task/project/client when the user clicks. Backwards-compatible with
+  // legacy single-arg callers.
+  onNavigate?: (path: PageView | string, params?: NavParams) => void;
+}
+
+// Mirrors the parser in NotificationsDrawer — pulls query params from
+// the notification's link and merges metadata.task_id as a fallback.
+function parseLinkAndMeta(link: string | null, metadata: any): { page: string; params?: NavParams } {
+  if (!link) {
+    const taskId = typeof metadata?.task_id === 'string' ? metadata.task_id : undefined;
+    return taskId ? { page: 'calendar', params: { taskId } } : { page: 'home' };
+  }
+  let path = link.startsWith('/') ? link.slice(1) : link;
+  let qs = '';
+  const qIdx = path.indexOf('?');
+  if (qIdx >= 0) {
+    qs = path.slice(qIdx + 1);
+    path = path.slice(0, qIdx);
+  }
+  const params: NavParams = {};
+  if (qs) {
+    try {
+      const usp = new URLSearchParams(qs);
+      const t = usp.get('task') || usp.get('task_id');         if (t) params.taskId    = t;
+      const p = usp.get('project') || usp.get('project_id');   if (p) params.projectId = p;
+      const c = usp.get('client') || usp.get('client_id');     if (c) params.clientId  = c;
+    } catch { /* malformed query string */ }
+  }
+  if (!params.taskId && typeof metadata?.task_id === 'string') {
+    params.taskId = metadata.task_id;
+  }
+  return { page: path || 'home', params: Object.keys(params).length ? params : undefined };
 }
 
 const TOAST_DURATION_MS = 9000;
@@ -210,9 +243,11 @@ export const NotificationToaster: React.FC<NotificationToasterProps> = ({ onNavi
 
   const handleClick = useCallback((n: Notification) => {
     if (!n.read) { markAsRead(n.id).catch(() => {}); }
-    if (n.link && onNavigate) {
-      const pageName = n.link.replace(/^\//, '');
-      onNavigate(pageName);
+    if (onNavigate) {
+      // Parse query params + metadata so task assignments deep-link to
+      // /calendar with taskId set, opening the task detail panel directly.
+      const { page, params } = parseLinkAndMeta(n.link, n.metadata);
+      onNavigate(page, params);
     }
     dismiss(n.id);
   }, [markAsRead, onNavigate, dismiss]);
@@ -229,6 +264,11 @@ export const NotificationToaster: React.FC<NotificationToasterProps> = ({ onNavi
         const style = priorityStyles[notification.priority] || priorityStyles.medium;
         const isLead = notification.type === 'lead';
         const isUrgent = notification.priority === 'urgent' || notification.priority === 'high';
+        // Task assignments get a distinct CTA + chip — the DB trigger
+        // sets category='task_assignment' so we can recognize them.
+        const isTaskAssignment = notification.type === 'task' && (notification.category === 'task_assignment' || notification.metadata?.assigner_id);
+        const assignerName = notification.metadata?.assigner_name as string | undefined;
+        const projectTitle = notification.metadata?.project_title as string | undefined;
         return (
           <div
             key={notification.id}
@@ -282,6 +322,26 @@ export const NotificationToaster: React.FC<NotificationToasterProps> = ({ onNavi
                   <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
                     Ver lead
                     <Icons.External size={12} />
+                  </div>
+                )}
+                {isTaskAssignment && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {assignerName && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                        <Icons.User size={9} />
+                        de {assignerName}
+                      </span>
+                    )}
+                    {projectTitle && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                        <Icons.Briefcase size={9} />
+                        {projectTitle}
+                      </span>
+                    )}
+                    <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                      {notification.action_text || 'Abrir tarea'}
+                      <Icons.External size={12} />
+                    </span>
                   </div>
                 )}
               </div>

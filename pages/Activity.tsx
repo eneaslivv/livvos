@@ -34,6 +34,10 @@ interface TransformedActivity {
   dateKey: string;
   likes: string[];
   commentCount: number;
+  /** For type='task_assigned', the name of the user the task was assigned
+      TO (the assigner is `userName`). Comes from metadata.assignee_name
+      set by the notify_on_task_assignment trigger. */
+  assigneeName: string | null;
 }
 
 function getRelativeTime(date: Date): string {
@@ -369,7 +373,10 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
                         a.type === 'user_logout' ? 'signed out of' :
                         (a.action || 'updated'),
           target: a.target || 'General',
-          taskId: a.metadata?.task_id || null,
+          taskId: a.metadata?.task_id || a.details?.task_id || null,
+          assigneeName: (a.type === 'task_assigned')
+            ? (a.details?.assignee_name || a.metadata?.assignee_name || null)
+            : null,
           projectTitle: a.project_title,
           type: a.type,
           details: extractContent(a.details),
@@ -1150,6 +1157,16 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
                             )}
                             {act.projectTitle && (
                               <span className="text-zinc-400 dark:text-zinc-500"> · {act.projectTitle}</span>
+                            )}
+                            {act.type === 'task_assigned' && act.assigneeName && (
+                              <>
+                                {' '}
+                                <span className="text-zinc-400 dark:text-zinc-500">→</span>{' '}
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 text-[11px] font-semibold">
+                                  <Icons.User size={9} />
+                                  {act.assigneeName}
+                                </span>
+                              </>
                             )}
                           </p>
                           <span className="text-[10px] text-zinc-400 whitespace-nowrap tabular-nums" title={act.timestamp}>

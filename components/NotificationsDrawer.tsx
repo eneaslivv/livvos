@@ -123,9 +123,11 @@ function parseLink(link: string | null, metadata: Record<string, any>): { page: 
   if (qs) {
     try {
       const usp = new URLSearchParams(qs);
-      const t = usp.get('task');     if (t) params.taskId    = t;
-      const p = usp.get('project');  if (p) params.projectId = p;
-      const c = usp.get('client');   if (c) params.clientId  = c;
+      // Accept both `task` (legacy) and `task_id` (new — matches the
+      // DB triggers' link format in 2026-06-08_task_assignment_full.sql).
+      const t = usp.get('task') || usp.get('task_id');         if (t) params.taskId    = t;
+      const p = usp.get('project') || usp.get('project_id');   if (p) params.projectId = p;
+      const c = usp.get('client') || usp.get('client_id');     if (c) params.clientId  = c;
     } catch { /* ignore malformed */ }
   }
   // Fallback: also pull from metadata.task_id which the DB triggers always set.

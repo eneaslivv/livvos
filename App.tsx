@@ -1291,7 +1291,7 @@ const App: React.FC = () => {
                                     showDebug={showDebug}
                                     navParams={navParams}
                                   />
-                                  <NotificationToaster onNavigate={(p) => handleNavigate(p as PageView)} />
+                                  <NotificationToaster onNavigate={(p, params) => handleNavigate(p as PageView, params)} />
                                   <LiveCursors currentPage={currentPage} />
                                   {/* Aurora multi-agent FAB — persistent across all admin pages */}
                                   <AuroraFab />
