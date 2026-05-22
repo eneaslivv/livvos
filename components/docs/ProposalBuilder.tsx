@@ -129,17 +129,21 @@ const seedLines = (p: any) => {
 }
 
 interface Props {
-  initialLeadId?: number | null
+  initialLeadId?: string | number | null
   leads?: any[]  // optional override — defaults to LEADS_FALLBACK
+  tenantId?: string | null
   onClose: () => void
+  onSaved?: (proposalId: string) => void
 }
 
-export const ProposalBuilder: React.FC<Props> = ({ initialLeadId, leads: leadsProp, onClose }) => {
+export const ProposalBuilder: React.FC<Props> = ({ initialLeadId, leads: leadsProp, tenantId, onClose, onSaved }) => {
   const LEADS = leadsProp && leadsProp.length > 0 ? leadsProp : LEADS_FALLBACK
+  const [saving, setSaving] = useState<boolean>(false)
+  const [savedId, setSavedId] = useState<string | null>(null)
 
   const [customLeads, setCustomLeads] = useState<any[]>([])
   const allLeads = [...customLeads, ...LEADS]
-  const [leadId, setLeadId] = useState<number>(initialLeadId || LEADS[0]?.id || 30)
+  const [leadId, setLeadId] = useState<string | number>(initialLeadId ?? LEADS[0]?.id ?? 30)
   const lead = allLeads.find(l => l.id === leadId) || allLeads[0]
 
   const [stageFilter, setStageFilter] = useState<string>('all')
@@ -320,6 +324,68 @@ Return ONLY valid JSON (no fences, no preamble). Shape:
     setTimeout(() => setAiFresh(false), 1500)
   }
 
+  // Persist proposal to `proposals` table. Insert on first save, update after.
+  const saveProposal = async (markSent = false) => {
+    if (!tenantId) { alert('Tenant not ready'); return null }
+    setSaving(true)
+    try {
+      const recommended = tiers.find((t: any) => t.recommended) || tiers[0]
+      const { oneFinal, mo } = tierTotals(recommended)
+      const pricingTotal = oneFinal + (mo * 12)  // annualized total for sorting
+      const isUuid = typeof lead.id === 'string' && /^[0-9a-f-]{36}$/i.test(String(lead.id))
+
+      const payload: any = {
+        tenant_id: tenantId,
+        lead_id: isUuid ? lead.id : null,
+        title: `Proposal for ${lead.company}`,
+        summary: ai?.understanding || brief.slice(0, 240),
+        status: markSent ? 'sent' : 'draft',
+        brief_text: brief,
+        project_type: pkg.id,
+        pricing_total: pricingTotal || null,
+        portfolio_ids: cases,
+        pricing_snapshot: {
+          tiers,
+          scope: scopeItems,
+          insights,
+          cases,
+          links,
+          notes,
+          package: { id: pkg.id, name: pkg.name, weeks: pkg.weeks },
+          ai: ai || null,
+          tone,
+          contact: lead.contact,
+          company: lead.company,
+        },
+        timeline: { startDate, weeks: pkg.weeks, phases },
+        updated_at: new Date().toISOString(),
+      }
+      if (markSent) payload.sent_at = new Date().toISOString()
+
+      let proposalId = savedId
+      if (proposalId) {
+        const { data, error } = await supabase
+          .from('proposals').update(payload).eq('id', proposalId).select('id').single()
+        if (error) throw error
+        proposalId = (data as any).id
+      } else {
+        const { data, error } = await supabase
+          .from('proposals').insert(payload).select('id').single()
+        if (error) throw error
+        proposalId = (data as any).id
+        setSavedId(proposalId)
+      }
+      setSaving(false)
+      if (onSaved && proposalId) onSaved(proposalId)
+      return proposalId
+    } catch (err: any) {
+      setSaving(false)
+      console.error('[ProposalBuilder] save failed', err)
+      alert(`Save failed: ${err?.message || 'unknown error'}`)
+      return null
+    }
+  }
+
   const phases = (ai?.approach || [
     { name: 'Discover', desc: 'Map current state, surface highest-leverage gap.' },
     { name: 'Install',  desc: `Ship the ${pkg.name.toLowerCase()} in ${pkg.weeks} weeks.` },
@@ -361,14 +427,16 @@ Return ONLY valid JSON (no fences, no preamble). Shape:
           <h2>Proposal for {lead.company}</h2>
         </div>
         <div className="pb-head-actions">
-          <button className="dx-btn"><span>Save draft</span></button>
+          <button className="dx-btn" onClick={() => saveProposal(false)} disabled={saving}>
+            <span>{saving ? 'Saving…' : savedId ? 'Saved ✓ — update' : 'Save draft'}</span>
+          </button>
           <button className="dx-btn" onClick={() => window.print()}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/></svg>
             <span>Export PDF</span>
           </button>
-          <button className="dx-btn primary">
+          <button className="dx-btn primary" onClick={async () => { const id = await saveProposal(true); if (id) onClose() }} disabled={saving}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            <span>Send to {(lead.contact || '').split(' ')[0]}</span>
+            <span>{saving ? 'Sending…' : `Send to ${(lead.contact || '').split(' ')[0]}`}</span>
           </button>
         </div>
       </div>

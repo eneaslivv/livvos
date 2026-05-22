@@ -607,10 +607,11 @@ export const Docs: React.FC = () => {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto pt-4 pb-6">
-      {/* Header */}
+    <div className="dx-page max-w-[1600px] mx-auto pt-4 pb-6">
+      {/* Header — using livv-design dx-* layout for visual consistency with
+          the design bundle (claude.ai/design 2026-05-22). Logic untouched. */}
       <div className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+        <div className="dx-head" style={{ marginBottom: 14 }}>
           <div>
             {/* Back button + Title */}
             <div className="flex items-center gap-3">
@@ -622,7 +623,7 @@ export const Docs: React.FC = () => {
                   <Icons.ChevronLeft size={16} />
                 </button>
               )}
-              <h1 className="dxd-title">
+              <h1 style={{ margin: 0, fontSize: 30, fontWeight: 300, letterSpacing: '-0.03em', color: 'var(--os-fg-0)' }}>
                 {activeTab === 'documents' && currentFolderId ? currentFolderName : 'Documents'}
               </h1>
             </div>
@@ -747,16 +748,16 @@ export const Docs: React.FC = () => {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="dxd-tabs">
+        {/* Tabs — using design bundle's .dx-tabs/.dx-tab pill style. */}
+        <div className="dx-toolbar" style={{ marginBottom: 0 }}>
+          <div className="dx-tabs">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`dxd-tab ${activeTab === tab.id ? 'active' : ''}`}
+                className={`dx-tab ${activeTab === tab.id ? 'active' : ''}`}
               >
-                <tab.icon size={13} />
+                <tab.icon size={11} />
                 <span>{tab.label}</span>
               </button>
             ))}

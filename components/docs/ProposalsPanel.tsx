@@ -156,6 +156,8 @@ export const ProposalsPanel: React.FC = () => {
   // claude.ai/design (2026-05-22). 7 soft steps + multi-tier pricing + live
   // deck preview + custom info. Coexiste con `ProposalComposer` legacy.
   const [showBuilder, setShowBuilder] = useState(false);
+  const [builderLeads, setBuilderLeads] = useState<any[]>([]);
+  const [builderLeadsLoading, setBuilderLeadsLoading] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createLeadId, setCreateLeadId] = useState<string>('');
   const [createClientId, setCreateClientId] = useState<string>('');
@@ -265,6 +267,74 @@ export const ProposalsPanel: React.FC = () => {
     () => proposals.find(p => p.id === selectedId) || null,
     [proposals, selectedId]
   );
+
+  // Open the wizard builder — load leads fresh from the CRM each time so
+  // the wizard sees the current state (new leads created in the pipeline
+  // since the page mounted).
+  const openBuilder = useCallback(async () => {
+    if (!currentTenant?.id) { alert('Tenant not ready'); return; }
+    setBuilderLeadsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, name, email, company, status, category, temperature, source, last_interaction, message')
+        .eq('tenant_id', currentTenant.id)
+        .order('last_interaction', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+
+      // Map leads to the shape ProposalBuilder expects.
+      // Category → ICP: agency / consult / product / ecom / retainer.
+      const mapIcp = (cat: string | null | undefined): string => {
+        const c = (cat || '').toLowerCase();
+        if (c.includes('agency') || c.includes('studio')) return 'agency';
+        if (c.includes('consult')) return 'consult';
+        if (c.includes('saas') || c.includes('product')) return 'product';
+        if (c.includes('ecom') || c.includes('dtc') || c.includes('shop')) return 'ecom';
+        if (c.includes('retainer') || c.includes('ongoing')) return 'retainer';
+        return 'agency';  // default
+      };
+      const mapStage = (status: string | null | undefined): string => {
+        const s = (status || '').toLowerCase();
+        if (s === 'new' || s === 'contacted') return 'contacted';
+        if (s === 'qualified' || s === 'call') return 'call';
+        if (s === 'meeting' || s === 'call-done') return 'call-done';
+        if (s === 'proposal' || s === 'negotiation') return 'proposal';
+        if (s === 'won' || s === 'closed') return 'won';
+        return 'contacted';
+      };
+      const mapped = (data || []).map((l: any) => ({
+        id: l.id,  // UUID string
+        company: l.company || l.name || 'Unknown',
+        contact: l.name || (l.email || '').split('@')[0] || '—',
+        email: l.email,
+        icp: mapIcp(l.category),
+        source: l.source || 'Direct',
+        stage: mapStage(l.status),
+        impl: 0,  // no pipeline value in this schema
+        mrr: 0,
+        action: l.status || 'Follow up',
+        when: l.last_interaction ? new Date(l.last_interaction).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recent',
+        age: 0,
+        owner: 'EN',
+        custom: false,
+      }));
+      setBuilderLeads(mapped);
+      setShowBuilder(true);
+    } catch (err: any) {
+      errorLogger.error('Builder leads fetch failed', err);
+      // Open builder anyway — fallback leads will be used.
+      setShowBuilder(true);
+    } finally {
+      setBuilderLeadsLoading(false);
+    }
+  }, [currentTenant?.id]);
+
+  const reloadProposals = useCallback(async () => {
+    if (!currentTenant?.id) return;
+    const { data } = await supabase.from('proposals').select('*').order('created_at', { ascending: false });
+    if (data) setProposals(data as Proposal[]);
+  }, [currentTenant?.id]);
 
   const selectedService = useMemo(
     () => services.find(s => s.id === selectedServiceId) || null,
@@ -598,12 +668,13 @@ export const ProposalsPanel: React.FC = () => {
               New
             </button>
             <button
-              onClick={() => setShowBuilder(true)}
+              onClick={openBuilder}
               className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1"
               title="Open the wizard builder — soft steps, live deck preview"
+              disabled={builderLeadsLoading}
             >
               <Icons.Sparkles size={11} />
-              Builder
+              {builderLeadsLoading ? 'Loading…' : 'Builder'}
             </button>
           </div>
         </div>
@@ -613,7 +684,10 @@ export const ProposalsPanel: React.FC = () => {
           <div style={{ position: 'fixed', inset: 0, background: 'var(--os-bg, #FDFBF7)', zIndex: 80, overflow: 'auto' }}>
             <ProposalBuilder
               initialLeadId={null}
+              leads={builderLeads}
+              tenantId={currentTenant?.id || null}
               onClose={() => setShowBuilder(false)}
+              onSaved={() => { setShowBuilder(false); reloadProposals(); }}
             />
           </div>
         )}
