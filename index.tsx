@@ -2,6 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+// Design tokens + Documents page CSS + Proposal builder CSS — adopted 1:1
+// from the claude.ai/design bundle (exported 2026-05-22).
+import './styles/livv-design-tokens.css';
+import './styles/livv-documents.css';
+import './styles/livv-proposal-builder.css';
+
 // Build info — inyectado por vite.config define. Permite verificar qué
 // commit está vivo en producción abriendo DevTools console.
 declare const __BUILD_COMMIT__: string;

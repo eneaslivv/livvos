@@ -1,0 +1,98 @@
+/* ============================================================
+   LIVV — Design tokens (copied 1:1 from claude.ai/design bundle)
+   Source: design-bundle-colors-type.css + design-bundle-os-styles.css
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  /* Warm cream neutrals */
+  --livv-cream-50:  #FDFBF7;
+  --livv-cream-100: #F5F2EB;
+  --livv-cream-200: #E6E2D8;
+  --livv-cream-300: #D6D1C7;
+  --livv-cream-400: #A8A29A;
+  --livv-cream-500: #78736A;
+  --livv-cream-600: #52525B;
+  --livv-cream-700: #3F3F46;
+  --livv-cream-800: #27272A;
+  --livv-cream-900: #09090B;
+  --livv-cream-950: #000000;
+
+  /* Burgundy / wine */
+  --livv-wine-100: #7a4038;
+  --livv-wine-200: #5c1d18;
+  --livv-wine-300: #3d1214;
+  --livv-wine-400: #2C0405;
+  --livv-wine-500: #2A1818;
+  --livv-wine-600: #1A1010;
+  --livv-wine-700: #0F0505;
+
+  --livv-parchment: #EDE5D8;
+
+  --livv-gold:        #C4A35A;
+  --livv-gold-soft:   #D4A574;
+  --livv-gold-bright: #E8BC59;
+
+  --livv-sage:      #769268;
+  --livv-sky:       #6DBEDC;
+  --livv-pink:      #F1ADD8;
+  --livv-pink-soft: #FFB8E0;
+
+  --livv-fg-body:   #5A3E3E;
+  --livv-destructive: #ef4444;
+
+  /* OS-level brand surface tokens */
+  --os-bg: var(--livv-cream-50);
+  --os-panel: #FFFFFF;
+  --os-surface: var(--livv-cream-100);
+  --os-surface-2: #FAF6EE;
+  --os-ink: var(--livv-cream-900);
+  --os-fg-0: var(--livv-cream-900);
+  --os-fg-1: var(--livv-cream-700);
+  --os-fg-2: #78736A;
+  --os-fg-3: var(--livv-cream-400);
+  --os-border: rgba(90,62,62,0.10);
+  --os-border-2: rgba(90,62,62,0.18);
+  --os-divider: rgba(214,209,199,0.45);
+
+  --accent: var(--livv-gold);
+  --accent-bright: var(--livv-gold-bright);
+  --accent-soft: rgba(196,163,90,0.13);
+  --accent-strong: rgba(196,163,90,0.30);
+
+  --wine: var(--livv-wine-400);
+  --sage: var(--livv-sage);
+  --sky:  var(--livv-sky);
+  --pink: var(--livv-pink);
+
+  --ok: var(--livv-sage);
+  --warn: #C8862C;
+  --err: var(--livv-destructive);
+
+  --ios-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --shadow-card: 0 1px 2px rgba(44,4,5,0.04);
+  --shadow-lifted: 0 12px 32px -10px rgba(44,4,5,0.10), 0 2px 6px -2px rgba(44,4,5,0.04);
+  --shadow-slideover: -40px 0 80px -24px rgba(44,4,5,0.12), -1px 0 0 rgba(255,255,255,0.6) inset;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+}
+
+/* Dark mode override — keep tokens semantically valid but flip surface */
+.dark {
+  --os-bg: #18181b;
+  --os-panel: #27272A;
+  --os-surface: #1F1F22;
+  --os-surface-2: #2A2A2D;
+  --os-ink: var(--livv-cream-50);
+  --os-fg-0: var(--livv-cream-50);
+  --os-fg-1: var(--livv-cream-200);
+  --os-fg-2: var(--livv-cream-400);
+  --os-fg-3: var(--livv-cream-500);
+  --os-border: rgba(255,255,255,0.08);
+  --os-border-2: rgba(255,255,255,0.14);
+  --os-divider: rgba(255,255,255,0.10);
+}

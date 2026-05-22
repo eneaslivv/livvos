@@ -10,6 +10,7 @@ import { generateProposalFromAI, getOutputId } from '../../lib/ai';
 import { AIFeedbackBar } from '../ai/AIFeedbackBar';
 import { ProposalDocumentView } from '../proposals/ProposalDocumentView';
 import { ProposalComposer } from './ProposalComposer';
+import { ProposalBuilder } from './ProposalBuilder';
 import { ProposalChatEditor } from './ProposalChatEditor';
 import { buildProposalDocumentData } from '../proposals/buildProposalDocumentData';
 
@@ -151,6 +152,10 @@ export const ProposalsPanel: React.FC = () => {
   // want full manual control over each field — they can reach it via
   // the "Más opciones" link on the empty state.
   const [showComposer, setShowComposer] = useState(false);
+  // Wizard fullscreen builder — patrón "tab proposal" del design bundle
+  // claude.ai/design (2026-05-22). 7 soft steps + multi-tier pricing + live
+  // deck preview + custom info. Coexiste con `ProposalComposer` legacy.
+  const [showBuilder, setShowBuilder] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createLeadId, setCreateLeadId] = useState<string>('');
   const [createClientId, setCreateClientId] = useState<string>('');
@@ -592,8 +597,26 @@ export const ProposalsPanel: React.FC = () => {
               <Icons.Sparkles size={11} />
               New
             </button>
+            <button
+              onClick={() => setShowBuilder(true)}
+              className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1"
+              title="Open the wizard builder — soft steps, live deck preview"
+            >
+              <Icons.Sparkles size={11} />
+              Builder
+            </button>
           </div>
         </div>
+
+        {/* Wizard builder — fullscreen overlay. Imported from the design bundle. */}
+        {showBuilder && (
+          <div style={{ position: 'fixed', inset: 0, background: 'var(--os-bg, #FDFBF7)', zIndex: 80, overflow: 'auto' }}>
+            <ProposalBuilder
+              initialLeadId={null}
+              onClose={() => setShowBuilder(false)}
+            />
+          </div>
+        )}
 
         {/* ─── Templates manager (toggled) ────────────────────────── */}
         {showTemplates && (
