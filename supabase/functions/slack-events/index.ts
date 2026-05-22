@@ -122,6 +122,24 @@ async function reserveEventId(admin: SupabaseClient, tenantId: string, slackEven
   return true
 }
 
+// Rate limit gate: if >RATE_LIMIT_PER_MIN events for this tenant in the last 60s,
+// mark the new event 'skipped' and bail. Protects against runaway message
+// floods (e.g. a noisy channel or a bot loop) without dropping legitimate use.
+const RATE_LIMIT_PER_MIN = 120
+async function rateLimitOk(admin: SupabaseClient, tenantId: string): Promise<boolean> {
+  const since = new Date(Date.now() - 60_000).toISOString()
+  const { count } = await admin
+    .from('slack_event_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .gte('created_at', since)
+  if (count !== null && count > RATE_LIMIT_PER_MIN) {
+    console.warn(`[slack-events] rate limited tenant ${tenantId} — ${count} events in last 60s`)
+    return false
+  }
+  return true
+}
+
 async function markEventDone(admin: SupabaseClient, slackEventId: string, status: 'done' | 'error' | 'skipped' = 'done', errMsg?: string) {
   await admin
     .from('slack_event_log')
@@ -193,6 +211,15 @@ async function handleEvent(payload: any) {
     .maybeSingle()
   if (!tok) {
     console.warn('[slack-events] no token for team', teamId)
+    return
+  }
+
+  // Rate limit gate — protect against floods. Check before the dedup insert
+  // because once we insert we've committed a row.
+  if (!await rateLimitOk(admin, tok.tenant_id)) {
+    // We don't insert at all so this doesn't pollute the log when we're already
+    // over the limit. Slack will retry on next event; if rate normalizes, we'll
+    // pick those up.
     return
   }
 

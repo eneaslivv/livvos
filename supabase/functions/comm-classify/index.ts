@@ -179,6 +179,25 @@ async function classify(admin: SupabaseClient, messageId: string) {
     return { ok: true, skipped: 'notify_only_mode' }
   }
 
+  // Circuit breaker: si las últimas 5 clasificaciones del tenant fallaron,
+  // pausamos. Esto previene quemar OpenAI quota durante outages upstream.
+  const { data: recentErrs } = await admin
+    .from('communication_messages')
+    .select('ai_classification')
+    .eq('tenant_id', msg.tenant_id)
+    .eq('platform', msg.platform)
+    .not('ai_classification', 'is', null)
+    .order('received_at', { ascending: false })
+    .limit(5)
+  const failureCount = (recentErrs || []).filter((m: any) => m.ai_classification?.error).length
+  if (failureCount >= 3) {
+    await admin.from('communication_messages')
+      .update({ ai_classification: { error: 'circuit_breaker_active', detail: `${failureCount}/5 recent failures` } })
+      .eq('id', messageId)
+    await maybeNotifyCircuitBreaker(admin, msg.tenant_id, failureCount)
+    return { ok: false, skipped: 'circuit_breaker_active', recent_failures: failureCount }
+  }
+
   const { data: tenantRow } = await admin
     .from('tenants').select('name').eq('id', msg.tenant_id).maybeSingle()
   const { data: clientsList } = await admin
@@ -388,4 +407,37 @@ async function createProposalNotification(
     },
   })
   if (notifErr) console.error('[comm-classify] notification insert failed', notifErr)
+}
+
+// ---------- circuit breaker notification (rate-limited 1/hour) ----------------
+async function maybeNotifyCircuitBreaker(admin: SupabaseClient, tenantId: string, failureCount: number) {
+  const { data: tenant } = await admin
+    .from('tenants').select('owner_id').eq('id', tenantId).maybeSingle()
+  if (!tenant?.owner_id) return
+
+  // De-dupe: si ya hubo una notif de tipo system en la última hora, skip
+  const since = new Date(Date.now() - 3600_000).toISOString()
+  const { count } = await admin
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('type', 'system')
+    .eq('category', 'communications')
+    .ilike('title', '%circuit breaker%')
+    .gte('created_at', since)
+  if ((count ?? 0) > 0) return
+
+  await admin.from('notifications').insert({
+    user_id: tenant.owner_id,
+    tenant_id: tenantId,
+    type: 'system',
+    category: 'communications',
+    title: '🚨 Slack agent — circuit breaker active',
+    message: `Las últimas ${failureCount} clasificaciones de mensajes Slack fallaron consecutivamente. El clasificador está pausado para evitar quemar quota de OpenAI. Verificá el dashboard de Master · Slack agent.`,
+    priority: 'high',
+    action_required: true,
+    action_url: '/?master=true&page=platform_slack_agent',
+    action_text: 'Open dashboard',
+    metadata: { failure_count: failureCount },
+  })
 }
