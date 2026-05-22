@@ -1236,25 +1236,15 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
   const getDayTasks = (date: string) => {
     if (calendarMode === 'content') return [];
-    // Exclude subtasks from calendar views (they show under their parent)
-    let allTasks = getTasksByDate(date).filter(t => !t.parent_task_id);
-
-    // On today: also include overdue tasks from past dates
-    if (date === todayStr) {
-      const overdue = tasks.filter(t =>
-        !t.parent_task_id &&
-        !t.completed &&
-        t.status !== 'done' &&
-        t.status !== 'cancelled' &&
-        t.start_date &&
-        t.start_date.slice(0, 10) < todayStr
-      );
-      // Merge without duplicates
-      const existingIds = new Set(allTasks.map(t => t.id));
-      allTasks = [...allTasks, ...overdue.filter(t => !existingIds.has(t.id))];
-    }
-
-    return applyTaskFilter(allTasks);
+    // Exclude subtasks from calendar views — solo top-level (no parent_task_id).
+    // Las subtasks aparecen dentro del detail panel del parent.
+    //
+    // NOTE: previously today also slurped in ALL overdue tasks from previous
+    // dates, which made today's column explode (e.g. 32 tasks in one cell
+    // when the actual due-today was 9). Each overdue task ya aparece en su
+    // día original — duplicarlo en today crea ruido. El KPI "Overdue" del
+    // header sigue siendo la entrada para revisarlas en lista.
+    return applyTaskFilter(getTasksByDate(date).filter(t => !t.parent_task_id));
   };
 
   // Group tasks by phase for collapsed view
