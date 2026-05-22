@@ -333,7 +333,17 @@ async function handleMessage(admin: SupabaseClient, tok: any, event: any, opts: 
 
   // El trigger Postgres `trg_queue_comm_classify` se va a disparar AFTER INSERT
   // y llama a comm-classify async via pg_net. Acá ya no clasificamos inline.
-  void inserted  // silenced — el id quedó en DB ya con ai_processed=false.
+
+  // Mention handling — slack-agent es el bot conversacional que responde en
+  // el thread. Disparamos fire-and-forget para que el webhook responda 200
+  // a Slack en <200ms.
+  if (opts.isMention && inserted?.id) {
+    fetch(`${SUPABASE_URL}/functions/v1/slack-agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message_id: inserted.id }),
+    }).catch(err => console.error('[slack-events] slack-agent dispatch failed:', err))
+  }
 }
 
 // ---------- reaction_added → ✅ completes linked task ------------------------
