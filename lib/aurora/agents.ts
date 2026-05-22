@@ -37,6 +37,10 @@ export function defaultAgentForPage(page: PageMap | undefined): AgentSlug {
     case 'strategy_hub':
       return 'lumen';
 
+    // ── Build hub → Lumen (entry point al workspace de construcción) ─
+    case 'build_hub':
+      return 'lumen';
+
     // ── Clients / CSM surfaces → Cobra ───────────────────────────
     // Cobra owns relationship health day-to-day. Lumen takes over
     // when the question is "is this the right ICP for us" (strategic).

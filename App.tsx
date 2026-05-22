@@ -66,6 +66,7 @@ const loadStrategyToolkit = () => retryDynamicImport(() => import('./pages/Strat
 const loadBundlePreview = () => retryDynamicImport(() => import('./pages/BundlePreview').then(m => ({ default: m.BundlePreview })), 'BundlePreview');
 const loadAgent = () => retryDynamicImport(() => import('./pages/Agent').then(m => ({ default: m.Agent })), 'Agent');
 const loadProducts = () => retryDynamicImport(() => import('./pages/Products').then(m => ({ default: m.Products })), 'Products');
+const loadBuildHub = () => retryDynamicImport(() => import('./pages/BuildHub').then(m => ({ default: m.BuildHub })), 'BuildHub');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -104,6 +105,7 @@ const StrategyToolkit = React.lazy(loadStrategyToolkit);
 const BundlePreview = React.lazy(loadBundlePreview);
 const Agent = React.lazy(loadAgent);
 const Products = React.lazy(loadProducts);
+const BuildHub = React.lazy(loadBuildHub);
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -941,6 +943,15 @@ const AppContent: React.FC<{
               <Products />
             </KeepAlivePage>
           )}
+
+          {/* Build hub — landing que consolida Strategy/Content/Products/
+             Toolkit/Scaling en 1 entry point. Las 5 páginas siguen vivas
+             y accesibles vía URL — sólo cambia dónde el sidebar te lleva. */}
+          {visitedPages.has('build_hub') && (
+            <KeepAlivePage page="build_hub" active={currentPage === 'build_hub'}>
+              <BuildHub onNavigate={handleNavigate} />
+            </KeepAlivePage>
+          )}
         </>
       )}
       {/* Bottom-right floating: "Force refresh" pill (always visible) +
@@ -962,7 +973,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
-  'bundle_preview', 'agent', 'products',
+  'bundle_preview', 'agent', 'products', 'build_hub',
 ]);
 
 const readLastPage = (): PageView => {

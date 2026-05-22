@@ -650,13 +650,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       ],
     },
     {
+      // Build se redujo de 5 items (Strategy/Content/Products/Toolkit/Scaling)
+      // a 1 hub que consolida todo. Las 5 páginas siguen vivas — sólo cambia
+      // el entry point. El hub muestra cada módulo como activo (verde, con
+      // métricas) o vacío (muted, con purpose copy + CTA configurar).
       label: 'Build',
       items: [
-        { id: 'strategy_hub',     label: 'Strategy',  icon: <Icons.Target /> },
-        { id: 'content_engine',   label: 'Content',   icon: <Icons.Sparkles /> },
-        { id: 'products',         label: 'Products',  icon: <Icons.Briefcase /> },
-        { id: 'strategy_toolkit', label: 'Toolkit',   icon: <Icons.Briefcase /> },
-        { id: 'team_scaling',     label: 'Scaling',   icon: <Icons.Users /> },
+        { id: 'build_hub', label: 'Workspace', icon: <Icons.Briefcase /> },
       ],
     },
   ];
