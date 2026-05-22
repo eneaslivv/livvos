@@ -92,38 +92,11 @@ async function verifySlackSignature(rawBody: string, timestamp: string, signatur
   return diff === 0
 }
 
-// Run gemini classifier inline (kept from previous version; PR2 moves this
-// to comm-classify edge fn + trigger so backfill is uniform).
-async function classifyAndUpdate(admin: SupabaseClient, messageId: string, classifyInput: any, tenantId: string) {
-  try {
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/gemini`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'comm_classify', input: JSON.stringify(classifyInput) }),
-    })
-    if (!res.ok) return
-    const { result } = await res.json()
-    if (!result) return
-    const { data: existing } = await admin
-      .from('communication_messages')
-      .select('matched_project_id')
-      .eq('id', messageId)
-      .maybeSingle()
-    const updates: any = { ai_processed: true, ai_classification: result }
-    if (result.matched_client_id) {
-      const { data: c } = await admin.from('clients').select('id').eq('id', result.matched_client_id).eq('tenant_id', tenantId).maybeSingle()
-      if (c) updates.matched_client_id = result.matched_client_id
-    }
-    if (result.matched_project_id && !existing?.matched_project_id) {
-      const { data: p } = await admin.from('projects').select('id').eq('id', result.matched_project_id).eq('tenant_id', tenantId).maybeSingle()
-      if (p) updates.matched_project_id = result.matched_project_id
-    }
-    await admin.from('communication_messages').update(updates).eq('id', messageId)
-  } catch (err) {
-    console.error('[slack-events] classify error:', err)
-  }
-}
+// NOTE: Inline classification was removed in PR2. Classification now happens
+// via the Postgres trigger `trg_queue_comm_classify` → comm-classify edge fn.
+// This drops the webhook response latency from ~2-3s to <200ms (Slack has a
+// 3s timeout budget) and unifies the path for slack-events + slack-sync +
+// backfill.
 
 // Dedup helper: returns true if we should process this event, false if dup.
 async function reserveEventId(admin: SupabaseClient, tenantId: string, slackEventId: string, eventType: string, channelId: string | null, teamId: string | null, payload: any): Promise<boolean> {
@@ -358,28 +331,9 @@ async function handleMessage(admin: SupabaseClient, tok: any, event: any, opts: 
     return
   }
 
-  // notify_only: no clasificamos. notify_only suele ser para canales como
-  // #social o #random donde el dueño quiere ver el feed pero no procesarlo.
-  if (mode === 'notify_only' && !opts.isMention) return
-
-  // classify_and_propose / classify_and_auto_create / mention:
-  // run inline classifier (PR2 va a migrar esto a comm-classify trigger).
-  const { data: tenantRow } = await admin.from('tenants').select('name').eq('id', tok.tenant_id).maybeSingle()
-  const { data: clientsList } = await admin.from('clients').select('id, name, email, company').eq('tenant_id', tok.tenant_id).limit(200)
-  const { data: projectsList } = await admin.from('projects').select('id, title, client_id, clients(name)').eq('tenant_id', tok.tenant_id).limit(200)
-
-  classifyAndUpdate(admin, inserted.id, {
-    platform: 'slack',
-    is_mention: opts.isMention,
-    from_name: fromName,
-    from_email: fromEmail || '',
-    subject: `#${monitored.channel_name}`,
-    body: event.text || '',
-    thread_context: threadContext,
-    agency_name: tenantRow?.name || 'this agency',
-    clients: (clientsList || []).map((c: any) => ({ id: c.id, name: c.name || '', email: c.email || '', company: c.company || '' })),
-    projects: (projectsList || []).map((p: any) => ({ id: p.id, title: p.title || '', client_id: p.client_id || null, client_name: p.clients?.name || null })),
-  }, tok.tenant_id)
+  // El trigger Postgres `trg_queue_comm_classify` se va a disparar AFTER INSERT
+  // y llama a comm-classify async via pg_net. Acá ya no clasificamos inline.
+  void inserted  // silenced — el id quedó en DB ya con ai_processed=false.
 }
 
 // ---------- reaction_added → ✅ completes linked task ------------------------
