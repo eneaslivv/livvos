@@ -1,33 +1,29 @@
 // Slack Events API receiver.
 //
-// This is a PUBLIC webhook (verify_jwt=false). Slack POSTs every message
-// in monitored channels here in real-time, so the user doesn't have to
-// wait the 90s for the auto-poll. The poll stays in place as a safety
-// net for missed events / cold starts.
+// PUBLIC webhook (verify_jwt=false). Slack POSTs every event in real-time.
 //
 // Security:
-//   - Validates X-Slack-Signature using SLACK_SIGNING_SECRET (env var).
-//   - The signing-secret check is mandatory; without it any caller could
-//     stuff messages into communication_messages.
-//   - Slack's URL-verification challenge is echoed back on first setup.
+//   - HMAC verification con SLACK_SIGNING_SECRET (env var). Replay protection
+//     5min. Constant-time compare. Sin signing secret la fn rechaza todo.
+//   - Slack URL-verification challenge se echo-back en setup.
 //
-// Behavior on an event_callback (type=message):
-//   - Reject subtypes (joins, topic edits, bot replies, etc.)
-//   - Reject the bot's own messages (bot_user_id match)
-//   - Look up integration_tokens by team_id
-//   - Check the channel is in slack_monitored_channels and is_active
-//   - Resolve user info (cached per request) for from_name/email/avatar
-//   - Insert into communication_messages with platform='slack' and
-//     external_id = `${channel_id}:${ts}`
-//   - Fire-and-forget classify-and-update so the AI fields populate
+// Eventos soportados:
+//   - message              → insertar en communication_messages, clasificar
+//                            según slack_monitored_channels.inbound_mode
+//   - app_mention          → ídem message, pero ai_classification.is_mention=true.
+//                            (PR3 va a invocar slack-agent para responder.)
+//   - reaction_added       → si emoji ∈ {white_check_mark, check, ballot_box_with_check}
+//                            y el mensaje original tiene communication_messages.task_id,
+//                            marca esa task como completed.
 //
-// Setup (one-time, in the Slack app dashboard):
-//   1. Event Subscriptions → enable
-//   2. Request URL: https://<project>.supabase.co/functions/v1/slack-events
-//   3. Subscribe to bot events:
-//        message.channels   (public channels the bot is in)
-//        message.groups     (private channels the bot is in)
-//   4. Reinstall the app to the workspace if scopes changed.
+// Dedup robusto vía slack_event_log.slack_event_id (UNIQUE). El insert sirve
+// como lock: si ya existe, rechazamos el evento (Slack retries no duplican).
+//
+// Inbound mode (per channel) controla el processing:
+//   - ignore                       → insertamos al event_log para auditoría y sale.
+//   - notify_only                  → inserta en communication_messages sin clasificar.
+//   - classify_and_propose         → inserta + corre gemini + propone (sin auto-task).
+//   - classify_and_auto_create     → inserta + corre gemini + crea task si confidence>0.85.
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -40,6 +36,8 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SLACK_SIGNING_SECRET = Deno.env.get('SLACK_SIGNING_SECRET') || ''
+
+const COMPLETION_REACTIONS = new Set(['white_check_mark', 'check', 'ballot_box_with_check', 'heavy_check_mark'])
 
 const adminClient = (): SupabaseClient =>
   createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -69,13 +67,12 @@ async function slackFetch<T = any>(botToken: string, method: string, params?: Re
   return data as T
 }
 
-// HMAC-SHA256 of `v0:{ts}:{rawBody}` using SLACK_SIGNING_SECRET, in hex.
+// HMAC-SHA256 of `v0:{ts}:{rawBody}` using SLACK_SIGNING_SECRET, hex.
 async function verifySlackSignature(rawBody: string, timestamp: string, signature: string): Promise<boolean> {
   if (!SLACK_SIGNING_SECRET) {
     console.error('[slack-events] SLACK_SIGNING_SECRET is not set; rejecting all requests')
     return false
   }
-  // Replay protection: reject anything older than 5 minutes.
   const ts = parseInt(timestamp, 10)
   if (!Number.isFinite(ts)) return false
   if (Math.abs(Date.now() / 1000 - ts) > 300) return false
@@ -89,13 +86,14 @@ async function verifySlackSignature(rawBody: string, timestamp: string, signatur
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(baseString))
   const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
   const expected = `v0=${hex}`
-  // Constant-time compare.
   if (expected.length !== signature.length) return false
   let diff = 0
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i)
   return diff === 0
 }
 
+// Run gemini classifier inline (kept from previous version; PR2 moves this
+// to comm-classify edge fn + trigger so backfill is uniform).
 async function classifyAndUpdate(admin: SupabaseClient, messageId: string, classifyInput: any, tenantId: string) {
   try {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -107,9 +105,6 @@ async function classifyAndUpdate(admin: SupabaseClient, messageId: string, class
     if (!res.ok) return
     const { result } = await res.json()
     if (!result) return
-    // Read the row first so we can see if matched_project_id was already
-    // set from the channel→project link. If yes, the AI's project guess
-    // never wins — the explicit human-set link is the source of truth.
     const { data: existing } = await admin
       .from('communication_messages')
       .select('matched_project_id')
@@ -130,6 +125,41 @@ async function classifyAndUpdate(admin: SupabaseClient, messageId: string, class
   }
 }
 
+// Dedup helper: returns true if we should process this event, false if dup.
+async function reserveEventId(admin: SupabaseClient, tenantId: string, slackEventId: string, eventType: string, channelId: string | null, teamId: string | null, payload: any): Promise<boolean> {
+  const { error } = await admin
+    .from('slack_event_log')
+    .insert({
+      tenant_id: tenantId,
+      slack_event_id: slackEventId,
+      slack_team_id: teamId,
+      event_type: eventType,
+      channel_id: channelId,
+      raw_payload: payload,
+      processing_status: 'processing',
+    })
+  if (error) {
+    // Unique violation → duplicate retry from Slack.
+    if (error.code === '23505' || /duplicate/i.test(error.message || '')) {
+      return false
+    }
+    console.error('[slack-events] event_log insert failed:', error)
+    return true  // fail open: still process so we don't lose events
+  }
+  return true
+}
+
+async function markEventDone(admin: SupabaseClient, slackEventId: string, status: 'done' | 'error' | 'skipped' = 'done', errMsg?: string) {
+  await admin
+    .from('slack_event_log')
+    .update({
+      processing_status: status,
+      processed_at: new Date().toISOString(),
+      ...(errMsg ? { error_message: errMsg.slice(0, 1000) } : {}),
+    })
+    .eq('slack_event_id', slackEventId)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
   if (req.method !== 'POST') {
@@ -140,8 +170,6 @@ Deno.serve(async (req) => {
   const signature = req.headers.get('X-Slack-Signature') || ''
   const timestamp = req.headers.get('X-Slack-Request-Timestamp') || ''
 
-  // Verify the signature on EVERY request (including the URL verification
-  // challenge — Slack signs that one too).
   const valid = await verifySlackSignature(rawBody, timestamp, signature)
   if (!valid) {
     return new Response('invalid signature', { status: 401, headers: corsHeaders })
@@ -151,7 +179,7 @@ Deno.serve(async (req) => {
   try { payload = JSON.parse(rawBody) }
   catch { return new Response('invalid json', { status: 400, headers: corsHeaders }) }
 
-  // 1. URL verification handshake — echo back the challenge in plain text.
+  // 1. URL verification challenge.
   if (payload.type === 'url_verification') {
     return new Response(payload.challenge || '', {
       status: 200,
@@ -159,12 +187,8 @@ Deno.serve(async (req) => {
     })
   }
 
-  // 2. Event callback. We respond 200 fast and process async so Slack
-  //    doesn't time out (3s budget on their side).
+  // 2. Event callback. Respond 200 fast, process async.
   if (payload.type === 'event_callback' && payload.event) {
-    // Don't await — return 200 immediately, do the work in the background.
-    // EdgeRuntime is a Deno deployment global on Supabase that keeps the
-    // worker alive after the response is sent.
     const work = handleEvent(payload).catch(err => console.error('[slack-events] handle error:', err))
     try {
       // @ts-ignore — EdgeRuntime is provided by Supabase Edge Runtime
@@ -179,16 +203,14 @@ Deno.serve(async (req) => {
 async function handleEvent(payload: any) {
   const event = payload.event
   const teamId = payload.team_id || payload.authorizations?.[0]?.team_id
-  if (!event || event.type !== 'message') return
-  // Skip subtypes (joins, topic edits, message_changed, etc.) and bot replies.
-  if (event.subtype) return
-  if (event.bot_id) return
-  if (!event.channel || !event.ts) return
-  if (!teamId) return
+  if (!event || !teamId) return
+  // The top-level event_id is unique per Slack delivery; use it for dedup.
+  const slackEventId: string | undefined = payload.event_id
+  if (!slackEventId) return
 
   const admin = adminClient()
 
-  // Find the integration token for this Slack workspace.
+  // Find tenant for this workspace.
   const { data: tok } = await admin
     .from('integration_tokens')
     .select('id, tenant_id, slack_bot_token, slack_bot_user_id, access_token')
@@ -201,23 +223,65 @@ async function handleEvent(payload: any) {
     return
   }
 
-  // Skip messages authored by the bot itself.
+  // Dedup gate — first claimer wins. Slack retries duplicate event_ids on 5xx.
+  const proceed = await reserveEventId(
+    admin, tok.tenant_id, slackEventId, event.type || 'unknown',
+    event.channel || event.item?.channel || null, teamId, payload,
+  )
+  if (!proceed) return
+
+  try {
+    if (event.type === 'reaction_added') {
+      await handleReaction(admin, tok, event)
+    } else if (event.type === 'app_mention') {
+      await handleMessage(admin, tok, event, { isMention: true })
+    } else if (event.type === 'message') {
+      if (event.subtype) {
+        await markEventDone(admin, slackEventId, 'skipped', `subtype:${event.subtype}`)
+        return
+      }
+      if (event.bot_id) {
+        await markEventDone(admin, slackEventId, 'skipped', 'bot_id')
+        return
+      }
+      await handleMessage(admin, tok, event, { isMention: false })
+    } else {
+      await markEventDone(admin, slackEventId, 'skipped', `event_type:${event.type}`)
+      return
+    }
+    await markEventDone(admin, slackEventId, 'done')
+  } catch (err: any) {
+    console.error('[slack-events] processing error:', err)
+    await markEventDone(admin, slackEventId, 'error', String(err?.message || err))
+  }
+}
+
+// ---------- message / app_mention --------------------------------------------
+async function handleMessage(admin: SupabaseClient, tok: any, event: any, opts: { isMention: boolean }) {
+  if (!event.channel || !event.ts) return
   if (event.user && tok.slack_bot_user_id && event.user === tok.slack_bot_user_id) return
 
-  // Channel must be in slack_monitored_channels for this workspace.
+  // Channel must be monitored.
   const { data: monitored } = await admin
     .from('slack_monitored_channels')
-    .select('channel_id, channel_name, project_id')
+    .select('channel_id, channel_name, project_id, inbound_mode')
     .eq('tenant_id', tok.tenant_id)
     .eq('integration_token_id', tok.id)
     .eq('channel_id', event.channel)
     .eq('is_active', true)
     .maybeSingle()
-  if (!monitored) return // user didn't ask us to monitor this channel
+  if (!monitored) return
+
+  const mode = (monitored.inbound_mode || 'classify_and_propose') as
+    'ignore' | 'notify_only' | 'classify_and_propose' | 'classify_and_auto_create'
+
+  // ignore mode: solo logueamos al event_log (ya hicimos reserveEventId), bye.
+  if (mode === 'ignore' && !opts.isMention) return
+  // Las mentions SIEMPRE se procesan aunque el modo sea ignore (es explícito al bot).
 
   const externalId = `${event.channel}:${event.ts}`
 
-  // Idempotency: if we already have this row (e.g. the poll beat us), bail.
+  // Idempotency: si ya existe la fila, salimos.
   const { data: existing } = await admin
     .from('communication_messages')
     .select('id')
@@ -247,7 +311,7 @@ async function handleEvent(payload: any) {
 
   const receivedAt = new Date(parseFloat(event.ts) * 1000).toISOString()
 
-  // Lightweight thread context for replies.
+  // Thread context for replies.
   let threadContext: Array<{ from: string; body: string; date: string }> = []
   if (event.thread_ts && event.thread_ts !== event.ts && botToken) {
     try {
@@ -263,9 +327,6 @@ async function handleEvent(payload: any) {
     } catch { /* best-effort */ }
   }
 
-  // If the user linked this channel to a project, stamp matched_project_id
-  // up-front. The AI classifier still runs (in classifyAndUpdate below)
-  // but won't overwrite a non-null FK — see classifyAndUpdate guard.
   const { data: inserted, error: insErr } = await admin
     .from('communication_messages')
     .insert({
@@ -284,7 +345,8 @@ async function handleEvent(payload: any) {
       channel_name: monitored.channel_name,
       thread_context: threadContext,
       received_at: receivedAt,
-      ai_processed: false,
+      ai_processed: mode === 'notify_only' ? true : false,
+      ai_classification: opts.isMention ? { is_mention: true } : null,
       matched_project_id: monitored.project_id || null,
     })
     .select('id')
@@ -296,13 +358,19 @@ async function handleEvent(payload: any) {
     return
   }
 
-  // Fetch tenant + CRM context for AI classification (once per event).
+  // notify_only: no clasificamos. notify_only suele ser para canales como
+  // #social o #random donde el dueño quiere ver el feed pero no procesarlo.
+  if (mode === 'notify_only' && !opts.isMention) return
+
+  // classify_and_propose / classify_and_auto_create / mention:
+  // run inline classifier (PR2 va a migrar esto a comm-classify trigger).
   const { data: tenantRow } = await admin.from('tenants').select('name').eq('id', tok.tenant_id).maybeSingle()
   const { data: clientsList } = await admin.from('clients').select('id, name, email, company').eq('tenant_id', tok.tenant_id).limit(200)
   const { data: projectsList } = await admin.from('projects').select('id, title, client_id, clients(name)').eq('tenant_id', tok.tenant_id).limit(200)
 
   classifyAndUpdate(admin, inserted.id, {
     platform: 'slack',
+    is_mention: opts.isMention,
     from_name: fromName,
     from_email: fromEmail || '',
     subject: `#${monitored.channel_name}`,
@@ -312,4 +380,32 @@ async function handleEvent(payload: any) {
     clients: (clientsList || []).map((c: any) => ({ id: c.id, name: c.name || '', email: c.email || '', company: c.company || '' })),
     projects: (projectsList || []).map((p: any) => ({ id: p.id, title: p.title || '', client_id: p.client_id || null, client_name: p.clients?.name || null })),
   }, tok.tenant_id)
+}
+
+// ---------- reaction_added → ✅ completes linked task ------------------------
+async function handleReaction(admin: SupabaseClient, tok: any, event: any) {
+  // event.item.channel, event.item.ts identify the target message.
+  if (!event.reaction) return
+  if (!COMPLETION_REACTIONS.has(event.reaction)) return
+  const item = event.item
+  if (!item || item.type !== 'message' || !item.channel || !item.ts) return
+
+  // Find communication_messages row + linked task_id.
+  const externalId = `${item.channel}:${item.ts}`
+  const { data: msg } = await admin
+    .from('communication_messages')
+    .select('id, task_id, tenant_id')
+    .eq('platform', 'slack')
+    .eq('external_id', externalId)
+    .eq('tenant_id', tok.tenant_id)
+    .maybeSingle()
+  if (!msg || !msg.task_id) return
+
+  // Mark task complete. Use the existing helper if there's one; else direct update.
+  const { error } = await admin
+    .from('tasks')
+    .update({ completed: true, status: 'Completed' })
+    .eq('id', msg.task_id)
+    .eq('tenant_id', tok.tenant_id)
+  if (error) console.error('[slack-events] task complete update failed:', error)
 }
