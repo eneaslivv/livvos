@@ -1,5 +1,7 @@
-// AuroraContext — multi-agent chat state (Solara / Marina / Nova + Atlas router).
-// Follows the same provider pattern as the other 12 contexts in Livv.
+// AuroraContext — multi-agent chat state (14 agents + Atlas router).
+// Backed by aurora-chat edge function (OpenAI gpt-4o + tool calling).
+// Persists threads in aurora_threads + history in aurora_messages.
+// Falls back to mockBackend.ts when LIVE flag off or edge fn fails.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSlug, AgentResponse, AuroraMessage, AuroraMode, Canvas } from '../types/aurora';
@@ -7,6 +9,7 @@ import { auroraAgents } from '../lib/aurora/tokens';
 import { auroraMockRespond } from '../lib/aurora/mockBackend';
 import { supabase } from '../lib/supabase';
 import { useTenant } from './TenantContext';
+import { useAuth } from '../hooks/useAuth';
 
 type AuroraStatus = 'idle' | 'sending' | 'error';
 
@@ -38,8 +41,13 @@ const STORAGE_KEY_MODE = 'aurora:mode';
 const STORAGE_KEY_AGENT = 'aurora:lastAgent';
 
 // Flip to a single env var. Defaults to mock so the dock is always functional.
-// Set VITE_AURORA_LIVE=true once the edge fn is deployed AND ANTHROPIC_API_KEY is set as a Supabase secret.
+// Set VITE_AURORA_LIVE=true once the edge fn is deployed AND OPENAI_API_KEY
+// is set as a Supabase secret.
 const LIVE = ((import.meta as any).env?.VITE_AURORA_LIVE === 'true');
+
+// Cache thread_id per (user × agent) so we don't roundtrip the RPC on every send.
+type ThreadKey = string; // `${userId}:${agentSlug}`
+const threadCache = new Map<ThreadKey, string>();
 
 function uid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -49,8 +57,13 @@ function uid(): string {
 export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // AuroraProvider is mounted deep in the stack inside TenantProvider — useTenant is always available.
   const tenantCtx = useTenant();
+  const { user } = useAuth();
 
   const [open, setOpen] = useState(false);
+  // Track current thread per (user × agent). Loaded lazily on first send.
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  // Cache loaded history per thread so we don't refetch on every dock toggle.
+  const loadedThreadsRef = useRef<Set<string>>(new Set());
   const [agent, setAgentState] = useState<AgentSlug>(() => {
     try {
       const v = localStorage.getItem(STORAGE_KEY_AGENT);
@@ -92,6 +105,54 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     lastAgentRef.current = agent;
   }, [agent]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load thread + history when (user, agent) changes — only in LIVE mode.
+  // Mock mode keeps the dock fully ephemeral so devs can poke around without DB.
+  useEffect(() => {
+    if (!LIVE || !user?.id) return;
+    let cancelled = false;
+    const cacheKey: ThreadKey = `${user.id}:${agent}`;
+    const cached = threadCache.get(cacheKey);
+    if (cached) {
+      setActiveThreadId(cached);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: threadId, error } = await supabase.rpc('aurora_get_or_create_thread', { p_agent_slug: agent });
+        if (cancelled || error || !threadId) return;
+        threadCache.set(cacheKey, threadId as string);
+        setActiveThreadId(threadId as string);
+
+        // Load last 30 messages to hydrate the dock so the user picks up
+        // where they left off. Only the first time we touch this thread.
+        if (loadedThreadsRef.current.has(threadId as string)) return;
+        loadedThreadsRef.current.add(threadId as string);
+        const { data: msgs } = await supabase
+          .from('aurora_messages')
+          .select('id, role, agent_slug, text, canvas, created_at')
+          .eq('thread_id', threadId)
+          .in('role', ['user', 'assistant'])
+          .order('created_at', { ascending: true })
+          .limit(30);
+        if (cancelled || !msgs) return;
+        const hydrated: AuroraMessage[] = msgs.map((m: any) => ({
+          id: m.id,
+          role: m.role === 'assistant' ? 'agent' : 'user',
+          agent: m.agent_slug || undefined,
+          text: m.text || '',
+          canvas: m.canvas || undefined,
+          createdAt: new Date(m.created_at).getTime(),
+        }));
+        // Replace messages — but only if the dock is empty (don't blow away an
+        // in-flight conversation). If there's already a user typing flow, append.
+        setMessages(prev => prev.length === 0 ? hydrated : prev);
+      } catch (e) {
+        // Silent — fall through to ephemeral mode.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, agent]);
+
   const toggle = useCallback(() => setOpen(o => !o), []);
 
   const clear = useCallback(() => { setMessages([]); setLastError(null); }, []);
@@ -109,15 +170,38 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let response: AgentResponse;
     try {
       if (LIVE) {
-        const { data, error } = await supabase.functions.invoke<AgentResponse>('aurora-chat', {
+        // Find or create the thread for (user × targetAgent). Cache hits skip the RPC.
+        let threadId: string | null = activeThreadId;
+        if (user?.id) {
+          const cacheKey: ThreadKey = `${user.id}:${targetAgent}`;
+          threadId = threadCache.get(cacheKey) || null;
+          if (!threadId) {
+            const { data: t } = await supabase.rpc('aurora_get_or_create_thread', { p_agent_slug: targetAgent });
+            if (t) {
+              threadId = t as string;
+              threadCache.set(cacheKey, threadId);
+            }
+          }
+        }
+
+        const { data, error } = await supabase.functions.invoke<any>('aurora-chat', {
           body: {
             agent: targetAgent,
             message: trimmed,
             tenant_id: tenantCtx?.currentTenant?.id ?? null,
+            thread_id: threadId,
           },
         });
-        if (error || !data) throw new Error(error?.message || 'aurora-chat empty response');
-        response = data;
+        if (error) throw new Error(error?.message || 'aurora-chat error');
+        if (!data || data.error) {
+          throw new Error(data?.error || 'aurora-chat empty response');
+        }
+        response = data as AgentResponse;
+        // Update the active thread if the backend created one
+        if (data.thread_id && data.thread_id !== threadId) {
+          setActiveThreadId(data.thread_id);
+          if (user?.id) threadCache.set(`${user.id}:${targetAgent}`, data.thread_id);
+        }
       } else {
         response = auroraMockRespond(targetAgent, trimmed);
       }
@@ -150,7 +234,7 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       createdAt: Date.now(),
     }]);
     setStatus('idle');
-  }, [agent, tenantCtx?.currentTenant?.id, setAgent]);
+  }, [agent, tenantCtx?.currentTenant?.id, setAgent, activeThreadId, user?.id]);
 
   const value = useMemo<AuroraContextValue>(() => ({
     open, setOpen, toggle,
