@@ -91,7 +91,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           <div ref={platformDropdownRef as React.RefObject<HTMLDivElement>} className="relative">
             <button
               onClick={() => setPlatformDropdownOpen(prev => !prev)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 rounded-full text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
             >
               <Icons.Filter size={13} />
               Networks
@@ -158,13 +158,13 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
 
         {/* Navigation */}
         <div className="flex items-center gap-0.5">
-          <button onClick={() => navigateCalendar(-1)} className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
+          <button onClick={() => navigateCalendar(-1)} className="p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
             <Icons.ChevronLeft size={14} />
           </button>
-          <button onClick={goToToday} className="px-2 py-0.5 text-[11px] font-medium rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors">
+          <button onClick={goToToday} className="px-2 py-0.5 text-[11px] font-medium rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors">
             Today
           </button>
-          <button onClick={() => navigateCalendar(1)} className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
+          <button onClick={() => navigateCalendar(1)} className="p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
             <Icons.ChevronRight size={14} />
           </button>
           <span className="text-[11px] text-zinc-600 dark:text-zinc-300 ml-1.5 min-w-[120px] tabular-nums">{periodLabel}</span>
@@ -173,7 +173,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         {/* Action buttons */}
         <button
           onClick={onNewEvent}
-          className="flex items-center gap-1 px-2.5 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[11px] font-medium hover:opacity-90 transition-opacity"
+          className="flex items-center gap-1 px-2.5 py-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-full text-[11px] font-medium hover:opacity-90 transition-opacity"
         >
           <Icons.Plus size={11} strokeWidth={2.5} />
           {calendarMode === 'content' ? 'Content' : 'Event'}
@@ -181,7 +181,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         {calendarMode === 'schedule' && (
           <button
             onClick={onNewTask}
-            className="flex items-center gap-1 px-2.5 py-1 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md text-[11px] font-medium transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-[11px] font-medium transition-colors"
           >
             <Icons.Check size={11} strokeWidth={2.5} />
             Task
@@ -193,7 +193,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           <button
             onClick={() => syncGoogle().catch(() => {})}
             disabled={googleSyncing}
-            className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+            className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
             title="Sync Google Calendar"
           >
             <Icons.RefreshCw size={13} className={googleSyncing ? 'animate-spin' : ''} />
@@ -202,7 +202,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         {onToggleTimezones && hasClientTimezones && (
           <button
             onClick={onToggleTimezones}
-            className={`p-1 rounded-md transition-colors ${
+            className={`p-1 rounded-full transition-colors ${
               showTimezones
                 ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'
                 : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -214,7 +214,7 @@ export const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         )}
         <button
           onClick={() => setShowGoogleSettings(prev => !prev)}
-          className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+          className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
           title="Calendar integrations"
         >
           <Icons.Settings size={13} />

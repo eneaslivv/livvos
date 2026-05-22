@@ -19,9 +19,9 @@ export const ToggleGroup = <T extends string>({ options, value, onChange }: {
   }, [value]);
 
   return (
-    <div ref={containerRef} className="relative flex items-center gap-0.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+    <div ref={containerRef} className="relative flex items-center gap-0.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-full">
       <motion.div
-        className="absolute top-1 bottom-1 bg-white dark:bg-zinc-700 rounded-lg shadow-sm"
+        className="absolute top-1 bottom-1 bg-white dark:bg-zinc-700 rounded-full shadow-sm"
         initial={false}
         animate={{ left: indicator.left, width: indicator.width }}
         transition={{ type: 'tween', duration: 0.15, ease: 'easeOut' }}
@@ -34,7 +34,7 @@ export const ToggleGroup = <T extends string>({ options, value, onChange }: {
             key={opt.id}
             data-toggle={opt.id}
             onClick={() => onChange(opt.id)}
-            className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 ${
+            className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-colors duration-200 ${
               isActive
                 ? 'text-zinc-900 dark:text-zinc-100'
                 : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'

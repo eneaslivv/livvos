@@ -13,6 +13,7 @@ import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
 import { generateWeeklySummaryFromAI, generatePlanFromAI, PlanAIResult } from '../lib/ai';
 import { CalendarHeader } from '../components/calendar/CalendarHeader';
+import { CalendarKpiStrip } from '../components/calendar/CalendarKpiStrip';
 import { AiWeeklySummary } from '../components/calendar/AiWeeklySummary';
 import { AiPlanPreview } from '../components/calendar/AiPlanPreview';
 import { PlanningPreferences } from '../components/calendar/PlanningPreferences';
@@ -1337,6 +1338,12 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         onToggleTimezones={toggleTimezones}
         hasClientTimezones={hasClientTimezones}
       />
+
+      {/* Mini KPI strip — quick read-out of task state in the visible window.
+          Schedule mode only — content mode tiene su propio set de métricas. */}
+      {calendarMode === 'schedule' && (
+        <CalendarKpiStrip tasks={tasks as any[]} />
+      )}
 
       {/* AI Weekly Summary + AI Plan */}
       <div className="flex items-start gap-3 mb-4">
