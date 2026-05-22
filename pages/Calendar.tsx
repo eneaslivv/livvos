@@ -260,7 +260,15 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
     duration: 60,
     type: 'meeting' as CalendarEvent['type'],
     color: '#3b82f6',
-    location: ''
+    location: '',
+    // ── Auto Meet invite ────────────────────────────────────────────
+    // Si type='meeting' y invitee_email está set, se invoca el edge fn
+    // event-meet-invite después de crear, que genera Google Meet link y
+    // manda invitación email + Google Calendar invite al invitee.
+    invitee_email: '',
+    invitee_name: '',
+    invitee_client_id: '' as string | undefined,
+    auto_meet: true,
   });
 
   const [newContentData, setNewContentData] = useState({
@@ -655,17 +663,50 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
     return hours;
   };
 
-  // Create event
+  // Create event — si es meeting con invitee_email + auto_meet, también
+  // genera Google Meet link + envía invitación al invitado.
   const handleCreateEvent = async () => {
     if (!newEventData.title.trim()) return;
 
     try {
-      await createEvent({
-        ...newEventData,
+      const shouldGenerateMeet =
+        newEventData.type === 'meeting' &&
+        newEventData.auto_meet &&
+        newEventData.invitee_email.trim().length > 0;
+
+      // 1. Create local event (with invitee_email if present)
+      const { invitee_email, invitee_name, invitee_client_id, auto_meet: _, ...eventPayload } = newEventData;
+      const created = await createEvent({
+        ...eventPayload,
         owner_id: user?.id || '',
         start_date: newEventData.start_date || selectedDate,
-        all_day: !newEventData.start_time
-      });
+        all_day: !newEventData.start_time,
+        invitee_email: invitee_email.trim() || null,
+        invitee_name:  invitee_name.trim() || null,
+        invitee_client_id: invitee_client_id || null,
+      } as any);
+
+      // 2. If it's a meeting with invitee → fire edge fn to generate Meet
+      //    link + send invite. Best-effort: if Google not connected, the
+      //    event still exists locally, the user gets an info message.
+      if (shouldGenerateMeet && (created as any)?.id) {
+        try {
+          const { data, error } = await supabase.functions.invoke('event-meet-invite', {
+            body: { event_id: (created as any).id },
+          });
+          if (error || data?.error) {
+            const msg = error?.message || data?.error || 'unknown';
+            if (msg.includes('google_calendar_not_connected')) {
+              alert('Evento creado, pero Google Calendar no está conectado. Conectalo en Settings → Integrations para generar Meet links automáticamente.');
+            } else {
+              errorLogger.warn('event-meet-invite failed', msg);
+              alert('Evento creado pero no pude generar el Meet link: ' + msg);
+            }
+          }
+        } catch (e: any) {
+          errorLogger.warn('event-meet-invite invoke failed', e);
+        }
+      }
 
       setNewEventData({
         title: '',
@@ -675,7 +716,11 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         duration: 60,
         type: 'meeting',
         color: '#3b82f6',
-        location: ''
+        location: '',
+        invitee_email: '',
+        invitee_name: '',
+        invitee_client_id: '',
+        auto_meet: true,
       });
       setShowNewEventForm(false);
     } catch (err) {
@@ -748,7 +793,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         all_day: !newEventData.start_time,
       });
       setEditingEventId(null);
-      setNewEventData({ title: '', description: '', start_date: '', start_time: '', duration: 60, type: 'meeting', color: '#3b82f6', location: '' });
+      setNewEventData({ title: '', description: '', start_date: '', start_time: '', duration: 60, type: 'meeting', color: '#3b82f6', location: '', invitee_email: '', invitee_name: '', invitee_client_id: '', auto_meet: true });
       setShowNewEventForm(false);
     } catch (err) {
       errorLogger.error('Error updating event', err);

@@ -264,16 +264,62 @@ export const EventTaskFormPanel: React.FC<EventTaskFormPanelProps> = ({
             )}
 
             {calendarMode !== 'content' && (
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 mb-1">Location</label>
-                <input
-                  type="text"
-                  placeholder="Zoom / Office / Link"
-                  value={newEventData.location}
-                  onChange={(e) => setNewEventData((prev: any) => ({ ...prev, location: e.target.value }))}
-                  className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-[10px] font-medium text-zinc-400 mb-1">Location</label>
+                  <input
+                    type="text"
+                    placeholder="Zoom / Office / Link"
+                    value={newEventData.location}
+                    onChange={(e) => setNewEventData((prev: any) => ({ ...prev, location: e.target.value }))}
+                    className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-blue-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all"
+                  />
+                </div>
+                {/* ── Auto Meet invite — solo cuando es meeting ─────────────────
+                    Si type='meeting' y se completa invitee_email + auto_meet=true,
+                    al guardar se invoca event-meet-invite (Google Calendar API
+                    crea el Meet, envía invite al invitee + livv-branded email). */}
+                {newEventData.type === 'meeting' && (
+                  <div className="p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-500/20 bg-amber-50/40 dark:bg-amber-500/5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-amber-700 dark:text-amber-400 inline-flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        Invitar a alguien · auto Meet
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newEventData.auto_meet}
+                          onChange={(e) => setNewEventData((prev: any) => ({ ...prev, auto_meet: e.target.checked }))}
+                          className="w-3 h-3 rounded accent-amber-600"
+                        />
+                        <span className="text-[10px] text-zinc-600 dark:text-zinc-300">Generar Meet link</span>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="email"
+                        placeholder="cliente@empresa.com"
+                        value={newEventData.invitee_email}
+                        onChange={(e) => setNewEventData((prev: any) => ({ ...prev, invitee_email: e.target.value }))}
+                        className="px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-amber-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Nombre (opcional)"
+                        value={newEventData.invitee_name}
+                        onChange={(e) => setNewEventData((prev: any) => ({ ...prev, invitee_name: e.target.value }))}
+                        className="px-2.5 py-1.5 bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:border-amber-400 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                      />
+                    </div>
+                    {newEventData.invitee_email && newEventData.auto_meet && (
+                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1.5 leading-snug">
+                        Al guardar: se crea el evento en tu Google Calendar con Meet link, y el invitado recibe el invite de Google + un mail livv con el link.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             {calendarMode === 'content' && (

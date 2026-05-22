@@ -26,6 +26,10 @@ const templateConfig: Record<string, { accent: string; icon: string }> = {
   welcome:            { accent: '#10b981', icon: '&#128075;' },
   daily_schedule:     { accent: '#3b82f6', icon: '&#128197;' },
   weekly_digest:      { accent: '#8b5cf6', icon: '&#128202;' },
+  // Meeting invite (event-meet-invite edge function). Accent = livv gold.
+  // Google envía su propio invite vía sendUpdates=all; este es el livv-branded
+  // follow-up con CTA bien grande "Unirme al Google Meet".
+  meeting_invite:     { accent: '#C4A35A', icon: '&#127909;' },
 }
 
 function buildWelcomeSection(): string {
