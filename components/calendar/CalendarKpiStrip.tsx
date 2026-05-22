@@ -6,16 +6,18 @@
  *   - Cancelled      : status='cancelled' en la ventana
  *   - Overdue        : due_date < hoy y no completed/cancelled
  *
- * Diseño: pill cards full-round, divider izquierdo de color tono por kpi,
- * matching el resto del calendar header (que también se hizo full-round).
- *
- * Las cards son clickables — emiten un evento opcional onSelect(kpi) que
- * el host puede usar para filtrar la lista de tareas debajo.
+ * Diseño: pill cards full-round con sutilezas — gradient interior tinted
+ * por tono, hover lift con ring de accent, estado empty atenuado, caret
+ * sutil indicando clickable. Click abre un modal de detalle con la lista
+ * de tareas filtradas (CalendarKpiDetail).
  */
 import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 
-interface CalendarKpiStripProps {
+export type KpiKey = 'assigned_new' | 'active' | 'cancelled' | 'overdue';
+
+export interface CalendarKpiStripProps {
   /** Las tareas de la ventana visible. Se filtran adentro por status. */
   tasks: Array<{
     id: string;
@@ -26,41 +28,30 @@ interface CalendarKpiStripProps {
     cancelled_at?: string | null;
     assigned_at?: string | null;
   }>;
-  /** Opcional: callback cuando el user clickea una card para filtrar la lista. */
-  onSelect?: (kpi: 'assigned_new' | 'active' | 'cancelled' | 'overdue' | null) => void;
-  /** Cuál card está visualmente highlighted como filtro activo. */
-  selected?: 'assigned_new' | 'active' | 'cancelled' | 'overdue' | null;
+  /** Click handler — abre el modal de detalle filtrado por ese kpi. */
+  onOpen?: (kpi: KpiKey) => void;
 }
 
-type KpiKey = 'assigned_new' | 'active' | 'cancelled' | 'overdue';
-
-const TONE: Record<KpiKey, { bar: string; ico: React.ReactNode; label: string }> = {
-  assigned_new: { bar: '#6DBEDC', ico: <Icons.User size={11} />,         label: 'Asignadas nuevas' },
-  active:       { bar: '#C4A35A', ico: <Icons.Activity size={11} />,     label: 'Activas' },
-  cancelled:    { bar: '#A8A29A', ico: <Icons.X size={11} />,            label: 'Canceladas' },
-  overdue:      { bar: '#E11D48', ico: <Icons.AlertCircle size={11} />,  label: 'Demoradas' },
+const TONE: Record<KpiKey, { bar: string; icon: React.ReactNode; label: string; bgFrom: string }> = {
+  assigned_new: { bar: '#6DBEDC', icon: <Icons.User size={11} />,         label: 'ASIGNADAS NUEVAS', bgFrom: 'rgba(109,190,220,0.05)' },
+  active:       { bar: '#C4A35A', icon: <Icons.Activity size={11} />,     label: 'ACTIVAS',          bgFrom: 'rgba(196,163,90,0.05)' },
+  cancelled:    { bar: '#A8A29A', icon: <Icons.X size={11} />,            label: 'CANCELADAS',       bgFrom: 'rgba(168,162,154,0.04)' },
+  overdue:      { bar: '#E11D48', icon: <Icons.AlertCircle size={11} />,  label: 'DEMORADAS',        bgFrom: 'rgba(225,29,72,0.05)' },
 };
 
-export const CalendarKpiStrip: React.FC<CalendarKpiStripProps> = ({ tasks, onSelect, selected }) => {
+export const CalendarKpiStrip: React.FC<CalendarKpiStripProps> = ({ tasks, onOpen }) => {
   const counts = useMemo(() => {
     const now = Date.now();
     const since7d = now - 7 * 86400000;
-    let assignedNew = 0;
-    let active = 0;
-    let cancelled = 0;
-    let overdue = 0;
+    let assignedNew = 0, active = 0, cancelled = 0, overdue = 0;
     for (const t of tasks) {
       const isDone = t.completed === true || t.status === 'done' || t.status === 'completed';
       const isCancelled = t.status === 'cancelled' || !!t.cancelled_at;
-      // Assigned new = asignada en últimos 7d (proxy: assigned_at o created_at).
       const assignedTs = t.assigned_at ? new Date(t.assigned_at).getTime()
                          : t.created_at ? new Date(t.created_at).getTime() : 0;
       if (!isDone && !isCancelled && assignedTs >= since7d) assignedNew += 1;
-      // Active = no done, no cancelled.
       if (!isDone && !isCancelled) active += 1;
-      // Cancelled — cualquiera con status cancelled.
       if (isCancelled) cancelled += 1;
-      // Overdue = due_date pasado, no done, no cancelled.
       if (!isDone && !isCancelled && t.due_date) {
         const dueTs = new Date(t.due_date).getTime();
         if (!isNaN(dueTs) && dueTs < now) overdue += 1;
@@ -78,42 +69,95 @@ export const CalendarKpiStrip: React.FC<CalendarKpiStripProps> = ({ tasks, onSel
 
   return (
     <div className="flex items-center gap-2 mb-3 flex-wrap">
-      {cards.map(({ key, value }) => {
+      {cards.map(({ key, value }, idx) => {
         const tone = TONE[key];
-        const isActive = selected === key;
-        const isClickable = !!onSelect;
+        const isEmpty = value === 0;
+        const isClickable = !!onOpen && !isEmpty;
         return (
-          <button
+          <motion.button
             key={key}
             type="button"
-            onClick={() => onSelect?.(isActive ? null : key)}
+            onClick={() => isClickable && onOpen?.(key)}
             disabled={!isClickable}
-            className={`relative flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full border bg-white dark:bg-zinc-900 transition-all ${
-              isActive
-                ? 'border-zinc-900 dark:border-zinc-100 shadow-sm'
-                : 'border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, delay: idx * 0.04, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={isClickable ? { y: -1, transition: { duration: 0.15 } } : undefined}
+            whileTap={isClickable ? { scale: 0.98, transition: { duration: 0.08 } } : undefined}
+            className={`group relative flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full border bg-white dark:bg-zinc-900 transition-[background,border-color,box-shadow] duration-200 ${
+              isEmpty
+                ? 'border-zinc-200/60 dark:border-zinc-800/60 opacity-55'
+                : 'border-zinc-200/80 dark:border-zinc-800 hover:shadow-sm'
             } ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
-            title={isClickable ? (isActive ? 'Limpiar filtro' : `Filtrar por ${tone.label.toLowerCase()}`) : tone.label}
+            style={{
+              backgroundImage: isEmpty
+                ? undefined
+                : `linear-gradient(135deg, ${tone.bgFrom} 0%, transparent 60%)`,
+              boxShadow: 'none',
+            }}
+            title={isClickable ? `Ver ${value} ${tone.label.toLowerCase()}` : tone.label.toLowerCase()}
           >
-            {/* Tone bar (left edge) */}
+            {/* Hover ring on accent — sutil */}
             <span
-              className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full"
-              style={{ background: tone.bar }}
+              className={`absolute inset-0 rounded-full pointer-events-none transition-opacity duration-200 ${
+                isClickable ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'
+              }`}
+              style={{ boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${tone.bar} 35%, transparent)` }}
               aria-hidden
             />
+
+            {/* Tone bar — left edge, full-height */}
             <span
-              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-zinc-700 dark:text-zinc-300"
-              style={{ background: `color-mix(in oklab, ${tone.bar} 14%, transparent)`, color: tone.bar }}
+              className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full transition-opacity"
+              style={{
+                background: tone.bar,
+                opacity: isEmpty ? 0.35 : 1,
+              }}
+              aria-hidden
+            />
+
+            {/* Icon avatar — tinted con accent */}
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full transition-transform group-hover:scale-110"
+              style={{
+                background: isEmpty
+                  ? 'rgba(161,161,170,0.10)'
+                  : `color-mix(in oklab, ${tone.bar} 14%, transparent)`,
+                color: isEmpty ? '#a1a1aa' : tone.bar,
+              }}
             >
-              {tone.ico}
+              {tone.icon}
             </span>
-            <span className="text-[12.5px] font-mono tabular-nums font-medium text-zinc-900 dark:text-zinc-100">
+
+            {/* Value — bigger, tabular */}
+            <span
+              className={`text-[13px] font-mono tabular-nums font-semibold leading-none ${
+                isEmpty ? 'text-zinc-400 dark:text-zinc-600' : 'text-zinc-900 dark:text-zinc-100'
+              }`}
+            >
               {value}
             </span>
-            <span className="text-[10.5px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+
+            {/* Label — uppercase, micro */}
+            <span
+              className={`text-[10px] font-medium uppercase tracking-[0.12em] leading-none ${
+                isEmpty ? 'text-zinc-400 dark:text-zinc-600' : 'text-zinc-500 dark:text-zinc-400'
+              }`}
+            >
               {tone.label}
             </span>
-          </button>
+
+            {/* Subtle chevron — only when clickable, visible on hover */}
+            {isClickable && (
+              <span
+                className="ml-0.5 -mr-1 opacity-0 group-hover:opacity-70 -translate-x-1 group-hover:translate-x-0 transition-all duration-200"
+                style={{ color: tone.bar }}
+                aria-hidden
+              >
+                <Icons.ChevronRight size={10} />
+              </span>
+            )}
+          </motion.button>
         );
       })}
     </div>
