@@ -117,10 +117,18 @@ export const auroraRegistry = [
 // livv OS — studio-level agents. Solo se renderean en el chip rail cuando
 // el user es is_platform_admin. Server-side los gateía igual via guard.
 export const livvStudioRegistry = [
+  // MVS (Sprint 1)
   auroraAgents.norte,   // CEO / Manager del studio
   auroraAgents.tesoro,  // Finance del studio
   auroraAgents.pulso,   // Portfolio metrics
   auroraAgents.memoria, // Lessons / decision archive
+  // Strategy + Operations + Borde (Sprints 2-5)
+  auroraAgents.cumbre,  // Strategy / Foresight
+  auroraAgents.forja,   // Engineering / Tech ops
+  auroraAgents.trazo,   // Design / Brand
+  auroraAgents.ola,     // Growth / Build-in-public
+  auroraAgents.raiz,    // People / Talent
+  auroraAgents.brujula, // Bizdev / Partnerships
 ];
 
 // Used as a fallback when the response is unknown/garbled.

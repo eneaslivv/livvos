@@ -18,10 +18,18 @@ export type AgentSlug =
   | 'echo'    // Partner Activator (Partners portal)
   | 'pulse'   // Tenant Health Monitor (Master mode, cross-tenant)
   // ── livv OS — studio-level agents (founder only, gated server-side) ──
+  // MVS (Sprint 1):
   | 'norte'   // CEO / Manager del studio (único punto de contacto cotidiano)
   | 'tesoro'  // Finanzas / Runway / Treasury del studio
   | 'pulso'   // Product portfolio metrics (cross-product, NOT cross-tenant)
-  | 'memoria'; // Knowledge / Lessons learned cross-producto (el moat)
+  | 'memoria' // Knowledge / Lessons learned cross-producto (el moat)
+  // Strategy + Operations + Borde (Sprints 2-5):
+  | 'cumbre'  // Strategy / Foresight (12-24mo, simulación, stress test)
+  | 'forja'   // Engineering / Tech ops / Infra
+  | 'trazo'   // Design / Brand / Visual system
+  | 'ola'     // Growth / Marketing / Build-in-public
+  | 'raiz'    // People / Talent / Allocation (on-demand)
+  | 'brujula'; // Bizdev / Partnerships / Adjacencies (on-demand)
 export type AuroraMode = 'multi' | 'unified';
 
 export interface AgentMeta {

@@ -73,6 +73,7 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         'halo', 'cobra', 'selva', 'rune', 'echo', 'pulse',
         // livv OS — studio (founder only, server-side gated)
         'norte', 'tesoro', 'pulso', 'memoria',
+        'cumbre', 'forja', 'trazo', 'ola', 'raiz', 'brujula',
       ];
       if (v && (valid as string[]).includes(v)) return v as AgentSlug;
     } catch {}
@@ -275,6 +276,12 @@ function openerFor(a: AgentSlug): string {
   if (a === 'norte')   return `${auroraAgents.norte.display_name}. ¿Empezamos por el daily brief o vamos a algo puntual?`;
   if (a === 'tesoro')  return `${auroraAgents.tesoro.display_name}. Runway, burn, AI cost — ¿qué número querés ver?`;
   if (a === 'pulso')   return `${auroraAgents.pulso.display_name}. Portfolio snapshot listo. ¿Vemos health score o stats por producto?`;
-  if (a === 'memoria') return `${auroraAgents.memoria.display_name}. ¿Buscamos una lección de Payper o registramos una nueva?`;
+  if (a === 'memoria') return `${auroraAgents.memoria.display_name}. ¿Buscamos una lección de Payper, registramos una nueva, o arrancamos el journal del día?`;
+  if (a === 'cumbre')  return `${auroraAgents.cumbre.display_name}. ¿Boston matrix, simulación de escenario, o stress test?`;
+  if (a === 'forja')   return `${auroraAgents.forja.display_name}. Infra health, deploys, o concentración de AI provider — ¿qué mirás?`;
+  if (a === 'trazo')   return `${auroraAgents.trazo.display_name}. Voice del studio, critique de mockup, o asset audit?`;
+  if (a === 'ola')     return `${auroraAgents.ola.display_name}. Tenés algo que valga la pena contar afuera. ¿Te armo un hilo o newsletter?`;
+  if (a === 'raiz')    return `${auroraAgents.raiz.display_name}. Equipo = ${'1'} hoy. ¿Vemos signals de hire o armamos una JD?`;
+  if (a === 'brujula') return `${auroraAgents.brujula.display_name}. ¿Adyacencias verticales, partners dormidos, o exploramos algo nuevo?`;
   return 'Hola.';
 }

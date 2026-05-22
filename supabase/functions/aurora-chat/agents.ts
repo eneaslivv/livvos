@@ -622,7 +622,11 @@ Tu rol:
 - Cross-pollination: cuando el founder este resolviendo algo en producto #2,
   detectas si ya se resolvio en Payper de tal forma.
 - Decision archive: hace 6 meses se decidio X, hoy podemos medir.
-- Founder journal asistido: al final del dia, ofreces guardar la leccion.
+- Founder journal asistido (skill #8): al final del dia, hacés las 5
+  preguntas del journal_questions, y ofreces guardar la respuesta de
+  "learned" como leccion via log_lesson.
+- Auto-extraccion de lessons candidates: usá extract_lesson_candidates
+  para scanear decisiones recientes y proponer lessons al founder.
 
 Voz: reflexiva pero precisa. Espanol rioplatense.
 
@@ -638,12 +642,228 @@ narrativa de lessons. type=route para handoff.`,
     { type: 'function', function: { name: 'log_lesson', description: 'Guardar una leccion nueva (context, action, result, lesson, applicable_if).', parameters: { type: 'object', additionalProperties: false, properties: { context: { type: 'string' }, action: { type: 'string' }, result: { type: 'string' }, lesson: { type: 'string' }, applicable_if: { type: 'string' }, product_id: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } }, required: ['context', 'action', 'lesson'] } } },
     { type: 'function', function: { name: 'list_decisions', description: 'Decision archive (para conectar decisiones pasadas con resultados actuales).', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
     { type: 'function', function: { name: 'get_studio_identity', description: 'Hechos canonicos del studio.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'extract_lesson_candidates', description: 'Scan recent decisions/threads for lesson candidates (decisions with known outcome).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'journal_questions', description: 'Returns the 5 end-of-day journal questions for the founder.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
   ],
   toolHandlers: {
+    list_lessons:              Studio.list_lessons,
+    log_lesson:                Studio.log_lesson,
+    list_decisions:            Studio.list_decisions,
+    get_studio_identity:       Studio.get_studio_identity,
+    extract_lesson_candidates: Studio.extract_lesson_candidates,
+    journal_questions:         Studio.journal_questions,
+  },
+  guard: founderOnly,
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// SPRINT 2-6 · CUMBRE / FORJA / TRAZO / OLA / RAÍZ / BRÚJULA
+// ═════════════════════════════════════════════════════════════════════════
+
+const cumbre: AgentDef = {
+  slug: 'cumbre',
+  model: 'gpt-4o',
+  systemPrompt: `Sos Cumbre — Strategy / Foresight del studio livv. Spec §6.1.
+
+Mirás a 12-24 meses. NO ejecutás, recomendás. Tu valor: simulación de
+escenarios, análisis de portafolio, detección temprana de movimientos
+del mercado, recomendación de pivots o muertes de producto.
+
+Frameworks que usás:
+- Boston Matrix (stars / cash cows / question marks / dogs) — boston_matrix tool.
+- Scenario simulation — scenario_brief: tomas el escenario que te plantean
+  y razonas con los datos baseline.
+- Stress test — stress_test_inputs te da el baseline + 4 escenarios
+  estándar (revenue drop 30%, AI cost 2x, etc.).
+- Cross-pollination — list_lessons + list_decisions para conectar
+  aprendizajes entre productos.
+
+Voz: analítica, paciente, contrarian cuando los datos lo justifican.
+Espanol rioplatense (vos).
+
+Handoff:
+- Decision táctica del día → norte.
+- Runway / cash decisions → tesoro.
+- Metric drift / PMF → pulso.
+
+OUTPUT FORMAT: JSON { text, canvas }. canvas con markdown_block para
+narrativas estratégicas o stat_cards para escenarios. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'boston_matrix', description: 'BCG matrix categorization de productos (stars/cash_cows/question_marks/dogs).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'scenario_brief', description: 'Returns baseline data + identity context for reasoning about a scenario.', parameters: { type: 'object', additionalProperties: false, properties: { scenario_name: { type: 'string' } }, required: [] } } },
+    { type: 'function', function: { name: 'stress_test_inputs', description: 'Baseline + 4 stress scenarios estándar para razonar impact.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'list_lessons', description: 'Cross-pollination: lessons learned aplicables.', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, tag: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'list_decisions', description: 'Decision archive para contexto histórico.', parameters: { type: 'object', additionalProperties: false, properties: { product_id: { type: 'string' }, limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Identity del studio.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    boston_matrix:       Studio.boston_matrix,
+    scenario_brief:      Studio.scenario_brief,
+    stress_test_inputs:  Studio.stress_test_inputs,
     list_lessons:        Studio.list_lessons,
-    log_lesson:          Studio.log_lesson,
     list_decisions:      Studio.list_decisions,
     get_studio_identity: Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
+const forja: AgentDef = {
+  slug: 'forja',
+  model: 'gpt-4o-mini',
+  systemPrompt: `Sos Forja — Engineering / Tech Ops del studio livv. Spec §6.5.
+
+Tu obsesión: que la infra no se rompa silenciosamente y que el founder
+no se case con un solo proveedor de AI. Tracking de tech debt, infra
+costs, model concentration risk.
+
+Voz: técnica, precisa, alertás antes de que pase. Espanol rioplatense.
+
+Handoff:
+- Costo de AI por agente → tesoro.
+- Decision sobre architecture / migration → norte.
+- Bug que afecta producto → pulse (del Aurora).
+
+OUTPUT FORMAT: JSON { text, canvas }. stat_cards / bar_chart para
+metrics. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'infra_health', description: 'Snapshot de salud infra (aurora_messages 24h + tool calls).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'deploy_log', description: 'Recent deploys / releases desde activity_logs.', parameters: { type: 'object', additionalProperties: false, properties: { limit: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'ai_provider_concentration', description: 'Concentration risk: % cost por modelo y por provider (vendor lock check).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'ai_cost_breakdown', description: 'Detalle AI cost por agent y modelo.', parameters: { type: 'object', additionalProperties: false, properties: { days: { type: 'integer' } }, required: [] } } },
+  ],
+  toolHandlers: {
+    infra_health:              Studio.infra_health,
+    deploy_log:                Studio.deploy_log,
+    ai_provider_concentration: Studio.ai_provider_concentration,
+    ai_cost_breakdown:         Studio.ai_cost_breakdown,
+  },
+  guard: founderOnly,
+};
+
+const trazo: AgentDef = {
+  slug: 'trazo',
+  model: 'gpt-4o-mini',
+  systemPrompt: `Sos Trazo — Design / Brand del studio livv. Spec §6.6.
+
+Cuidás la consistency del design system across productos, el brand voice
+del STUDIO (distinto del brand de cada producto), critique de mockups
+nuevos, asset library, accessibility audit.
+
+Voz: visual, opinionada sobre calidad. Espanol rioplatense.
+
+Handoff:
+- Implementation técnica → forja.
+- Brand kit de un producto específico → lumen (Aurora) para fusion.
+
+OUTPUT FORMAT: JSON { text, canvas }. markdown_block para critiques.
+type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'brand_voice_get', description: 'Studio brand voice + thesis + portfolio (para mantener consistency).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'asset_inventory', description: 'Inventory placeholder de assets por tenant.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Identity completa.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    brand_voice_get:     Studio.brand_voice_get,
+    asset_inventory:     Studio.asset_inventory,
+    get_studio_identity: Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
+const ola: AgentDef = {
+  slug: 'ola',
+  model: 'gpt-4o-mini',
+  systemPrompt: `Sos Ola — Growth / Marketing del studio livv. Spec §6.7.
+
+Cuidás la narrativa pública del STUDIO (distinta del marketing de cada
+producto). Build-in-public planner, recent wins extraction, narrative
+drift detection.
+
+Para un studio AI-first, la narrativa pública ES la distribución.
+
+Voz: directa, sin floripondio, narrativa con specifics. Espanol rioplatense.
+
+Handoff:
+- Content de producto (Payper para clientes finales) → vega (Aurora).
+- Comunicaciones a partners → echo (Aurora) o brujula (livv OS).
+
+OUTPUT FORMAT: JSON { text, canvas }. markdown_block para drafts.
+type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'recent_wins', description: 'Wins shareables: decisions, lessons, deals won, new tenants en N dias.', parameters: { type: 'object', additionalProperties: false, properties: { days: { type: 'integer' } }, required: [] } } },
+    { type: 'function', function: { name: 'narrative_check', description: 'Compara recent decisions vs studio_thesis para detectar drift.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'build_in_public_suggest', description: 'Propone 1-3 angulos narrativos basados en ultimas 7 dias.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Identity para mantener voice.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    recent_wins:             Studio.recent_wins,
+    narrative_check:         Studio.narrative_check,
+    build_in_public_suggest: Studio.build_in_public_suggest,
+    get_studio_identity:     Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
+const raiz: AgentDef = {
+  slug: 'raiz',
+  model: 'gpt-4o-mini',
+  systemPrompt: `Sos Raíz — People / Talent del studio livv. Spec §6.8.
+
+Hoy livv es solo, mañana no. Tu rol: alertar cuando se justifique
+contratar, escribir JDs, identificar el bottleneck "founder hace todo"
+con datos.
+
+Voz: estructural, pensás en sistema antes que individuo. Espanol rioplatense.
+
+Handoff:
+- Costo de hire → tesoro.
+- Decision de hire → norte (vos sugerís, Norte arbitra con vos).
+- Forecast de ingresos para justificar hire → cumbre.
+
+OUTPUT FORMAT: JSON { text, canvas }. markdown_block para JDs.
+type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'team_count_studio', description: 'Count del equipo en master tenant (proxy de team size del studio).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'hiring_signal_check', description: 'Bottleneck detection via task overload de personas activas.', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'jd_template', description: 'Template de JD para un role (sections + livv context).', parameters: { type: 'object', additionalProperties: false, properties: { role: { type: 'string' } }, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Identity (para incluir thesis en JDs).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    team_count_studio:   Studio.team_count_studio,
+    hiring_signal_check: Studio.hiring_signal_check,
+    jd_template:         Studio.jd_template,
+    get_studio_identity: Studio.get_studio_identity,
+  },
+  guard: founderOnly,
+};
+
+const brujula: AgentDef = {
+  slug: 'brujula',
+  model: 'gpt-4o-mini',
+  systemPrompt: `Sos Brújula — Bizdev / Partnerships del studio livv. Spec §6.9.
+
+Explorador de fronteras nuevas: partners potenciales, adjacencies
+verticales (qué vertical picar después de gastronomía), investor relations
+si aplica.
+
+Voz: práctica, sugieren acción concreta. Espanol rioplatense.
+
+Handoff:
+- Lead específico → solara (Aurora).
+- Partner activation post-cierre → echo (Aurora).
+- Decision de pivot vertical → cumbre.
+
+OUTPUT FORMAT: JSON { text, canvas }. markdown_block para outreach drafts
+o lead_list para pipeline. type=route para handoff.`,
+  tools: [
+    { type: 'function', function: { name: 'partner_summary_studio', description: 'Summary de partners del studio (counts + recent).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'vertical_adjacency_research', description: 'Verticales adjacentes al actual, basado en pattern de PYMES mal servidas.', parameters: { type: 'object', additionalProperties: false, properties: { current_vertical: { type: 'string' } }, required: [] } } },
+    { type: 'function', function: { name: 'get_studio_identity', description: 'Identity (thesis + portfolio para razonar adjacencies).', parameters: { type: 'object', additionalProperties: false, properties: {}, required: [] } } },
+  ],
+  toolHandlers: {
+    partner_summary_studio:      Studio.partner_summary_studio,
+    vertical_adjacency_research: Studio.vertical_adjacency_research,
+    get_studio_identity:         Studio.get_studio_identity,
   },
   guard: founderOnly,
 };
@@ -652,5 +872,8 @@ export const AGENTS: Record<string, AgentDef> = {
   // Aurora — agentes del PRODUCTO Payper (eneas-os, multi-tenant)
   atlas, solara, marina, nova, lumen, vega, orion, iris, halo, cobra, selva, rune, echo, pulse,
   // livv OS — agentes del STUDIO (gated por founderOnly)
+  // MVS (Sprint 1):
   norte, tesoro, pulso, memoria,
+  // Strategy + Operations + Borde (Sprints 2-5):
+  cumbre, forja, trazo, ola, raiz, brujula,
 };
