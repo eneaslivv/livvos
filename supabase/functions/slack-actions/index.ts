@@ -164,6 +164,25 @@ async function handleSlashCommand(admin: SupabaseClient, form: Record<string, st
       return await markTaskDone(admin, tenantId, subRest)
     }
 
+    case 'link': {
+      // Link the Slack user to a LivvOS profile so reverse-flow DMs work.
+      // Usage: /livv link <email>  — Slack user_id viene del form
+      if (!subRest) return ephemeral('Usage: `/livv link <your-livvos-email>`')
+      const email = subRest.trim().toLowerCase()
+      const { data: prof } = await admin
+        .from('profiles').select('id, full_name, slack_user_id, tenant_id')
+        .ilike('email', email).maybeSingle()
+      if (!prof) return ephemeral(`No profile found for ${email}. Are you signed up to LivvOS?`)
+      if (prof.tenant_id !== tenantId) return ephemeral(`That email belongs to a different workspace.`)
+      if (prof.slack_user_id && prof.slack_user_id !== user_id) {
+        return ephemeral(`That LivvOS account is already linked to another Slack user.`)
+      }
+      const { error: linkErr } = await admin
+        .from('profiles').update({ slack_user_id: user_id }).eq('id', prof.id)
+      if (linkErr) return ephemeral(`❌ Could not link: ${linkErr.message}`)
+      return ephemeral(`✅ Linked! Cuando te asignen tareas en LivvOS te llegan acá como DM. *${prof.full_name || email}*`)
+    }
+
     case 'brief': {
       // Async work — ack quickly, send DM later via response_url.
       const responseUrl = form.response_url
@@ -189,6 +208,8 @@ function buildHelpText() {
     '   _Example:_ `/livv done Diseñar landing`',
     '',
     '`/livv brief` — get your daily briefing (sent as ephemeral message)',
+    '',
+    '`/livv link <your-livvos-email>` — link this Slack account to your LivvOS profile so task assignments arrive as DMs.',
     '',
     '`/livv help` — this help message',
     '',
@@ -396,6 +417,19 @@ async function handleInteractivity(admin: SupabaseClient, payload: any) {
         return new Response(JSON.stringify({
           replace_original: true,
           text: '🗑️ Propuesta descartada.',
+        }), { headers: { ...cors, 'Content-Type': 'application/json' } })
+      }
+
+      case 'accept_assigned_task': {
+        // User accepted an assigned task — mark status 'In Progress' so it shows
+        // up as actively-being-worked-on in LivvOS.
+        const taskId = action.value
+        if (!taskId) return new Response('', { status: 200, headers: cors })
+        await admin.from('tasks').update({ status: 'In Progress' })
+          .eq('id', taskId).eq('tenant_id', tok.tenant_id)
+        return new Response(JSON.stringify({
+          replace_original: true,
+          text: `✅ Aceptaste la tarea. Status → *In Progress*. Mucha suerte 🚀`,
         }), { headers: { ...cors, 'Content-Type': 'application/json' } })
       }
 
