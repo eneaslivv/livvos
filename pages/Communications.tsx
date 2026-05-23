@@ -917,19 +917,40 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
                   </div>
                 )}
                 {cls.suggested_task && cls.should_create_task && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Suggested task</div>
+                  <div className={`mt-2 p-2.5 rounded-lg border ${
+                    cls.needs_clarification
+                      ? 'bg-amber-50/60 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'
+                      : 'bg-white dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700'
+                  }`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 inline-flex items-center gap-1 ${
+                      cls.needs_clarification ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-500'
+                    }`}>
+                      {cls.needs_clarification ? <><Icons.AlertCircle size={10}/> Necesita aclaración</> : 'Suggested task'}
+                    </div>
                     <div className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100">{cls.suggested_task.title}</div>
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{cls.suggested_task.description}</div>
                     {cls.suggested_task.due_date && (
                       <div className="text-[10px] text-zinc-400 mt-1">Due: {cls.suggested_task.due_date}</div>
                     )}
+                    {cls.needs_clarification && cls.clarification_question && (
+                      <div className="mt-2 p-2 rounded bg-white/70 dark:bg-zinc-900/50 border border-amber-200/60 dark:border-amber-500/20">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-0.5">Preguntar al remitente</div>
+                        <div className="text-[11.5px] text-zinc-700 dark:text-zinc-200 italic">{cls.clarification_question}</div>
+                      </div>
+                    )}
                     <button
                       onClick={handleCreateTask}
                       disabled={creatingTask || msg.status === 'task_created' || !!msg.task_id}
-                      className="mt-2 w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 transition-opacity"
+                      className={`mt-2 w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity ${
+                        cls.needs_clarification
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                      }`}
                     >
-                      {creatingTask ? 'Creating…' : (msg.status === 'task_created' || msg.task_id) ? '✓ Task created' : 'Create task'}
+                      {creatingTask ? 'Creating…'
+                        : (msg.status === 'task_created' || msg.task_id) ? '✓ Task created'
+                        : cls.needs_clarification ? 'Crear igual (sin contexto)'
+                        : 'Create task'}
                     </button>
                   </div>
                 )}

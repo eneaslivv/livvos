@@ -16,52 +16,61 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Eraser, ChevronDown, Sparkles, ArrowRight } from 'lucide-react';
 import { useAurora } from '../../context/AuroraContext';
 import { auroraAgents, cssVarsForAgent } from '../../lib/aurora/tokens';
-import { auroraRegistry, livvStudioRegistry } from '../../lib/aurora/agents';
 import type { AgentSlug, AgentMeta } from '../../types/aurora';
 import { AuroraCanvas } from './AuroraCanvas';
 import { usePlatformAdmin } from '../../hooks/usePlatformAdmin';
 
-// Category metadata for the agent picker. Groups the 24 agents into 5
-// human-readable buckets so users can find what they need without scanning.
-interface CategoryDef {
-  id: string;
+// Primary agents — 5 caras visibles, una por área de trabajo. Los otros 19
+// agentes especialistas (Halo / Marina / Cobra / Nova / Vega / Iris / Rune /
+// Echo / Pulse + los 9 sub-agentes de Livv OS) quedan internamente
+// disponibles para routing en el backend, pero invisibles en el UI.
+// El user le habla al primary; el backend hace handoff al especialista
+// correcto via canvas.type='route' (ya implementado en aurora-chat runner).
+interface PrimaryAgent {
+  slug: string;
   label: string;
   desc: string;
-  slugs: string[];
+  area: string;  // qué cubre (incluye sub-agents internamente)
 }
 
-const AURORA_CATEGORIES: CategoryDef[] = [
+const PRIMARY_AGENTS: PrimaryAgent[] = [
   {
-    id: 'daily',
-    label: 'Día a día',
-    desc: 'Brief, inbox, foco.',
-    slugs: ['orion', 'halo', 'marina'],
+    slug: 'atlas',
+    label: 'Atlas',
+    desc: 'Orquestador. Empezá acá si no sabés a quién llamar.',
+    area: 'Routea al especialista correcto.',
   },
   {
-    id: 'sales',
-    label: 'Sales & Growth',
-    desc: 'Pipeline, clientes, funnel.',
-    slugs: ['solara', 'cobra', 'nova'],
+    slug: 'orion',
+    label: 'Orion',
+    desc: 'Día a día — brief, inbox, calendar, foco.',
+    area: 'Incluye triage de mensajes (Halo) y health financiero (Marina).',
   },
   {
-    id: 'strategy',
-    label: 'Strategy & Content',
-    desc: 'ICPs, voz, frameworks.',
-    slugs: ['lumen', 'vega', 'iris'],
+    slug: 'solara',
+    label: 'Solara',
+    desc: 'Sales & Growth — pipeline, clientes, funnel.',
+    area: 'Incluye relaciones con clientes (Cobra) y growth analytics (Nova).',
   },
   {
-    id: 'platform',
-    label: 'Team & Platform',
-    desc: 'Equipo, pricing, partners.',
-    slugs: ['selva', 'rune', 'echo', 'pulse'],
+    slug: 'lumen',
+    label: 'Lumen',
+    desc: 'Strategy & Content — ICPs, voz, frameworks.',
+    area: 'Incluye content engine (Vega) y toolkit de frameworks (Iris).',
+  },
+  {
+    slug: 'selva',
+    label: 'Selva',
+    desc: 'Team & Platform — equipo, productos, partners.',
+    area: 'Incluye pricing (Rune), partners (Echo) y platform health (Pulse).',
   },
 ];
 
-const LIVV_OS_CATEGORY: CategoryDef = {
-  id: 'studio',
-  label: 'Livv Studio',
-  desc: 'Founder-level · decisiones, finanzas, lessons.',
-  slugs: ['norte', 'tesoro', 'pulso', 'memoria', 'cumbre', 'forja', 'trazo', 'ola', 'raiz', 'brujula'],
+const LIVV_OS_PRIMARY: PrimaryAgent = {
+  slug: 'norte',
+  label: 'Norte',
+  desc: 'Livv Studio — decisiones, finanzas, lessons (founder-level).',
+  area: 'Incluye Tesoro (finanzas studio), Pulso (equipo), Memoria (decisiones) y 6 más.',
 };
 
 export const AuroraDock: React.FC = () => {
@@ -156,24 +165,29 @@ export const AuroraDock: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="overflow-hidden border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60"
           >
-            <div className="px-4 py-3 space-y-3 max-h-[55vh] overflow-y-auto">
-              {AURORA_CATEGORIES.map(cat => (
-                <CategoryGroup
-                  key={cat.id}
-                  category={cat}
-                  activeSlug={agent}
-                  onPick={switchAgent}
-                  allAgents={auroraRegistry}
+            <div className="px-3 py-2 max-h-[60vh] overflow-y-auto">
+              {PRIMARY_AGENTS.map(a => (
+                <PrimaryAgentRow
+                  key={a.slug}
+                  primary={a}
+                  active={a.slug === agent}
+                  onPick={() => switchAgent(a.slug as AgentSlug)}
                 />
               ))}
               {isPlatformAdmin && (
-                <CategoryGroup
-                  category={LIVV_OS_CATEGORY}
-                  activeSlug={agent}
-                  onPick={switchAgent}
-                  allAgents={livvStudioRegistry}
-                  founderOnly
-                />
+                <>
+                  <div className="mt-2 mb-1 px-2 text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
+                    Founder
+                    <span className="text-[8.5px] font-medium normal-case tracking-normal text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1 py-0.5 rounded">
+                      livv studio
+                    </span>
+                  </div>
+                  <PrimaryAgentRow
+                    primary={LIVV_OS_PRIMARY}
+                    active={LIVV_OS_PRIMARY.slug === agent}
+                    onPick={() => switchAgent(LIVV_OS_PRIMARY.slug as AgentSlug)}
+                  />
+                </>
               )}
             </div>
           </motion.div>
@@ -294,53 +308,42 @@ const WelcomeState: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────────
-// CategoryGroup — bucket de agentes con label + desc + chips compactos.
+// PrimaryAgentRow — row vertical con avatar + label + desc + area note.
+// Reemplaza los chips horizontales (que se veían como sopa de 23+ items).
 // ─────────────────────────────────────────────────────────────────────
-const CategoryGroup: React.FC<{
-  category: CategoryDef;
-  activeSlug: AgentSlug;
-  onPick: (slug: AgentSlug) => void;
-  allAgents: AgentMeta[];
-  founderOnly?: boolean;
-}> = ({ category, activeSlug, onPick, allAgents, founderOnly }) => {
-  const agents = category.slugs
-    .map(s => allAgents.find(a => a.slug === s))
-    .filter(Boolean) as AgentMeta[];
-  if (agents.length === 0) return null;
+const PrimaryAgentRow: React.FC<{
+  primary: PrimaryAgent;
+  active: boolean;
+  onPick: () => void;
+}> = ({ primary, active, onPick }) => {
+  const meta = auroraAgents[primary.slug as AgentSlug];
+  const accent = meta?.accent_hex || '#0EA5E9';
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 mb-1.5 px-0.5">
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-600 dark:text-zinc-300">
-          {category.label}
-          {founderOnly && (
-            <span className="ml-1.5 text-[8.5px] font-medium normal-case tracking-normal text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1 py-0.5 rounded">
-              founder
-            </span>
-          )}
-        </span>
-        <span className="text-[10px] text-zinc-400">{category.desc}</span>
+    <button
+      onClick={onPick}
+      className={`group w-full text-left px-3 py-2.5 rounded-xl border transition-all flex items-start gap-2.5 ${
+        active
+          ? 'border-transparent shadow-sm'
+          : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700'
+      }`}
+      style={active ? { background: `color-mix(in oklab, ${accent} 8%, white)` } : undefined}
+    >
+      <div
+        className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-[12px] font-semibold shrink-0"
+        style={{ background: `linear-gradient(135deg, ${accent} 0%, ${meta?.accent_text || accent} 120%)` }}
+      >
+        {primary.label.slice(0, 1).toUpperCase()}
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {agents.map(a => {
-          const active = a.slug === activeSlug;
-          return (
-            <button
-              key={a.slug}
-              onClick={() => onPick(a.slug)}
-              className={`px-2.5 py-1 text-[11.5px] font-medium rounded-full border transition-all ${
-                active
-                  ? 'text-white border-transparent shadow-sm'
-                  : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-600'
-              }`}
-              style={active ? { background: a.accent_hex } : undefined}
-              title={a.tagline}
-            >
-              {a.display_name}
-            </button>
-          );
-        })}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100">{primary.label}</span>
+          <span className="text-[10.5px] text-zinc-500 dark:text-zinc-400 truncate">{primary.desc}</span>
+        </div>
+        <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 leading-tight line-clamp-1">
+          {primary.area}
+        </div>
       </div>
-    </div>
+    </button>
   );
 };
 

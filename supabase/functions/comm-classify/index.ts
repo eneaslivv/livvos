@@ -61,8 +61,10 @@ Return ONLY valid JSON with this shape:
   "matched_project_id": "uuid from projects[] or null",
   "match_reason": "why we matched, or null",
   "should_create_task": boolean,
+  "needs_clarification": boolean,
+  "clarification_question": "string — what to ask the sender if needs_clarification is true, or null",
   "suggested_task": {
-    "title": "short imperative",
+    "title": "short imperative — MUST be specific about WHAT, not generic ('Prioritize X request' is BAD)",
     "description": "1-3 sentences with the concrete asks + context",
     "due_date": "YYYY-MM-DD or null",
     "project_hint": "free-text guess or null"
@@ -74,12 +76,17 @@ Return ONLY valid JSON with this shape:
 }
 
 Rules — CRITICAL:
+- AMBIGUITY HANDLING: If the body uses references without antecedent ('this one', 'el otro también', 'esa cosa', 'lo de antes', 'el mismo asap', 'también', 'también please', 'sumá éste'), do this FIRST:
+   1. Look at thread_context[] for prior messages — what was being discussed?
+   2. If you can resolve the reference confidently, write a SPECIFIC suggested_task.title naming the actual thing (e.g. "Send invoice to Acme — also requested ASAP by Christie on May 22" instead of "Prioritize Christie request").
+   3. If thread_context doesn't resolve it OR is empty, set needs_clarification=true + clarification_question (e.g. "Christie pidió priorizar 'this one' sin contexto. ¿Cuál es 'this one'? Mensaje original: '<quote>'"). In that case, suggested_task may be null OR have a title prefixed with "[CLARIFICAR] " to make the gap obvious.
+- NEVER create a generic task like "Prioritize X request" or "Action X message" with no concrete verb. If you can't say WHAT to do, set needs_clarification=true.
 - Intent = 'urgent' ONLY when the message uses time-pressure language ("ASAP", "today", "urgente"). Don't crank "high" priority for routine work.
 - 'follow_up' is for "bumping" / "any updates?".
 - 'info_only' = no answer needed (FYI, automated digests, status updates with nothing to action).
 - should_create_task = true ONLY for new_request, urgent, or feedback that requires real follow-through. Approvals and questions usually just need a reply, not a task.
 - suggested_task = null when should_create_task is false. When true, due_date must be a real date in the future inferred from the body — never invent.
-- suggested_reply: 2-5 sentences, polite, concrete. NEVER make up commitments. Acknowledge + propose next step.
+- suggested_reply: 2-5 sentences, polite, concrete. If needs_clarification, suggested_reply MUST ask the clarification_question.
 - key_entities: extract names of people, companies, projects, dates, amounts, URLs literally as they appear. Max 8.
 - language: detect from body. Reply in that language.
 - matched_client_id: ONLY set when confident. Match by from_email exact, domain, or body/subject mention. If multiple could match, pick null.
@@ -148,7 +155,7 @@ serve(async (req) => {
 async function classify(admin: SupabaseClient, messageId: string) {
   const { data: msg, error: msgErr } = await admin
     .from('communication_messages')
-    .select('id, tenant_id, platform, from_id, from_name, from_email, subject, body_text, channel_id, channel_name, thread_context, ai_processed, matched_project_id, ai_classification')
+    .select('id, tenant_id, platform, from_id, from_name, from_email, subject, body_text, channel_id, channel_name, thread_id, thread_context, ai_processed, matched_project_id, ai_classification, received_at')
     .eq('id', messageId)
     .maybeSingle()
   if (msgErr) throw msgErr
@@ -205,13 +212,35 @@ async function classify(admin: SupabaseClient, messageId: string) {
   const { data: projectsList } = await admin
     .from('projects').select('id, title, client_id, clients(name)').eq('tenant_id', msg.tenant_id).limit(100)
 
+  // Pull thread context from DB if missing — esto resuelve el caso del
+  // mensaje "este también asap" donde el classifier no sabe qué es "este"
+  // porque thread_context viene vacío en muchos mensajes que vienen via
+  // slack-events sin batch context.
+  let threadCtx: any[] = Array.isArray(msg.thread_context) ? msg.thread_context : []
+  if (threadCtx.length === 0 && msg.thread_id) {
+    const { data: priorMsgs } = await admin
+      .from('communication_messages')
+      .select('from_name, body_text, received_at')
+      .eq('tenant_id', msg.tenant_id)
+      .eq('thread_id', msg.thread_id)
+      .neq('id', msg.id)
+      .lte('received_at', msg.received_at || new Date().toISOString())
+      .order('received_at', { ascending: true })
+      .limit(8)
+    threadCtx = (priorMsgs || []).map((m: any) => ({
+      from: m.from_name || 'unknown',
+      body: (m.body_text || '').slice(0, 400),
+      date: m.received_at,
+    }))
+  }
+
   const classifyInput = {
     platform: msg.platform,
     from_name: msg.from_name || '',
     from_email: msg.from_email || '',
     subject: msg.subject || (msg.channel_name ? `#${msg.channel_name}` : ''),
     body: (msg.body_text || '').slice(0, 4000),
-    thread_context: msg.thread_context || [],
+    thread_context: threadCtx,
     agency_name: tenantRow?.name || 'this agency',
     clients: (clientsList || []).map((c: any) => ({
       id: c.id, name: c.name || '', email: c.email || '', company: c.company || ''
