@@ -1387,10 +1387,14 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         />
       )}
 
-      {/* KPI detail slide-over — abierto cuando se clickea una card del strip. */}
+      {/* KPI detail slide-over — abierto cuando se clickea una card del strip.
+          Pasamos projectTitles + userNames así el detail puede mostrar contexto +
+          agrupar por proyecto + filtrar por proyecto. */}
       <CalendarKpiDetail
         kpi={kpiDetailOpen}
         tasks={tasks as any[]}
+        projectTitles={Object.fromEntries(Object.entries(projectMap).map(([id, p]) => [id, p.title]))}
+        userNames={Object.fromEntries(Object.entries(memberMap).map(([id, m]) => [id, m.name || 'Member']))}
         onClose={() => setKpiDetailOpen(null)}
         onOpenTask={(taskId) => {
           const task = tasks.find(t => t.id === taskId);

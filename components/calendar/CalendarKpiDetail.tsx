@@ -2,14 +2,17 @@
  * CalendarKpiDetail — modal/slide-over que se abre cuando el user clickea
  * una de las KPI cards. Lista todas las tareas filtradas por ese kpi.
  *
+ * v2 (2026-05-22): el sidebar de 173 tareas era un caos. Cambios:
+ *   • Subtasks ocultas por defecto (toggle "Subtareas" en el toolbar).
+ *   • Filtro de proyecto (chips horizontales) — "Todos" + cada proyecto + "Sin proyecto".
+ *   • Agrupado por proyecto cuando hay >1 proyecto — header colapsable
+ *     con count + chevron.
+ *   • Footer dinámico con counts: parents · subtasks ocultas · proyectos.
+ *
  * Click en una task row → emite onOpenTask(taskId) que el host usa para
  * abrir el TaskDetailPanel existente.
- *
- * Diseño: panel right-anchored, ~440px, full-round chrome, mismo tone
- * que el KPI source (sky / gold / stone / rose). Header con count + label,
- * lista scrolleable, cada row con title + meta (due_date, priority, assignee).
  */
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import type { KpiKey } from './CalendarKpiStrip';
@@ -27,6 +30,7 @@ interface MinimalTask {
   assignee_id?: string | null;
   project_id?: string | null;
   project_title?: string | null;
+  parent_task_id?: string | null;
 }
 
 interface CalendarKpiDetailProps {
@@ -78,7 +82,9 @@ const PRIORITY_DOT: Record<string, string> = {
   low:    '#a1a1aa',
 };
 
-function filterTasks(tasks: MinimalTask[], kpi: KpiKey): MinimalTask[] {
+const UNASSIGNED_PROJECT_ID = '__none__';
+
+function filterByKpi(tasks: MinimalTask[], kpi: KpiKey): MinimalTask[] {
   const now = Date.now();
   const since7d = now - 7 * 86400000;
   return tasks.filter(t => {
@@ -123,7 +129,72 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
   onClose,
   onOpenTask,
 }) => {
-  const filtered = useMemo(() => kpi ? filterTasks(tasks, kpi) : [], [tasks, kpi]);
+  const [showSubtasks, setShowSubtasks] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Reset filters cuando cambia el KPI
+  useEffect(() => {
+    setShowSubtasks(false);
+    setProjectFilter('all');
+    setCollapsedGroups(new Set());
+  }, [kpi]);
+
+  // Filtrado: KPI → subtasks toggle → project filter
+  const { filtered, subtasksCount, projectOptions, groups } = useMemo(() => {
+    if (!kpi) return { filtered: [], subtasksCount: 0, projectOptions: [], groups: [] };
+    const byKpi = filterByKpi(tasks, kpi);
+    const parents = byKpi.filter(t => !t.parent_task_id);
+    const subs    = byKpi.filter(t => !!t.parent_task_id);
+    let visible = showSubtasks ? byKpi : parents;
+
+    // Project options del set actual de KPI (no del total)
+    const projMap = new Map<string, string>();
+    let unassigned = 0;
+    for (const t of byKpi) {
+      const pid = t.project_id || UNASSIGNED_PROJECT_ID;
+      const title = pid === UNASSIGNED_PROJECT_ID
+        ? 'Sin proyecto'
+        : (t.project_title || (t.project_id ? projectTitles?.[t.project_id] : null) || 'Proyecto');
+      if (pid === UNASSIGNED_PROJECT_ID) unassigned++;
+      else if (!projMap.has(pid)) projMap.set(pid, title);
+    }
+    const options = Array.from(projMap.entries()).map(([id, title]) => ({ id, title, count: byKpi.filter(t => t.project_id === id && (!t.parent_task_id || showSubtasks)).length }));
+    options.sort((a, b) => b.count - a.count);
+    if (unassigned > 0) {
+      options.push({ id: UNASSIGNED_PROJECT_ID, title: 'Sin proyecto', count: byKpi.filter(t => !t.project_id && (!t.parent_task_id || showSubtasks)).length });
+    }
+
+    if (projectFilter !== 'all') {
+      visible = visible.filter(t => {
+        if (projectFilter === UNASSIGNED_PROJECT_ID) return !t.project_id;
+        return t.project_id === projectFilter;
+      });
+    }
+
+    // Group by project — sólo cuando hay >1 proyecto en el visible set
+    const groupKeys = new Set(visible.map(t => t.project_id || UNASSIGNED_PROJECT_ID));
+    const grouped: Array<{ id: string; title: string; tasks: MinimalTask[] }> = [];
+    if (groupKeys.size > 1) {
+      for (const [id, title] of projMap.entries()) {
+        const ts = visible.filter(t => t.project_id === id);
+        if (ts.length > 0) grouped.push({ id, title, tasks: ts });
+      }
+      const noPid = visible.filter(t => !t.project_id);
+      if (noPid.length > 0) grouped.push({ id: UNASSIGNED_PROJECT_ID, title: 'Sin proyecto', tasks: noPid });
+      grouped.sort((a, b) => b.tasks.length - a.tasks.length);
+    } else {
+      grouped.push({ id: '__flat__', title: '', tasks: visible });
+    }
+
+    return {
+      filtered: visible,
+      subtasksCount: subs.length,
+      projectOptions: options,
+      groups: grouped,
+    };
+  }, [kpi, tasks, showSubtasks, projectFilter, projectTitles]);
+
   const meta = kpi ? KPI_META[kpi] : null;
 
   // Esc para cerrar
@@ -133,6 +204,14 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [kpi, onClose]);
+
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <AnimatePresence>
@@ -154,12 +233,12 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 460, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed top-0 right-0 z-50 h-screen w-full sm:w-[440px] bg-white dark:bg-zinc-950 border-l border-zinc-200/80 dark:border-zinc-800 shadow-2xl flex flex-col"
+            className="fixed top-0 right-0 z-50 h-screen w-full sm:w-[460px] bg-white dark:bg-zinc-950 border-l border-zinc-200/80 dark:border-zinc-800 shadow-2xl flex flex-col"
             style={{ ['--kpi-tone' as any]: meta.tone, ['--kpi-tone-soft' as any]: meta.toneSoft }}
           >
             {/* Header */}
             <header
-              className="px-5 pt-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0"
+              className="px-5 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0"
               style={{
                 backgroundImage: `linear-gradient(135deg, var(--kpi-tone-soft) 0%, transparent 60%)`,
               }}
@@ -180,7 +259,7 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
                       {meta.label}
                     </span>
                   </div>
-                  <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-1 leading-snug">
+                  <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">
                     {meta.description}
                   </p>
                 </div>
@@ -195,8 +274,65 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
               </div>
             </header>
 
-            {/* Lista */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2.5">
+            {/* Toolbar: subtasks toggle + project chips */}
+            <div className="px-5 py-2.5 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setShowSubtasks(s => !s)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-medium border transition-colors ${
+                    showSubtasks
+                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent'
+                      : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  {showSubtasks ? <Icons.Check size={10} /> : <Icons.Plus size={10} />}
+                  Subtareas
+                  {subtasksCount > 0 && (
+                    <span className={`text-[9.5px] font-mono ${showSubtasks ? 'opacity-70' : 'opacity-50'}`}>
+                      {subtasksCount}
+                    </span>
+                  )}
+                </button>
+                {projectOptions.length > 1 && (
+                  <span className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-400">
+                    {projectOptions.length} proyectos
+                  </span>
+                )}
+              </div>
+
+              {projectOptions.length > 0 && (
+                <div className="flex items-center gap-1 overflow-x-auto -mx-1 px-1 pb-0.5 scrollbar-none">
+                  <button
+                    onClick={() => setProjectFilter('all')}
+                    className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${
+                      projectFilter === 'all'
+                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {projectOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setProjectFilter(opt.id)}
+                      className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors inline-flex items-center gap-1 ${
+                        projectFilter === opt.id
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent'
+                          : 'bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50'
+                      }`}
+                      title={opt.title}
+                    >
+                      <span className="truncate max-w-[120px]">{opt.title}</span>
+                      <span className="text-[9px] font-mono opacity-70">{opt.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Lista — agrupada por proyecto cuando aplica */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center px-6">
                   <div
@@ -206,97 +342,135 @@ export const CalendarKpiDetail: React.FC<CalendarKpiDetailProps> = ({
                     {meta.icon}
                   </div>
                   <p className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">
-                    No hay tareas en este estado
+                    {projectFilter !== 'all' ? 'Sin tareas en este proyecto' : 'No hay tareas en este estado'}
                   </p>
                   <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-[280px]">
-                    {kpi === 'overdue' && 'Nada vencido. Buen trabajo.'}
-                    {kpi === 'cancelled' && 'Sin cancelaciones en esta ventana.'}
-                    {kpi === 'assigned_new' && 'No hubo asignaciones nuevas en los últimos 7 días.'}
-                    {kpi === 'active' && 'Sin tareas activas — todo está completo o pausado.'}
+                    {projectFilter !== 'all' ? 'Probá quitar el filtro de proyecto.' : (
+                      <>
+                        {kpi === 'overdue' && 'Nada vencido. Buen trabajo.'}
+                        {kpi === 'cancelled' && 'Sin cancelaciones en esta ventana.'}
+                        {kpi === 'assigned_new' && 'No hubo asignaciones nuevas en los últimos 7 días.'}
+                        {kpi === 'active' && 'Sin tareas activas — todo está completo o pausado.'}
+                      </>
+                    )}
                   </p>
                 </div>
               ) : (
-                <ul className="flex flex-col gap-1">
-                  {filtered.map(task => {
-                    const projectTitle = task.project_title || (task.project_id ? projectTitles?.[task.project_id] : null);
-                    const assigneeName = task.assignee_id ? userNames?.[task.assignee_id] : null;
-                    const priorityColor = PRIORITY_DOT[task.priority || 'medium'] || PRIORITY_DOT.medium;
-                    const due = formatDate(task.due_date);
+                <div className="flex flex-col gap-2">
+                  {groups.map(group => {
+                    const isFlat = group.id === '__flat__';
+                    const isCollapsed = collapsedGroups.has(group.id);
                     return (
-                      <motion.li
-                        key={task.id}
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        <button
-                          onClick={() => onOpenTask?.(task.id)}
-                          className="group w-full text-left px-3 py-2.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors flex items-start gap-2.5"
-                        >
-                          {/* Priority dot */}
-                          <span
-                            className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ background: priorityColor }}
-                            aria-hidden
-                          />
-
-                          {/* Body */}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 leading-snug truncate">
-                              {task.title || 'Sin título'}
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                              {projectTitle && (
-                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[140px]">
-                                  {projectTitle}
-                                </span>
-                              )}
-                              {due && (
-                                <>
-                                  {projectTitle && <span className="text-zinc-300 dark:text-zinc-700 text-[10px]">·</span>}
-                                  <span
-                                    className={`text-[11px] tabular-nums ${
-                                      kpi === 'overdue'
-                                        ? 'font-semibold text-rose-600 dark:text-rose-400'
-                                        : 'text-zinc-500 dark:text-zinc-400'
-                                    }`}
-                                  >
-                                    {kpi === 'overdue' && <Icons.AlertCircle size={9} className="inline mr-0.5 mb-px" />}
-                                    {due}
-                                  </span>
-                                </>
-                              )}
-                              {assigneeName && (
-                                <>
-                                  <span className="text-zinc-300 dark:text-zinc-700 text-[10px]">·</span>
-                                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 inline-flex items-center gap-1">
-                                    <Icons.User size={9} />
-                                    {assigneeName}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Chevron — visible on hover */}
-                          <span
-                            className="opacity-0 group-hover:opacity-100 transition-opacity self-center text-zinc-400"
-                            aria-hidden
+                      <div key={group.id} className="flex flex-col">
+                        {!isFlat && (
+                          <button
+                            onClick={() => toggleGroup(group.id)}
+                            className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors text-left"
                           >
-                            <Icons.ChevronRight size={14} />
-                          </span>
-                        </button>
-                      </motion.li>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Icons.ChevronRight
+                                size={11}
+                                className={`text-zinc-400 transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
+                              />
+                              <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 truncate">
+                                {group.title}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                              {group.tasks.length}
+                            </span>
+                          </button>
+                        )}
+
+                        {(isFlat || !isCollapsed) && (
+                          <ul className="flex flex-col gap-0.5 mt-0.5">
+                            {group.tasks.map(task => {
+                              const projectTitle = !isFlat ? null : (task.project_title || (task.project_id ? projectTitles?.[task.project_id] : null));
+                              const assigneeName = task.assignee_id ? userNames?.[task.assignee_id] : null;
+                              const priorityColor = PRIORITY_DOT[task.priority || 'medium'] || PRIORITY_DOT.medium;
+                              const due = formatDate(task.due_date);
+                              const isSub = !!task.parent_task_id;
+                              return (
+                                <motion.li
+                                  key={task.id}
+                                  initial={{ opacity: 0, y: 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.15 }}
+                                >
+                                  <button
+                                    onClick={() => onOpenTask?.(task.id)}
+                                    className={`group w-full text-left px-3 py-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors flex items-start gap-2.5 ${isSub ? 'pl-7' : ''}`}
+                                  >
+                                    <span
+                                      className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0"
+                                      style={{ background: priorityColor }}
+                                      aria-hidden
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 leading-snug truncate flex items-center gap-1.5">
+                                        {isSub && <span className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 shrink-0">sub</span>}
+                                        <span className="truncate">{task.title || 'Sin título'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                        {projectTitle && (
+                                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[140px]">
+                                            {projectTitle}
+                                          </span>
+                                        )}
+                                        {due && (
+                                          <>
+                                            {projectTitle && <span className="text-zinc-300 dark:text-zinc-700 text-[10px]">·</span>}
+                                            <span
+                                              className={`text-[11px] tabular-nums ${
+                                                kpi === 'overdue'
+                                                  ? 'font-semibold text-rose-600 dark:text-rose-400'
+                                                  : 'text-zinc-500 dark:text-zinc-400'
+                                              }`}
+                                            >
+                                              {kpi === 'overdue' && <Icons.AlertCircle size={9} className="inline mr-0.5 mb-px" />}
+                                              {due}
+                                            </span>
+                                          </>
+                                        )}
+                                        {assigneeName && (
+                                          <>
+                                            <span className="text-zinc-300 dark:text-zinc-700 text-[10px]">·</span>
+                                            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 inline-flex items-center gap-1">
+                                              <Icons.User size={9} />
+                                              {assigneeName}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity self-center text-zinc-400"
+                                      aria-hidden
+                                    >
+                                      <Icons.ChevronRight size={14} />
+                                    </span>
+                                  </button>
+                                </motion.li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               )}
             </div>
 
-            {/* Footer — sutil */}
+            {/* Footer */}
             <footer className="px-5 py-2.5 border-t border-zinc-100 dark:border-zinc-800/60 shrink-0 flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
                 {filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}
+                {!showSubtasks && subtasksCount > 0 && (
+                  <span className="ml-1.5 normal-case tracking-normal text-zinc-300 dark:text-zinc-600">
+                    · +{subtasksCount} subtareas ocultas
+                  </span>
+                )}
               </span>
               <span className="text-[10px] text-zinc-400">
                 Esc para cerrar

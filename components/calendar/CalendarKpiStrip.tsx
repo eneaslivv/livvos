@@ -33,6 +33,7 @@ export interface CalendarKpiStripProps {
     created_at?: string | null;
     cancelled_at?: string | null;
     assigned_at?: string | null;
+    parent_task_id?: string | null;
   }>;
   onOpen?: (kpi: KpiKey) => void;
 }
@@ -89,6 +90,9 @@ function computeKpis(tasks: CalendarKpiStripProps['tasks']) {
   const spark = [0, 0, 0, 0, 0, 0, 0];
 
   for (const t of tasks) {
+    // Exclude subtasks from KPI counts — they shouldn't inflate the dashboard.
+    // A parent task with 5 subtasks should count as 1, not 6.
+    if (t.parent_task_id) continue;
     const isDone = t.completed === true || t.status === 'done' || t.status === 'completed';
     const isCancelled = t.status === 'cancelled' || !!t.cancelled_at;
     const assignedTs = t.assigned_at ? new Date(t.assigned_at).getTime()
