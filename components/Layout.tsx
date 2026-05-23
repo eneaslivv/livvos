@@ -948,30 +948,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
 
         {/* Bottom Actions */}
         <div className="w-full flex flex-col gap-1 shrink-0 mt-2 items-center">
-          {/* Platform admin fallback button — only when NOT already in master
-              mode, so admins can jump in even from OS or Sales context.
-              Hidden while viewing-as another tenant for the same reason
-              the segmented switch hides Master in that state. */}
-          {canUseMasterMode && currentMode !== 'master' && (
-            <NavItem
-              id="platform_admin"
-              icon={<Icons.Shield />}
-              label="Platform"
-              active={false}
-              expanded={isSidebarExpanded}
-              onClick={() => onSwitchMode('master')}
-            />
-          )}
-          <button
-            onClick={toggleTheme}
-            className="relative flex items-center w-[calc(100%-16px)] mx-2 px-2.5 py-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors group/btn shrink-0"
-            title={!isSidebarExpanded ? "Toggle Theme" : undefined}
-          >
-            <div className="flex items-center justify-center w-[18px] h-[18px] shrink-0">
-              {isDarkMode ? <Icons.Sun size={17} strokeWidth={2} /> : <Icons.Moon size={17} strokeWidth={2} />}
-            </div>
-            <span className={`ml-2.5 text-[13px] whitespace-nowrap transition-all duration-300 ${isSidebarExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Theme</span>
-          </button>
+          {/* Theme toggle removed — dark/light controlled via TopNavbar or
+              system preference. Keeps sidebar minimal. */}
 
           {/* Sidebar Toggle Button */}
           <button
