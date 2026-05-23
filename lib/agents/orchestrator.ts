@@ -185,6 +185,27 @@ const runAgentSkills = async (
 };
 
 // ── 3. Build the LLM prompt from the skill results ───────────────────
+
+/** Compact a raw data row for the LLM prompt. Trims long text fields
+ *  (body_text, description, notes) to short previews so the LLM
+ *  synthesizes instead of dumping raw content. */
+const compactRow = (row: any): any => {
+  if (!row || typeof row !== 'object') return row;
+  const out: any = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (typeof v === 'string' && v.length > 120 && ['body_text', 'description', 'notes', 'content', 'body'].includes(k)) {
+      out[k] = v.slice(0, 100).replace(/\s+/g, ' ').trim() + '…';
+    } else if (k === 'messages' && Array.isArray(v)) {
+      // Grouped skill data (e.g. slack_channels → { channel, messages[] })
+      out[k] = (v as any[]).slice(0, 5).map(compactRow);
+      if (v.length > 5) out[`${k}_total`] = v.length;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+};
+
 const formatSkillResultsForPrompt = (
   trace: Array<{ skill: Skill; result: SkillResult }>,
 ): string => {
@@ -200,16 +221,18 @@ const formatSkillResultsForPrompt = (
       lines.push(`  → no_data — reason: ${result.reason || 'unknown'}`);
       continue;
     }
-    // Pretty-print common shapes
+    // Pretty-print common shapes — compact rows to avoid bloating the prompt
     if (Array.isArray(result.data)) {
       const arr = result.data as any[];
       lines.push(`  → ${arr.length} item${arr.length === 1 ? '' : 's'}`);
       arr.slice(0, 15).forEach((row, i) => {
-        lines.push(`     ${i + 1}. ${JSON.stringify(row).slice(0, 300)}`);
+        const compact = compactRow(row);
+        lines.push(`     ${i + 1}. ${JSON.stringify(compact).slice(0, 400)}`);
       });
       if (arr.length > 15) lines.push(`     …+${arr.length - 15} more`);
     } else {
-      lines.push(`  → ${JSON.stringify(result.data).slice(0, 600)}`);
+      const compact = compactRow(result.data);
+      lines.push(`  → ${JSON.stringify(compact).slice(0, 600)}`);
     }
   }
   return lines.join('\n');
