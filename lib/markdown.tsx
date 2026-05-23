@@ -17,6 +17,14 @@
  */
 import React from 'react';
 
+// ── Interactive action types ───────────────────────────────────────
+// When interactive blocks (topic pills, clickable headings) are present,
+// the consumer passes an `onAction` callback to `<Markdown>`. Each
+// interactive block fires this with a typed payload.
+export type MarkdownAction =
+  | { type: 'topic_click'; label: string; filter: string }
+  | { type: 'navigate'; target: string; params?: Record<string, string> };
+
 type Block =
   | { type: 'heading'; level: number; text: string }
   | { type: 'para'; text: string }
@@ -48,7 +56,17 @@ type Block =
   // tasklist: bullet list where each item can be prefixed with
   // [urgent] / [high] / [medium] / [low] / [done] for visual priority.
   // Treated specially so the renderer can drop colored dots.
-  | { type: 'tasklist'; items: Array<{ priority: TaskPriority; text: string }> };
+  | { type: 'tasklist'; items: Array<{ priority: TaskPriority; text: string }> }
+  // topic: clickable pill for topic/channel groupings. Fires onAction
+  // with the filter value when clicked.
+  //   :::topic label="Frenetic Updates" count="6" filter="#frenetic-pace" tone="violet":::
+  | { type: 'topic'; label: string; count?: string; filter: string; tone: ToneKey }
+  // topics: a row of topic pills rendered as a flex-wrap group.
+  //   :::topics
+  //   Frenetic Updates | 6 | #frenetic-pace | violet
+  //   Mobilita Feedback | 4 | #mobilita | rose
+  //   :::end:::
+  | { type: 'topics'; items: Array<{ label: string; count?: string; filter: string; tone: ToneKey }> };
 
 type TaskPriority = 'urgent' | 'high' | 'medium' | 'low' | 'done' | 'none';
 const PRIORITY_DOT: Record<TaskPriority, string> = {
@@ -192,6 +210,45 @@ const parseBlocks = (md: string): Block[] => {
       }
       i++;
       blocks.push({ type: 'grid', tiles });
+      continue;
+    }
+    // :::topic label="..." count="6" filter="..." tone="...":::
+    const topicM = line.match(/^:::topic\s+(.+):::$/);
+    if (topicM) {
+      flushPara(); flushList();
+      const attrs = parseAttrs(topicM[1]);
+      blocks.push({
+        type: 'topic',
+        label: attrs.label || '',
+        count: attrs.count || undefined,
+        filter: attrs.filter || attrs.label || '',
+        tone: toneOf(attrs.tone),
+      });
+      i++; continue;
+    }
+    // :::topics ... :::end:::  — body lines: `label | count | filter | tone`
+    const topicsOpen = line.match(/^:::topics\s*$/);
+    if (topicsOpen) {
+      flushPara(); flushList();
+      const items: Array<{ label: string; count?: string; filter: string; tone: ToneKey }> = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== ':::end:::' && lines[i].trim() !== ':::') {
+        const row = lines[i].trim();
+        if (row) {
+          const parts = row.split('|').map(p => p.trim());
+          if (parts.length >= 2) {
+            items.push({
+              label: parts[0] || '',
+              count: parts[1] || undefined,
+              filter: parts[2] || parts[0] || '',
+              tone: toneOf(parts[3]),
+            });
+          }
+        }
+        i++;
+      }
+      i++;
+      blocks.push({ type: 'topics', items });
       continue;
     }
     // :::tasklist ... :::end:::  — body lines: each is a task item
@@ -406,6 +463,47 @@ const TONE_CLASS: Record<ToneKey, { card: string; text: string; muted: string }>
   zinc:    { card: 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200/70 dark:border-zinc-700',                text: 'text-zinc-800 dark:text-zinc-200',     muted: 'text-zinc-500/80 dark:text-zinc-400/80' },
 };
 
+// ── Action context ──────────────────────────────────────────────
+// Threaded through React context so deeply nested blocks (topic
+// pills inside sections, etc.) can fire click handlers without
+// prop-drilling through every intermediate component.
+const ActionCtx = React.createContext<((action: MarkdownAction) => void) | undefined>(undefined);
+
+// ── Topic pill ─────────────────────────────────────────────────
+const TopicPill: React.FC<{
+  label: string;
+  count?: string;
+  filter: string;
+  tone: ToneKey;
+}> = ({ label, count, filter, tone }) => {
+  const onAction = React.useContext(ActionCtx);
+  const c = TONE_CLASS[tone];
+  return (
+    <button
+      type="button"
+      onClick={() => onAction?.({ type: 'topic_click', label, filter })}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all
+        ${c.card} ${c.text}
+        ${onAction
+          ? 'cursor-pointer hover:scale-[1.04] hover:shadow-sm active:scale-[0.97]'
+          : 'cursor-default'
+        }`}
+    >
+      <span className="truncate max-w-[160px]">{label}</span>
+      {count && (
+        <span className={`inline-flex items-center justify-center min-w-[18px] h-[16px] rounded-full text-[9px] font-bold tabular-nums ${c.muted} bg-black/5 dark:bg-white/10`}>
+          {count}
+        </span>
+      )}
+      {onAction && (
+        <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      )}
+    </button>
+  );
+};
+
 // ── Block renderer ──────────────────────────────────────────────
 const Heading: React.FC<{ level: number; text: string }> = ({ level, text }) => {
   const inline = parseInline(text);
@@ -575,15 +673,41 @@ const RenderBlock: React.FC<{ block: Block }> = ({ block }) => {
       </ul>
     );
   }
+  if (block.type === 'topic') {
+    return (
+      <div className="inline-flex my-0.5 mr-1.5">
+        <TopicPill label={block.label} count={block.count} filter={block.filter} tone={block.tone} />
+      </div>
+    );
+  }
+  if (block.type === 'topics') {
+    return (
+      <div className="flex flex-wrap gap-1.5 my-2">
+        {block.items.map((t, i) => (
+          <TopicPill key={i} label={t.label} count={t.count} filter={t.filter} tone={t.tone} />
+        ))}
+      </div>
+    );
+  }
   return null;
 };
 
-export const Markdown: React.FC<{ source: string; className?: string }> = ({ source, className }) => {
+export const Markdown: React.FC<{
+  source: string;
+  className?: string;
+  /** Fires when the user clicks an interactive element (topic pill, etc.). */
+  onAction?: (action: MarkdownAction) => void;
+}> = ({ source, className, onAction }) => {
   if (!source) return null;
   const blocks = React.useMemo(() => parseBlocks(source), [source]);
-  return (
+  const content = (
     <div className={`space-y-1.5 ${className || ''}`}>
       {blocks.map((b, i) => <RenderBlock key={i} block={b} />)}
     </div>
   );
+  // Only wrap in context provider when there's an action handler —
+  // avoids needless re-renders for consumers that don't use interactivity.
+  return onAction
+    ? <ActionCtx.Provider value={onAction}>{content}</ActionCtx.Provider>
+    : content;
 };

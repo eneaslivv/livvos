@@ -20,6 +20,7 @@ import type { AgentSlug, AgentMeta } from '../../types/aurora';
 import { AuroraCanvas } from './AuroraCanvas';
 import { usePlatformAdmin } from '../../hooks/usePlatformAdmin';
 import { Markdown } from '../../lib/markdown';
+import type { MarkdownAction } from '../../lib/markdown';
 import { InboxCards } from '../chat/InboxCards';
 
 // Primary agents — 5 caras visibles, una por área de trabajo. Los otros 19
@@ -85,6 +86,15 @@ export const AuroraDock: React.FC = () => {
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, status]);
+
+  // Handle interactive elements in Markdown (topic pills, etc.)
+  const handleMarkdownAction = React.useCallback((action: MarkdownAction) => {
+    if (action.type === 'topic_click') {
+      const followUp = `Detallame los mensajes de ${action.label}`;
+      setInput(followUp);
+      void send(followUp);
+    }
+  }, [send]);
 
   if (!open) return null;
   const meta = auroraAgents[agent];
@@ -220,7 +230,7 @@ export const AuroraDock: React.FC = () => {
                       <InboxCards messages={m.inboxMessages} aiSummary={m.text} />
                     ) : m.text ? (
                       <div className="text-[13px] leading-snug text-zinc-900 dark:text-zinc-100">
-                        <Markdown source={m.text} />
+                        <Markdown source={m.text} onAction={handleMarkdownAction} />
                       </div>
                     ) : null}
                     {m.canvas && <AuroraCanvas canvas={m.canvas} />}

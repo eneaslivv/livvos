@@ -37,6 +37,7 @@ import { runOrchestrator, executeProposedAction, type ProposedAction } from '../
 import { errorLogger } from '../lib/errorLogger';
 import { DailyBrief } from '../components/brief/DailyBrief';
 import { Markdown } from '../lib/markdown';
+import type { MarkdownAction } from '../lib/markdown';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import type { PageView, NavParams } from '../types';
@@ -319,6 +320,14 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     }
   }, [input, sending, currentTenant?.id, user?.id, messages]);
 
+  // Handle interactive elements in Markdown (topic pills, etc.)
+  const handleMarkdownAction = useCallback((action: MarkdownAction) => {
+    if (action.type === 'topic_click') {
+      const followUp = `Detallame los mensajes de ${action.label}`;
+      void handleSend(followUp);
+    }
+  }, [handleSend]);
+
   // Auto-scroll to bottom on every new message + when the "Thinking…"
   // indicator toggles, so the user always sees the latest turn without
   // having to scroll manually.
@@ -566,7 +575,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                   aiSummary={m.content}
                                 />
                               ) : (
-                                <Markdown source={m.content} />
+                                <Markdown source={m.content} onAction={handleMarkdownAction} />
                               )}
                               {m.actions && m.actions.length > 0 && (
                                 <div className="mt-2 space-y-1.5">

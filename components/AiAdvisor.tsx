@@ -36,6 +36,7 @@ import { LinkifiedText } from './ui/LinkifiedText';
 // :::section:::, :::row:::, :::kpi:::, :::tasklist:::) that turn flat
 // AI replies into scannable structured cards.
 import { Markdown } from '../lib/markdown';
+import type { MarkdownAction } from '../lib/markdown';
 // Memory layer — every AiAdvisor turn lands in agent_conversations so
 // the critique loop sees it alongside Brief/orchestrator turns. The
 // user profile is injected into context so style/length preferences
@@ -1076,6 +1077,14 @@ export const AiAdvisor: React.FC = () => {
     }));
   }, []);
 
+  // Handle interactive elements in Markdown (topic pills, etc.)
+  const handleMarkdownAction = useCallback((action: MarkdownAction) => {
+    if (action.type === 'topic_click') {
+      const followUp = `Detallame los mensajes de ${action.label}`;
+      void sendQuestion(followUp);
+    }
+  }, [sendQuestion]);
+
   const handleApproveAction = useCallback(async (msgIdx: number, action: ProposedAction) => {
     try {
       if (action.kind === 'create_task') {
@@ -1687,6 +1696,7 @@ export const AiAdvisor: React.FC = () => {
                             <Markdown
                               source={(msg as any).content}
                               className="text-[13px] leading-[1.55]"
+                              onAction={handleMarkdownAction}
                             />
                           )}
                           {outputId && (

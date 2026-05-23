@@ -22,6 +22,7 @@ import { useAutomations } from '../hooks/useAutomations';
 import { runOrchestrator } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { Markdown } from '../lib/markdown';
+import type { MarkdownAction } from '../lib/markdown';
 import '../components/livv/bundle-strategy.css';
 import '../components/livv/bundle-agent.css';
 
@@ -149,6 +150,14 @@ export const Agent: React.FC = () => {
     }
   }, [input, sending, currentTenant?.id, user?.id, thread]);
 
+  // Handle interactive elements in Markdown (topic pills, etc.)
+  const handleMarkdownAction = useCallback((action: MarkdownAction) => {
+    if (action.type === 'topic_click') {
+      const followUp = `Detallame los mensajes de ${action.label}`;
+      void handleSend(followUp);
+    }
+  }, [handleSend]);
+
   return (
     <div className="bdl-ag-page">
       {/* Header */}
@@ -259,7 +268,7 @@ export const Agent: React.FC = () => {
                   </div>
                   <div className="bdl-ag-msg-body">
                     <div className="bdl-ag-msg-bubble">
-                      {m.role === 'agent' ? <Markdown source={m.text} /> : m.text}
+                      {m.role === 'agent' ? <Markdown source={m.text} onAction={handleMarkdownAction} /> : m.text}
                     </div>
 
                     {m.sources && m.sources.length > 0 && (

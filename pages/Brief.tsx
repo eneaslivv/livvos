@@ -34,6 +34,7 @@ import { ContextMenu } from '../components/ui/ContextMenu';
 import { DailyBrief } from '../components/brief/DailyBrief';
 import '../components/brief/BriefDesign.css';
 import { Markdown } from '../lib/markdown';
+import type { MarkdownAction } from '../lib/markdown';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
@@ -248,6 +249,14 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e?.message || 'unknown'}`, ts: Date.now() }]);
     } finally {
       setSending(false);
+    }
+  };
+
+  // Handle interactive elements in Markdown (topic pills, etc.)
+  const handleMarkdownAction = (action: MarkdownAction) => {
+    if (action.type === 'topic_click') {
+      const followUp = `Detallame los mensajes de ${action.label}`;
+      void handleSend(followUp);
     }
   };
 
@@ -588,7 +597,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                     {m.content}
                   </div>
                 ) : (
-                  <Markdown source={m.content} className="text-zinc-800 dark:text-zinc-100" />
+                  <Markdown source={m.content} className="text-zinc-800 dark:text-zinc-100" onAction={handleMarkdownAction} />
                 )}
                 {/* Action approval cards — render before the skill trace
                     so the user sees pending actions first. Each card
