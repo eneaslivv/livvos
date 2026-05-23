@@ -1009,7 +1009,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         onNavigate={onNavigate}
         initialTab={configInitialTab}
       />
-      <AiAdvisor />
+      {/* AiAdvisor (legacy gemini chat) removido por feedback de UX —
+          competía con el AuroraFab en la misma esquina abajo-derecha y
+          dejaba la experiencia confusa. Aurora ya cubre el caso de uso
+          con el agente "advisor" entre sus 24 slugs (multi-agent +
+          tool calling con OpenAI). Si querés re-habilitarlo, descomentá
+          la línea siguiente — pero conviene refactorearlo a un mode
+          dentro del Aurora dock antes de re-prenderlo.
+          <AiAdvisor /> */}
 
       {/* Mobile Bottom Tab Bar */}
       {isMobile && (

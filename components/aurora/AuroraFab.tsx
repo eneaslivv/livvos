@@ -1,5 +1,13 @@
-// AuroraFab — floating button (bottom-right) that opens the AuroraDock.
-// Color cycles to whichever agent is currently active.
+// AuroraFab — floating launcher (bottom-right) that opens the AuroraDock.
+//
+// v2 (2026-05-22): rewriten "soft" tras feedback del user — antes competía
+// con el AiAdvisor legacy en la misma esquina y se sentía estridente. Ahora:
+//   • Tamaño 44px (en lugar de 56) — menos invasivo en la ventana
+//   • Color neutro ink + ring gold sutil (en lugar de full color del agente)
+//   • Sparkle interno mantiene el accent del agente activo (sutileza)
+//   • Hover: ring expand suave + lift sutil (no scale dramático)
+//   • Spring entrance + breath animation lenta
+//   • Tooltip visible "Aurora" con el agente actual
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,23 +23,45 @@ export const AuroraFab: React.FC = () => {
 
   return (
     <>
-      {!open && (
-        <button
-          aria-label={`Abrir ${label}`}
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-105 transition-transform"
-          style={{ ...cssVarsForAgent(agent), background: 'var(--aurora-accent)' }}
-          title={`${label} · ${meta.tagline}`}
-        >
-          <motion.span
-            animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-5 h-5 flex items-center justify-center"
+      <AnimatePresence>
+        {!open && (
+          <motion.button
+            key="fab"
+            aria-label={`Abrir ${label}`}
+            onClick={() => setOpen(true)}
+            initial={{ opacity: 0, scale: 0.8, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 8 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.94 }}
+            className="group fixed bottom-5 right-5 z-[60] inline-flex items-center gap-2 h-11 pl-3 pr-4 rounded-full bg-zinc-900/95 dark:bg-zinc-100/95 text-white dark:text-zinc-900 backdrop-blur-sm border border-white/10 dark:border-zinc-900/10 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35),0_2px_4px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.12)] transition-shadow"
+            style={cssVarsForAgent(agent)}
+            title={`${label} · ${meta.tagline}`}
           >
-            <Sparkles size={20} strokeWidth={2.4} />
-          </motion.span>
-        </button>
-      )}
+            {/* Sparkle dot — gold accent del agente, breath animation */}
+            <motion.span
+              animate={{ opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+              className="relative w-6 h-6 rounded-full flex items-center justify-center"
+              style={{ background: 'var(--aurora-accent)' }}
+            >
+              <Sparkles size={13} strokeWidth={2.4} className="text-white" />
+              {/* Glow halo — sutilísimo, accent del agent */}
+              <span
+                className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-50 transition-opacity blur-md"
+                style={{ background: 'var(--aurora-accent)' }}
+                aria-hidden
+              />
+            </motion.span>
+
+            <span className="text-[12px] font-medium tracking-tight pr-0.5">
+              Aurora
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {open && <AuroraDock />}
       </AnimatePresence>
