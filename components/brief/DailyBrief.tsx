@@ -72,59 +72,49 @@ const writeBriefCache = (userId: string, payload: Omit<CachedBrief, 'ts'>) => {
   } catch { /* quota / private-mode */ }
 };
 
-// ── Daily reflection — a short phrase rotated by day-of-year. Sits
-//    in the sticky header so it's always visible while the user
-//    scrolls through cards or chat below. Mix of focus / clarity /
-//    leadership maxims. Keep them under ~90 chars so they render in
-//    one line on the chat column at typical widths.
-const REFLECTIONS_ES: string[] = [
-  'Foco sobre frenesí. Una cosa bien hecha vale 10 a medias.',
-  'Lo que medís, mejora. Mirá tus métricas antes de planear.',
-  'Empezá por lo que mueve la aguja, no por lo más fácil.',
-  'Lo urgente roba tiempo a lo importante. Hoy elegí.',
-  'La claridad escala. Lo confuso se rompe en producción.',
-  'Decidir es restar. Sacá una cosa de la lista antes de sumar.',
-  'Hablar con un cliente vale más que mirar tres dashboards.',
-  'Si no podés explicarlo en una línea, todavía no lo entendiste.',
-  'Velocidad mata perfección — pero solo si después iterás.',
-  'El sistema gana al esfuerzo. Construí flujo, no heroísmo.',
-  'Lo que delegás bien hoy, te devuelve dos horas mañana.',
-  'Empezá las reuniones por la decisión que necesitás tomar.',
-  'Una promesa cumplida vale más que diez prometidas.',
-  'Mostrá el trabajo antes de pulirlo. Feedback temprano gana.',
-  'Tu calendario es tu estrategia. Mirá dónde gastás las horas.',
-  'Pedir ayuda no es debilidad — es economía de tiempo.',
-  'Lo que repetís tres veces, automatizalo o documentalo.',
-  'Pensá como dueño: ¿esto me deja un activo o solo cansancio?',
-  'Un buen "no" libera tiempo para tu mejor "sí".',
-  'La calidad del input determina la calidad del output. Cuidá tu dieta de info.',
-  'Hoy no es para terminar todo — es para terminar lo que importa.',
-  'Las mejores ideas vienen caminando. Salí del escritorio 20 minutos.',
-  'Si todo es prioridad, nada lo es. Elegí tres cosas.',
-  'Reuniones sin agenda son robos consentidos. Mandá agenda o no vayas.',
-  'Tu energía es finita. Trabajá en bloques, no en goteo.',
-  'Lo que no se mide no se cobra. Trackeá las horas, sí o sí.',
-  'Cuidá la primera media hora del día — define las otras 23.',
-  'Un cliente feliz trae tres. Uno enojado los espanta a todos.',
-  'Procesos boring, productos sexy. Aburrite con la operación.',
-  'La marca es lo que dicen de vos cuando no estás. Cuidá cada detalle.',
-  'Cobrar bien es el primer acto de respeto por tu trabajo.',
-  'El equipo crece donde el líder presta atención. Mirá a quién mirás.',
-  'No vendas tu tiempo — vendé tu criterio.',
-  'Documentar es regalarle tiempo a tu yo del futuro.',
-  'Hoy, una decisión difícil vale más que diez tareas fáciles.',
-  'Antes de optimizar, preguntate si hace falta hacerlo.',
-  'Lo que se hace en silencio gana. La performance se nota sin avisar.',
-  'Cerrá ciclos. Una cosa terminada vale más que tres abiertas.',
-  'Tu próximo cliente te está mirando. Hoy es un día de show.',
-  'Cada error documentado es un error que no se repite.',
-];
+// ── Weekly focus — dynamic line derived from the brief's category
+//    data. Replaces the old static motivational quotes with a real
+//    snapshot of what needs attention this week. Falls back to a
+//    simple greeting when cards haven't loaded yet.
+function buildWeeklyFocus(cards: CategoryData[]): string {
+  const parts: string[] = [];
 
-function getDailyReflection(): string {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const day = Math.floor((now.getTime() - start.getTime()) / 86400000);
-  return REFLECTIONS_ES[day % REFLECTIONS_ES.length];
+  for (const c of cards) {
+    if (c.status === 'empty') continue;
+
+    // Extract numeric highlights that signal load
+    for (const h of c.highlights) {
+      const v = typeof h.value === 'number' ? h.value : parseInt(String(h.value), 10);
+      if (isNaN(v)) continue;
+      const lo = h.label.toLowerCase();
+
+      if (lo.includes('overdue') && v > 0) parts.push(`${v} overdue`);
+      else if (lo.includes('due today') && v > 0) parts.push(`${v} due today`);
+      else if (lo.includes('pending') && v > 0 && c.id === 'today_load') parts.push(`${v} pending tasks`);
+      else if (lo.includes('hot') && v > 0) parts.push(`${v} hot leads`);
+      else if ((lo.includes('warm') || lo.includes('open')) && v > 0 && c.id === 'pipeline') parts.push(`${v} deals in motion`);
+      else if (lo.includes('unpaid') && v > 0) parts.push(`${v} unpaid invoices`);
+      else if (lo.includes('meeting') && v > 0) parts.push(`${v} meetings today`);
+      else if (lo.includes('unread') && v > 0) parts.push(`${v} unread`);
+    }
+
+    // Check bullets for actionable signals
+    for (const b of c.bullets.slice(0, 3)) {
+      const bl = b.toLowerCase();
+      if (bl.includes('deadline') || bl.includes('vence')) {
+        parts.push(b.length > 60 ? b.slice(0, 57) + '...' : b);
+        break;
+      }
+    }
+  }
+
+  if (parts.length === 0) {
+    const h = new Date().getHours();
+    return h < 12 ? 'Buenos días — tu semana empieza limpia.' : h < 18 ? 'Tu tarde está libre de urgencias.' : 'Cerrando el día sin pendientes críticos.';
+  }
+
+  // Build a compact line: "3 overdue · 2 hot leads · 1 unpaid invoice"
+  return parts.slice(0, 4).join(' · ');
 }
 
 interface Prefs {
@@ -321,7 +311,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
   }, [cards, prefs.enabled_categories]);
 
   const allEmpty = !loading && orderedCards.every(c => c.status === 'empty');
-  const reflection = useMemo(() => getDailyReflection(), []);
+  const weeklyFocus = useMemo(() => buildWeeklyFocus(orderedCards), [orderedCards]);
 
   return (
     <div className="pb-3">
@@ -373,22 +363,23 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             </motion.button>
           </div>
         </div>
-        {/* Daily aphorism — vertical gold-gradient bar on the left,
-           subtle warm tint background. Replaces the old flat-dot
-           variant with the editorial treatment from the design. */}
-        <div
-          className="mt-2.5 relative pl-4 pr-3 py-2 rounded-r-[10px]"
-          style={{ background: 'linear-gradient(90deg, rgba(232,188,89,0.06) 0%, transparent 100%)' }}
-        >
-          <span
-            aria-hidden
-            className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full"
-            style={{ background: 'linear-gradient(180deg, #E8BC59 0%, transparent 100%)' }}
-          />
-          <p className="text-[12.5px] text-zinc-600 dark:text-zinc-300 italic leading-relaxed">
-            {reflection}
-          </p>
-        </div>
+        {/* Weekly focus line — derived from real card data (overdue
+           tasks, hot leads, unpaid invoices, etc). Gold-bar accent. */}
+        {weeklyFocus && (
+          <div
+            className="mt-2.5 relative pl-4 pr-3 py-2 rounded-r-[10px]"
+            style={{ background: 'linear-gradient(90deg, rgba(232,188,89,0.06) 0%, transparent 100%)' }}
+          >
+            <span
+              aria-hidden
+              className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full"
+              style={{ background: 'linear-gradient(180deg, #E8BC59 0%, transparent 100%)' }}
+            />
+            <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--os-fg-1)', fontWeight: 500, letterSpacing: '-0.01em' }}>
+              {weeklyFocus}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="px-5 pt-3 space-y-3">

@@ -506,12 +506,10 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             </span>
           </div>
 
-          {/* Today's brief eyebrow */}
+          {/* Brief eyebrow + settings — DailyBrief provides the
+              full header with its own "Today's brief" eyebrow, so we
+              just show quick nav here. */}
           <div className="flex items-center gap-2 pt-1">
-            <span className="bd-eyebrow">
-              <span className="bd-pulse" aria-hidden />
-              Today's brief
-            </span>
             <div className="ml-auto inline-flex gap-1">
               <button
                 onClick={() => onNavigate('activity')}
@@ -520,36 +518,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               >
                 <Icons.Activity size={11} />
               </button>
-              <button
-                onClick={() => onNavigate('settings' as PageView)}
-                className="w-6 h-6 rounded-md text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors inline-flex items-center justify-center"
-                title="Brief settings"
-              >
-                <Icons.Settings size={11} />
-              </button>
             </div>
           </div>
-
-          {/* Aphorism — gold-left-border italic quote (rotates daily based on date) */}
-          {(() => {
-            const aphorisms = [
-              { line: 'La calidad del input determina la calidad del output.', em: 'Cuidá tu dieta de info.' },
-              { line: 'El sistema no es el branding.', em: 'El branding es lo que mostrás del sistema.' },
-              { line: 'Velocidad sin cadencia es ruido.', em: 'La cadencia compone con repetición.' },
-              { line: 'El precio comunica posicionamiento.', em: 'Cobrá lo que vale; no lo que pesa.' },
-              { line: 'Lo importante no es el plan, son los rituales.', em: 'Los rituales sobreviven al caos.' },
-              { line: 'Tu calendario es tu estrategia.', em: 'Si no está bloqueado, no va a pasar.' },
-              { line: 'Comprometete con menos, ejecutá con más profundidad.', em: 'Foco es la palanca.' },
-            ];
-            const day = new Date().getDay();
-            const a = aphorisms[day % aphorisms.length];
-            return (
-              <div className="bd-aphorism">
-                {a.line}
-                <em>{a.em}</em>
-              </div>
-            );
-          })()}
         </div>
 
         {/* Single scroll surface: DailyBrief + chat messages flow
