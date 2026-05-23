@@ -123,6 +123,12 @@ export interface OrchestratorOutput {
   /** Write actions the agent proposed but did NOT execute (user must
    *  approve). Parsed out of <action> tags in the LLM reply. */
   proposedActions?: ProposedAction[];
+  /** Raw data from skill results — used by the frontend for rich
+   *  rendering (e.g. inbox messages as structured cards instead of
+   *  plain text). Only populated for skills that produce message arrays. */
+  rawData?: {
+    inboxMessages?: Array<any>;
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────

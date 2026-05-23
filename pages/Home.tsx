@@ -40,6 +40,7 @@ import { Markdown } from '../lib/markdown';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import type { PageView, NavParams } from '../types';
+import { InboxCards, type InboxMessage } from '../components/chat/InboxCards';
 
 interface HomeProps {
   onNavigate: (page: PageView, params?: NavParams) => void;
@@ -54,6 +55,8 @@ interface ChatMsg {
   actions?: ChatAction[];
   conversationId?: string | null;
   agentId?: string;
+  /** Structured inbox messages for rich card rendering */
+  inboxMessages?: InboxMessage[];
 }
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
@@ -187,7 +190,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   ];
   const QUICK_CHIPS = [
     { label: 'Resumir inbox',  icon: 'Mail',          prompt: 'Hacé un resumen corto de los mails nuevos / pendientes — agrupados por remitente o tema, qué requiere respuesta urgente.' },
-    { label: 'Resumir Slack',  icon: 'MessageSquare', prompt: 'Resumime los mensajes de Slack pendientes de respuesta — qué canales / personas están esperando algo mío.' },
+    { label: 'Resumir Slack',  icon: 'Message', prompt: 'Resumime los mensajes de Slack pendientes de respuesta — qué canales / personas están esperando algo mío.' },
     { label: 'Redactar reply', icon: 'Edit',          prompt: 'Ayudame a redactar respuestas a los mensajes pendientes que más demoraron. Sugerime un draft por cada uno y yo apruebo.' },
     { label: 'Qué cambió',     icon: 'Activity',      prompt: '¿Qué cambió desde la última vez que abrí la app? Mensajes nuevos, tareas que se vencieron, eventos próximos.' },
   ];
@@ -306,6 +309,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         actions: (out.proposedActions || []).map(a => ({ ...a, state: 'pending' as const })),
         conversationId: (out as any).conversationId || null,
         agentId: out.agentId,
+        inboxMessages: out.rawData?.inboxMessages as InboxMessage[] | undefined,
       }]);
     } catch (e: any) {
       errorLogger.warn('home chat failed', e);
@@ -555,7 +559,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                             </div>
                           ) : (
                             <>
-                              <Markdown source={m.content} />
+                              {/* Rich inbox cards when structured data is present */}
+                              {m.inboxMessages && m.inboxMessages.length > 0 ? (
+                                <InboxCards
+                                  messages={m.inboxMessages}
+                                  aiSummary={m.content}
+                                />
+                              ) : (
+                                <Markdown source={m.content} />
+                              )}
                               {m.actions && m.actions.length > 0 && (
                                 <div className="mt-2 space-y-1.5">
                                   {m.actions.map((a, ai) => (

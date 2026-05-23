@@ -276,6 +276,30 @@ export async function runOrchestrator(
     proposedActions: actions,
   };
 
+  // Extract structured inbox data for rich frontend rendering
+  const inboxMessages: any[] = [];
+  const seenIds = new Set<string>();
+  for (const { skill, result } of trace) {
+    if (!skill.id.startsWith('inbox.') || !result.ok) continue;
+    const arr = Array.isArray(result.data) ? result.data : [];
+    // For slack_channels skill, data is { channel, messages[] }[]
+    for (const item of arr) {
+      if (item.messages && Array.isArray(item.messages)) {
+        // Grouped format (slack_channels)
+        for (const msg of item.messages) {
+          if (msg.id && !seenIds.has(msg.id)) { seenIds.add(msg.id); inboxMessages.push(msg); }
+        }
+      } else if (item.id && !seenIds.has(item.id)) {
+        // Flat format (pending, recent, by_contact)
+        seenIds.add(item.id);
+        inboxMessages.push(item);
+      }
+    }
+  }
+  if (inboxMessages.length > 0) {
+    output.rawData = { inboxMessages };
+  }
+
   const msTotal = Date.now() - t0;
 
   // Log + auto-detect implicit feedback signals (re-ask, rephrase) from
