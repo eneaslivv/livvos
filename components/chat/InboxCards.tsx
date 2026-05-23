@@ -131,7 +131,7 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const cfg = statusConfig[status.toLowerCase()] ?? {
+  const cfg = statusConfig[(status || 'pending').toLowerCase()] ?? {
     bg: 'bg-zinc-100 dark:bg-zinc-800',
     text: 'text-zinc-600 dark:text-zinc-400',
     label: status,
@@ -432,7 +432,7 @@ function GroupCard({
 
 function StatsBar({ messages }: { messages: InboxMessage[] }) {
   const total = messages.length;
-  const pending = messages.filter((m) => m.status.toLowerCase() === 'pending').length;
+  const pending = messages.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
   const slackCount = messages.filter((m) => m.platform === 'slack').length;
   const gmailCount = messages.filter((m) => m.platform === 'gmail').length;
 
