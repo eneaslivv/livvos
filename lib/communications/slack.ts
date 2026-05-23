@@ -758,6 +758,109 @@ export async function sendSlackReply(args: {
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────
+
+/**
+ * Render Slack mrkdwn body to safe HTML for the message detail panel.
+ * Handles:
+ *   • HTML entities (&gt; &lt; &amp;) — slack-events stores escaped text
+ *   • <@USER_ID|name> and <@USER_ID> mentions (with optional name map)
+ *   • <#CHANNEL_ID|name> channel mentions
+ *   • <URL|label> and <URL> links → <a> clickable
+ *   • *bold*, _italic_, `code`, ~strike~
+ *   • > quoted lines → <blockquote>
+ *   • Newlines preserved as <br>
+ * Returns a string of safe HTML (escapes raw <, >, & in user content first
+ * before applying our own substitutions, so XSS is not possible).
+ *
+ * userMap: optional { slack_user_id → display_name }. When provided, resolves
+ * <@U123> mentions to @DisplayName. Falls back to '@user' when unknown.
+ */
+export function renderSlackBodyHtml(
+  raw: string,
+  userMap?: Record<string, string>,
+): string {
+  if (!raw) return '';
+  // First decode HTML entities that slack-events may have stored escaped.
+  let text = raw
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;(?!@|#|https?:)/g, '<')  // don't decode our own <@...>, <#...>, <url> tokens
+    .replace(/&amp;/g, '&');
+
+  // Tokenize the slack-specific patterns BEFORE escaping, so they survive.
+  // We replace them with placeholders, escape, then swap back.
+  const tokens: string[] = [];
+  const placeholder = (html: string) => {
+    tokens.push(html);
+    return ` T${tokens.length - 1} `;
+  };
+
+  // <@USER_ID|name>  or  <@USER_ID>
+  text = text.replace(/<@([A-Z0-9]+)(?:\|([^>]+))?>/g, (_, id, name) => {
+    const resolved = name || userMap?.[id] || 'user';
+    return placeholder(`<span class="px-1 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[0.95em]">@${escapeHtml(resolved)}</span>`);
+  });
+  // <#CHAN_ID|name>  or  <#CHAN_ID>
+  text = text.replace(/<#([A-Z0-9]+)(?:\|([^>]+))?>/g, (_, _id, name) =>
+    placeholder(`<span class="text-zinc-500 font-medium">#${escapeHtml(name || 'channel')}</span>`),
+  );
+  // <https://...|label>
+  text = text.replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/g, (_, url, label) =>
+    placeholder(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 dark:text-blue-400 hover:text-blue-700">${escapeHtml(label)}</a>`),
+  );
+  // <https://...>
+  text = text.replace(/<(https?:\/\/[^>]+)>/g, (_, url) =>
+    placeholder(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 dark:text-blue-400 hover:text-blue-700">${escapeHtml(url)}</a>`),
+  );
+  // Raw URLs (no angle brackets) — best-effort
+  text = text.replace(/(?<![">\w])(https?:\/\/[^\s<]+)/g, (url) =>
+    placeholder(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 dark:text-blue-400 hover:text-blue-700">${escapeHtml(url)}</a>`),
+  );
+
+  // Now escape everything else (user content) to neutralize XSS.
+  text = escapeHtml(text);
+
+  // mrkdwn → HTML on the escaped text
+  text = text
+    .replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
+    .replace(/_([^_\n]+)_/g, '<em>$1</em>')
+    .replace(/`([^`\n]+)`/g, '<code class="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[0.92em] font-mono">$1</code>')
+    .replace(/~([^~\n]+)~/g, '<s>$1</s>');
+
+  // Lines starting with `>` → blockquote (group consecutive quote lines)
+  const lines = text.split(/\n/);
+  const rendered: string[] = [];
+  let quoteBuf: string[] = [];
+  const flushQuote = () => {
+    if (quoteBuf.length > 0) {
+      rendered.push(`<blockquote class="my-1 pl-3 border-l-2 border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 italic">${quoteBuf.join('<br>')}</blockquote>`);
+      quoteBuf = [];
+    }
+  };
+  for (const line of lines) {
+    if (/^&gt;|^>/.test(line)) {
+      quoteBuf.push(line.replace(/^(?:&gt;|>)\s?/, ''));
+    } else {
+      flushQuote();
+      rendered.push(line);
+    }
+  }
+  flushQuote();
+
+  // Restore tokenized HTML
+  let out = rendered.join('<br>');
+  out = out.replace(/ T(\d+) /g, (_, idx) => tokens[Number(idx)] || '');
+  return out;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /** Slack messages can use mrkdwn — extract a plain preview for the inbox list. */
 export function slackTextToPreview(text: string): string {
   if (!text) return '';

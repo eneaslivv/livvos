@@ -38,7 +38,7 @@ import {
 import {
   getSlackConnectUrl, listAvailableSlackChannels, setMonitoredChannels,
   setSlackNotifyChannel, linkSlackChannelToProject, postToSlack,
-  setSlackChannelNotifyEvents, slackTextToPreview, syncSlack,
+  setSlackChannelNotifyEvents, slackTextToPreview, syncSlack, renderSlackBodyHtml,
   type AvailableSlackChannel, type SlackProjectEvent,
 } from '../lib/communications/slack';
 
@@ -616,6 +616,7 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
   const [sending, setSending] = useState(false);
   const [showAi, setShowAi] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creatingTask, setCreatingTask] = useState(false);
 
   // ── AI compose toolbar state ────────────────────────────────────
   const [aiBusy, setAiBusy] = useState<ComposeCommReplyAction | null>(null);
@@ -769,20 +770,53 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
 
   const handleCreateTask = async () => {
     if (!cls?.suggested_task) return;
+    // Idempotency guards:
+    //  1. State lock — bloquea clicks repetidos durante el insert in-flight.
+    //  2. Server check — si msg.task_id ya existe, no creamos otra task.
+    //  3. msg.status === 'task_created' — backup check del UI.
+    if (creatingTask || msg.task_id || msg.status === 'task_created') return;
+    setCreatingTask(true);
     try {
       const { data: tenantData } = await supabase.auth.getUser();
       const userId = tenantData.user?.id;
+
+      // Build a richer description so the task carries the source link.
+      const sourceLine = msg.platform === 'slack' && msg.channel_name
+        ? `\n\n_From #${msg.channel_name} · ${msg.from_name || 'someone'}_`
+        : msg.platform === 'gmail'
+          ? `\n\n_From email · ${msg.from_name || msg.from_email || 'someone'}_`
+          : '';
+      const description = (cls.suggested_task.description || '') + sourceLine;
+
+      // Validate due_date — must be YYYY-MM-DD and not too far in the past.
+      let dueDate: string | null = null;
+      if (cls.suggested_task.due_date && /^\d{4}-\d{2}-\d{2}$/.test(cls.suggested_task.due_date)) {
+        dueDate = cls.suggested_task.due_date;
+      }
+
+      // Priority: lowercase matches the dominant DB convention (399 medium,
+      // 40 high, 12 urgent). 'urgent' if AI marked intent=urgent.
+      const priority = cls.intent === 'urgent' ? 'urgent'
+        : cls.priority === 'high' ? 'high'
+        : cls.priority === 'low' ? 'low'
+        : 'medium';
+
       const { data: task, error: taskErr } = await supabase
         .from('tasks')
         .insert({
           tenant_id: msg.tenant_id,
           owner_id: userId,
           title: cls.suggested_task.title,
-          description: cls.suggested_task.description,
+          description,
           status: 'todo',
-          priority: cls.priority === 'high' ? 'high' : 'medium',
-          start_date: cls.suggested_task.due_date,
-          due_date: cls.suggested_task.due_date,
+          priority,
+          start_date: dueDate,
+          due_date: dueDate,
+          // Carry the matched client/project from the classifier so the task
+          // lands in the right project board automatically.
+          project_id: msg.matched_project_id || null,
+          client_id: msg.matched_client_id || null,
+          completed: false,
         })
         .select()
         .single();
@@ -794,6 +828,8 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
       onAction();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -890,10 +926,10 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
                     )}
                     <button
                       onClick={handleCreateTask}
-                      disabled={msg.status === 'task_created'}
-                      className="mt-2 w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40"
+                      disabled={creatingTask || msg.status === 'task_created' || !!msg.task_id}
+                      className="mt-2 w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 transition-opacity"
                     >
-                      {msg.status === 'task_created' ? '✓ Task created' : 'Create task'}
+                      {creatingTask ? 'Creating…' : (msg.status === 'task_created' || msg.task_id) ? '✓ Task created' : 'Create task'}
                     </button>
                   </div>
                 )}
@@ -902,11 +938,32 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
           </div>
         )}
 
-        {/* Body */}
-        <div className="text-[13px] leading-relaxed text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words">
-          {msg.platform === 'gmail' && msg.body_html
-            ? <div dangerouslySetInnerHTML={{ __html: sanitizeBasic(msg.body_html) }} className="prose prose-sm dark:prose-invert max-w-none" />
-            : msg.body_text}
+        {/* Body — Slack mrkdwn rendered with user mention resolution,
+            link/quote/bold/italic formatting. Gmail uses sanitized HTML. */}
+        <div className="text-[13px] leading-relaxed text-zinc-800 dark:text-zinc-200 break-words">
+          {msg.platform === 'gmail' && msg.body_html ? (
+            <div dangerouslySetInnerHTML={{ __html: sanitizeBasic(msg.body_html) }} className="prose prose-sm dark:prose-invert max-w-none" />
+          ) : msg.platform === 'slack' ? (
+            <div
+              dangerouslySetInnerHTML={{
+                // Build a userMap from messages we already have loaded —
+                // (from_id, from_name) pairs across allMessages. Lets us
+                // resolve <@U123> mentions to @DisplayName for users we've
+                // seen post in any monitored channel.
+                __html: renderSlackBodyHtml(
+                  msg.body_text || '',
+                  Object.fromEntries(
+                    (allMessages || [])
+                      .filter(m => m.platform === 'slack' && m.from_id && m.from_name)
+                      .map(m => [m.from_id as string, m.from_name as string])
+                  ),
+                ),
+              }}
+              className="whitespace-pre-wrap"
+            />
+          ) : (
+            <div className="whitespace-pre-wrap">{msg.body_text}</div>
+          )}
         </div>
 
         {/* Reply composer */}
