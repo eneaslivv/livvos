@@ -24,9 +24,9 @@ import { ClientCommsSection } from '../components/clients/ClientCommsSection';
 
 /* ─── Helpers ─── */
 const statusConfig = {
-  active:   { label: 'Active',    bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  prospect: { label: 'Prospect', bg: 'bg-amber-50 dark:bg-amber-500/10',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
-  inactive: { label: 'Inactive',  bg: 'bg-zinc-100 dark:bg-zinc-800',         text: 'text-zinc-500 dark:text-zinc-400',       dot: 'bg-zinc-400' },
+  active:   { label: 'Active',   dot: 'var(--sage)',  bg: 'rgba(118,146,104,0.10)', text: 'var(--sage)' },
+  prospect: { label: 'Prospect', dot: 'var(--accent)', bg: 'var(--accent-soft)',     text: 'var(--accent)' },
+  inactive: { label: 'Inactive', dot: 'var(--os-fg-3)', bg: 'var(--os-surface)',     text: 'var(--os-fg-2)' },
 } as const;
 
 /* ─── Simplified client header (name + color + status) ─── */
@@ -56,19 +56,23 @@ const ClientSimpleHeader: React.FC<{
   const editingName = editingField === 'name';
   const logoInputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60">
+    <div className="p-5" style={{ borderBottom: '1px solid var(--os-border)' }}>
       <div className="flex items-center gap-3">
         {/* Logo / avatar (editable) */}
         <div className="relative group shrink-0">
           <button
             onClick={() => logoInputRef.current?.click()}
             disabled={isUploadingLogo}
-            className="w-11 h-11 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-xs font-bold transition-all hover:border-zinc-400 dark:hover:border-zinc-500 disabled:opacity-50"
-            style={!client.avatar_url && client.color ? { backgroundColor: `${client.color}22`, color: client.color } : undefined}
+            className="w-11 h-11 overflow-hidden flex items-center justify-center text-xs font-bold transition-all disabled:opacity-50"
+            style={{
+              borderRadius: 12,
+              border: '1px solid var(--os-border-2)',
+              ...((!client.avatar_url && client.color) ? { backgroundColor: `${client.color}22`, color: client.color } : {}),
+            }}
             title={client.avatar_url ? 'Change logo' : 'Upload logo'}
           >
             {isUploadingLogo ? (
-              <div className="w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+              <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid var(--os-border-2)', borderTopColor: 'var(--os-fg-2)' }} />
             ) : client.avatar_url ? (
               <img
                 src={client.avatar_url}
@@ -79,12 +83,12 @@ const ClientSimpleHeader: React.FC<{
             ) : client.icon ? (
               <span className="text-xl leading-none">{client.icon}</span>
             ) : (
-              <span className={!client.color ? 'text-zinc-500 dark:text-zinc-400' : ''}>
+              <span style={{ color: client.color ? undefined : 'var(--os-fg-2)' }}>
                 {getClientInitials(client.name)}
               </span>
             )}
           </button>
-          <div className="absolute inset-0 rounded-xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 pointer-events-none" style={{ borderRadius: 12 }}>
             <Icons.Upload size={14} className="text-white pointer-events-auto cursor-pointer" onClick={() => logoInputRef.current?.click()} />
             {client.avatar_url && (
               <Icons.Trash
@@ -136,12 +140,14 @@ const ClientSimpleHeader: React.FC<{
               if (e.key === 'Enter') onInlineEdit('name');
               if (e.key === 'Escape') onCancelEdit();
             }}
-            className="text-lg font-bold text-zinc-900 dark:text-zinc-100 bg-transparent border-b border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-zinc-900 dark:focus:border-zinc-100 px-1 flex-1"
+            className="text-lg bg-transparent focus:outline-none px-1 flex-1"
+            style={{ fontWeight: 300, letterSpacing: '-0.03em', color: 'var(--os-ink)', borderBottom: '1px solid var(--os-border-2)' }}
           />
         ) : (
           <button
             onClick={() => { onEditField('name'); onEditDraftChange({ name: client.name }); }}
-            className="text-lg font-bold text-zinc-900 dark:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 px-1 -mx-1 rounded transition-colors text-left truncate"
+            className="text-lg px-1 -mx-1 rounded transition-colors text-left truncate"
+            style={{ fontWeight: 300, letterSpacing: '-0.03em', color: 'var(--os-ink)' }}
           >
             {client.name || 'Untitled client'}
           </button>
@@ -149,21 +155,30 @@ const ClientSimpleHeader: React.FC<{
         <div className="relative">
           <button
             onClick={() => setStatusOpen(v => !v)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${status.bg} ${status.text}`}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium"
+            style={{
+              borderRadius: 9999,
+              background: status.bg,
+              color: status.text,
+              letterSpacing: '0.06em',
+            }}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: status.dot }} />
             {status.label}
             <Icons.ChevronDown size={10} />
           </button>
           {statusOpen && (
-            <div className="absolute right-0 top-full mt-1 z-20 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl min-w-[120px]">
+            <div className="absolute right-0 top-full mt-1 z-20 py-1 min-w-[120px]" style={{ background: 'var(--os-panel)', border: '1px solid var(--os-border-2)', borderRadius: 12, boxShadow: 'var(--shadow-xl)' }}>
               {(['active','prospect','inactive'] as const).map(s => (
                 <button
                   key={s}
                   onClick={() => { onUpdateStatus(s); setStatusOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700/60 text-left"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-left transition-colors"
+                  style={{ color: 'var(--os-fg-1)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--os-surface)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${statusConfig[s].dot}`} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusConfig[s].dot }} />
                   {statusConfig[s].label}
                 </button>
               ))}
@@ -187,7 +202,7 @@ const InlineProp: React.FC<{
   onSave: () => Promise<boolean> | void;
 }> = ({ label, value, editing, draft, onEdit, onDraftChange, onCancel, onSave }) => (
   <div>
-    <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">{label}</p>
+    <p className="mb-1" style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--os-fg-3)' }}>{label}</p>
     {editing ? (
       <input
         autoFocus
@@ -198,14 +213,16 @@ const InlineProp: React.FC<{
           if (e.key === 'Enter') onSave();
           if (e.key === 'Escape') onCancel();
         }}
-        className="w-full text-[12px] bg-transparent border-b border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-zinc-900 dark:focus:border-zinc-100 text-zinc-900 dark:text-zinc-100"
+        className="w-full text-[12px] bg-transparent focus:outline-none"
+        style={{ color: 'var(--os-ink)', borderBottom: '1px solid var(--os-border-2)' }}
       />
     ) : (
       <button
         onClick={onEdit}
-        className="text-[12px] font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 truncate text-left w-full"
+        className="text-[12px] font-medium truncate text-left w-full transition-colors"
+        style={{ color: 'var(--os-fg-1)' }}
       >
-        {value || <span className="text-zinc-400 italic font-normal">Add…</span>}
+        {value || <span style={{ color: 'var(--os-fg-3)', fontStyle: 'italic', fontWeight: 400 }}>Add...</span>}
       </button>
     )}
   </div>
@@ -1271,16 +1288,16 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
   if (loading && !loadingTimedOut) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
+        <div className="animate-spin rounded-full h-8 w-8" style={{ border: '2px solid var(--os-border-2)', borderTopColor: 'var(--os-ink)' }} />
       </div>
     );
   }
 
   if (error && clients.length === 0 && !error.includes('Could not find') && !error.includes('does not exist')) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-        <p className="text-sm text-red-700 dark:text-red-400 mb-3">{error}</p>
-        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">Reload</button>
+      <div className="p-6" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 14 }}>
+        <p className="text-sm mb-3" style={{ color: 'var(--err)' }}>{error}</p>
+        <button onClick={() => window.location.reload()} className="px-4 py-2 text-white text-sm" style={{ background: 'var(--err)', borderRadius: 9999 }}>Reload</button>
       </div>
     );
   }
@@ -1292,12 +1309,15 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
       {/* ─── Header ─── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Clients</h1>
-          <p className="text-xs text-zinc-400 mt-0.5">{clients.length} {clients.length === 1 ? 'client' : 'clients'} total</p>
+          <h1 style={{ fontSize: 'clamp(20px, 2.5vw, 26px)', fontWeight: 300, letterSpacing: '-0.03em', color: 'var(--os-ink)' }}>Clients</h1>
+          <p className="mt-0.5" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.15em', color: 'var(--os-fg-3)', textTransform: 'uppercase' }}>
+            {clients.length} {clients.length === 1 ? 'client' : 'clients'} total
+          </p>
         </div>
         <button
           onClick={() => setShowNewClientPanel(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all active:scale-[0.97] text-xs font-semibold"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-all active:scale-[0.97]"
+          style={{ background: 'var(--os-ink)', color: 'var(--os-panel)', borderRadius: 9999 }}
         >
           <Icons.Plus size={15} />
           New Client
@@ -1323,12 +1343,13 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
         {(!isMobile || selectedClient) && (
         <div className={isMobile ? 'col-span-1' : 'lg:col-span-8 xl:col-span-9'}>
           {selectedClient ? (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 overflow-hidden">
+            <div className="overflow-hidden" style={{ background: 'var(--os-panel)', borderRadius: 14, border: '1px solid var(--os-border-2)', boxShadow: 'var(--shadow-card)' }}>
               {/* Mobile back button */}
               {isMobile && (
                 <button
                   onClick={() => setSelectedClient(null)}
-                  className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors w-full border-b border-zinc-100 dark:border-zinc-800/60"
+                  className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors w-full"
+                  style={{ color: 'var(--os-fg-2)', borderBottom: '1px solid var(--os-border)' }}
                 >
                   <Icons.ChevronLeft size={18} />
                   Back to clients
@@ -1363,7 +1384,7 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
               />
 
               {/* ── 3 inline props ── */}
-              <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60 grid grid-cols-3 gap-4">
+              <div className="px-5 py-4 grid grid-cols-3 gap-4" style={{ borderBottom: '1px solid var(--os-border)' }}>
                 <InlineProp
                   label="Industry"
                   value={selectedClient.industry || ''}
@@ -1375,8 +1396,8 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   onSave={() => handleInlineEdit('industry')}
                 />
                 <div>
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Owner</p>
-                  <p className="text-[12px] font-medium text-zinc-700 dark:text-zinc-300 truncate">
+                  <p className="mb-1" style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--os-fg-3)' }}>Owner</p>
+                  <p className="text-[12px] font-medium truncate" style={{ color: 'var(--os-fg-1)' }}>
                     {teamMembers.find(m => m.id === selectedClient.owner_id)?.name || '—'}
                   </p>
                 </div>
@@ -1401,32 +1422,33 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
               {selectedClient.email && (
                 <div className="px-5 pt-5">
                   {partnerStatus === 'accepted' ? (
-                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
-                      <Icons.CheckCircle size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-2.5 p-3" style={{ borderRadius: 14, background: 'rgba(118,146,104,0.08)', border: '1px solid rgba(118,146,104,0.20)' }}>
+                      <Icons.CheckCircle size={16} className="shrink-0" style={{ color: 'var(--sage)' }} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
+                        <div className="text-[12px] font-medium" style={{ color: 'var(--os-ink)' }}>
                           Connected as partner agency
                         </div>
-                        <div className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--os-fg-2)' }}>
                           Their email already has a workspace. Use{' '}
                           <span className="font-semibold">"Connect agency"</span> on a project to share it with them.
                         </div>
                       </div>
                     </div>
                   ) : partnerStatus === 'pending' ? (
-                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
-                      <Icons.Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <div className="flex items-center gap-2.5 p-3" style={{ borderRadius: 14, background: 'var(--accent-soft)', border: '1px solid rgba(196,163,90,0.20)' }}>
+                      <Icons.Clock size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                        <div className="text-[12px] font-medium" style={{ color: 'var(--os-ink)' }}>
                           Partner-agency invite pending
                         </div>
-                        <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--os-fg-2)' }}>
                           We sent an invite to {selectedClient.email}. They need to accept to start sharing projects.
                         </div>
                       </div>
                       <button
                         onClick={() => setAgencyModalOpen(true)}
-                        className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline-offset-2 hover:underline"
+                        className="shrink-0 text-[11px] font-medium underline-offset-2 hover:underline transition-colors"
+                        style={{ color: 'var(--accent)' }}
                       >
                         Resend
                       </button>
@@ -1434,20 +1456,21 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   ) : (
                     <button
                       onClick={() => setAgencyModalOpen(true)}
-                      className="w-full flex items-center gap-2.5 p-3 rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-100 dark:hover:bg-violet-500/15 transition-colors text-left group"
+                      className="w-full flex items-center gap-2.5 p-3 transition-colors text-left group"
+                      style={{ borderRadius: 14, background: 'var(--os-surface)', border: '1px solid var(--os-border-2)' }}
                     >
-                      <div className="w-8 h-8 rounded-md bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-                        <Icons.Briefcase size={14} className="text-violet-600 dark:text-violet-400" />
+                      <div className="w-8 h-8 flex items-center justify-center shrink-0" style={{ borderRadius: 10, background: 'var(--accent-soft)' }}>
+                        <Icons.Briefcase size={14} style={{ color: 'var(--accent)' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-violet-800 dark:text-violet-300">
+                        <div className="text-[12px] font-medium" style={{ color: 'var(--os-ink)' }}>
                           Invite as partner agency
                         </div>
-                        <div className="text-[11px] text-violet-700/80 dark:text-violet-400/80 mt-0.5">
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--os-fg-2)' }}>
                           Give {selectedClient.name} their own workspace so you can sync projects, tasks and updates both ways.
                         </div>
                       </div>
-                      <Icons.ChevronRight size={14} className="text-violet-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                      <Icons.ChevronRight size={14} className="shrink-0 group-hover:translate-x-0.5 transition-transform" style={{ color: 'var(--os-fg-3)' }} />
                     </button>
                   )}
                 </div>
@@ -1460,16 +1483,16 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                   inside the EmailDraftPanel.  */}
               <div className="px-5 pt-5 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">AI Outreach</h3>
+                  <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--os-fg-3)' }}>AI Outreach</h3>
                   {emailContextSaving && (
-                    <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
-                      <span className="w-2 h-2 border border-zinc-300 border-t-zinc-500 rounded-full animate-spin" />
-                      Saving context…
+                    <span className="inline-flex items-center gap-1" style={{ fontSize: 10, color: 'var(--os-fg-3)' }}>
+                      <span className="w-2 h-2 rounded-full animate-spin" style={{ border: '1px solid var(--os-border-2)', borderTopColor: 'var(--os-fg-2)' }} />
+                      Saving context...
                     </span>
                   )}
                 </div>
                 {!selectedClient.email && (
-                  <div className="flex items-start gap-1.5 p-2 rounded-md text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                  <div className="flex items-start gap-1.5 p-2 text-[11px]" style={{ borderRadius: 10, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid rgba(196,163,90,0.18)' }}>
                     <Icons.AlertCircle size={11} className="shrink-0 mt-0.5" />
                     <span>
                       No email on file — the buttons will open the panel where you can pick a recipient. Add an email to {selectedClient.name?.split(' ')[0] || 'this client'} above to skip this step.
@@ -1480,32 +1503,34 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={openBlankEmail}
-                    className="flex items-center gap-2 p-2.5 rounded-lg bg-fuchsia-50 dark:bg-fuchsia-500/10 border border-fuchsia-200 dark:border-fuchsia-500/30 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/15 transition-colors text-left group"
+                    className="flex items-center gap-2 p-2.5 transition-colors text-left group"
+                    style={{ borderRadius: 14, background: 'var(--os-surface)', border: '1px solid var(--os-border-2)' }}
                   >
-                    <div className="w-7 h-7 rounded-md bg-fuchsia-100 dark:bg-fuchsia-500/20 flex items-center justify-center shrink-0">
-                      <Icons.Mail size={13} className="text-fuchsia-600 dark:text-fuchsia-400" />
+                    <div className="w-7 h-7 flex items-center justify-center shrink-0" style={{ borderRadius: 10, background: 'var(--accent-soft)' }}>
+                      <Icons.Mail size={13} style={{ color: 'var(--accent)' }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-fuchsia-800 dark:text-fuchsia-300">
+                      <div className="text-[12px] font-medium" style={{ color: 'var(--os-ink)' }}>
                         Compose with AI
                       </div>
-                      <div className="text-[10px] text-fuchsia-700/80 dark:text-fuchsia-400/80 mt-0.5 truncate">
+                      <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--os-fg-2)' }}>
                         Email or Slack — you pick
                       </div>
                     </div>
                   </button>
                   <button
                     onClick={openWeeklyUpdateEmail}
-                    className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors text-left group"
+                    className="flex items-center gap-2 p-2.5 transition-colors text-left group"
+                    style={{ borderRadius: 14, background: 'var(--os-surface)', border: '1px solid var(--os-border-2)' }}
                   >
-                    <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
-                      <Icons.CheckCircle size={13} className="text-emerald-600 dark:text-emerald-400" />
+                    <div className="w-7 h-7 flex items-center justify-center shrink-0" style={{ borderRadius: 10, background: 'rgba(118,146,104,0.10)' }}>
+                      <Icons.CheckCircle size={13} style={{ color: 'var(--sage)' }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-emerald-800 dark:text-emerald-300">
+                      <div className="text-[12px] font-medium" style={{ color: 'var(--os-ink)' }}>
                         Weekly update
                       </div>
-                      <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 truncate">
+                      <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--os-fg-2)' }}>
                         Auto-pulls last week's wins
                       </div>
                     </div>
@@ -1514,8 +1539,8 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
 
                   {/* Per-client context notes — fed to the AI on every draft */}
                   <div>
-                    <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">
-                      Context for AI <span className="normal-case font-normal text-zinc-300">— how to write to {selectedClient.name?.split(' ')[0] || 'this client'}</span>
+                    <label style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--os-fg-3)' }}>
+                      Context for AI <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--os-fg-3)', opacity: 0.7 }}>— how to write to {selectedClient.name?.split(' ')[0] || 'this client'}</span>
                     </label>
                     <textarea
                       value={emailContextDraft}
@@ -1523,9 +1548,10 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                       onBlur={saveEmailContext}
                       rows={3}
                       placeholder="e.g. Christie prefers concise emails, signs off as 'Chris'. CC bob@ckstudio.biz on anything finance-related. Past projects: Sunnyside, Lucky."
-                      className="mt-1 w-full px-2.5 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 text-[11.5px] text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-none leading-snug"
+                      className="mt-1 w-full px-2.5 py-2 text-[11.5px] resize-none leading-snug focus:outline-none"
+                      style={{ borderRadius: 10, border: '1px solid var(--os-border-2)', background: 'var(--os-surface-2)', color: 'var(--os-fg-1)' }}
                     />
-                    <p className="text-[10px] text-zinc-400 mt-1">
+                    <p className="mt-1" style={{ fontSize: 10, color: 'var(--os-fg-3)' }}>
                       The AI uses this every time you draft an email here. Saved on blur.
                     </p>
                   </div>
@@ -1541,33 +1567,36 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
               {/* ── Projects list ── */}
               <div className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                  <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--os-fg-3)' }}>
                     Projects · {assignedProjects.length}
                   </h3>
                 </div>
                 {assignedProjects.length === 0 ? (
-                  <p className="text-[12px] text-zinc-400 italic py-4 text-center">
+                  <p className="text-[12px] italic py-4 text-center" style={{ color: 'var(--os-fg-3)' }}>
                     No projects yet.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                    {assignedProjects.map(p => (
-                      <li key={p.id}>
+                  <ul>
+                    {assignedProjects.map((p, i) => (
+                      <li key={p.id} style={i > 0 ? { borderTop: '1px solid var(--os-border)' } : undefined}>
                         <button
                           onClick={() => onNavigate?.('projects', { projectId: p.id })}
-                          className="w-full flex items-center gap-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 -mx-2 px-2 rounded-lg transition-colors text-left"
+                          className="w-full flex items-center gap-3 py-2.5 -mx-2 px-2 transition-colors text-left"
+                          style={{ borderRadius: 10 }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--os-surface)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            p.status === 'Completed' ? 'bg-zinc-400'
-                            : p.status === 'Pending' ? 'bg-amber-500'
-                            : p.status === 'Review' ? 'bg-violet-500'
-                            : 'bg-emerald-500'
-                          }`} />
-                          <span className="text-[13px] font-medium text-zinc-800 dark:text-zinc-200 truncate flex-1">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{
+                            background: p.status === 'Completed' ? 'var(--os-fg-3)'
+                              : p.status === 'Pending' ? 'var(--accent)'
+                              : p.status === 'Review' ? '#8b5cf6'
+                              : 'var(--sage)',
+                          }} />
+                          <span className="text-[13px] font-medium truncate flex-1" style={{ color: 'var(--os-ink)' }}>
                             {p.title}
                           </span>
                           {p.deadline && (
-                            <span className="text-[11px] text-zinc-400 shrink-0">
+                            <span className="shrink-0" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)' }}>
                               {new Date(p.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                           )}
@@ -1583,7 +1612,8 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                     }));
                     onNavigate?.('projects', { clientId: selectedClient.id });
                   }}
-                  className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl text-[12px] font-medium text-zinc-500 hover:border-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 text-[12px] font-medium transition-colors"
+                  style={{ border: '1px dashed var(--os-border-2)', borderRadius: 14, color: 'var(--os-fg-2)' }}
                 >
                   <Icons.Plus size={14} />
                   New project
@@ -1591,12 +1621,12 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
               </div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
-              <div className="w-14 h-14 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
-                <Icons.Users size={24} className="text-zinc-400" />
+            <div className="p-12 text-center flex flex-col items-center justify-center min-h-[400px]" style={{ background: 'var(--os-panel)', borderRadius: 14, border: '1px solid var(--os-border-2)', boxShadow: 'var(--shadow-card)' }}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--os-surface)' }}>
+                <Icons.Users size={24} style={{ color: 'var(--os-fg-3)' }} />
               </div>
-              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Select a client</h3>
-              <p className="text-xs text-zinc-400 max-w-xs">
+              <h3 className="text-base mb-1" style={{ fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--os-ink)' }}>Select a client</h3>
+              <p className="text-xs max-w-xs" style={{ color: 'var(--os-fg-3)' }}>
                 Choose a client from the list or create a new one to see their details, messages and tasks.
               </p>
             </div>
