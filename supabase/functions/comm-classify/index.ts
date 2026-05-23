@@ -1,8 +1,8 @@
 // @ts-nocheck
 // comm-classify — AI classifier dedicado para communication_messages.
 //
-// Llama OpenAI gpt-4o-mini directamente (bypaseando gemini edge fn por un
-// bug donde el LLM hacía echo del input en lugar de clasificar).
+// Delega el call al modelo a la edge fn `gemini` con type='comm_classify',
+// para mantener una sola fuente del prompt + quotas + retries.
 //
 // Flujo:
 //   1. Recibe { message_id: uuid }.
@@ -12,7 +12,7 @@
 //        - ignore: marca ai_processed=true y sale.
 //        - notify_only: marca ai_processed=true sin AI.
 //        - classify_and_propose / classify_and_auto_create: continúa.
-//   5. Llama OpenAI gpt-4o-mini con response_format=json_object.
+//   5. Invoca gemini fn con type='comm_classify'.
 //   6. Deriva confidence heurístico.
 //   7. UPDATE communication_messages con ai_classification + matched_*.
 //   8. Si mode=auto_create AND should_create_task AND confidence>=0.85: crea task.
@@ -31,68 +31,10 @@ const cors = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || ''
 
 const AUTO_CREATE_THRESHOLD = 0.85
 const PROPOSE_THRESHOLD = 0.50
-const OPENAI_MODEL = 'gpt-4o-mini'
-
-const COMM_CLASSIFY_SYSTEM_PROMPT = `You are a triage assistant for a creative agency's inbox (emails + Slack). The user gives you a JSON payload with one message + recent thread context + the agency's CRM (known clients and projects). Your job is to classify it AND link it back to the right client/project so the team can decide what to do without reading the whole message.
-
-Input shape:
-{
-  "platform": "gmail" | "slack",
-  "from_name": "...",
-  "from_email": "...",
-  "subject": "...",
-  "body": "the message text",
-  "thread_context": [{ "from": "...", "body": "...", "date": "ISO timestamp" }],
-  "agency_name": "the brand name — use this as 'we' in suggested_reply",
-  "clients": [{ "id": "uuid", "name": "Acme Co", "email": "contact@acme.com", "company": "Acme Industries" }],
-  "projects": [{ "id": "uuid", "title": "Mobilita rebrand", "client_id": "uuid", "client_name": "Christie King" }]
-}
-
-Return ONLY valid JSON with this shape:
-{
-  "intent": "new_request" | "follow_up" | "question" | "approval" | "feedback" | "info_only" | "urgent",
-  "priority": "high" | "medium" | "low",
-  "summary": "1-2 sentence plain-language recap of what the message is asking for / about",
-  "matched_client_id": "uuid from clients[] or null",
-  "matched_project_id": "uuid from projects[] or null",
-  "match_reason": "why we matched, or null",
-  "should_create_task": boolean,
-  "needs_clarification": boolean,
-  "clarification_question": "string — what to ask the sender if needs_clarification is true, or null",
-  "suggested_task": {
-    "title": "short imperative — MUST be specific about WHAT, not generic ('Prioritize X request' is BAD)",
-    "description": "1-3 sentences with the concrete asks + context",
-    "due_date": "YYYY-MM-DD or null",
-    "project_hint": "free-text guess or null"
-  } | null,
-  "suggested_reply": "ready-to-send draft, first-person plural, polite + concrete",
-  "reply_tone": "formal" | "friendly" | "concise",
-  "key_entities": ["max 8 names/dates/amounts/URLs"],
-  "language": "es" | "en" | "other"
-}
-
-Rules — CRITICAL:
-- AMBIGUITY HANDLING: If the body uses references without antecedent ('this one', 'el otro también', 'esa cosa', 'lo de antes', 'el mismo asap', 'también', 'también please', 'sumá éste'), do this FIRST:
-   1. Look at thread_context[] for prior messages — what was being discussed?
-   2. If you can resolve the reference confidently, write a SPECIFIC suggested_task.title naming the actual thing (e.g. "Send invoice to Acme — also requested ASAP by Christie on May 22" instead of "Prioritize Christie request").
-   3. If thread_context doesn't resolve it OR is empty, set needs_clarification=true + clarification_question (e.g. "Christie pidió priorizar 'this one' sin contexto. ¿Cuál es 'this one'? Mensaje original: '<quote>'"). In that case, suggested_task may be null OR have a title prefixed with "[CLARIFICAR] " to make the gap obvious.
-- NEVER create a generic task like "Prioritize X request" or "Action X message" with no concrete verb. If you can't say WHAT to do, set needs_clarification=true.
-- Intent = 'urgent' ONLY when the message uses time-pressure language ("ASAP", "today", "urgente"). Don't crank "high" priority for routine work.
-- 'follow_up' is for "bumping" / "any updates?".
-- 'info_only' = no answer needed (FYI, automated digests, status updates with nothing to action).
-- should_create_task = true ONLY for new_request, urgent, or feedback that requires real follow-through. Approvals and questions usually just need a reply, not a task.
-- suggested_task = null when should_create_task is false. When true, due_date must be a real date in the future inferred from the body — never invent.
-- suggested_reply: 2-5 sentences, polite, concrete. If needs_clarification, suggested_reply MUST ask the clarification_question.
-- key_entities: extract names of people, companies, projects, dates, amounts, URLs literally as they appear. Max 8.
-- language: detect from body. Reply in that language.
-- matched_client_id: ONLY set when confident. Match by from_email exact, domain, or body/subject mention. If multiple could match, pick null.
-- matched_project_id: ONLY set when message clearly references a project from projects[]. If client matches but no specific project, leave null.
-- match_reason: 1 short sentence. null when nothing matched.
-- NEVER invent ids. Only return ids that literally exist in the input clients[]/projects[] arrays.`
+const GEMINI_FN_URL = `${SUPABASE_URL}/functions/v1/gemini`
 
 function deriveConfidence(result: any): number {
   let score = 0.25
@@ -118,12 +60,6 @@ serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), {
       status: 405, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (!OPENAI_API_KEY) {
-    return new Response(JSON.stringify({ error: 'OPENAI_API_KEY not set' }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -250,44 +186,38 @@ async function classify(admin: SupabaseClient, messageId: string) {
     })),
   }
 
-  // Direct OpenAI call — explicit system + user messages, json_object response.
-  const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+  // Delegamos al gemini fn — single source of prompt + model + quota tracking.
+  // Auth con service_role: la gemini fn no requiere JWT pero el SR garantiza
+  // que pasamos cualquier verify_jwt si en el futuro lo activamos.
+  const geminiRes = await fetch(GEMINI_FN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'apikey': SUPABASE_SERVICE_ROLE_KEY,
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: COMM_CLASSIFY_SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify(classifyInput) },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      max_tokens: 1500,
+      type: 'comm_classify',
+      input: JSON.stringify(classifyInput),
     }),
   })
 
-  if (!openaiRes.ok) {
-    const errText = await openaiRes.text()
-    console.error('[comm-classify] openai error', openaiRes.status, errText)
+  if (!geminiRes.ok) {
+    const errText = await geminiRes.text()
+    console.error('[comm-classify] gemini error', geminiRes.status, errText.slice(0, 500))
     await admin.from('communication_messages')
-      .update({ ai_classification: { error: 'openai_call_failed', status: openaiRes.status, detail: errText.slice(0, 500) } })
+      .update({ ai_classification: { error: 'gemini_call_failed', status: geminiRes.status, detail: errText.slice(0, 500) } })
       .eq('id', messageId)
-    throw new Error(`openai ${openaiRes.status}: ${errText.slice(0, 200)}`)
+    throw new Error(`gemini ${geminiRes.status}: ${errText.slice(0, 200)}`)
   }
-  const openaiData = await openaiRes.json()
-  const rawContent = openaiData?.choices?.[0]?.message?.content || ''
-
-  let result: any
-  try { result = JSON.parse(rawContent) }
-  catch (e) {
-    console.error('[comm-classify] json parse failed', rawContent.slice(0, 300))
+  const geminiData = await geminiRes.json()
+  const result: any = geminiData?.result
+  if (!result) {
+    console.error('[comm-classify] gemini returned no result', JSON.stringify(geminiData).slice(0, 300))
     await admin.from('communication_messages')
-      .update({ ai_classification: { error: 'json_parse_failed', raw: rawContent.slice(0, 500) } })
+      .update({ ai_classification: { error: 'gemini_no_result', raw: geminiData } })
       .eq('id', messageId)
-    throw new Error('json_parse_failed')
+    throw new Error('gemini_no_result')
   }
 
   // Sanity: ensure required fields exist; if not, mark and exit.
