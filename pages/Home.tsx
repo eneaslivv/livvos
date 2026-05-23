@@ -145,19 +145,51 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   // ModeTabs (Thoughts / Vision / Deep work) sistema removido — el toggle
   // ocupaba espacio sin generar valor. Los chips + placeholder del Deep
   // work mode están hardcodeados abajo como defaults universales.
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  //
+  // Conversación persistida en sessionStorage para que la charla
+  // sobreviva navegar entre páginas y volver. La idea (pedido del user):
+  // el composer queda anclado abajo, los mensajes fluyen arriba y podés
+  // seguir consultando cosas — resumir Slack, mails, redactar
+  // respuestas — sin tener que volver a empezar cada vez.
+  const CHAT_STORAGE_KEY = 'home:chat:v1';
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    try {
+      const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  });
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [pendingMsgs, setPendingMsgs] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Persist on every change. We keep only the last 40 turns to avoid
+  // unbounded growth in sessionStorage.
+  useEffect(() => {
+    try {
+      const trimmed = messages.slice(-40);
+      sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(trimmed));
+    } catch { /* quota / private-mode: silently skip */ }
+  }, [messages]);
 
   // Hardcoded chips + placeholder — antes venía del modeConfig dinámico.
   const HOME_PLACEHOLDER = "Let's focus — what's the first thing?";
+  // Two flavors of chips. The "start" chips show only on an empty
+  // conversation (heavy prompts that kick things off). The "quick" chips
+  // sit above the composer always — son los que pidió el user para
+  // consultar mails / slack / redactar respuestas sin esfuerzo.
   const HOME_CHIPS = [
     { label: 'Plan my week',    prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
     { label: "What's blocked?", prompt: "What's blocked or waiting on someone else right now?" },
     { label: 'Follow-ups',      prompt: "Show me pending follow-ups across clients + inbox I haven't replied to." },
     { label: 'Catch me up',     prompt: 'Catch me up on what changed since yesterday across tasks, inbox, and finance.' },
+  ];
+  const QUICK_CHIPS = [
+    { label: 'Resumir inbox',  icon: 'Mail',          prompt: 'Hacé un resumen corto de los mails nuevos / pendientes — agrupados por remitente o tema, qué requiere respuesta urgente.' },
+    { label: 'Resumir Slack',  icon: 'MessageSquare', prompt: 'Resumime los mensajes de Slack pendientes de respuesta — qué canales / personas están esperando algo mío.' },
+    { label: 'Redactar reply', icon: 'Edit',          prompt: 'Ayudame a redactar respuestas a los mensajes pendientes que más demoraron. Sugerime un draft por cada uno y yo apruebo.' },
+    { label: 'Qué cambió',     icon: 'Activity',      prompt: '¿Qué cambió desde la última vez que abrí la app? Mensajes nuevos, tareas que se vencieron, eventos próximos.' },
   ];
 
   // ── Derived counts for the top stat cards ───────────────────────
@@ -283,11 +315,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     }
   }, [input, sending, currentTenant?.id, user?.id, messages]);
 
-  // Auto-scroll on new message.
+  // Auto-scroll to bottom on every new message + when the "Thinking…"
+  // indicator toggles, so the user always sees the latest turn without
+  // having to scroll manually.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, sending]);
 
   // Execute an AI-proposed action inline via the centralized executor.
   const executeAction = async (msgIdx: number, actionIdx: number) => {
@@ -458,159 +492,188 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             <StatCard label="Pending msgs" value={pendingMsgs}     tone="violet"  />
           </div>
 
-          {/* Chat block — slim version of the Brief chat. Greeting +
-              prompt chips + ask box + last few messages. For the
-              full Tasks/Calendar/Inbox tabs, the user navigates to
-              Brief (linked from the bottom). */}
-          <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center shrink-0">
-                <Icons.Sparkles size={13} className="text-white dark:text-zinc-900" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[14px] text-zinc-900 dark:text-zinc-100 leading-snug">
-                  {partOfDay.replace('Good ', 'Buen ').replace('morning', 'mañana').replace('afternoon', 'tarde').replace('evening', 'noche')}, <span className="capitalize">{userFirstName}</span>.
-                  <span className="text-zinc-500 dark:text-zinc-400 font-normal ml-1">{HOME_PLACEHOLDER}</span>
-                </div>
-              </div>
-            </div>
-            {/* Prompt chips for the current mode */}
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {HOME_CHIPS.map(c => {
-                const IconCmp = (Icons as any)[
-                  c.label.includes('week') ? 'Calendar' :
-                  c.label.includes('blocked') ? 'AlertTriangle' :
-                  c.label.includes('Follow-ups') ? 'Mail' :
-                  c.label.includes('Catch') ? 'Zap' :
-                  c.label.includes('Brainstorm') ? 'Sparkles' :
-                  c.label.includes('Reflect') ? 'Activity' :
-                  c.label.includes('Write') ? 'Edit' :
-                  c.label.includes('Strategy') ? 'Target' :
-                  c.label.includes('Roadmap') ? 'Flag' :
-                  c.label.includes('Big bets') ? 'Star' :
-                  'Sparkles'
-                ] || Icons.Sparkles;
-                return (
-                  <motion.button
-                    key={c.label}
-                    onClick={() => handleSend(c.prompt)}
-                    disabled={sending}
-                    whileTap={{ scale: 0.96, transition: SPRING_TAP }}
-                    whileHover={{ y: -1, transition: SPRING_TAP }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 transition-colors"
-                  >
-                    <IconCmp size={11} />
-                    {c.label}
-                  </motion.button>
-                );
-              })}
-            </div>
-            {/* Input */}
-            <div className="mt-3 flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder={voice.isListening ? 'Listening…' : `Ask anything…  e.g. show me what's overdue on Sunnyside`}
-                rows={1}
-                className={`flex-1 resize-none px-3.5 py-2 rounded-xl text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors border ${
-                  voice.isListening
-                    ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
-                    : 'bg-zinc-50 dark:bg-zinc-800/60 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
-                }`}
-                style={{ minHeight: '38px' }}
-              />
-              {voice.isSupported && (
-                <motion.button
-                  onClick={() => voice.isListening ? voice.stop() : voice.start()}
-                  disabled={sending}
-                  whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-                  animate={voice.isListening ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } } : { scale: 1 }}
-                  className={`p-2 rounded-xl border transition-colors ${
-                    voice.isListening
-                      ? 'bg-rose-500 border-rose-500 text-white'
-                      : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40'
-                  }`}
-                  title={voice.isListening ? 'Stop' : 'Dictate'}
-                >
-                  <Icons.Mic size={14} />
-                </motion.button>
-              )}
-              <motion.button
-                onClick={() => handleSend()}
-                disabled={!input.trim() || sending}
-                whileTap={{ scale: 0.9, transition: SPRING_TAP }}
-                className="p-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition-opacity"
-              >
-                <Icons.Send size={14} />
-              </motion.button>
-            </div>
-            {voice.error && (
-              <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">{voice.error}</div>
-            )}
-
-            {/* Last message thread (compact). Full chat history lives in Brief. */}
-            {messages.length > 0 && (
-              <div ref={scrollRef} className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800/60 max-h-[40vh] overflow-y-auto space-y-3">
-                <AnimatePresence initial={false}>
-                  {messages.slice(-6).map((m, i) => (
-                    <motion.div
-                      key={`${m.ts}-${i}`}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={SPRING_ENTER}
-                      className={m.role === 'user' ? 'flex justify-end' : ''}
-                    >
-                      <div className="max-w-full">
-                        {m.role === 'user' ? (
-                          <div className="max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2 ml-auto text-[12.5px] leading-relaxed whitespace-pre-wrap">
-                            {m.content}
-                          </div>
-                        ) : (
-                          <>
-                            <Markdown source={m.content} />
-                            {m.actions && m.actions.length > 0 && (
-                              <div className="mt-2 space-y-1.5">
-                                {m.actions.map((a, ai) => (
-                                  <ActionCard
-                                    key={ai}
-                                    action={a}
-                                    onConfirm={() => executeAction(messages.indexOf(m), ai)}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {sending && (
-                  <div className="text-zinc-400 text-[11.5px] inline-flex items-center gap-2">
-                    <span className="inline-flex gap-1">
-                      {[0,1,2].map(i => (
-                        <motion.span
-                          key={i}
-                          className="w-1.5 h-1.5 rounded-full bg-zinc-400"
-                          animate={{ y: [0,-3,0], opacity: [0.4,1,0.4] }}
-                          transition={{ duration: 1.1, repeat: Infinity, delay: i*0.12, ease: 'easeInOut' }}
-                        />
-                      ))}
-                    </span>
-                    Thinking…
+          {/* Chat block — composer anclado abajo, mensajes fluyendo
+              arriba. La idea (pedido del user): podés seguir la charla
+              sin que el input se mueva, y los chips rápidos (resumir
+              inbox, resumir Slack, redactar reply, qué cambió) están
+              siempre visibles arriba del composer. El bloque tiene
+              altura fija con scroll interno para que los mensajes
+              largos no empujen al resto de la home hacia abajo. */}
+          <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col" style={{ minHeight: '480px', maxHeight: 'calc(100vh - 220px)' }}>
+            {/* ── Messages area (flex-1, scroll interno) ───────────── */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-2 space-y-3">
+              {messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                  <div className="w-9 h-9 rounded-full bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center mb-3">
+                    <Icons.Sparkles size={15} className="text-white dark:text-zinc-900" />
                   </div>
-                )}
-                <div className="text-center pt-2">
-                  <button
-                    onClick={() => onNavigate('brief')}
-                    className="text-[10.5px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors inline-flex items-center gap-1"
-                  >
-                    Continue in Brief <Icons.ArrowLeft size={9} className="rotate-180" />
-                  </button>
+                  <div className="text-[14px] text-zinc-900 dark:text-zinc-100 font-medium">
+                    {partOfDay.replace('Good ', 'Buen ').replace('morning', 'mañana').replace('afternoon', 'tarde').replace('evening', 'noche')}, <span className="capitalize">{userFirstName}</span>.
+                  </div>
+                  <div className="text-[12px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-[420px]">{HOME_PLACEHOLDER}</div>
+                  {/* Starter chips — only on empty conversation */}
+                  <div className="flex flex-wrap gap-1.5 justify-center mt-5 max-w-[480px]">
+                    {HOME_CHIPS.map(c => {
+                      const IconCmp = (Icons as any)[
+                        c.label.includes('week') ? 'Calendar' :
+                        c.label.includes('blocked') ? 'AlertTriangle' :
+                        c.label.includes('Follow-ups') ? 'Mail' :
+                        c.label.includes('Catch') ? 'Zap' :
+                        'Sparkles'
+                      ] || Icons.Sparkles;
+                      return (
+                        <motion.button
+                          key={c.label}
+                          onClick={() => handleSend(c.prompt)}
+                          disabled={sending}
+                          whileTap={{ scale: 0.96, transition: SPRING_TAP }}
+                          whileHover={{ y: -1, transition: SPRING_TAP }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 transition-colors"
+                        >
+                          <IconCmp size={11} />
+                          {c.label}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <AnimatePresence initial={false}>
+                    {messages.map((m, i) => (
+                      <motion.div
+                        key={`${m.ts}-${i}`}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={SPRING_ENTER}
+                        className={m.role === 'user' ? 'flex justify-end' : ''}
+                      >
+                        <div className="max-w-full">
+                          {m.role === 'user' ? (
+                            <div className="max-w-[85%] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-2xl rounded-br-md px-3.5 py-2 ml-auto text-[12.5px] leading-relaxed whitespace-pre-wrap">
+                              {m.content}
+                            </div>
+                          ) : (
+                            <>
+                              <Markdown source={m.content} />
+                              {m.actions && m.actions.length > 0 && (
+                                <div className="mt-2 space-y-1.5">
+                                  {m.actions.map((a, ai) => (
+                                    <ActionCard
+                                      key={ai}
+                                      action={a}
+                                      onConfirm={() => executeAction(i, ai)}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                  {sending && (
+                    <div className="text-zinc-400 text-[11.5px] inline-flex items-center gap-2">
+                      <span className="inline-flex gap-1">
+                        {[0,1,2].map(i => (
+                          <motion.span
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full bg-zinc-400"
+                            animate={{ y: [0,-3,0], opacity: [0.4,1,0.4] }}
+                            transition={{ duration: 1.1, repeat: Infinity, delay: i*0.12, ease: 'easeInOut' }}
+                          />
+                        ))}
+                      </span>
+                      Thinking…
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* ── Composer anchored at bottom ───────────────────────
+                Chips rápidos siempre visibles arriba del input para
+                consultar mails / slack / redactar respuestas con
+                un click. Border-top suave para separar visualmente
+                de los mensajes sin meter ruido. */}
+            <div className="border-t border-zinc-100 dark:border-zinc-800/60 px-4 pt-3 pb-3.5 bg-white dark:bg-zinc-900 rounded-b-2xl">
+              {/* Quick chips — siempre visibles */}
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
+                {QUICK_CHIPS.map(c => {
+                  const IconCmp = (Icons as any)[c.icon] || Icons.Sparkles;
+                  return (
+                    <motion.button
+                      key={c.label}
+                      onClick={() => handleSend(c.prompt)}
+                      disabled={sending}
+                      whileTap={{ scale: 0.96, transition: SPRING_TAP }}
+                      whileHover={{ y: -1, transition: SPRING_TAP }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-700/70 text-[10.5px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-40 transition-colors"
+                      title={c.prompt}
+                    >
+                      <IconCmp size={10.5} />
+                      {c.label}
+                    </motion.button>
+                  );
+                })}
+                {messages.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setMessages([]);
+                      try { sessionStorage.removeItem(CHAT_STORAGE_KEY); } catch {}
+                    }}
+                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                    title="Empezar de nuevo"
+                  >
+                    <Icons.X size={10} /> Nueva charla
+                  </button>
+                )}
               </div>
-            )}
+              {/* Input row */}
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  placeholder={voice.isListening ? 'Listening…' : `Seguí la charla…  ej. respondele al último de Slack que sí lo hacemos`}
+                  rows={1}
+                  className={`flex-1 resize-none px-3.5 py-2 rounded-xl text-[12.5px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none max-h-32 transition-colors border ${
+                    voice.isListening
+                      ? 'bg-rose-50/40 dark:bg-rose-500/5 border-rose-200/60 dark:border-rose-500/30'
+                      : 'bg-zinc-50 dark:bg-zinc-800/60 border-transparent focus:border-zinc-300 dark:focus:border-zinc-600'
+                  }`}
+                  style={{ minHeight: '38px' }}
+                />
+                {voice.isSupported && (
+                  <motion.button
+                    onClick={() => voice.isListening ? voice.stop() : voice.start()}
+                    disabled={sending}
+                    whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+                    animate={voice.isListening ? { scale: [1, 1.06, 1], transition: { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } } : { scale: 1 }}
+                    className={`p-2 rounded-xl border transition-colors ${
+                      voice.isListening
+                        ? 'bg-rose-500 border-rose-500 text-white'
+                        : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40'
+                    }`}
+                    title={voice.isListening ? 'Stop' : 'Dictate'}
+                  >
+                    <Icons.Mic size={14} />
+                  </motion.button>
+                )}
+                <motion.button
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || sending}
+                  whileTap={{ scale: 0.9, transition: SPRING_TAP }}
+                  className="p-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition-opacity"
+                >
+                  <Icons.Send size={14} />
+                </motion.button>
+              </div>
+              {voice.error && (
+                <div className="mt-1.5 text-[10.5px] text-rose-600 dark:text-rose-400">{voice.error}</div>
+              )}
+            </div>
           </section>
 
           {/* DailyBrief — full AI structured summary. Lives below the
@@ -886,6 +949,13 @@ const QuickTasksCard: React.FC<{
                 >
                   {t.title}
                 </button>
+                {/* "Interno" indicator — pequeño punto de casa para las
+                    tareas sin proyecto ni cliente (laburo de estudio).
+                    Sutil para no competir con el due label, pero
+                    suficiente para que no se sienta huérfana en el listado. */}
+                {!t.project_id && !t.client_id && (
+                  <Icons.Home size={9} className="text-zinc-300 dark:text-zinc-600 flex-shrink-0" aria-label="Interno" />
+                )}
                 <span className={`text-[9.5px] font-mono whitespace-nowrap ${dueColor}`}>{due.text}</span>
               </li>
             );

@@ -441,12 +441,14 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
               placeholder="Untitled"
             />
 
-            <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-              Created {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
-              {selectedTask.owner_id && (() => {
-                const ownerName = getMemberName(selectedTask.owner_id);
-                return ownerName ? <> by <span className="text-zinc-600 dark:text-zinc-300 font-medium">{ownerName}</span></> : null;
-              })()}
+            <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              <span>
+                Created {new Date(selectedTask.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+                {selectedTask.owner_id && (() => {
+                  const ownerName = getMemberName(selectedTask.owner_id);
+                  return ownerName ? <> by <span className="text-zinc-600 dark:text-zinc-300 font-medium">{ownerName}</span></> : null;
+                })()}
+              </span>
               {selectedTask.project_id && (() => {
                 // Surface the project + client right here so the user always
                 // knows what context the task belongs to — even when the
@@ -457,11 +459,46 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
                 const cli = proj.client_id ? clients.find(c => c.id === proj.client_id) : null;
                 return (
                   <>
-                    {' · '}
+                    <span className="text-zinc-300 dark:text-zinc-700">·</span>
                     <span className="inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-300">
                       <Icons.Briefcase size={10} />
                       {proj.title}
                       {cli && <span className="text-zinc-400"> · {cli.name}</span>}
+                    </span>
+                  </>
+                );
+              })()}
+              {/* "Interno" chip — surfaces tasks que no tienen ni proyecto
+                  ni cliente como laburo de estudio (no client work). Antes
+                  estas tareas se sentían huérfanas con "No project / No
+                  client" en los selects de abajo; el chip las dignifica
+                  como una categoría intencional. Si la tarea sólo tiene
+                  cliente pero no proyecto, mostramos "Direct work" con el
+                  cliente para que no se vea como un bug. */}
+              {!selectedTask.project_id && !selectedTask.client_id && (
+                <>
+                  <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 text-[10px] font-medium"
+                    title="Tarea interna del estudio — sin cliente ni proyecto asociado."
+                  >
+                    <Icons.Home size={9} />
+                    Interno · Studio
+                  </span>
+                </>
+              )}
+              {!selectedTask.project_id && selectedTask.client_id && (() => {
+                const cli = clients.find(c => c.id === selectedTask.client_id);
+                if (!cli) return null;
+                return (
+                  <>
+                    <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-medium"
+                      title="Trabajo directo para un cliente sin proyecto formal asignado."
+                    >
+                      <Icons.Users size={9} />
+                      Direct · {cli.name}
                     </span>
                   </>
                 );

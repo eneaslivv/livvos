@@ -64,6 +64,12 @@ export interface CategoryData {
   // the card body. Currently only used by `content` for per-channel
   // frequency compliance, but the shape is general.
   gauges?: Array<{ label: string; current: number; target: number; tone?: 'rose' | 'amber' | 'emerald' | 'violet' }>;
+  // Optional structured items — richer than plain bullets. Each item
+  // has an id + text and can carry arbitrary meta. When present, the
+  // UI renders these as clickable rows that can open a detail panel
+  // (e.g. inbox messages). The plain `bullets` array still exists for
+  // the AI synthesis prompt.
+  items?: Array<{ id: string; text: string; meta?: Record<string, any> }>;
 }
 
 export interface LoaderCtx {
@@ -255,7 +261,7 @@ async function loadInbox(ctx: LoaderCtx): Promise<CategoryData | null> {
   try {
     const { data: msgs } = await ctx.db
       .from('communication_messages')
-      .select('id, from_name, subject, ai_classification, received_at')
+      .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, status, ai_classification, matched_client_id')
       .eq('tenant_id', ctx.tenantId)
       .eq('status', 'pending')
       .order('received_at', { ascending: false })
@@ -266,7 +272,15 @@ async function loadInbox(ctx: LoaderCtx): Promise<CategoryData | null> {
       return c.priority === 'high' || c.intent === 'urgent';
     });
     const requests = pending.filter(m => m.ai_classification?.should_create_task === true);
-    const topUrgent = [...urgent, ...requests].slice(0, 4);
+    // Surface urgent + requests first, then fill with the rest.
+    const seen = new Set<string>();
+    const topItems: any[] = [];
+    for (const m of [...urgent, ...requests, ...pending]) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      topItems.push(m);
+      if (topItems.length >= 6) break;
+    }
     return {
       id: 'inbox',
       title: 'Inbox signals',
@@ -275,9 +289,26 @@ async function loadInbox(ctx: LoaderCtx): Promise<CategoryData | null> {
         { label: 'Urgent',   value: String(urgent.length),   tone: urgent.length > 0 ? 'rose' : 'zinc' },
         { label: 'Requests', value: String(requests.length), tone: requests.length > 0 ? 'violet' : 'zinc' },
       ],
-      bullets: topUrgent.slice(0, 4).map((m: any) =>
+      bullets: topItems.map((m: any) =>
         `${m.from_name || 'Anonymous'} · ${(m.subject || '(no subject)').slice(0, 60)}`
       ),
+      // Structured items — each carries the full message data so the
+      // detail panel can render it without a round-trip to the DB.
+      items: topItems.map((m: any) => ({
+        id: m.id,
+        text: `${m.from_name || 'Anonymous'} · ${(m.subject || '(no subject)').slice(0, 60)}`,
+        meta: {
+          platform: m.platform,
+          from_name: m.from_name,
+          from_email: m.from_email,
+          subject: m.subject,
+          body_text: m.body_text,
+          channel_name: m.channel_name,
+          received_at: m.received_at,
+          ai_classification: m.ai_classification,
+          matched_client_id: m.matched_client_id,
+        },
+      })),
       status: urgent.length > 0 ? 'attention' : (pending.length > 0 ? 'ok' : 'empty'),
       context: { pending_total: pending.length, urgent_count: urgent.length, request_count: requests.length },
     };

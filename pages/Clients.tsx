@@ -20,6 +20,7 @@ import { NewClientPanel } from '../components/clients/NewClientPanel';
 import { ConnectAgencyModal } from '../components/layout/ConnectAgencyModal';
 import { EmailDraftPanel } from '../components/ai/EmailDraftPanel';
 import { IconPicker } from '../components/ui/IconPicker';
+import { ClientCommsSection } from '../components/clients/ClientCommsSection';
 
 /* ─── Helpers ─── */
 const statusConfig = {
@@ -1529,6 +1530,13 @@ export const Clients: React.FC<{ onNavigate?: (page: PageView, params?: NavParam
                     </p>
                   </div>
                 </div>
+
+              {/* ── Communications timeline (Gmail + Slack) ── */}
+              <ClientCommsSection
+                clientId={selectedClient.id}
+                clientName={selectedClient.name}
+                clientEmail={selectedClient.email}
+              />
 
               {/* ── Projects list ── */}
               <div className="p-5">

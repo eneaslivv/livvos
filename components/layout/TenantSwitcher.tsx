@@ -118,9 +118,12 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
     const nativeMemberships = memberships.filter(m => m.source === 'native' || m.is_super_agency);
     const connectedAgencies = memberships.filter(m => m.source === 'connection');
 
-    const logoSrc = currentTenant.logo_url_dark && isDarkMode
-        ? currentTenant.logo_url_dark
-        : (currentTenant.logo_url || currentTenant.logo_url_dark);
+    // Contrast-swap: light mode → show the WHITE version of the logo on
+    // a dark circle; dark mode → show the DARK version on a white circle.
+    // This keeps the logo always popping against its container.
+    const logoSrc = isDarkMode
+        ? (currentTenant.logo_url || currentTenant.logo_url_dark)    // dark logo (dark/black) on white circle
+        : (currentTenant.logo_url_dark || currentTenant.logo_url);   // light logo (white) on dark circle
 
     return (
         <>
@@ -136,15 +139,15 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ expanded, isDark
                         hover:bg-zinc-50 dark:hover:bg-zinc-800/40
                         transition-all
                         ${isInChildTenant ? 'ring-1 ring-amber-300 dark:ring-amber-700' : ''}
-                        ${expanded ? 'p-1.5 justify-start' : 'p-0.5 justify-center'}
+                        ${expanded ? 'px-1.5 py-1 justify-start' : 'p-0.5 justify-center'}
                     `}
                     title={expanded ? undefined : currentTenant.name}
                 >
-                    <div className={`relative flex items-center justify-center rounded-lg shrink-0 overflow-hidden bg-white dark:bg-zinc-800 ${expanded ? 'w-9 h-9' : 'w-10 h-10'}`}>
+                    <div className={`relative flex items-center justify-center rounded-full shrink-0 overflow-hidden bg-zinc-900 dark:bg-white ${expanded ? 'w-11 h-11' : 'w-12 h-12'}`}>
                         {logoSrc ? (
-                            <img src={logoSrc} alt={currentTenant.name} className="w-full h-full object-contain" />
+                            <img src={logoSrc} alt={currentTenant.name} className="w-[70%] h-[70%] object-contain" />
                         ) : (
-                            <span className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300 select-none">
+                            <span className="text-[13px] font-bold text-white dark:text-zinc-900 select-none">
                                 {currentTenant.name.slice(0, 2).toUpperCase()}
                             </span>
                         )}

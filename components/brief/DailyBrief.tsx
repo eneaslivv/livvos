@@ -181,6 +181,8 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
   const [refreshing, setRefreshing] = useState(false);
   const [synthesizing, setSynthesizing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Message detail panel — opens when clicking on an inbox item.
+  const [previewItem, setPreviewItem] = useState<{ id: string; text: string; meta?: Record<string, any> } | null>(null);
 
   // Pull prefs (or seed defaults). Failing means we silently fall back.
   const loadPrefs = useCallback(async (): Promise<Prefs> => {
@@ -460,6 +462,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
                   aiTag={aiTag}
                   idx={idx}
                   onOpen={onNavigate ? () => onNavigate(meta.navigateTo) : undefined}
+                  onItemClick={c.items ? (item) => setPreviewItem(item) : undefined}
                 />
               );
             })}
@@ -476,13 +479,152 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
           />
         )}
       </AnimatePresence>
+
+      {/* Message detail slide-over — opens when user clicks on an
+          inbox item in the "Inbox signals" card. Shows full body +
+          AI classification + metadata without navigating away. */}
+      <MessagePreviewPanel
+        item={previewItem}
+        onClose={() => setPreviewItem(null)}
+      />
       </div>
     </div>
   );
 };
 
+// ── MessagePreviewPanel — slide-over for inbox message detail ────
+const MessagePreviewPanel: React.FC<{
+  item: { id: string; text: string; meta?: Record<string, any> } | null;
+  onClose: () => void;
+}> = ({ item, onClose }) => {
+  if (!item) return null;
+  const m = item.meta || {};
+  const isSlack = m.platform === 'slack';
+  const aiC = m.ai_classification || {};
+  return (
+    <AnimatePresence>
+      {item && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="msg-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/20 z-[70]"
+          />
+          {/* Panel */}
+          <motion.div
+            key="msg-panel"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            className="fixed top-0 right-0 bottom-0 w-full max-w-[480px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl z-[71] flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                isSlack ? 'bg-violet-50 dark:bg-violet-500/10' : 'bg-rose-50 dark:bg-rose-500/10'
+              }`}>
+                {isSlack
+                  ? <Icons.Hash size={14} className="text-violet-500" />
+                  : <Icons.Mail size={14} className="text-rose-500" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                  {m.from_name || m.from_email || 'Unknown sender'}
+                </div>
+                <div className="text-[11px] text-zinc-400 truncate">
+                  {m.from_email || ''}{m.channel_name ? ` · #${m.channel_name}` : ''}
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <Icons.X size={16} className="text-zinc-400" />
+              </button>
+            </div>
+
+            {/* Subject */}
+            {m.subject && (
+              <div className="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+                <div className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100 leading-snug">
+                  {m.subject}
+                </div>
+                {m.received_at && (
+                  <div className="text-[10.5px] text-zinc-400 mt-1 font-mono tabular-nums">
+                    {new Date(m.received_at).toLocaleString('es-AR', {
+                      weekday: 'short', day: 'numeric', month: 'short',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI classification summary */}
+            {(aiC.summary || aiC.proposed_title) && (
+              <div className="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Icons.Sparkles size={11} className="text-violet-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">AI Analysis</span>
+                </div>
+                {aiC.summary && (
+                  <p className="text-[12px] text-zinc-700 dark:text-zinc-300 leading-relaxed">{aiC.summary}</p>
+                )}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {aiC.intent && (
+                    <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium">
+                      Intent: {aiC.intent}
+                    </span>
+                  )}
+                  {aiC.priority && (
+                    <span className={`text-[9.5px] px-1.5 py-0.5 rounded-full font-medium ${
+                      aiC.priority === 'high' ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                      : aiC.priority === 'medium' ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                    }`}>
+                      Priority: {aiC.priority}
+                    </span>
+                  )}
+                  {aiC.should_create_task && (
+                    <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 font-medium">
+                      Task request
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="text-[12.5px] text-zinc-700 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {m.body_text || '(No body)'}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-2">
+              <span className="text-[10px] text-zinc-400 font-mono">{item.id.slice(0, 8)}</span>
+              <span className={`text-[9.5px] px-1.5 py-0.5 rounded-full font-medium ${
+                isSlack ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-600' : 'bg-rose-100 dark:bg-rose-500/10 text-rose-600'
+              }`}>
+                {isSlack ? 'Slack' : 'Gmail'}
+              </span>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
 // ── CategoryCard ──────────────────────────────────────────────────
-const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: string; idx: number; onOpen?: () => void }> = ({ meta, data, aiTag, idx, onOpen }) => {
+const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: string; idx: number; onOpen?: () => void; onItemClick?: (item: { id: string; text: string; meta?: Record<string, any> }) => void }> = ({ meta, data, aiTag, idx, onOpen, onItemClick }) => {
   const tint = TONE_TINT[meta.tone] || TONE_TINT.zinc;
   const IconCmp = (Icons as any)[meta.icon] || Icons.Sparkles;
   const attention = data.status === 'attention';
@@ -567,14 +709,34 @@ const CategoryCard: React.FC<{ meta: CategoryMeta; data: CategoryData; aiTag?: s
           })}
         </div>
       )}
-      {/* Bullets — raw data */}
-      {data.bullets.length > 0 && (
+      {/* Bullets / Items — raw data, or structured clickable rows when
+          the loader provides items (e.g. inbox messages). */}
+      {data.items && data.items.length > 0 && onItemClick ? (
+        <ul className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-0.5 leading-snug">
+          {data.items.slice(0, 6).map((item) => (
+            <li key={item.id}>
+              <button
+                onClick={(e) => { e.stopPropagation(); onItemClick(item); }}
+                className="w-full text-left truncate hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/40 -mx-1 px-1 py-0.5 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                title={item.text}
+              >
+                {item.meta?.platform === 'slack' ? (
+                  <Icons.Hash size={9} className="text-violet-400 shrink-0" />
+                ) : item.meta?.platform === 'gmail' ? (
+                  <Icons.Mail size={9} className="text-rose-400 shrink-0" />
+                ) : null}
+                {item.text}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : data.bullets.length > 0 ? (
         <ul className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-0.5 leading-snug">
           {data.bullets.slice(0, 5).map((b, i) => (
             <li key={i} className="truncate" title={b}>{b}</li>
           ))}
         </ul>
-      )}
+      ) : null}
     </Component>
   );
 };

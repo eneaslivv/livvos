@@ -157,7 +157,12 @@ const runAgentSkills = async (
     const isAlwaysOn = skill.id.endsWith('list_open_for_me')
       || skill.id.endsWith('list_overdue')
       || skill.id.endsWith('today_events')
-      || skill.id.endsWith('pending');
+      || skill.id.endsWith('pending')
+      // Inbox agent skills that should always run when the agent is
+      // selected — the user expects "resumir inbox" to show real data.
+      || skill.id.endsWith('recent')
+      || skill.id.endsWith('summary_stats')
+      || skill.id.endsWith('slack_channels');
     if (!hitsRelevance && !isAlwaysOn && out.length > 0) continue;
     try {
       const result = await skill.run(validated, ctx);

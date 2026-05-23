@@ -1809,6 +1809,14 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
         else if (listQuickFilter === 'urgent')    quickFiltered = baseTasks.filter(t => t.priority === 'urgent');
         else if (listQuickFilter === 'high_only') quickFiltered = baseTasks.filter(t => t.priority === 'high');
         else if (listQuickFilter === 'unassigned') quickFiltered = baseTasks.filter(t => !t.assignee_id);
+        // ─── Kind filters ─────────────────────────────────────────
+        // Derivados de project_id / client_id sin depender de la
+        // columna `tasks.kind` (que existe en DB pero no la leemos
+        // todavía desde el frontend). Esto permite separar laburo de
+        // estudio (interno) del trabajo facturable a primera vista.
+        else if (listQuickFilter === 'internal')    quickFiltered = baseTasks.filter(t => !t.project_id && !t.client_id);
+        else if (listQuickFilter === 'client_work') quickFiltered = baseTasks.filter(t => !!t.project_id);
+        else if (listQuickFilter === 'direct')      quickFiltered = baseTasks.filter(t => !t.project_id && !!t.client_id);
         else if (listQuickFilter.startsWith('project:')) {
           const pid = listQuickFilter.slice('project:'.length);
           quickFiltered = baseTasks.filter(t => t.project_id === pid);
@@ -2073,10 +2081,22 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
         // Reused dot color palette per row (Material-style soft tones).
         type QuickRow = { id: string; label: string; count: number; dot: string };
+        // ── Kind counters (derivados client-side de project_id/client_id) ──
+        // Permite separar laburo facturable, directo y interno sin
+        // tocar la DB. Cuenta sobre openBase (no completadas) para no
+        // engrosar números con tareas viejas terminadas.
+        const clientWorkCount = openBase.filter(t => !!t.project_id).length;
+        const directCount     = openBase.filter(t => !t.project_id && !!t.client_id).length;
+        const internalCount   = openBase.filter(t => !t.project_id && !t.client_id).length;
         const filterRows: QuickRow[] = [
-          { id: 'mine',       label: 'Mine',          count: mineCount,       dot: '#769268' },
-          { id: 'urgent',     label: 'Urgent',        count: urgentCount,     dot: '#ef4444' },
-          { id: 'high_only',  label: 'High',          count: highCount,       dot: '#E8BC59' },
+          { id: 'mine',         label: 'Mine',           count: mineCount,        dot: '#769268' },
+          { id: 'urgent',       label: 'Urgent',         count: urgentCount,      dot: '#ef4444' },
+          { id: 'high_only',    label: 'High',           count: highCount,        dot: '#E8BC59' },
+          // Kind chips — sólo se muestran si hay tareas de ese tipo,
+          // así un workspace nuevo no se llena de filas con count=0.
+          ...(clientWorkCount > 0 ? [{ id: 'client_work', label: 'Client work',  count: clientWorkCount, dot: '#6DBEDC' } as QuickRow] : []),
+          ...(directCount > 0     ? [{ id: 'direct',      label: 'Direct',       count: directCount,     dot: '#F1ADD8' } as QuickRow] : []),
+          ...(internalCount > 0   ? [{ id: 'internal',    label: 'Internal',     count: internalCount,   dot: '#A8A29A' } as QuickRow] : []),
           ...topProjects.map<QuickRow>(p => ({
             id: `project:${p.id}`,
             label: p.name,

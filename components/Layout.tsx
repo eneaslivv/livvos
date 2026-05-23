@@ -596,7 +596,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
       // Brief — chat-with-AI + structured tasks/calendar panel on the side
       { id: 'brief', label: 'Brief', icon: <Icons.Sparkles /> },
-      { id: 'activity', label: 'Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
+      { id: 'activity', label: 'Studio Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
     ],
     [
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
@@ -730,71 +730,88 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
         */}
         <div className="w-[calc(100%-24px)] mx-3 mb-1.5 shrink-0">
           {(() => {
+            // The segmented switch is ALWAYS 2 segments: OS + Sales.
+            // Master lives as a separate button below.
             const segments: Array<{ key: AppMode; icon: React.ReactNode; label: string; shortcut: string }> = [
               { key: 'os',     icon: <Icons.Home size={13} />,  label: 'System', shortcut: '1' },
             ];
-            // Show the Sales segment when EITHER sales_module is on (full
-            // sales pipeline) OR finance_module is on (just Financial
-            // Center). Partner agencies usually have finance only — they
-            // still need to reach the Sales toggle to access it.
             if (hasFeature('sales_module') || hasFeature('finance_module')) {
               segments.push({ key: 'sales', icon: <Icons.Chart size={13} />, label: 'Sales', shortcut: '2' });
             }
-            // Master segment hides while viewing-as another tenant —
-            // you can't run platform-level work from inside a partner
-            // agency's context. Return to home tenant first.
-            if (canUseMasterMode) {
-              segments.push({ key: 'master', icon: <Icons.Shield size={13} />, label: 'Master', shortcut: '3' });
-            }
-            const activeIdx = Math.max(0, segments.findIndex(s => s.key === currentMode));
+            // activeIdx for the 2-segment switch — master mode means
+            // neither is active inside the switch (both dim).
+            const activeIdx = currentMode === 'master' ? -1 : Math.max(0, segments.findIndex(s => s.key === currentMode));
             const segCount = segments.length;
-            const activeLabel = segments[activeIdx]?.label || 'System';
+            const activeLabel = currentMode === 'master' ? 'Master' : (segments[Math.max(0, activeIdx)]?.label || 'System');
             const titleText = segments
               .filter(s => s.key !== currentMode)
               .map(s => `Switch to ${s.label} (${s.shortcut})`)
               .join(' · ');
             return (
-              <div className={`w-full flex items-center gap-2 ${isSidebarExpanded ? '' : 'justify-center'}`}>
-                {/* Segmented buttons — fixed width (one icon per segment),
-                    sit on their own without absolute overlap so they can
-                    never be hidden behind the label. */}
-                <div
-                  className="relative flex items-center p-0.5 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 group/switch"
-                  style={{ width: `${segCount * 26 + 4}px` }}
-                  title={titleText}
-                >
+              <div className={`w-full flex flex-col gap-1.5 ${isSidebarExpanded ? '' : 'items-center'}`}>
+                <div className={`w-full flex items-center gap-2 ${isSidebarExpanded ? '' : 'justify-center'}`}>
                   <div
-                    className="absolute top-0.5 bottom-0.5 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-[left,width] duration-300 pointer-events-none"
-                    style={{ width: `${100 / segCount}%`, left: `${(100 / segCount) * activeIdx}%` }}
-                  />
-                  {segments.map(s => {
-                    const isActive = s.key === currentMode;
-                    return (
-                      <button
-                        key={s.key}
-                        onClick={() => onSwitchMode(s.key)}
-                        className={`relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
-                          isActive
-                            ? (s.key === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100')
-                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
-                        }`}
-                        title={`Switch to ${s.label} (${s.shortcut})`}
-                        aria-label={`Switch to ${s.label}`}
-                      >
-                        {s.icon}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Label — inline with the toggle, not absolute. Only when
-                    expanded so it never collides with collapsed sidebar. */}
-                {isSidebarExpanded && (
-                  <div className="flex-1 min-w-0 flex flex-col items-start">
-                    <div className={`font-semibold text-xs leading-tight truncate w-full ${currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                      {activeLabel}
-                    </div>
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
+                    className="relative flex items-center p-0.5 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 group/switch"
+                    style={{ width: `${segCount * 26 + 4}px` }}
+                    title={titleText}
+                  >
+                    {/* Sliding highlight — hidden when Master mode is active */}
+                    {activeIdx >= 0 && (
+                      <div
+                        className="absolute top-0.5 bottom-0.5 bg-white dark:bg-zinc-800 rounded-full shadow-sm transition-[left,width] duration-300 pointer-events-none"
+                        style={{ width: `${100 / segCount}%`, left: `${(100 / segCount) * activeIdx}%` }}
+                      />
+                    )}
+                    {segments.map(s => {
+                      const isActive = s.key === currentMode;
+                      return (
+                        <button
+                          key={s.key}
+                          onClick={() => onSwitchMode(s.key)}
+                          className={`relative z-10 flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
+                            isActive
+                              ? 'text-zinc-900 dark:text-zinc-100'
+                              : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200'
+                          }`}
+                          title={`Switch to ${s.label} (${s.shortcut})`}
+                          aria-label={`Switch to ${s.label}`}
+                        >
+                          {s.icon}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {isSidebarExpanded && currentMode !== 'master' && (
+                    <div className="flex-1 min-w-0 flex flex-col items-start">
+                      <div className="font-semibold text-xs leading-tight truncate w-full text-zinc-900 dark:text-zinc-100">
+                        {activeLabel}
+                      </div>
+                      <div className="text-[9px] text-zinc-500 uppercase tracking-wider leading-tight mt-0.5">Switch view</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Master button — separate from the 2-segment switch,
+                    visible only to platform admins. Sits below the toggle. */}
+                {canUseMasterMode && (
+                  <button
+                    onClick={() => onSwitchMode('master')}
+                    className={`
+                      w-full flex items-center gap-2 rounded-lg px-2 py-1.5 transition-all
+                      ${currentMode === 'master'
+                        ? 'bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30'
+                        : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40 border border-transparent'
+                      }
+                    `}
+                    title="Switch to Master (3)"
+                  >
+                    <Icons.Shield size={14} className={currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400 dark:text-zinc-500'} />
+                    {isSidebarExpanded && (
+                      <span className={`text-xs font-semibold truncate ${currentMode === 'master' ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                        Master
+                      </span>
+                    )}
+                  </button>
                 )}
               </div>
             );
