@@ -140,6 +140,23 @@ Deno.serve(async (req) => {
       id: p.id, title: p.title || '', client_id: p.client_id || null, client_name: p.clients?.name || null,
     }))
 
+    // Load all Slack user IDs for tenant members — used to detect
+    // "you already replied in Slack" by matching reply authors against
+    // known team members. Also includes bot user IDs so we skip those.
+    const { data: memberProfiles } = await admin
+      .from('profiles')
+      .select('slack_user_id')
+      .in('id', (await admin
+        .from('tenant_members')
+        .select('user_id')
+        .eq('tenant_id', ctx.tenant_id)
+      ).data?.map((m: any) => m.user_id) || [])
+    const teamSlackIds = new Set<string>(
+      (memberProfiles || [])
+        .map((p: any) => p.slack_user_id)
+        .filter(Boolean)
+    )
+
     let totalSynced = 0
     const errors: string[] = []
     // Lower bound for conversations.history. Slack expects unix seconds (with optional decimals).
@@ -151,6 +168,8 @@ Deno.serve(async (req) => {
         errors.push(`token ${tok.id}: no bot token`)
         continue
       }
+      // Add bot user ID to the team set so we can distinguish team vs external
+      if (tok.slack_bot_user_id) teamSlackIds.add(tok.slack_bot_user_id)
 
       // Channels we're supposed to monitor for THIS workspace.
       const { data: channels, error: chErr } = await admin
@@ -223,14 +242,40 @@ Deno.serve(async (req) => {
               // Lightweight thread context — pull thread parent + last few replies
               // when this is a reply (thread_ts != ts).
               let threadContext: Array<{ from: string; body: string; date: string }> = []
+              let repliedInPlatform = false
+              let replyCount = m.reply_count || 0
+              let lastReplyAt: string | null = null
+
+              // Check if THIS message was sent by a team member (meaning
+              // the team already engaged in this channel — mark as replied)
+              if (senderId && teamSlackIds.has(senderId)) {
+                repliedInPlatform = true
+              }
+
               if (m.thread_ts && m.thread_ts !== m.ts) {
                 try {
                   const thread = await slackFetch<{ messages?: SlackMessage[] }>(botToken, 'conversations.replies', {
                     channel: ch.channel_id,
                     ts: m.thread_ts,
-                    limit: '6',
+                    limit: '20',
                   })
-                  const others = (thread.messages || []).filter(x => x.ts !== m.ts).slice(-5)
+                  const allReplies = thread.messages || []
+                  replyCount = Math.max(replyCount, allReplies.length - 1) // exclude parent
+
+                  // Check if any team member replied in this thread
+                  if (!repliedInPlatform) {
+                    repliedInPlatform = allReplies.some(r =>
+                      r.user && teamSlackIds.has(r.user) && r.ts !== m.ts
+                    )
+                  }
+
+                  // Track last reply timestamp
+                  if (allReplies.length > 1) {
+                    const lastReply = allReplies[allReplies.length - 1]
+                    lastReplyAt = new Date(parseFloat(lastReply.ts) * 1000).toISOString()
+                  }
+
+                  const others = allReplies.filter(x => x.ts !== m.ts).slice(-5)
                   threadContext = await Promise.all(others.map(async o => {
                     const oUser = o.user ? await getUserInfo(o.user) : null
                     return {
@@ -240,6 +285,28 @@ Deno.serve(async (req) => {
                     }
                   }))
                 } catch { /* thread fetch is best-effort */ }
+              } else if (m.reply_count && m.reply_count > 0) {
+                // Parent message with replies — fetch to check team participation
+                try {
+                  const thread = await slackFetch<{ messages?: SlackMessage[] }>(botToken, 'conversations.replies', {
+                    channel: ch.channel_id,
+                    ts: m.ts,
+                    limit: '20',
+                  })
+                  const allReplies = thread.messages || []
+                  replyCount = Math.max(replyCount, allReplies.length - 1)
+
+                  if (!repliedInPlatform) {
+                    repliedInPlatform = allReplies.some(r =>
+                      r.user && teamSlackIds.has(r.user) && r.ts !== m.ts
+                    )
+                  }
+
+                  if (allReplies.length > 1) {
+                    const lastReply = allReplies[allReplies.length - 1]
+                    lastReplyAt = new Date(parseFloat(lastReply.ts) * 1000).toISOString()
+                  }
+                } catch { /* best-effort */ }
               }
 
               const { data: inserted, error: insErr } = await admin
@@ -253,7 +320,7 @@ Deno.serve(async (req) => {
                   from_name: fromName,
                   from_email: fromEmail,
                   from_avatar_url: fromAvatar,
-                  subject: null, // Slack messages don't have subjects
+                  subject: null,
                   body_text: m.text || '',
                   body_html: null,
                   channel_id: ch.channel_id,
@@ -261,10 +328,11 @@ Deno.serve(async (req) => {
                   thread_context: threadContext,
                   received_at: receivedAt,
                   ai_processed: false,
-                  // If the user linked this channel to a project, stamp it
-                  // up-front. The AI classifier in classifyAndUpdate won't
-                  // overwrite a non-null FK.
                   matched_project_id: (ch as any).project_id || null,
+                  // Reply tracking
+                  replied_in_platform: repliedInPlatform,
+                  reply_count: replyCount,
+                  last_reply_at: lastReplyAt,
                 })
                 .select('id')
                 .single()

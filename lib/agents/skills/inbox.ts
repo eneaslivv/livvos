@@ -26,7 +26,7 @@ export const pending_messages: Skill<{ platform?: 'gmail' | 'slack' }, Array<any
   run: async (params, ctx) => {
     const t0 = Date.now();
     let q = ctx.db.from('communication_messages')
-      .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, ai_classification, matched_client_id')
+      .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, ai_classification, matched_client_id, replied_in_platform, reply_count')
       .eq('tenant_id', ctx.tenantId)
       .eq('status', 'pending')
       .order('received_at', { ascending: false })
@@ -174,7 +174,7 @@ export const slack_channels: Skill<{}, Array<any>> = {
   run: async (_p, ctx) => {
     const t0 = Date.now();
     const { data, error } = await ctx.db.from('communication_messages')
-      .select('id, from_name, from_email, subject, body_text, channel_name, channel_id, received_at, status, ai_classification')
+      .select('id, from_name, from_email, subject, body_text, channel_name, channel_id, received_at, status, ai_classification, replied_in_platform, reply_count')
       .eq('tenant_id', ctx.tenantId)
       .eq('platform', 'slack')
       .order('received_at', { ascending: false })

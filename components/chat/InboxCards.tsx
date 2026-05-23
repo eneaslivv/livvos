@@ -27,6 +27,12 @@ export interface InboxMessage {
     should_create_task?: boolean;
   } | null;
   matched_client_id?: string | null;
+  /** True if a team member already replied in this thread directly from Slack/Gmail */
+  replied_in_platform?: boolean;
+  /** Number of replies in the thread */
+  reply_count?: number;
+  /** Timestamp of the last reply in the thread */
+  last_reply_at?: string | null;
 }
 
 export interface InboxCardsProps {
@@ -277,6 +283,8 @@ function MessageRow({
   const isPending = (message.status || '').toLowerCase() === 'pending';
   const hasDraft = !!message.ai_classification?.suggested_reply;
   const sender = message.from_name || message.from_email?.split('@')[0] || '?';
+  const repliedInPlatform = message.replied_in_platform === true;
+  const replyCount = message.reply_count || 0;
 
   return (
     <motion.div
@@ -311,10 +319,21 @@ function MessageRow({
             <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums shrink-0">
               {relativeTime(message.received_at)}
             </span>
-            {isPending && (
+            {repliedInPlatform ? (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+                <Icons.Check className="h-3 w-3" />
+                respondido
+              </span>
+            ) : isPending ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
                 <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
                 pendiente
+              </span>
+            ) : null}
+            {replyCount > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+                <Icons.MessageCircle className="h-3 w-3" />
+                {replyCount}
               </span>
             )}
           </div>
