@@ -58,6 +58,7 @@ const loadPlatformRoles = () => retryDynamicImport(() => import('./pages/Platfor
 const loadPlatformFeatures = () => retryDynamicImport(() => import('./pages/PlatformFeatures').then(m => ({ default: m.PlatformFeatures })), 'PlatformFeatures');
 const loadPlatformAudit = () => retryDynamicImport(() => import('./pages/PlatformAudit').then(m => ({ default: m.PlatformAudit })), 'PlatformAudit');
 const loadPlatformSlackAgent = () => retryDynamicImport(() => import('./pages/PlatformSlackAgent').then(m => ({ default: m.PlatformSlackAgent })), 'PlatformSlackAgent');
+const loadPlatformSalesAgent = () => retryDynamicImport(() => import('./pages/PlatformSalesAgent').then(m => ({ default: m.PlatformSalesAgent })), 'PlatformSalesAgent');
 const loadStrategyHub = () => retryDynamicImport(() => import('./pages/StrategyHub').then(m => ({ default: m.StrategyHub })), 'StrategyHub');
 const loadContentEngine = () => retryDynamicImport(() => import('./pages/ContentEngine').then(m => ({ default: m.ContentEngine })), 'ContentEngine');
 const loadSalesPipeline = () => retryDynamicImport(() => import('./pages/SalesPipeline').then(m => ({ default: m.SalesPipeline })), 'SalesPipeline');
@@ -98,6 +99,7 @@ const PlatformRoles = React.lazy(loadPlatformRoles);
 const PlatformFeatures = React.lazy(loadPlatformFeatures);
 const PlatformAudit = React.lazy(loadPlatformAudit);
 const PlatformSlackAgent = React.lazy(loadPlatformSlackAgent);
+const PlatformSalesAgent = React.lazy(loadPlatformSalesAgent);
 const StrategyHub = React.lazy(loadStrategyHub);
 const ContentEngine = React.lazy(loadContentEngine);
 const SalesPipeline = React.lazy(loadSalesPipeline);
@@ -885,6 +887,13 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
+          {/* Platform Sales Agent — commercial agent + tier catalog + onboarding wizard */}
+          {visitedPages.has('platform_sales_agent') && (
+            <KeepAlivePage page="platform_sales_agent" active={currentPage === 'platform_sales_agent'}>
+              <PlatformSalesAgent />
+            </KeepAlivePage>
+          )}
+
           {/* Strategy Hub — ICPs, packages, positioning principles */}
           {visitedPages.has('strategy_hub') && (
             <KeepAlivePage page="strategy_hub" active={currentPage === 'strategy_hub'}>
@@ -980,7 +989,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'home', 'brief', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
-  'platform_customers', 'platform_roles', 'platform_features', 'platform_audit', 'platform_slack_agent',
+  'platform_customers', 'platform_roles', 'platform_features', 'platform_audit', 'platform_slack_agent', 'platform_sales_agent',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
   'bundle_preview', 'agent', 'products', 'build_hub',
 ]);

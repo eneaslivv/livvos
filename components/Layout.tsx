@@ -675,6 +675,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     { id: 'platform_features',  label: 'Features',          icon: <Icons.Settings /> },
     { id: 'platform_audit',     label: 'Audit log',         icon: <Icons.Activity /> },
     { id: 'platform_slack_agent', label: 'Slack agent',     icon: <Icons.Message /> },
+    { id: 'platform_sales_agent', label: 'Sales Agent',     icon: <Icons.Sparkles /> },
   ];
 
   const currentNavItems = (
