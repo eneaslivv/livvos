@@ -22,6 +22,7 @@ import { useProjects } from '../context/ProjectsContext';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { supabase } from '../lib/supabase';
 import { errorLogger } from '../lib/errorLogger';
+import { InboxDigestCard } from '../components/communications/InboxDigestCard';
 import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
 import {
   INTENT_LABELS, STATUS_LABELS,
@@ -260,6 +261,7 @@ export const Communications: React.FC = () => {
           allClients={(clients as Client[]) || []}
           projects={projects || []}
           onMessageUpdate={refreshMessages}
+          tenantId={currentTenant?.id || null}
         />
       ) : (
         <SettingsView
@@ -286,12 +288,16 @@ interface InboxViewProps {
   allClients: Client[];
   projects: Project[];
   onMessageUpdate: () => void;
+  tenantId: string | null;
 }
 
-const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, allClients, projects, onMessageUpdate }) => {
+const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, allClients, projects, onMessageUpdate, tenantId }) => {
   const [filter, setFilter] = useState<Filter>('pending');
   const [clientFilter, setClientFilter] = useState<string>('all'); // client_id or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Theme filter — set when user clicks a theme chip in the digest.
+  // Restricts the inbox list to just those message_ids until cleared.
+  const [themeMessageIds, setThemeMessageIds] = useState<string[] | null>(null);
 
   // Build a map of clients that have at least one message — only show those
   // in the per-client picker, no point listing 50 clients with 0 messages.
@@ -316,8 +322,12 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
     else if (filter === 'slack') list = list.filter(m => m.platform === 'slack');
     if (clientFilter === '__unmatched__') list = list.filter(m => m.ai_processed && !m.matched_client_id);
     else if (clientFilter !== 'all') list = list.filter(m => m.matched_client_id === clientFilter);
+    if (themeMessageIds && themeMessageIds.length > 0) {
+      const set = new Set(themeMessageIds);
+      list = list.filter(m => set.has(m.id));
+    }
     return list.sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
-  }, [messages, filter, clientFilter]);
+  }, [messages, filter, clientFilter, themeMessageIds]);
 
   const selected = selectedId ? messages.find(m => m.id === selectedId) || null : null;
 
@@ -337,6 +347,31 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
   }
 
   return (
+    <>
+      {/* AI digest — auto-loads with last 72h, cached 30min, regenerable */}
+      <InboxDigestCard
+        tenantId={tenantId}
+        onOpenMessage={(id) => setSelectedId(id)}
+        onFilterByMessageIds={(ids) => { setThemeMessageIds(ids); setFilter('all'); setClientFilter('all'); }}
+      />
+
+      {/* Theme filter indicator — when user clicks a theme chip in the digest */}
+      {themeMessageIds && themeMessageIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/30">
+          <Icons.Sparkles size={11} className="text-amber-600 dark:text-amber-400" />
+          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+            Filtrando por tema del digest · {themeMessageIds.length} mensajes
+          </span>
+          <button
+            onClick={() => setThemeMessageIds(null)}
+            className="ml-auto text-[10px] font-medium text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1"
+          >
+            <Icons.X size={10} />
+            Quitar filtro
+          </button>
+        </div>
+      )}
+
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 min-h-[600px]">
       {/* ── Left: filter pills + message list ── */}
       <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
@@ -454,6 +489,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
         )}
       </div>
     </div>
+    </>
   );
 };
 
