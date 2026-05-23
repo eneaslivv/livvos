@@ -67,6 +67,10 @@ export type { PromptTunerProposal, RunPromptTunerArgs, RunPromptTunerResult } fr
 export { invalidateOverridesCache } from './overrides';
 export type { ActiveOverride } from './overrides';
 
+// Surface context — maps page/persona → LLM hint + preferred agent
+export { resolveSurface, PAGE_SURFACES, AURORA_PERSONA_MAP } from './surfaces';
+export type { SurfaceConfig } from './surfaces';
+
 // Action executor — single dispatcher for every ProposedAction kind
 export { executeProposedAction } from './execute';
 export type { ExecuteResult, ExecutorHelpers } from './execute';

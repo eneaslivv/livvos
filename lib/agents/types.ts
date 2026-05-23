@@ -104,6 +104,17 @@ export interface OrchestratorInput {
   /** Override the auto-routed agent. Useful when a page widget wants to
    *  force a specific agent (e.g. Finance page → finance-agent). */
   forcedAgentId?: string;
+  /** Surface-level context hint injected into the LLM prompt so replies
+   *  are tailored to the section the user is looking at. Each surface
+   *  describes: what the user is viewing, which data is most relevant,
+   *  and any extra tone/focus instructions.
+   *
+   *  Examples:
+   *    'brief'    → "focus on today's tasks, overdue, schedule"
+   *    'finance'  → "focus on income/expenses/cashflow"
+   *    'aurora:marina' → "you are Marina, the finance specialist"
+   */
+  surfaceHint?: string;
   ctx: ExecutionContext;
 }
 

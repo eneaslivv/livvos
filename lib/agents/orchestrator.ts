@@ -40,6 +40,7 @@ import {
   effectiveSystemPrompt,
   type ActiveOverride,
 } from './overrides';
+import { resolveSurface } from './surfaces';
 
 // ── Action parser ────────────────────────────────────────────────────
 // The LLM emits actions in <action kind="..." param="..." ...>label</action>
@@ -97,18 +98,27 @@ const parseActionsFromReply = (reply: string): { cleanReply: string; actions: Pr
 // Considers per-agent overrides — added hints can promote an agent
 // the defaults wouldn't have matched, removed hints demote agents
 // that were misrouting on certain words.
+/** Score how many routing hints an agent matches for a query. */
+const scoreAgent = (
+  agent: AgentDefinition,
+  query: string,
+  overridesMap?: Map<string, ActiveOverride>,
+): number => {
+  const lowered = query.toLowerCase();
+  const hints = overridesMap
+    ? effectiveRoutingHints(agent, overridesMap.get(agent.id))
+    : agent.routingHints;
+  return hints.filter(h => lowered.includes(h.toLowerCase())).length;
+};
+
 const routeAgent = (
   query: string,
   overridesMap?: Map<string, ActiveOverride>,
 ): AgentDefinition => {
-  const lowered = query.toLowerCase();
   let best = AGENTS[0];
   let bestScore = 0;
   for (const a of AGENTS) {
-    const hints = overridesMap
-      ? effectiveRoutingHints(a, overridesMap.get(a.id))
-      : a.routingHints;
-    const score = hints.filter(h => lowered.includes(h.toLowerCase())).length;
+    const score = scoreAgent(a, query, overridesMap);
     if (score > bestScore) {
       best = a;
       bestScore = score;
@@ -221,15 +231,40 @@ export async function runOrchestrator(
 ): Promise<OrchestratorOutput & { conversationId?: string | null }> {
   const t0 = Date.now();
 
+  // ── Resolve surface context ─────────────────────────────────────
+  // The UI sends a surface key ('home', 'brief', 'aurora:marina', etc.)
+  // which we resolve into a hint (injected into the LLM prompt) plus an
+  // optional preferred agent id (biases routing, doesn't hard-lock it).
+  const surfaceKey = options.surface || '';
+  const surfaceCfg = resolveSurface(surfaceKey);
+
   // Fetch active per-tenant agent overrides FIRST so routing sees the
   // tuned routing hints, not just the defaults. Cached for 5 min so
   // the per-turn cost is one cache lookup in steady state.
   const overrideRows = await fetchActiveOverrides(input.ctx.db, input.ctx.tenantId);
   const overridesMap = overridesByAgent(overrideRows);
 
-  const agent = input.forcedAgentId
-    ? AGENT_BY_ID.get(input.forcedAgentId) || routeAgent(input.query, overridesMap)
-    : routeAgent(input.query, overridesMap);
+  // Agent selection priority:
+  //   1. forcedAgentId (hard lock from the UI)
+  //   2. keyword routing — if the query strongly matches a domain
+  //   3. surface preferred agent — fallback bias from the current section/persona
+  //   4. default to first agent in registry
+  let agent: AgentDefinition;
+  if (input.forcedAgentId) {
+    agent = AGENT_BY_ID.get(input.forcedAgentId) || routeAgent(input.query, overridesMap);
+  } else {
+    const routed = routeAgent(input.query, overridesMap);
+    // Check if routing actually matched something meaningful (score > 0).
+    // If the router returned the default agent with score 0, prefer the
+    // surface's bias instead — the user's section context is a stronger
+    // signal than "no keywords matched".
+    const routedScore = scoreAgent(routed, input.query, overridesMap);
+    if (routedScore === 0 && surfaceCfg.preferredAgentId) {
+      agent = AGENT_BY_ID.get(surfaceCfg.preferredAgentId) || routed;
+    } else {
+      agent = routed;
+    }
+  }
   const agentOverride = overridesMap.get(agent.id);
 
   // Run skills (read-only) + record per-skill timing
@@ -248,11 +283,21 @@ export async function runOrchestrator(
   // The agent's system prompt is composed: defaults + tenant-specific
   // override suffix (if any) — additive, never replaces the base.
   const promptForAgent = effectiveSystemPrompt(agent, agentOverride);
+
+  // ── Surface context block ──────────────────────────────────────
+  // Injected into the LLM prompt so it knows what page/persona the
+  // user is in. The surfaceHint from OrchestratorInput takes priority
+  // (explicit per-call override), otherwise use the resolved config.
+  const surfaceHintText = input.surfaceHint || surfaceCfg.hint || '';
+  const surfaceBlock = surfaceHintText
+    ? `\n── SURFACE CONTEXT ──\n${surfaceHintText}\nAdapt your reply depth and focus to this context. Be concise where possible.\n`
+    : '';
+
   const aiContext = [
     `AGENT: ${agent.name} (${agent.id})`,
     '',
     promptForAgent,
-    '',
+    surfaceBlock,
     profileBlock,
     skillContextBlock,
   ].filter(Boolean).join('\n');

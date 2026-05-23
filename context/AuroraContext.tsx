@@ -193,7 +193,7 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           history,
           ctx: { db: supabase as any, tenantId, userId, now: new Date() },
         },
-        { surface: 'aurora' },
+        { surface: `aurora:${agent}` },
       );
 
       setMessages(m => [...m, {

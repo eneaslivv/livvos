@@ -19,6 +19,9 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import { useAutomations } from '../hooks/useAutomations';
+import { runOrchestrator } from '../lib/agents';
+import { errorLogger } from '../lib/errorLogger';
+import { Markdown } from '../lib/markdown';
 import '../components/livv/bundle-strategy.css';
 import '../components/livv/bundle-agent.css';
 
@@ -100,40 +103,51 @@ export const Agent: React.FC = () => {
 
   const wfList = workflows.length > 0 ? workflows : SEED_WORKFLOWS;
 
-  // Send a message to the agent. Currently uses a friendly mock that
-  // includes sources + findings + actions matching the bundle's
-  // SEED_THREAD shape. Wire to /gemini edge function later.
+  // Send a message through the real orchestrator — same pipeline as
+  // Home + Brief + Aurora dock, with surface='agent' so the LLM knows
+  // to give cross-domain power-user depth.
   const handleSend = useCallback(async (raw?: string) => {
     const text = (raw ?? input).trim();
-    if (!text || sending) return;
+    if (!text || sending || !currentTenant?.id || !user?.id) return;
     setSending(true);
     setInput('');
     const userMsg: ChatMsg = { role: 'user', text, when: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setThread(prev => [...prev, userMsg]);
     try {
-      // Simulate the agent response with structured output
-      await new Promise(r => setTimeout(r, 800));
+      const history = thread.slice(-8).map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+        content: m.text,
+      }));
+      const out = await runOrchestrator(
+        {
+          query: text,
+          history,
+          ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+        },
+        { surface: 'agent' },
+      );
+      // Map skill trace to the bundle's "sources" chip format
+      const sources = out.skillTrace
+        .filter(s => s.ok)
+        .map(s => s.skillId.replace(/\./g, ' · '));
       const agentMsg: ChatMsg = {
         role: 'agent',
         when: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        text: `I looked at your live data and found three patterns. (This is a placeholder — wire the agent backend to /gemini for real answers.)`,
-        sources: ['Sales pipeline', 'Strategy · ICPs', 'Content · Calendar'],
-        findings: [
-          { tone: 'red',   label: 'Halcyon AI sat 6+ days in Call Done',         action: 'Send recap email' },
-          { tone: 'amber', label: 'Sable Loft proposal awaiting CFO sign-off',    action: 'Bump email' },
-          { tone: 'green', label: 'Atlas Retainer ready to counter on MRR',       action: 'Send counter' },
-        ],
-        actions: [
-          { id: 'send3', label: 'Send 3 follow-ups now',  primary: true,  icon: 'Mail' },
-          { id: 'save',  label: 'Save as report',         primary: false, icon: 'Docs' },
-          { id: 'sched', label: 'Schedule weekly recap',  primary: false, icon: 'Calendar' },
-        ],
+        text: out.reply,
+        sources: sources.length > 0 ? sources : undefined,
       };
       setThread(prev => [...prev, agentMsg]);
+    } catch (e: any) {
+      errorLogger.warn('agent chat failed', e);
+      setThread(prev => [...prev, {
+        role: 'agent',
+        when: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: `Error: ${e?.message || 'unknown'}`,
+      }]);
     } finally {
       setSending(false);
     }
-  }, [input, sending]);
+  }, [input, sending, currentTenant?.id, user?.id, thread]);
 
   return (
     <div className="bdl-ag-page">
@@ -245,7 +259,7 @@ export const Agent: React.FC = () => {
                   </div>
                   <div className="bdl-ag-msg-body">
                     <div className="bdl-ag-msg-bubble">
-                      {m.text}
+                      {m.role === 'agent' ? <Markdown source={m.text} /> : m.text}
                     </div>
 
                     {m.sources && m.sources.length > 0 && (
