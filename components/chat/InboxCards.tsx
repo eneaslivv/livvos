@@ -332,7 +332,7 @@ function MessageRow({
             ) : null}
             {replyCount > 0 && (
               <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500 tabular-nums">
-                <Icons.MessageCircle className="h-3 w-3" />
+                <Icons.Message className="h-3 w-3" />
                 {replyCount}
               </span>
             )}
@@ -352,7 +352,7 @@ function MessageRow({
             )}
             {message.ai_classification?.should_create_task && (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-violet-500 dark:text-violet-400">
-                <Icons.CheckSquare className="h-3 w-3" /> crear tarea
+                <Icons.SquareCheck className="h-3 w-3" /> crear tarea
               </span>
             )}
             {hasDraft && !isReplying && (
