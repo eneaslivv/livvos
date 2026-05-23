@@ -10,6 +10,7 @@ import { auroraMockRespond } from '../lib/aurora/mockBackend';
 import { supabase } from '../lib/supabase';
 import { useTenant } from './TenantContext';
 import { useAuth } from '../hooks/useAuth';
+import { runOrchestrator } from '../lib/agents';
 
 type AuroraStatus = 'idle' | 'sending' | 'error';
 
@@ -161,84 +162,65 @@ export const AuroraProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const clear = useCallback(() => { setMessages([]); setLastError(null); }, []);
 
-  const send = useCallback(async (text: string, forceAgent?: AgentSlug) => {
+  const send = useCallback(async (text: string, _forceAgent?: AgentSlug) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const targetAgent = forceAgent || agent;
 
     // user bubble
     setMessages(m => [...m, { id: uid(), role: 'user', text: trimmed, createdAt: Date.now() }]);
     setStatus('sending');
     setLastError(null);
 
-    let response: AgentResponse;
     try {
-      if (LIVE) {
-        // Find or create the thread for (user × targetAgent). Cache hits skip the RPC.
-        let threadId: string | null = activeThreadId;
-        if (user?.id) {
-          const cacheKey: ThreadKey = `${user.id}:${targetAgent}`;
-          threadId = threadCache.get(cacheKey) || null;
-          if (!threadId) {
-            const { data: t } = await supabase.rpc('aurora_get_or_create_thread', { p_agent_slug: targetAgent });
-            if (t) {
-              threadId = t as string;
-              threadCache.set(cacheKey, threadId);
-            }
-          }
-        }
+      // ── Unified pipeline: use the same orchestrator as Home chat ──
+      // The orchestrator auto-routes to the right domain agent (inbox,
+      // tasks, finance, calendar, clients, projects) based on keywords
+      // and returns structured data (rawData.inboxMessages, actions, etc).
+      // Aurora persona is just the UI layer — data comes from the same
+      // skill pipeline regardless of which agent avatar is shown.
+      const history = messages.slice(-8).map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+        content: m.text,
+      }));
 
-        const { data, error } = await supabase.functions.invoke<any>('aurora-chat', {
-          body: {
-            agent: targetAgent,
-            message: trimmed,
-            tenant_id: tenantCtx?.currentTenant?.id ?? null,
-            thread_id: threadId,
-          },
-        });
-        if (error) throw new Error(error?.message || 'aurora-chat error');
-        if (!data || data.error) {
-          throw new Error(data?.error || 'aurora-chat empty response');
-        }
-        response = data as AgentResponse;
-        // Update the active thread if the backend created one
-        if (data.thread_id && data.thread_id !== threadId) {
-          setActiveThreadId(data.thread_id);
-          if (user?.id) threadCache.set(`${user.id}:${targetAgent}`, data.thread_id);
-        }
-      } else {
-        response = auroraMockRespond(targetAgent, trimmed);
-      }
+      const tenantId = tenantCtx?.currentTenant?.id;
+      const userId = user?.id;
+      if (!tenantId || !userId) throw new Error('No tenant or user');
+
+      const out = await runOrchestrator(
+        {
+          query: trimmed,
+          history,
+          ctx: { db: supabase as any, tenantId, userId, now: new Date() },
+        },
+        { surface: 'aurora' },
+      );
+
+      setMessages(m => [...m, {
+        id: uid(),
+        role: 'agent',
+        agent,
+        text: out.reply,
+        createdAt: Date.now(),
+        inboxMessages: out.rawData?.inboxMessages,
+        proposedActions: out.proposedActions,
+      }]);
     } catch (e: any) {
       // Soft fallback to mock so the user always gets a response.
-      console.warn('[Aurora] Live call failed, falling back to mock:', e?.message);
+      if (import.meta.env.DEV) console.warn('[Aurora] Orchestrator failed, falling back to mock:', e?.message);
       setLastError(e?.message ?? 'unknown');
-      response = auroraMockRespond(targetAgent, trimmed);
+      const response = auroraMockRespond(agent, trimmed);
+      setMessages(m => [...m, {
+        id: uid(),
+        role: 'agent',
+        agent: response.agent,
+        text: response.text,
+        canvas: response.canvas,
+        createdAt: Date.now(),
+      }]);
     }
-
-    // Atlas route → swap active agent + replay the question.
-    if (response.canvas?.type === 'route' && response.canvas.target_agent && response.canvas.target_agent !== targetAgent) {
-      setMessages(m => [...m, { id: uid(), role: 'agent', agent: 'atlas', text: response.text, canvas: response.canvas, createdAt: Date.now() }]);
-      setTimeout(() => {
-        const next = response.canvas!.target_agent!;
-        setAgent(next);
-        // re-send to the routed agent
-        setTimeout(() => { void send(trimmed, next); }, 200);
-      }, 400);
-      setStatus('idle');
-      return;
-    }
-
-    setMessages(m => [...m, {
-      id: uid(),
-      role: 'agent',
-      agent: response.agent,
-      text: response.text,
-      canvas: response.canvas,
-      createdAt: Date.now(),
-    }]);
     setStatus('idle');
-  }, [agent, tenantCtx?.currentTenant?.id, setAgent, activeThreadId, user?.id]);
+  }, [agent, tenantCtx?.currentTenant?.id, user?.id, messages]);
 
   const value = useMemo<AuroraContextValue>(() => ({
     open, setOpen, toggle,

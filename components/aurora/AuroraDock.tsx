@@ -19,6 +19,8 @@ import { auroraAgents, cssVarsForAgent } from '../../lib/aurora/tokens';
 import type { AgentSlug, AgentMeta } from '../../types/aurora';
 import { AuroraCanvas } from './AuroraCanvas';
 import { usePlatformAdmin } from '../../hooks/usePlatformAdmin';
+import { Markdown } from '../../lib/markdown';
+import { InboxCards } from '../chat/InboxCards';
 
 // Primary agents — 5 caras visibles, una por área de trabajo. Los otros 19
 // agentes especialistas (Halo / Marina / Cobra / Nova / Vega / Iris / Rune /
@@ -213,11 +215,14 @@ export const AuroraDock: React.FC = () => {
                   >{m.text}</div>
                 ) : (
                   <div className="max-w-[92%] space-y-2" style={m.agent ? cssVarsForAgent(m.agent) : undefined}>
-                    {m.text && (
-                      <div className="px-3.5 py-2 rounded-2xl text-[13px] leading-snug bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
-                        {m.text}
+                    {/* Rich inbox cards when structured data is present */}
+                    {m.inboxMessages && m.inboxMessages.length > 0 ? (
+                      <InboxCards messages={m.inboxMessages} aiSummary={m.text} />
+                    ) : m.text ? (
+                      <div className="text-[13px] leading-snug text-zinc-900 dark:text-zinc-100">
+                        <Markdown source={m.text} />
                       </div>
-                    )}
+                    ) : null}
                     {m.canvas && <AuroraCanvas canvas={m.canvas} />}
                   </div>
                 )}

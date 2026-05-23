@@ -137,6 +137,10 @@ export interface AuroraMessage {
   text: string;
   canvas?: Canvas | null;
   createdAt: number;
+  /** Structured inbox messages for rich card rendering (from orchestrator rawData) */
+  inboxMessages?: any[];
+  /** Proposed write actions from the orchestrator */
+  proposedActions?: any[];
 }
 
 export interface AuroraSendOptions {
