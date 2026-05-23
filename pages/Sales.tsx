@@ -19,36 +19,45 @@ interface SalesProps {
 }
 
 // ─── SubViewToggle ───────────────────────────────────────────────
-// Pipeline ↔ Inbox switch that lives inside Sales Overview. Used to
-// be two separate sidebar entries — consolidated so the user has
-// fewer top-level options but can still flip between layouts in one
-// click. Both sub-views show the SAME leads, just rendered as a
-// kanban (Pipeline) or a flat table (Inbox).
+// Pipeline ↔ Inbox pill toggle — editorial design system.
 const SubViewToggle: React.FC<{
   subView: 'pipeline' | 'inbox';
   onChange: (v: 'pipeline' | 'inbox') => void;
 }> = ({ subView, onChange }) => (
-  <div className="inline-flex p-0.5 bg-zinc-100/70 dark:bg-zinc-800/60 rounded-md text-[11.5px] font-medium">
-    <button
-      onClick={() => onChange('pipeline')}
-      className={`px-2.5 py-1 rounded transition-colors ${
-        subView === 'pipeline'
-          ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-          : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-      }`}
-    >
-      Pipeline
-    </button>
-    <button
-      onClick={() => onChange('inbox')}
-      className={`px-2.5 py-1 rounded transition-colors ${
-        subView === 'inbox'
-          ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-          : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-      }`}
-    >
-      Inbox
-    </button>
+  <div
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: 3,
+      background: 'var(--os-panel)',
+      border: '0.5px solid var(--os-border-2)',
+      borderRadius: 999,
+      boxShadow: 'var(--shadow-card)',
+    }}
+  >
+    {(['pipeline', 'inbox'] as const).map((v) => (
+      <button
+        key={v}
+        onClick={() => onChange(v)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 14px',
+          background: subView === v ? 'var(--os-ink)' : 'transparent',
+          border: 0,
+          cursor: 'pointer',
+          borderRadius: 999,
+          fontSize: 12,
+          fontWeight: 500,
+          color: subView === v ? 'var(--livv-cream-50, #FDFBF7)' : 'var(--os-fg-2)',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        {v === 'pipeline' ? <Icons.Grid size={12} /> : <Icons.Inbox size={12} />}
+        {v.charAt(0).toUpperCase() + v.slice(1)}
+      </button>
+    ))}
   </div>
 );
 
@@ -274,11 +283,15 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
   const renderLeadPanel = () => (
     <Suspense
       fallback={
-        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
-          <div className="absolute inset-0 bg-zinc-950/8" />
-          <aside className="relative h-full w-full max-w-xl bg-white dark:bg-zinc-950 shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
-            <div className="h-full flex flex-col">
-              <div className="p-6 space-y-5">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.06)' }} />
+          <aside style={{
+            position: 'relative', height: '100%', width: '100%', maxWidth: 560,
+            background: 'var(--os-panel)',
+            boxShadow: 'var(--shadow-slideover)',
+          }}>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div className="h-5 w-36 rounded bg-zinc-100/80 dark:bg-zinc-800/60 animate-pulse" />
                 <div className="h-3.5 w-24 rounded bg-zinc-100/70 dark:bg-zinc-800/50 animate-pulse" />
                 <div className="grid grid-cols-2 gap-3 mt-4">
@@ -288,7 +301,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                 </div>
                 <div className="h-24 rounded-lg bg-zinc-100/60 dark:bg-zinc-800/40 animate-pulse" />
               </div>
-              <div className="mt-auto p-5 bg-zinc-50/50 dark:bg-zinc-950/60">
+              <div style={{ marginTop: 'auto', padding: 20, background: 'var(--os-surface)' }}>
                 <div className="h-9 w-28 rounded-lg bg-zinc-100/70 dark:bg-zinc-800/50 animate-pulse" />
               </div>
             </div>
@@ -322,38 +335,94 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
     const data = analytics?.[0] || defaultAnalytics;
 
     return (
-      <div className="max-w-[1600px] mx-auto pt-4 pb-6">
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 0 80px' }}>
         {renderNewLeadModal()}
-        <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 mb-5 leading-tight">Sales Analytics</h1>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Total Visits</div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{data.totalVisits?.toLocaleString() || 0}</div>
-          </div>
-          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Unique Visitors</div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{data.uniqueVisitors?.toLocaleString() || 0}</div>
-          </div>
-          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Bounce Rate</div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{data.bounceRate}%</div>
-          </div>
-          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Conversions</div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{data.conversions}</div>
+
+        {/* Editorial header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+          gap: 24, marginBottom: 22, paddingBottom: 18,
+          borderBottom: '0.5px solid var(--os-divider)',
+        }}>
+          <div>
+            <h1 style={{
+              fontSize: 'clamp(22px, 2.4vw, 30px)', fontWeight: 300,
+              letterSpacing: '-0.03em', lineHeight: 1.05,
+              color: 'var(--os-fg-0)', margin: 0,
+            }}>
+              Sales Analytics
+            </h1>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
+              fontFamily: 'var(--font-mono)', fontSize: 10.5,
+              letterSpacing: '0.04em', color: 'var(--os-fg-2)',
+            }}>
+              Website performance · Conversion metrics
+            </div>
           </div>
         </div>
-        <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Top Pages</h2>
-          <div className="space-y-2">
+
+        {/* Stat cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+          {[
+            { label: 'Total Visits', value: data.totalVisits?.toLocaleString() || '0' },
+            { label: 'Unique Visitors', value: data.uniqueVisitors?.toLocaleString() || '0' },
+            { label: 'Bounce Rate', value: `${data.bounceRate}%` },
+            { label: 'Conversions', value: String(data.conversions || 0) },
+          ].map((stat) => (
+            <div key={stat.label} style={{
+              padding: '18px 20px', background: 'var(--os-panel)',
+              border: '0.5px solid var(--os-border-2)', borderRadius: 14,
+              boxShadow: 'var(--shadow-card)',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9.5,
+                letterSpacing: '0.2em', textTransform: 'uppercase' as const,
+                color: 'var(--os-fg-2)', marginBottom: 10,
+              }}>
+                {stat.label}
+              </div>
+              <div style={{
+                fontWeight: 300, fontSize: 30, lineHeight: 1,
+                letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
+                color: 'var(--os-fg-0)',
+              }}>
+                {stat.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Top Pages card */}
+        <div style={{
+          padding: 24, background: 'var(--os-panel)',
+          border: '0.5px solid var(--os-border-2)', borderRadius: 14,
+          boxShadow: 'var(--shadow-card)',
+        }}>
+          <h2 style={{
+            fontSize: 16, fontWeight: 500, letterSpacing: '-0.02em',
+            color: 'var(--os-fg-0)', margin: '0 0 16px',
+          }}>
+            Top Pages
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {data.topPages?.map((page: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">{page.path}</span>
-                <span className="text-zinc-500">{page.views?.toLocaleString()} views</span>
+              <div key={idx} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                fontSize: 13,
+              }}>
+                <span style={{ color: 'var(--fg-2, var(--livv-wine-500))' }}>{page.path}</span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11,
+                  color: 'var(--os-fg-2)',
+                }}>
+                  {page.views?.toLocaleString()} views
+                </span>
               </div>
             ))}
             {(!data.topPages || data.topPages.length === 0) && (
-              <div className="text-zinc-500 text-sm">No data available</div>
+              <div style={{ color: 'var(--os-fg-2)', fontSize: 13 }}>No data available</div>
             )}
           </div>
         </div>
@@ -368,62 +437,113 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
       <>
         {renderNewLeadModal()}
         {renderLeadPanel()}
-        <div className="max-w-[1800px] mx-auto px-6 py-4 h-[calc(100vh-80px)] flex flex-col">
+        <div style={{ maxWidth: 1800, margin: '0 auto', padding: '16px 24px', height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
           {/* Convert to Project Modal */}
           {showConvertModal && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
-                  <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-serif">Convert Lead to Project</h3>
-                  <p className="text-sm text-zinc-500 mt-1">Create a new project from this lead</p>
+            <div style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+              backdropFilter: 'blur(6px)', zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+            }}>
+              <div style={{
+                background: 'var(--os-panel)', borderRadius: 'var(--radius-lg, 24px)',
+                border: '0.5px solid var(--os-border-2)',
+                boxShadow: 'var(--shadow-xl)', maxWidth: 440, width: '100%',
+                maxHeight: '90vh', overflowY: 'auto',
+              }}>
+                <div style={{
+                  padding: '20px 24px',
+                  borderBottom: '0.5px solid var(--os-divider)',
+                }}>
+                  <h3 style={{
+                    fontSize: 18, fontWeight: 300, letterSpacing: '-0.02em',
+                    color: 'var(--os-fg-0)', margin: 0,
+                  }}>
+                    Convert Lead to Project
+                  </h3>
+                  <p style={{
+                    fontSize: 12, color: 'var(--os-fg-2)', marginTop: 4,
+                  }}>
+                    Create a new project from this lead
+                  </p>
                 </div>
-                <div className="p-6 space-y-4">
+                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
-                    <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Lead Details</div>
-                    <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500 text-sm">Name</span>
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.name}</span>
-                      </div>
-                      {showConvertModal.company && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-500 text-sm">Company</span>
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.company}</span>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 9.5,
+                      letterSpacing: '0.18em', textTransform: 'uppercase' as const,
+                      color: 'var(--os-fg-2)', marginBottom: 8, fontWeight: 600,
+                    }}>
+                      Lead Details
+                    </div>
+                    <div style={{
+                      padding: 16, background: 'var(--os-surface)',
+                      borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 8,
+                    }}>
+                      {[
+                        ['Name', showConvertModal.name],
+                        ...(showConvertModal.company ? [['Company', showConvertModal.company]] : []),
+                        ['Email', showConvertModal.email],
+                      ].map(([label, value]) => (
+                        <div key={label} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}>
+                          <span style={{ fontSize: 12, color: 'var(--os-fg-2)' }}>{label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--os-fg-0)' }}>{value}</span>
                         </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-500 text-sm">Email</span>
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{showConvertModal.email}</span>
-                      </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
-                        <Icons.Briefcase size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  <div style={{
+                    padding: 16, background: 'var(--accent-soft)',
+                    borderRadius: 14, border: '0.5px solid var(--accent-strong)',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 999,
+                      background: 'var(--accent-strong)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <Icons.Briefcase size={16} style={{ color: 'var(--livv-gold)' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--os-fg-0)' }}>
+                        Project will be created
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
-                          Project will be created
-                        </div>
-                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
-                          A new project titled "{showConvertModal.company || showConvertModal.name}" will be created.
-                        </p>
-                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--os-fg-2)', marginTop: 4 }}>
+                        A new project titled "{showConvertModal.company || showConvertModal.name}" will be created.
+                      </p>
                     </div>
                   </div>
                 </div>
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
+                <div style={{
+                  padding: '14px 24px',
+                  background: 'var(--os-surface)',
+                  borderTop: '0.5px solid var(--os-divider)',
+                  display: 'flex', justifyContent: 'flex-end', gap: 10,
+                }}>
                   <button
                     onClick={() => setShowConvertModal(null)}
-                    className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                    style={{
+                      padding: '8px 16px', fontSize: 13, fontWeight: 500,
+                      color: 'var(--os-fg-2)', background: 'transparent',
+                      border: 0, cursor: 'pointer', borderRadius: 999,
+                    }}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => handleConvertToProject(showConvertModal)}
                     disabled={isConverting}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '8px 18px', background: 'var(--os-ink)',
+                      color: 'var(--livv-cream-50, #FDFBF7)',
+                      border: '0.5px solid var(--os-ink)',
+                      borderRadius: 999, cursor: isConverting ? 'default' : 'pointer',
+                      fontSize: 13, fontWeight: 500,
+                      opacity: isConverting ? 0.5 : 1,
+                    }}
                   >
                     {isConverting ? (
                       <>
@@ -432,7 +552,7 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                       </>
                     ) : (
                       <>
-                        <Icons.Briefcase size={16} />
+                        <Icons.Briefcase size={14} />
                         Convert to Project
                       </>
                     )}
@@ -442,33 +562,65 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
             </div>
           )}
 
-          {/* Header & Filters */}
-          <div className="flex items-center justify-between mb-4 shrink-0">
-            <div className="flex items-baseline gap-4">
+          {/* Editorial header */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+            gap: 24, marginBottom: 18, paddingBottom: 16,
+            borderBottom: '0.5px solid var(--os-divider)', flexShrink: 0,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
               <div>
-                <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">
+                <h1 style={{
+                  fontSize: 'clamp(22px, 2.4vw, 30px)', fontWeight: 300,
+                  letterSpacing: '-0.03em', lineHeight: 1.05,
+                  color: 'var(--os-fg-0)', margin: 0,
+                }}>
                   Sales Pipeline
                 </h1>
-                <p className="text-zinc-500 dark:text-zinc-500 text-[12px] mt-0.5">Manage and track your leads.</p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
+                  fontFamily: 'var(--font-mono)', fontSize: 10.5,
+                  letterSpacing: '0.04em', color: 'var(--os-fg-2)',
+                }}>
+                  {filtered.length} leads
+                  <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+                  {filtered.filter((l: any) => l.status === 'new').length} new
+                </div>
               </div>
               <SubViewToggle subView={subView} onChange={setSubView} />
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {/* Search - Visual only for now */}
-              <div className="relative group">
-                <Icons.Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" strokeWidth={2} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Search */}
+              <div style={{ position: 'relative' }}>
+                <Icons.Search size={12} style={{
+                  position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                  color: 'var(--os-fg-3)',
+                }} strokeWidth={2} />
                 <input
                   type="text"
                   placeholder="Search leads"
-                  className="pl-7 pr-3 py-1.5 text-[12px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-zinc-400 dark:focus:border-zinc-600 w-44 transition-colors"
+                  style={{
+                    paddingLeft: 28, paddingRight: 12, paddingTop: 7, paddingBottom: 7,
+                    fontSize: 12, background: 'var(--os-panel)',
+                    border: '0.5px solid var(--os-border-2)',
+                    borderRadius: 999, outline: 'none', width: 160,
+                    color: 'var(--os-fg-0)',
+                    transition: 'border-color 0.2s',
+                  }}
                 />
               </div>
 
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value as LeadCategory | 'all')}
-                className="px-2.5 py-1.5 text-[12px] border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
+                style={{
+                  padding: '7px 12px', fontSize: 12,
+                  border: '0.5px solid var(--os-border-2)',
+                  borderRadius: 999, background: 'var(--os-panel)',
+                  color: 'var(--os-fg-0)', outline: 'none',
+                  cursor: 'pointer',
+                }}
               >
                 <option value="all">All categories</option>
                 {(['branding', 'web-design', 'ecommerce', 'saas', 'creators', 'other'] as LeadCategory[]).map(c => <option key={c} value={c}>{c}</option>)}
@@ -476,7 +628,13 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
               <select
                 value={temperature}
                 onChange={e => setTemperature(e.target.value as LeadTemperature | 'all')}
-                className="px-2.5 py-1.5 text-[12px] border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 outline-none hover:border-zinc-300 transition-colors"
+                style={{
+                  padding: '7px 12px', fontSize: 12,
+                  border: '0.5px solid var(--os-border-2)',
+                  borderRadius: 999, background: 'var(--os-panel)',
+                  color: 'var(--os-fg-0)', outline: 'none',
+                  cursor: 'pointer',
+                }}
               >
                 <option value="all">All temperatures</option>
                 {(['cold', 'warm', 'hot'] as LeadTemperature[]).map(t => <option key={t} value={t}>{t}</option>)}
@@ -484,7 +642,15 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
 
               <button
                 onClick={() => setShowNewLeadModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium rounded-md hover:opacity-90 transition-opacity ml-1"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', background: 'var(--os-ink)',
+                  color: 'var(--livv-cream-50, #FDFBF7)',
+                  border: '0.5px solid var(--os-ink)',
+                  borderRadius: 999, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 500,
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
               >
                 <Icons.Plus size={12} strokeWidth={2.5} />
                 New Lead
@@ -495,18 +661,31 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
           {/* Kanban Board */}
           <div className="flex-1 min-h-0">
             {leadsError && (
-              <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-sm flex items-center justify-between">
+              <div style={{
+                marginBottom: 16, borderRadius: 14,
+                border: '0.5px solid rgba(239,68,68,0.3)',
+                background: 'rgba(239,68,68,0.06)',
+                color: '#b91c1c', padding: '12px 16px', fontSize: 13,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
                 <span>{leadsError}</span>
                 <button
                   onClick={() => refreshLeads()}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 text-white"
+                  style={{
+                    padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                    borderRadius: 999, background: '#b91c1c', color: '#fff',
+                    border: 0, cursor: 'pointer',
+                  }}
                 >
                   Reintentar
                 </button>
               </div>
             )}
             {leadsLoading && (
-              <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+              <div style={{
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 11, color: 'var(--os-fg-3)',
+              }}>
                 <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300 rounded-full animate-spin" />
                 Loading leads...
               </div>
@@ -531,64 +710,124 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
       <>
         {renderNewLeadModal()}
         {renderLeadPanel()}
-        <div className="max-w-[1600px] mx-auto pt-4 pb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-baseline gap-4">
+        <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 0 80px' }}>
+          {/* Editorial header */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+            gap: 24, marginBottom: 22, paddingBottom: 18,
+            borderBottom: '0.5px solid var(--os-divider)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
               <div>
-                <h1 className="text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 leading-tight">Inbox</h1>
-                <p className="text-zinc-500">You have {newLeads.length} new leads to review.</p>
+                <h1 style={{
+                  fontSize: 'clamp(22px, 2.4vw, 30px)', fontWeight: 300,
+                  letterSpacing: '-0.03em', lineHeight: 1.05,
+                  color: 'var(--os-fg-0)', margin: 0,
+                }}>
+                  Leads Inbox
+                </h1>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
+                  fontFamily: 'var(--font-mono)', fontSize: 10.5,
+                  letterSpacing: '0.04em', color: 'var(--os-fg-2)',
+                }}>
+                  {newLeads.length} new leads to review
+                </div>
               </div>
               <SubViewToggle subView={subView} onChange={setSubView} />
             </div>
             <button
               onClick={() => setShowNewLeadModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-medium"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '8px 16px', background: 'var(--os-ink)',
+                color: 'var(--livv-cream-50, #FDFBF7)',
+                border: '0.5px solid var(--os-ink)',
+                borderRadius: 999, cursor: 'pointer',
+                fontSize: 12, fontWeight: 500,
+              }}
             >
-              <Icons.Plus size={16} />
+              <Icons.Plus size={14} />
               New Lead
             </button>
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 font-medium">
-                <tr>
-                  <th className="px-6 py-3">Name</th>
-                  <th className="px-6 py-3">Email</th>
-                  <th className="px-6 py-3">Company</th>
-                  <th className="px-6 py-3">Date</th>
-                  <th className="px-6 py-3">AI Analysis</th>
-                  <th className="px-6 py-3">Actions</th>
+          {/* Table card */}
+          <div style={{
+            background: 'var(--os-panel)',
+            border: '0.5px solid var(--os-border-2)',
+            borderRadius: 14, overflow: 'hidden',
+            boxShadow: 'var(--shadow-card)',
+          }}>
+            <table style={{ width: '100%', textAlign: 'left', fontSize: 13, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{
+                  background: 'var(--os-surface)',
+                  fontSize: 10.5, fontWeight: 500,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase' as const,
+                  color: 'var(--os-fg-2)',
+                }}>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>Name</th>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>Email</th>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>Company</th>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>Date</th>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>AI Analysis</th>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              <tbody>
                 {newLeads.map(lead => (
                   <tr
                     key={lead.id}
                     onClick={() => setSelectedLeadId(lead.id)}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                    style={{
+                      cursor: 'pointer',
+                      borderBottom: '0.5px solid var(--os-divider)',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--os-surface-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <td className="px-6 py-4 font-medium text-zinc-900 dark:text-zinc-100">{lead.name}</td>
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400">{lead.email}</td>
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400">{lead.company || '-'}</td>
-                    <td className="px-6 py-4 text-zinc-500">{new Date(lead.created_at || '').toLocaleDateString()}</td>
-                    <td className="px-6 py-4">
+                    <td style={{ padding: '14px 20px', fontWeight: 500, color: 'var(--os-fg-0)' }}>{lead.name}</td>
+                    <td style={{ padding: '14px 20px', color: 'var(--fg-2, var(--livv-wine-500))' }}>{lead.email}</td>
+                    <td style={{ padding: '14px 20px', color: 'var(--fg-2, var(--livv-wine-500))' }}>{lead.company || '-'}</td>
+                    <td style={{ padding: '14px 20px', color: 'var(--os-fg-2)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                      {new Date(lead.created_at || '').toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: '14px 20px' }}>
                       {lead.aiAnalysis?.temperature && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${lead.aiAnalysis.temperature === 'hot' ? 'bg-red-100 text-red-700' :
-                          lead.aiAnalysis.temperature === 'warm' ? 'bg-amber-100 text-amber-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
+                        <span style={{
+                          padding: '3px 10px', borderRadius: 999,
+                          fontSize: 10, fontWeight: 600,
+                          letterSpacing: '0.08em', textTransform: 'uppercase' as const,
+                          background: lead.aiAnalysis.temperature === 'hot'
+                            ? 'rgba(239,68,68,0.1)' : lead.aiAnalysis.temperature === 'warm'
+                              ? 'rgba(196,163,90,0.13)' : 'rgba(109,190,220,0.12)',
+                          color: lead.aiAnalysis.temperature === 'hot'
+                            ? '#b91c1c' : lead.aiAnalysis.temperature === 'warm'
+                              ? 'var(--livv-gold)' : 'var(--livv-sky)',
+                        }}>
                           {lead.aiAnalysis.temperature}
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td style={{ padding: '14px 20px' }}>
                       <button
                         onClick={(event) => {
                           event.stopPropagation();
                           handleStatusChange(lead.id, 'contacted');
                         }}
-                        className="text-indigo-600 hover:text-indigo-700 text-xs font-medium border border-indigo-200 rounded px-2 py-1"
+                        style={{
+                          padding: '4px 12px', fontSize: 11, fontWeight: 500,
+                          borderRadius: 999,
+                          border: '0.5px solid var(--os-border-2)',
+                          background: 'var(--os-panel)',
+                          color: 'var(--os-fg-0)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
                       >
                         Mark Contacted
                       </button>
@@ -597,7 +836,10 @@ export const Sales: React.FC<SalesProps> = ({ view, onNavigate }) => {
                 ))}
                 {newLeads.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
+                    <td colSpan={6} style={{
+                      padding: '48px 24px', textAlign: 'center',
+                      color: 'var(--os-fg-2)', fontSize: 13,
+                    }}>
                       No new leads found.
                     </td>
                   </tr>

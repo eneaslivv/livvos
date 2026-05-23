@@ -51,15 +51,21 @@ export interface AiPreview {
 
 /* ─── Status badge ─── */
 const StatusBadge = ({ status }: { status: ProjectStatus }) => {
-  const colors = {
-    [ProjectStatus.Active]: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-    [ProjectStatus.Pending]: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-    [ProjectStatus.Review]: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400',
-    [ProjectStatus.Completed]: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-    [ProjectStatus.Archived]: 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500',
+  const statusStyles: Record<string, { bg: string; color: string }> = {
+    [ProjectStatus.Active]: { bg: 'rgba(118,146,104,0.12)', color: 'var(--livv-sage)' },
+    [ProjectStatus.Pending]: { bg: 'rgba(196,163,90,0.13)', color: 'var(--livv-gold)' },
+    [ProjectStatus.Review]: { bg: 'rgba(139,92,246,0.1)', color: '#8b5cf6' },
+    [ProjectStatus.Completed]: { bg: 'rgba(82,82,91,0.08)', color: 'var(--os-fg-2)' },
+    [ProjectStatus.Archived]: { bg: 'rgba(82,82,91,0.06)', color: 'var(--os-fg-3)' },
   };
+  const s = statusStyles[status] || statusStyles[ProjectStatus.Archived];
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${colors[status]}`}>
+    <span style={{
+      padding: '3px 10px', borderRadius: 999,
+      fontSize: 10, fontWeight: 600,
+      letterSpacing: '0.1em', textTransform: 'uppercase',
+      background: s.bg, color: s.color,
+    }}>
       {status}
     </span>
   );
@@ -166,9 +172,27 @@ const TabBar = ({ tabs, active, onChange }: {
   }, [active]);
 
   return (
-    <div ref={containerRef} className="relative flex items-center gap-1 p-1 bg-zinc-100/80 dark:bg-zinc-800/50 rounded-xl">
+    <div
+      ref={containerRef}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: 3,
+        background: 'var(--os-panel)',
+        border: '0.5px solid var(--os-border-2)',
+        borderRadius: 999,
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
       <motion.div
-        className="absolute top-1 bottom-1 bg-white dark:bg-zinc-700/80 rounded-lg shadow-sm"
+        style={{
+          position: 'absolute',
+          top: 3,
+          bottom: 3,
+          background: 'var(--os-ink)',
+          borderRadius: 999,
+        }}
         animate={{ left: indicator.left, width: indicator.width }}
         transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
       />
@@ -180,11 +204,22 @@ const TabBar = ({ tabs, active, onChange }: {
             key={tab.id}
             data-tab={tab.id}
             onClick={() => onChange(tab.id)}
-            className={`relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 ${
-              isActive
-                ? 'text-zinc-900 dark:text-zinc-100'
-                : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-            }`}
+            style={{
+              position: 'relative',
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 16px',
+              background: 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 500,
+              color: isActive ? 'var(--livv-cream-50, #FDFBF7)' : 'var(--os-fg-2)',
+              transition: 'color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
           >
             <Icon size={13} />
             {tab.label}
@@ -1488,14 +1523,36 @@ export const Projects: React.FC<{
              brings this view back when needed. */}
         {/* ════════════════════════════════════════ */}
         {!selectedId && (
-        <div className={`${isMobile ? 'w-full' : 'w-[280px] shrink-0'} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden`}>
+        <div style={{
+          width: isMobile ? '100%' : 280, flexShrink: 0,
+          background: 'var(--os-panel)',
+          border: '0.5px solid var(--os-border-2)',
+          borderRadius: 14,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: 'var(--shadow-card)',
+        }}>
           {/* Sidebar header */}
-          <div className="px-4 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[13px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Projects</h2>
+          <div style={{
+            padding: '14px 16px 12px',
+            borderBottom: '0.5px solid var(--os-divider)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 12,
+            }}>
+              <h2 style={{
+                fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
+                color: 'var(--os-fg-0)', margin: 0,
+              }}>Projects</h2>
               <button
                 onClick={() => setIsCreating(!isCreating)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 transition-colors"
+                style={{
+                  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 999, background: 'var(--os-surface)',
+                  border: '0.5px solid var(--os-border-2)',
+                  color: 'var(--os-fg-2)', cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
               >
                 <Icons.Plus size={14} />
               </button>
@@ -1570,7 +1627,7 @@ export const Projects: React.FC<{
             </AnimatePresence>
 
             {/* Category filter pills */}
-            <div className="flex items-center gap-1">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {([
                 { id: 'all' as const, label: 'All', count: projects.length },
                 { id: 'client' as const, label: 'Clients', count: clientCount },
@@ -1579,11 +1636,13 @@ export const Projects: React.FC<{
                 <button
                   key={f.id}
                   onClick={() => setSidebarFilter(f.id)}
-                  className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-colors ${
-                    sidebarFilter === f.id
-                      ? 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60'
-                  }`}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500,
+                    borderRadius: 999, border: 0, cursor: 'pointer',
+                    background: sidebarFilter === f.id ? 'var(--os-ink)' : 'transparent',
+                    color: sidebarFilter === f.id ? 'var(--livv-cream-50, #FDFBF7)' : 'var(--os-fg-2)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
                 >
                   {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
                 </button>
