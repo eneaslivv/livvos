@@ -13,9 +13,11 @@
  */
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
+import '../components/communications/CommDesign.css';
 import { useSupabase } from '../hooks/useSupabase';
 import { useClients } from '../hooks/useClients';
 import { useProjects } from '../context/ProjectsContext';
@@ -183,73 +185,77 @@ export const Communications: React.FC = () => {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto pt-4 pb-16 space-y-4 animate-in fade-in duration-300">
+    <div className="cx-page space-y-4">
       {/* ─── Header ─── */}
-      <div className="flex items-center justify-between gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/60">
+      <div className="cx-head">
         <div>
-          <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-1">
-            <div className="w-1 h-1 rounded-full bg-amber-500" />
-            Communications Hub
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Inbox</h1>
-          <p className="text-zinc-400 text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
+          <h1 className="cx-title">Communications</h1>
+          <div className="cx-meta">
             <span>{(messages || []).filter(m => m.status === 'pending').length} pendientes</span>
-            <span className="text-zinc-300">·</span>
+            <span className="sep">·</span>
             <span>{(tokens || []).filter(t => t.platform === 'gmail').length} Gmail</span>
-            <span className="text-zinc-300">·</span>
+            <span className="sep">·</span>
             <span>{(tokens || []).filter(t => t.platform === 'slack').length} Slack</span>
             {lastSyncedAt && (
               <>
-                <span className="text-zinc-300">·</span>
-                <span className="inline-flex items-center gap-1 text-zinc-400">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                <span className="sep">·</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`cx-sync-dot ${isSyncing ? 'syncing' : 'synced'}`} />
                   {isSyncing ? 'Syncing…' : `Sync ${formatRelative(lastSyncedAt)}`}
                 </span>
               </>
             )}
-          </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {(hasGmail || hasSlack) && (
             <button
               onClick={() => runAutoSync(false)}
               disabled={isSyncing}
-              className="px-2.5 py-1.5 text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 disabled:opacity-40 inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300"
+              className="cx-btn"
               title="Pull new messages from Gmail + Slack now"
             >
-              <Icons.RefreshCw size={11} className={isSyncing ? 'animate-spin' : ''} />
+              <Icons.RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
               {isSyncing ? 'Syncing…' : 'Sync now'}
             </button>
           )}
-        <div className="flex gap-1 p-0.5 bg-zinc-100/60 dark:bg-zinc-900/60 rounded-lg">
-          {(['inbox', 'settings'] as Tab[]).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                tab === t
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-              }`}
-            >
-              {t === 'inbox' ? 'Inbox' : 'Settings'}
-            </button>
-          ))}
-        </div>
+          <div className="cx-tabs">
+            {(['inbox', 'settings'] as Tab[]).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`cx-tab ${tab === t ? 'active' : ''}`}
+              >
+                {t === 'inbox' ? 'Inbox' : 'Settings'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* ─── Connection banner ─── */}
+      <AnimatePresence>
       {banner && (
-        <div className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
-          banner.kind === 'success'
-            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50'
-            : 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200/50'
-        }`}>
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+          className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+            banner.kind === 'success'
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : 'text-rose-700 dark:text-rose-400'
+          }`}
+          style={{
+            background: banner.kind === 'success' ? 'rgba(118,146,104,0.08)' : 'rgba(239,68,68,0.06)',
+            border: `0.5px solid ${banner.kind === 'success' ? 'rgba(118,146,104,0.2)' : 'rgba(239,68,68,0.15)'}`,
+          }}
+        >
           {banner.kind === 'success' ? <Icons.CheckCircle size={14} /> : <Icons.AlertCircle size={14} />}
           {banner.text}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ─── Tab content ─── */}
       {tab === 'inbox' ? (
@@ -334,12 +340,12 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
   // No integrations yet — show onboarding
   if (tokens.length === 0 && !loading) {
     return (
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-12 text-center">
-        <div className="inline-flex p-3 rounded-full bg-amber-50 dark:bg-amber-500/10 mb-4">
-          <Icons.Sparkles size={20} className="text-amber-500" />
+      <div className="cx-card p-12 text-center">
+        <div className="inline-flex p-3 rounded-full mb-4" style={{ background: 'var(--accent-soft)' }}>
+          <Icons.Sparkles size={20} style={{ color: 'var(--accent)' }} />
         </div>
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Connect your first channel</h3>
-        <p className="text-xs text-zinc-500 max-w-md mx-auto mb-4">
+        <h3 className="text-base font-medium mb-1" style={{ color: 'var(--os-fg-0)', letterSpacing: '-0.01em' }}>Connect your first channel</h3>
+        <p className="text-xs max-w-md mx-auto mb-4" style={{ color: 'var(--os-fg-2)' }}>
           Connect Gmail and/or Slack from Settings to start seeing messages here. The AI will classify them automatically.
         </p>
       </div>
@@ -357,14 +363,15 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
 
       {/* Theme filter indicator — when user clicks a theme chip in the digest */}
       {themeMessageIds && themeMessageIds.length > 0 && (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/30">
-          <Icons.Sparkles size={11} className="text-amber-600 dark:text-amber-400" />
-          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl" style={{ background: 'var(--accent-soft)', border: '0.5px solid var(--accent-strong)' }}>
+          <Icons.Sparkles size={11} style={{ color: 'var(--accent)' }} />
+          <span className="text-[11px] font-medium" style={{ color: 'var(--os-fg-1)' }}>
             Filtrando por tema del digest · {themeMessageIds.length} mensajes
           </span>
           <button
             onClick={() => setThemeMessageIds(null)}
-            className="ml-auto text-[10px] font-medium text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1"
+            className="ml-auto text-[10px] font-medium hover:underline inline-flex items-center gap-1"
+            style={{ color: 'var(--accent)' }}
           >
             <Icons.X size={10} />
             Quitar filtro
@@ -374,46 +381,35 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
 
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 min-h-[600px]">
       {/* ── Left: filter pills + message list ── */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
-        <div className="border-b border-zinc-100 dark:border-zinc-800/60">
+      <div className="cx-card flex flex-col max-h-[calc(100vh-220px)]">
+        <div style={{ borderBottom: '0.5px solid var(--os-divider, rgba(214,209,199,0.45))' }}>
           {/* Status / platform filter pills */}
-          <div className="p-3 flex flex-wrap gap-1.5">
+          <div className="cx-filter-strip">
             {([
               { id: 'pending' as const, label: 'Pending', count: messages.filter(m => m.status === 'pending').length },
               { id: 'all' as const, label: 'All', count: messages.length },
               { id: 'high' as const, label: 'Urgent', count: messages.filter(m => m.ai_classification?.priority === 'high' || m.ai_classification?.intent === 'urgent').length },
-              // "Requests" chip — surfaces every inbound message the AI flagged as
-              // should_create_task that hasn't been converted yet. One-glance way to
-              // find "people asking us to do stuff" across Gmail + Slack channels.
-              { id: 'requests' as const, label: '📋 Requests', count: messages.filter(m => m.ai_classification?.should_create_task === true && m.status !== 'task_created').length },
+              { id: 'requests' as const, label: 'Requests', count: messages.filter(m => m.ai_classification?.should_create_task === true && m.status !== 'task_created').length },
               { id: 'gmail' as const, label: 'Gmail', count: messages.filter(m => m.platform === 'gmail').length },
               { id: 'slack' as const, label: 'Slack', count: messages.filter(m => m.platform === 'slack').length },
             ]).map(f => (
               <button
                 key={f.id}
                 onClick={() => setFilter(f.id)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1.5 ${
-                  filter === f.id
-                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-                }`}
+                className={`cx-pill ${filter === f.id ? 'active' : ''}`}
               >
                 {f.label}
-                <span className={`text-[9px] tabular-nums font-mono ${filter === f.id ? 'opacity-60' : 'opacity-50'}`}>{f.count}</span>
+                <span className="count">{f.count}</span>
               </button>
             ))}
           </div>
           {/* Per-client filter — only shown when AI has matched at least one. */}
           {clientsWithMessages.length > 0 && (
-            <div className="px-3 pb-3 flex flex-wrap gap-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 self-center mr-1">Cliente:</span>
+            <div className="cx-client-strip" style={{ borderTop: '0.5px solid var(--os-divider, rgba(214,209,199,0.25))', paddingTop: 10 }}>
+              <span className="cx-client-label">Cliente:</span>
               <button
                 onClick={() => setClientFilter('all')}
-                className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
-                  clientFilter === 'all'
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-                }`}
+                className={`cx-client-pill ${clientFilter === 'all' ? 'active' : ''}`}
               >
                 All
               </button>
@@ -421,38 +417,31 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
                 <button
                   key={c.id}
                   onClick={() => setClientFilter(c.id)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 max-w-[180px] ${
-                    clientFilter === c.id
-                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
-                      : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
-                  }`}
+                  className={`cx-client-pill ${clientFilter === c.id ? 'active' : ''}`}
                 >
                   <span className="truncate">{c.name}</span>
-                  <span className="text-[8.5px] tabular-nums font-mono opacity-60">{c.count}</span>
+                  <span className="count" style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', opacity: 0.6 }}>{c.count}</span>
                 </button>
               ))}
               {unmatchedCount > 0 && (
                 <button
                   onClick={() => setClientFilter('__unmatched__')}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 ${
-                    clientFilter === '__unmatched__'
-                      ? 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300'
-                      : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 italic'
-                  }`}
+                  className={`cx-client-pill ${clientFilter === '__unmatched__' ? 'active' : ''}`}
+                  style={{ fontStyle: clientFilter === '__unmatched__' ? 'normal' : 'italic' }}
                 >
                   Sin matchear
-                  <span className="text-[8.5px] tabular-nums font-mono opacity-60">{unmatchedCount}</span>
+                  <span className="count" style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', opacity: 0.6 }}>{unmatchedCount}</span>
                 </button>
               )}
             </div>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto divide-y divide-zinc-50 dark:divide-zinc-800/40">
+        <div className="flex-1 overflow-y-auto">
           {loading && messages.length === 0 && (
-            <div className="p-8 text-center text-xs text-zinc-400">Loading messages…</div>
+            <div className="p-8 text-center text-xs" style={{ color: 'var(--os-fg-2)' }}>Loading messages…</div>
           )}
           {!loading && filtered.length === 0 && (
-            <div className="p-12 text-center text-xs text-zinc-400">
+            <div className="p-12 text-center text-xs" style={{ color: 'var(--os-fg-2)' }}>
               No messages match this filter.
             </div>
           )}
@@ -469,9 +458,9 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
       </div>
 
       {/* ── Right: detail panel ── */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
+      <div className="cx-card flex flex-col max-h-[calc(100vh-220px)]">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center p-12 text-zinc-400">
+          <div className="flex-1 flex items-center justify-center p-12" style={{ color: 'var(--os-fg-3)' }}>
             <div className="text-center">
               <Icons.Mail size={28} className="mx-auto mb-3 opacity-30" />
               <p className="text-xs">Select a message to see the detail</p>
@@ -517,20 +506,14 @@ const MessageCard: React.FC<{
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 transition-colors flex items-start gap-3 ${
-        active
-          ? 'bg-amber-50/60 dark:bg-amber-500/10 border-l-2 border-amber-500'
-          : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40 border-l-2 border-transparent'
-      } ${!isPending ? 'opacity-60' : ''}`}
+      className={`cx-msg-row ${active ? 'active' : ''} ${!isPending ? 'read' : ''}`}
     >
       {/* Platform icon + status dot */}
-      <div className="relative shrink-0 mt-0.5">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-          msg.platform === 'gmail' ? 'bg-rose-50 dark:bg-rose-500/10' : 'bg-violet-50 dark:bg-violet-500/10'
-        }`}>
+      <div className="relative shrink-0">
+        <div className={`cx-platform-ic ${msg.platform}`}>
           {msg.platform === 'gmail'
-            ? <Icons.Mail size={13} className="text-rose-500" />
-            : <Icons.Message size={13} className="text-violet-500" />
+            ? <Icons.Mail size={13} />
+            : <Icons.Message size={13} />
           }
         </div>
         {isPending && (
@@ -542,55 +525,49 @@ const MessageCard: React.FC<{
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
-          <span className="text-[12px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+          <span className="text-[12px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>
             {msg.from_name || msg.from_email || 'Anonymous'}
           </span>
-          <span className="text-[10px] text-zinc-400 shrink-0 tabular-nums">
+          <span className="text-[10px] shrink-0 tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--os-fg-3)', letterSpacing: '0.04em' }}>
             {timeAgo(msg.received_at)}
           </span>
         </div>
         {headline && (
-          <div className="text-[11px] text-zinc-600 dark:text-zinc-300 truncate font-medium">{headline}</div>
+          <div className="text-[11px] truncate font-medium" style={{ color: 'var(--os-fg-1)' }}>{headline}</div>
         )}
-        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-0.5">{preview}</div>
+        <div className="text-[11px] line-clamp-2 mt-0.5" style={{ color: 'var(--os-fg-2)' }}>{preview}</div>
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-          {/* Client match — most prominent chip when present, since this
-              is what answers "which client/project does this belong to?" */}
           {clientName && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 inline-flex items-center gap-1 max-w-[140px]">
+            <span className="cx-chip inline-flex items-center gap-1 max-w-[140px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
               <Icons.Users size={9} />
               <span className="truncate">{clientName}</span>
             </span>
           )}
           {intentMeta && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${intentMeta.color}`}>
+            <span className={`cx-chip ${intentMeta.color}`}>
               {intentMeta.label}
             </span>
           )}
-          {/* Request chip — most actionable signal in the list. Means
-              the AI thinks the sender is asking for something we should
-              turn into a task. Green when not yet converted, gray once
-              the user clicked "Create task" in the detail panel. */}
           {isRequest && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
-              📋 Request
+            <span className="cx-chip" style={{ background: 'rgba(118,146,104,0.12)', color: 'var(--ok)' }}>
+              Request
             </span>
           )}
           {wasConverted && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 inline-flex items-center gap-1">
-              ✓ Task created
+            <span className="cx-chip" style={{ background: 'var(--os-surface)', color: 'var(--os-fg-2)' }}>
+              ✓ Task
             </span>
           )}
           {isUrgent && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-rose-500/15 text-rose-700 dark:text-rose-400">
-              ⚡ Urgent
+            <span className="cx-chip" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+              Urgent
             </span>
           )}
           {!msg.ai_processed && (
-            <span className="text-[9px] text-zinc-400 italic">analizando…</span>
+            <span className="text-[9px] italic" style={{ color: 'var(--os-fg-3)' }}>analizando…</span>
           )}
           {msg.status !== 'pending' && (
-            <span className="text-[9px] text-zinc-400">· {STATUS_LABELS[msg.status]}</span>
+            <span className="text-[9px]" style={{ color: 'var(--os-fg-3)' }}>· {STATUS_LABELS[msg.status]}</span>
           )}
         </div>
       </div>
@@ -838,28 +815,28 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
   return (
     <>
       {/* ─── Header ─── */}
-      <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
+      <div className="cx-detail-head">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] font-bold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded ${
-                msg.platform === 'gmail' ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400' : 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className={`cx-chip ${
+                msg.platform === 'gmail' ? 'bg-rose-500/10 text-rose-600' : 'bg-violet-500/10 text-violet-600'
               }`}>
                 {msg.platform}
               </span>
               {cls?.intent && (
-                <span className={`text-[10px] font-bold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded ${INTENT_LABELS[cls.intent].color}`}>
+                <span className={`cx-chip ${INTENT_LABELS[cls.intent].color}`}>
                   {INTENT_LABELS[cls.intent].label}
                 </span>
               )}
-              <span className="text-[10px] text-zinc-400">{timeAgo(msg.received_at)}</span>
+              <span className="text-[10px]" style={{ fontFamily: 'var(--font-mono)', color: 'var(--os-fg-3)', letterSpacing: '0.04em' }}>{timeAgo(msg.received_at)}</span>
             </div>
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+            <h2 className="text-base font-medium truncate" style={{ color: 'var(--os-fg-0)', letterSpacing: '-0.01em' }}>
               {headline || msg.from_name}
             </h2>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              <span className="font-medium">{msg.from_name}</span>
-              {msg.from_email && <span className="text-zinc-400"> · {msg.from_email}</span>}
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--os-fg-2)' }}>
+              <span className="font-medium" style={{ color: 'var(--os-fg-1)' }}>{msg.from_name}</span>
+              {msg.from_email && <span style={{ color: 'var(--os-fg-3)' }}> · {msg.from_email}</span>}
             </p>
           </div>
           {/* Quick actions */}
@@ -1283,15 +1260,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
       )}
 
       {/* ── Gmail section ── */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+      <div className="cx-settings-card">
+        <div className="cx-settings-head">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
-              <Icons.Mail size={15} className="text-rose-500" />
+            <div className="cx-platform-ic gmail" style={{ width: 32, height: 32, borderRadius: 9 }}>
+              <Icons.Mail size={15} />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Gmail</h3>
-              <p className="text-[11px] text-zinc-400">{gmailTokens.length} {gmailTokens.length === 1 ? 'account connected' : 'accounts connected'}</p>
+              <h3>Gmail</h3>
+              <p className="text-[11px]" style={{ color: 'var(--os-fg-3)', marginTop: 2 }}>{gmailTokens.length} {gmailTokens.length === 1 ? 'account connected' : 'accounts connected'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1300,7 +1277,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
                 <button
                   onClick={handleRegisterGmailWatch}
                   disabled={busy}
-                  className="px-3 py-1.5 text-[11px] font-medium border border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-500/10 rounded-md hover:bg-amber-100 dark:hover:bg-amber-500/15 disabled:opacity-40 inline-flex items-center gap-1.5"
+                  className="cx-btn"
                   title="Enables push notifications via Pub/Sub. Requires setup in Google Cloud (see WEBHOOKS.md). Expires every 7 days."
                 >
                   <Icons.Zap size={11} /> Enable push
@@ -1308,7 +1285,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
                 <button
                   onClick={handleSyncGmail}
                   disabled={busy}
-                  className="px-3 py-1.5 text-[11px] font-medium border border-zinc-200 dark:border-zinc-700 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800/40 disabled:opacity-40 inline-flex items-center gap-1.5"
+                  className="cx-btn"
                 >
                   <Icons.RefreshCw size={11} /> Sync
                 </button>
@@ -1317,7 +1294,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
             <button
               onClick={handleConnectGmail}
               disabled={busy}
-              className="px-3 py-1.5 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
+              className="cx-btn primary"
             >
               <Icons.Plus size={11} /> Connect Gmail
             </button>
@@ -1351,21 +1328,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
       </div>
 
       {/* ── Slack section ── */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between">
+      <div className="cx-settings-card">
+        <div className="cx-settings-head">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center">
-              <Icons.Message size={15} className="text-violet-500" />
+            <div className="cx-platform-ic slack" style={{ width: 32, height: 32, borderRadius: 9 }}>
+              <Icons.Message size={15} />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Slack</h3>
-              <p className="text-[11px] text-zinc-400">{slackTokens.length} {slackTokens.length === 1 ? 'workspace' : 'workspaces'}</p>
+              <h3>Slack</h3>
+              <p className="text-[11px]" style={{ color: 'var(--os-fg-3)', marginTop: 2 }}>{slackTokens.length} {slackTokens.length === 1 ? 'workspace' : 'workspaces'}</p>
             </div>
           </div>
           <button
             onClick={handleConnectSlack}
             disabled={busy}
-            className="px-3 py-1.5 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
+            className="cx-btn primary"
           >
             <Icons.Plus size={11} /> Connect Slack
           </button>
