@@ -20,6 +20,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
+import { SlidePanel } from '../components/ui/SlidePanel';
+import { InlineTaskDetailHost } from '../components/calendar/InlineTaskDetailHost';
+import { DocumentEditor } from '../components/docs/DocumentEditor';
 // Shared spring presets so Brief, AiAdvisor and future surfaces all
 // feel like one iOS-native UI. Tweaking the feel is a one-file change.
 import { SPRING_TAP, SPRING_ENTER, TAP_SCALE, SWIPE_THRESHOLD, SWIPE_VELOCITY } from '../lib/ui/motion';
@@ -36,6 +39,7 @@ import '../components/brief/BriefDesign.css';
 import { Markdown } from '../lib/markdown';
 import type { MarkdownAction } from '../lib/markdown';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
+import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
 import type { PageView, NavParams } from '../types';
@@ -46,6 +50,17 @@ interface BriefProps {
 
 type ActionState = 'pending' | 'executing' | 'done' | 'skipped' | 'failed';
 type ChatAction = ProposedAction & { state: ActionState; error?: string };
+type DocChatResult = {
+  kind: 'doc' | 'file';
+  id: string;
+  title: string;
+  subtitle: string;
+  snippet?: string;
+  url?: string;
+  clientId?: string | null;
+  projectId?: string | null;
+  updatedAt?: string | null;
+};
 
 type ChatMsg = {
   role: 'user' | 'assistant';
@@ -64,9 +79,42 @@ type ChatMsg = {
   conversationId?: string | null;
   /** Local thumbs state so we don't double-submit. */
   thumbs?: 'up' | 'down' | null;
+  docResults?: DocChatResult[];
 };
 
 type RightTab = 'tasks' | 'calendar' | 'inbox';
+type FocusDateMode = 'overdue' | 'today' | 'tomorrow' | 'week' | null;
+type BriefPanelFocus = {
+  tab: RightTab;
+  query: string;
+  label: string;
+  dateMode: FocusDateMode;
+  terms: string[];
+  projectIds: string[];
+  clientIds: string[];
+};
+
+const FOCUS_STOPWORDS = new Set([
+  'a', 'about', 'algo', 'and', 'con', 'de', 'del', 'detalle', 'details', 'el', 'en',
+  'for', 'in', 'la', 'las', 'los', 'me', 'of', 'por', 'que', 'show', 'sobre', 'the',
+  'to', 'today', 'tomorrow', 'task', 'tasks', 'tarea', 'tareas', 'inbox', 'mail',
+  'email', 'emails', 'calendar', 'meeting', 'meetings', 'date', 'fecha', 'fechas',
+]);
+
+const normalizeFocusText = (value: unknown): string =>
+  String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const tokenizeFocusQuery = (query: string): string[] =>
+  normalizeFocusText(query)
+    .split(' ')
+    .map(t => t.trim())
+    .filter(t => t.length > 2 && !FOCUS_STOPWORDS.has(t));
 
 const formatRelative = (dateStr: string | undefined): string => {
   if (!dateStr) return '';
@@ -95,7 +143,28 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openEvent, setOpenEvent] = useState<any | null>(null);
+  const [openMessage, setOpenMessage] = useState<any | null>(null);
+  const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
+  const [activeFocus, setActiveFocus] = useState<BriefPanelFocus | null>(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyPrompt, setReplyPrompt] = useState('');
+  const [replyBusy, setReplyBusy] = useState<ComposeCommReplyAction | 'prompt' | null>(null);
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyNote, setReplyNote] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const cls = openMessage?.ai_classification || {};
+    setReplyDraft(cls.suggested_reply || '');
+    setReplyPrompt('');
+    setReplyBusy(null);
+    setReplySending(false);
+    setReplyError(null);
+    setReplyNote(null);
+  }, [openMessage?.id]);
 
   // ── Voice input ─────────────────────────────────────────────────
   // Loads the user's preferred language once, maps to a BCP-47 tag,
@@ -160,6 +229,221 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     return { overdue, dueToday, dueSoon };
   }, [myTasks, today, nextWeek]);
 
+  const buildPanelFocus = (query: string): BriefPanelFocus | null => {
+    const q = normalizeFocusText(query);
+    if (!q) return null;
+
+    const mentionsInbox = /\b(inbox|mail|email|emails|message|messages|mensaje|mensajes|follow-?ups?)\b/.test(q);
+    const mentionsCalendar = /\b(calendar|meeting|meetings|event|events|agenda|reunion|reuniones)\b/.test(q);
+    const mentionsTasks = /\b(task|tasks|tarea|tareas|todo|overdue|vencid|due|deadline|deadlines|block|blocked|bloquead)\b/.test(q);
+
+    let dateMode: FocusDateMode = null;
+    if (/\b(overdue|vencid|atrasad|late)\b/.test(q)) dateMode = 'overdue';
+    else if (/\b(tomorrow|manana|mañana)\b/.test(q)) dateMode = 'tomorrow';
+    else if (/\b(today|hoy)\b/.test(q)) dateMode = 'today';
+    else if (/\b(this week|week|semana|7 dias|7 days)\b/.test(q)) dateMode = 'week';
+
+    const projectIds = projects
+      .filter(p => {
+        const name = normalizeFocusText((p as any).title || (p as any).name);
+        return name.length > 2 && q.includes(name);
+      })
+      .map(p => p.id);
+
+    const clientIds = clients
+      .filter(c => {
+        const name = normalizeFocusText((c as any).name || (c as any).company);
+        return name.length > 2 && q.includes(name);
+      })
+      .map(c => c.id);
+
+    const tab: RightTab = mentionsInbox
+      ? 'inbox'
+      : mentionsCalendar
+        ? 'calendar'
+        : (mentionsTasks || dateMode || projectIds.length || clientIds.length)
+          ? 'tasks'
+          : rightTab;
+
+    const terms = tokenizeFocusQuery(query);
+    const hasFocusSignal = mentionsInbox || mentionsCalendar || mentionsTasks || !!dateMode || projectIds.length > 0 || clientIds.length > 0 || terms.length > 0;
+    if (!hasFocusSignal) return null;
+
+    const bits: string[] = [];
+    if (dateMode === 'overdue') bits.push('overdue');
+    if (dateMode === 'today') bits.push('today');
+    if (dateMode === 'tomorrow') bits.push('tomorrow');
+    if (dateMode === 'week') bits.push('this week');
+    if (projectIds.length) bits.push(`${projectIds.length} project ${projectIds.length === 1 ? 'match' : 'matches'}`);
+    if (clientIds.length) bits.push(`${clientIds.length} client ${clientIds.length === 1 ? 'match' : 'matches'}`);
+    if (!bits.length && terms.length) bits.push(`"${terms.slice(0, 3).join(' ')}"`);
+
+    return {
+      tab,
+      query,
+      label: bits.length ? bits.join(' · ') : 'focused results',
+      dateMode,
+      terms,
+      projectIds,
+      clientIds,
+    };
+  };
+
+  const taskMatchesFocus = (task: CalendarTask, focus: BriefPanelFocus | null): boolean => {
+    if (!focus || focus.tab !== 'tasks') return true;
+    const due = task.start_date ? new Date(task.start_date + 'T12:00:00') : null;
+    const todayIso = today.toISOString().slice(0, 10);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowIso = tomorrow.toISOString().slice(0, 10);
+    let matched = false;
+
+    if (focus.dateMode === 'overdue') {
+      if (!task.start_date || task.start_date >= todayIso) return false;
+      matched = true;
+    }
+    if (focus.dateMode === 'today') {
+      if (task.start_date !== todayIso) return false;
+      matched = true;
+    }
+    if (focus.dateMode === 'tomorrow') {
+      if (task.start_date !== tomorrowIso) return false;
+      matched = true;
+    }
+    if (focus.dateMode === 'week') {
+      if (!due || due < today || due > nextWeek) return false;
+      matched = true;
+    }
+
+    if (focus.projectIds.length > 0) {
+      if (!task.project_id || !focus.projectIds.includes(task.project_id)) return false;
+      matched = true;
+    }
+
+    if (focus.clientIds.length > 0) {
+      if (!task.client_id || !focus.clientIds.includes(task.client_id)) return false;
+      matched = true;
+    }
+
+    if (focus.terms.length > 0) {
+      const project = task.project_id ? projects.find(p => p.id === task.project_id) : null;
+      const client = task.client_id ? clients.find(c => c.id === task.client_id) : null;
+      const haystack = normalizeFocusText([
+        task.title,
+        task.description,
+        project && ((project as any).title || (project as any).name),
+        client && ((client as any).name || (client as any).company),
+      ].filter(Boolean).join(' '));
+      const termMatch = focus.terms.some(term => haystack.includes(term));
+      if (!termMatch && !matched) return false;
+      matched = matched || termMatch;
+    }
+
+    return matched || !!focus.dateMode || focus.projectIds.length > 0 || focus.clientIds.length > 0 || focus.terms.length > 0;
+  };
+
+  const messageMatchesFocus = (message: any, focus: BriefPanelFocus | null): boolean => {
+    if (!focus || focus.tab !== 'inbox') return true;
+    if (focus.terms.length === 0 && !focus.dateMode) return true;
+
+    if (focus.dateMode) {
+      const received = message.received_at ? new Date(message.received_at) : null;
+      if (!received) return false;
+      const receivedDay = new Date(received); receivedDay.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+      if (focus.dateMode === 'today' && receivedDay.toDateString() !== today.toDateString()) return false;
+      if (focus.dateMode === 'tomorrow') return false;
+      if (focus.dateMode === 'week' && (receivedDay < today || receivedDay > nextWeek)) return false;
+    }
+
+    if (focus.terms.length === 0) return true;
+    const haystack = normalizeFocusText([
+      message.from_name,
+      message.from_email,
+      message.subject,
+      message.body_text,
+      message.channel_name,
+      message.ai_classification?.intent,
+      message.ai_classification?.priority,
+    ].filter(Boolean).join(' '));
+    return focus.terms.some(term => haystack.includes(term));
+  };
+
+  const findDocumentsForChat = async (query: string): Promise<DocChatResult[] | null> => {
+    if (!currentTenant?.id) return null;
+    const q = normalizeFocusText(query);
+    const asksDocs = /\b(doc|docs|document|documents|archivo|archivos|file|files|proposal|propuesta|contrato|brief)\b/.test(q);
+    if (!asksDocs) return null;
+
+    const terms = tokenizeFocusQuery(query).filter(t => !['document', 'documents', 'archivo', 'archivos', 'file', 'files', 'proposal', 'propuesta'].includes(t));
+    const matchedProjectIds = projects
+      .filter(p => q.includes(normalizeFocusText((p as any).title || (p as any).name)))
+      .map(p => p.id);
+    const matchedClientIds = clients
+      .filter(c => q.includes(normalizeFocusText((c as any).name || (c as any).company)))
+      .map(c => c.id);
+
+    const [{ data: docs }, { data: fileRows }] = await Promise.all([
+      supabase
+        .from('documents')
+        .select('id,title,content_text,status,client_id,project_id,updated_at')
+        .eq('tenant_id', currentTenant.id)
+        .order('updated_at', { ascending: false })
+        .limit(120),
+      supabase
+        .from('files')
+        .select('id,name,type,url,client_id,project_id,updated_at')
+        .eq('tenant_id', currentTenant.id)
+        .order('updated_at', { ascending: false })
+        .limit(120),
+    ]);
+
+    const scoreItem = (item: any, kind: 'doc' | 'file') => {
+      const project = item.project_id ? projectsById.get(item.project_id) : null;
+      const client = item.client_id ? clientsById.get(item.client_id) : (project?.client_id ? clientsById.get(project.client_id) : null);
+      const haystack = normalizeFocusText([
+        kind === 'doc' ? item.title : item.name,
+        item.content_text,
+        project && ((project as any).title || (project as any).name),
+        client && ((client as any).name || (client as any).company),
+      ].filter(Boolean).join(' '));
+      let score = 0;
+      if (matchedProjectIds.includes(item.project_id)) score += 8;
+      if (matchedClientIds.includes(item.client_id) || (project?.client_id && matchedClientIds.includes(project.client_id))) score += 8;
+      for (const term of terms) if (haystack.includes(term)) score += 2;
+      if (asksDocs && score === 0 && terms.length === 0) score = 1;
+      return { score, project, client };
+    };
+
+    const docResults = (docs || []).map((d: any) => {
+      const { score, project, client } = scoreItem(d, 'doc');
+      return { raw: d, kind: 'doc' as const, score, project, client };
+    });
+    const fileResults = (fileRows || []).map((f: any) => {
+      const { score, project, client } = scoreItem(f, 'file');
+      return { raw: f, kind: 'file' as const, score, project, client };
+    });
+
+    return [...docResults, ...fileResults]
+      .filter(r => r.score > 0)
+      .sort((a, b) => b.score - a.score || +new Date(b.raw.updated_at || 0) - +new Date(a.raw.updated_at || 0))
+      .slice(0, 6)
+      .map(r => ({
+        kind: r.kind,
+        id: r.raw.id,
+        title: r.kind === 'doc' ? r.raw.title : r.raw.name,
+        subtitle: [
+          r.kind === 'doc' ? 'Document' : 'File',
+          r.project?.title || r.project?.name,
+          r.client?.name || r.client?.company,
+        ].filter(Boolean).join(' · '),
+        snippet: r.kind === 'doc' ? String(r.raw.content_text || '').replace(/\s+/g, ' ').slice(0, 180) : r.raw.type,
+        url: r.kind === 'file' ? r.raw.url : undefined,
+        clientId: r.raw.client_id || r.project?.client_id || null,
+        projectId: r.raw.project_id || null,
+        updatedAt: r.raw.updated_at || null,
+      }));
+  };
+
   // ── Today's calendar events ──────────────────────────────────────
   const todayEvents = useMemo(() => {
     const todayStr = today.toISOString().slice(0, 10);
@@ -222,14 +506,22 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     const q = (override ?? input).trim();
     if (!q || sending || !currentTenant?.id || !user?.id) return;
     if (!override) setInput('');
+    const panelFocus = buildPanelFocus(q);
+    if (panelFocus) {
+      setActiveFocus(panelFocus);
+      setRightTab(panelFocus.tab);
+    }
     const userMsg: ChatMsg = { role: 'user', content: q, ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setSending(true);
     try {
       const history = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
+      const routedQuery = panelFocus
+        ? `${q}\n\nUI focus: The right panel is filtering/highlighting ${panelFocus.tab} for ${panelFocus.label}. Answer with a concrete, detailed breakdown of the matching items, dates, owners/projects/clients when available, and the next action. Do not stay generic.`
+        : q;
       const out = await runOrchestrator(
         {
-          query: q,
+          query: routedQuery,
           history,
           ctx: { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
         },
@@ -255,13 +547,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   // Handle interactive elements in Markdown (topic pills, etc.)
   const handleMarkdownAction = (action: MarkdownAction) => {
     if (action.type === 'topic_click') {
-      const followUp = `Detallame los mensajes de ${action.label}`;
+      const followUp = `Give me the message details for ${action.label}.`;
       void handleSend(followUp);
     }
   };
 
   const handleTaskClick = (t: CalendarTask) => {
-    onNavigate('calendar', { taskId: t.id });
+    setOpenTaskId(t.id);
   };
 
   // ── Inline task actions on the cards ─────────────────────────────
@@ -418,7 +710,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       try {
         const { data } = await supabase
           .from('communication_messages')
-          .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, ai_classification')
+          .select('id, platform, from_name, from_email, from_id, subject, body_text, body_html, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id')
           .eq('tenant_id', currentTenant.id)
           .eq('status', 'pending')
           .order('received_at', { ascending: false })
@@ -477,10 +769,103 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     }
   };
 
+  const runReplyAI = async (
+    action: ComposeCommReplyAction | 'prompt',
+    extra?: { tone?: string; custom_instructions?: string },
+  ) => {
+    if (!openMessage) return;
+    setReplyBusy(action);
+    setReplyError(null);
+    setReplyNote(null);
+    try {
+      const selectedClient = openMessage.matched_client_id ? clients.find(c => c.id === openMessage.matched_client_id) : null;
+      const selectedProject = openMessage.matched_project_id ? projects.find(p => p.id === openMessage.matched_project_id) : null;
+      const result = await composeCommReply({
+        action: action === 'prompt' ? 'generate' : action,
+        draft: replyDraft,
+        inbound_message: {
+          platform: openMessage.platform,
+          sender_name: openMessage.from_name || undefined,
+          sender_email: openMessage.from_email || undefined,
+          subject: openMessage.subject || openMessage.channel_name || undefined,
+          body: (openMessage.body_text || '').slice(0, 4000),
+          received_at: openMessage.received_at,
+        },
+        client_context: selectedClient ? {
+          name: (selectedClient as any).name,
+          email: (selectedClient as any).email,
+          notes: ((selectedClient as any).notes || '').slice(0, 600),
+        } : null,
+        project_context: selectedProject ? {
+          title: (selectedProject as any).title,
+          description: ((selectedProject as any).description || '').slice(0, 600),
+          status: (selectedProject as any).status,
+          deadline: (selectedProject as any).deadline,
+        } : null,
+        params: {
+          tone: extra?.tone,
+          custom_instructions: action === 'prompt'
+            ? (replyPrompt.trim() || extra?.custom_instructions || 'Draft a useful reply.')
+            : extra?.custom_instructions,
+        },
+      });
+      setReplyDraft(result.reply);
+      setReplyNote(result.explanation || 'Draft updated.');
+    } catch (err) {
+      setReplyError((err as Error).message || 'Could not generate reply.');
+    } finally {
+      setReplyBusy(null);
+    }
+  };
+
+  const sendMessageReply = async () => {
+    if (!openMessage || !replyDraft.trim()) return;
+    setReplySending(true);
+    setReplyError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comm-reply`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message_id: openMessage.id,
+          body: replyDraft,
+          edited_from_draft: true,
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || `HTTP ${res.status}`);
+      }
+      setPendingMessages(prev => prev.filter(m => m.id !== openMessage.id));
+      setPendingRequestsCount(c => Math.max(0, c - 1));
+      setOpenMessage(null);
+    } catch (err) {
+      setReplyError((err as Error).message || 'Could not send reply.');
+    } finally {
+      setReplySending(false);
+    }
+  };
+
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
   const clientsById = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+  const focusedOverdue = activeFocus?.tab === 'tasks' ? overdue.filter(t => taskMatchesFocus(t, activeFocus)) : overdue;
+  const focusedDueToday = activeFocus?.tab === 'tasks' ? dueToday.filter(t => taskMatchesFocus(t, activeFocus)) : dueToday;
+  const focusedDueSoon = activeFocus?.tab === 'tasks' ? dueSoon.filter(t => taskMatchesFocus(t, activeFocus)) : dueSoon;
+  const focusedMessages = activeFocus?.tab === 'inbox' ? pendingMessages.filter(m => messageMatchesFocus(m, activeFocus)) : pendingMessages;
+  const activeFocusCount = activeFocus?.tab === 'tasks'
+    ? focusedOverdue.length + focusedDueToday.length + focusedDueSoon.length
+    : activeFocus?.tab === 'inbox'
+      ? focusedMessages.length
+      : activeFocus?.tab === 'calendar'
+        ? todayEvents.length
+        : 0;
 
   return (
+    <>
     <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] gap-4 max-w-[1600px] mx-auto py-4">
       {/* ── LEFT: chat column ── */}
       <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
@@ -506,20 +891,6 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             </span>
           </div>
 
-          {/* Brief eyebrow + settings — DailyBrief provides the
-              full header with its own "Today's brief" eyebrow, so we
-              just show quick nav here. */}
-          <div className="flex items-center gap-2 pt-1">
-            <div className="ml-auto inline-flex gap-1">
-              <button
-                onClick={() => onNavigate('activity')}
-                className="w-6 h-6 rounded-md text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors inline-flex items-center justify-center"
-                title="Open Activity"
-              >
-                <Icons.Activity size={11} />
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Single scroll surface: DailyBrief + chat messages flow
@@ -683,6 +1054,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         <div className="px-4 pt-3 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
           <div className="bd-chips mb-2.5">
             {[
+              { label: 'New client',      cat: 'cat-onboard', prompt: 'I want to set up a new client.' },
+              { label: 'New project',     cat: 'cat-onboard', prompt: 'I want to create a new project.' },
               { label: 'Plan my week',    cat: 'cat-tasks',   prompt: 'Plan my week: pick the most important things to ship Mon–Fri.' },
               { label: "What's blocked?", cat: 'cat-tasks',   prompt: "What's blocked or waiting on someone else right now?" },
               { label: 'Follow-ups',      cat: 'cat-mail',    prompt: "Show me pending follow-ups across clients + inbox I haven't replied to." },
@@ -781,14 +1154,34 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
         {/* Feed area — bundle's bd-feed wraps everything so the rows
             sit on the iOS-style grouped container with day labels. */}
+        {activeFocus && activeFocus.tab === rightTab && (
+          <div className="bd-focus-strip">
+            <div className="bd-focus-copy">
+              <span className="bd-focus-kicker">Focused from chat</span>
+              <span className="bd-focus-title">{activeFocus.label}</span>
+              <span className="bd-focus-meta">
+                {activeFocusCount} matching {rightTab === 'inbox' ? 'messages' : rightTab === 'calendar' ? 'items' : 'tasks'}
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveFocus(null)}
+              className="bd-focus-clear"
+              title="Clear focus"
+            >
+              <Icons.X size={12} />
+            </button>
+          </div>
+        )}
+
         <div className="bd-feed flex-1 overflow-y-auto">
           {rightTab === 'tasks' && (
             <>
               <TaskSection
                 title="Overdue"
                 icon={<Icons.Clock size={11} className="text-rose-500" />}
-                tasks={overdue}
+                tasks={focusedOverdue}
                 tone="rose"
+                focused={activeFocus?.tab === 'tasks'}
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
@@ -800,8 +1193,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               <TaskSection
                 title="Due today"
                 icon={<Icons.Activity size={11} className="text-amber-500" />}
-                tasks={dueToday}
+                tasks={focusedDueToday}
                 tone="amber"
+                focused={activeFocus?.tab === 'tasks'}
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
@@ -813,8 +1207,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               <TaskSection
                 title="Due soon"
                 icon={<Icons.Sparkles size={11} className="text-indigo-500" />}
-                tasks={dueSoon}
+                tasks={focusedDueSoon}
                 tone="indigo"
+                focused={activeFocus?.tab === 'tasks'}
                 projectsById={projectsById}
                 clientsById={clientsById}
                 onTaskClick={handleTaskClick}
@@ -843,7 +1238,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                       key={e.id}
                       className="bd-msg"
                       style={{ gridTemplateColumns: '60px 1fr 80px' }}
-                      onClick={() => onNavigate('calendar')}
+                      onClick={() => setOpenEvent(e)}
                     >
                       <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#18181b', fontWeight: 600, letterSpacing: '0.04em' }}>
                         {e.start_time || '—'}
@@ -872,24 +1267,25 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             <>
               <div className="bd-day flex items-center">
                 Pending messages
-                <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{pendingMessages.length}</span>
+                <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{focusedMessages.length}</span>
                 <button
                   onClick={() => onNavigate('communications')}
                   className="ml-auto bd-open-full hover:!text-[#5c1d18]"
                 >Open Inbox →</button>
               </div>
-              {pendingMessages.length === 0 ? (
+              {focusedMessages.length === 0 ? (
                 <div className="px-5 py-8 text-center text-[12px] text-zinc-400 dark:text-zinc-500 italic">
                   Inbox empty.
                 </div>
               ) : (
                 <AnimatePresence initial={false}>
-                  {pendingMessages.map((m, idx) => (
+                  {focusedMessages.map((m, idx) => (
                     <SwipeableInboxCard
                       key={m.id}
                       message={m}
                       idx={idx}
-                      onOpen={() => onNavigate('communications')}
+                      focused={activeFocus?.tab === 'inbox'}
+                      onOpen={() => setOpenMessage(m)}
                       onConvert={() => handleConvertToTask(m)}
                       onMarkDone={() => handleMarkMessageDone(m)}
                     />
@@ -901,6 +1297,183 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         </div>
       </section>
     </div>
+    <InlineTaskDetailHost
+      taskId={openTaskId}
+      onClose={() => setOpenTaskId(null)}
+    />
+    <SlidePanel
+      isOpen={!!openEvent}
+      onClose={() => setOpenEvent(null)}
+      width="md"
+      title={openEvent?.title || 'Event'}
+      subtitle={openEvent
+        ? `${new Date((openEvent.start_date || '').slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}${openEvent.start_time ? ` at ${openEvent.start_time}` : ''}`
+        : undefined}
+      headerRight={openEvent?.type ? (
+        <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+          {openEvent.type}
+        </span>
+      ) : null}
+    >
+      {openEvent && (
+        <div className="space-y-5 p-6 text-sm text-zinc-700 dark:text-zinc-300">
+          <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div className="mb-3 flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: openEvent.color || '#c4a35a' }}
+              />
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+                Schedule
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <div className="text-zinc-400">Starts</div>
+                <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">{openEvent.start_time || 'All day'}</div>
+              </div>
+              <div>
+                <div className="text-zinc-400">Duration</div>
+                <div className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">
+                  {openEvent.duration ? (openEvent.duration < 60 ? `${openEvent.duration}m` : `${Math.round(openEvent.duration / 60 * 10) / 10}h`) : 'Not set'}
+                </div>
+              </div>
+            </div>
+          </div>
+          {openEvent.description && (
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Notes</div>
+              <p className="whitespace-pre-wrap leading-6">{openEvent.description}</p>
+            </div>
+          )}
+          {openEvent.location && (
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Location</div>
+              <p>{openEvent.location}</p>
+            </div>
+          )}
+          {(openEvent.project_id || openEvent.client_id) && (
+            <div className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Context</div>
+              <div className="mt-2 space-y-1">
+                {openEvent.project_id && <div>{projectsById.get(openEvent.project_id)?.title || 'Project linked'}</div>}
+                {openEvent.client_id && <div>{clientsById.get(openEvent.client_id)?.name || 'Client linked'}</div>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </SlidePanel>
+    <SlidePanel
+      isOpen={!!openMessage}
+      onClose={() => setOpenMessage(null)}
+      width="lg"
+      title={openMessage?.subject || openMessage?.from_name || 'Message'}
+      subtitle={openMessage ? `${openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown'} · ${formatMsgTime(openMessage.received_at)}` : undefined}
+      footer={openMessage ? (
+        <div className="flex gap-2 pr-24">
+          <button
+            onClick={async () => { await handleConvertToTask(openMessage); setOpenMessage(null); }}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+          >
+            <Icons.Plus size={14} /> Convert to task
+          </button>
+          <button
+            onClick={async () => { await handleMarkMessageDone(openMessage); setOpenMessage(null); }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            <Icons.Check size={14} /> Done
+          </button>
+        </div>
+      ) : null}
+    >
+      {openMessage && (
+        <div className="space-y-5 p-6">
+          <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">From</div>
+            <div className="font-medium text-zinc-900 dark:text-zinc-100">{openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown sender'}</div>
+            {openMessage.from_email && <div className="mt-1 text-xs text-zinc-500">{openMessage.from_email}</div>}
+          </div>
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Message</div>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+              {openMessage.body_text || openMessage.subject || 'No message body.'}
+            </p>
+          </div>
+          {openMessage.ai_classification && (
+            <div className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">AI signal</div>
+              <div className="flex flex-wrap gap-2">
+                {openMessage.ai_classification.intent && <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{openMessage.ai_classification.intent}</span>}
+                {openMessage.ai_classification.priority && <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">{openMessage.ai_classification.priority}</span>}
+                {openMessage.ai_classification.should_create_task && <span className="rounded-full bg-rose-500/10 px-2 py-1 text-xs text-rose-700 dark:text-rose-300">task candidate</span>}
+              </div>
+            </div>
+          )}
+          <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Reply</div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  Sends through {openMessage.platform === 'gmail' ? 'Gmail email' : 'Slack'} using the connected account.
+                </div>
+              </div>
+              <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${openMessage.platform === 'gmail' ? 'bg-rose-500/10 text-rose-600' : 'bg-violet-500/10 text-violet-600'}`}>
+                {openMessage.platform === 'gmail' ? <Icons.Mail size={10} /> : <Icons.Message size={10} />}
+                {openMessage.platform === 'gmail' ? 'Email' : 'Slack'}
+              </div>
+            </div>
+            <div className="mb-2 flex gap-2">
+              <input
+                value={replyPrompt}
+                onChange={e => setReplyPrompt(e.target.value)}
+                placeholder="Prompt the response: warm, shorter, ask for timeline..."
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              <button
+                onClick={() => runReplyAI('prompt')}
+                disabled={!!replyBusy}
+                className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-950"
+              >
+                Apply
+              </button>
+            </div>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              <button onClick={() => runReplyAI('generate')} disabled={!!replyBusy} className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-40 dark:text-amber-300">
+                {replyBusy === 'generate' ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.Sparkles size={11} />} Generate
+              </button>
+              <button onClick={() => runReplyAI('improve')} disabled={!!replyBusy || !replyDraft.trim()} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-300 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Improve</button>
+              <button onClick={() => runReplyAI('rewrite_tone', { tone: 'concise' })} disabled={!!replyBusy || !replyDraft.trim()} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-300 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Shorter</button>
+              <button onClick={() => runReplyAI('rewrite_tone', { tone: 'friendly' })} disabled={!!replyBusy || !replyDraft.trim()} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-300 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Friendlier</button>
+              <button onClick={() => runReplyAI('rewrite_tone', { tone: 'formal' })} disabled={!!replyBusy || !replyDraft.trim()} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-300 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Formal</button>
+            </div>
+            <textarea
+              value={replyDraft}
+              onChange={e => setReplyDraft(e.target.value)}
+              rows={7}
+              placeholder="Write or generate a reply..."
+              className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm leading-6 text-zinc-800 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+            {replyNote && <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">{replyNote}</div>}
+            {replyError && <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">{replyError}</div>}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-xs text-zinc-400">
+                {openMessage.status === 'replied' ? 'Already replied' : `Ready to send through ${openMessage.platform === 'gmail' ? 'Gmail' : 'Slack'}`}
+              </span>
+              <button
+                onClick={sendMessageReply}
+                disabled={replySending || !replyDraft.trim() || openMessage.status === 'replied'}
+                className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-950"
+              >
+                {replySending ? <Icons.Loader size={14} className="animate-spin" /> : <Icons.Send size={14} />}
+                Send {openMessage.platform === 'gmail' ? 'email' : 'Slack'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </SlidePanel>
+    </>
   );
 };
 
@@ -923,6 +1496,8 @@ const TaskSection: React.FC<{
   icon: React.ReactNode;
   tasks: CalendarTask[];
   tone: 'rose' | 'amber' | 'indigo';
+  focused?: boolean;
+  focused?: boolean;
   projectsById: Map<string, any>;
   clientsById: Map<string, any>;
   onTaskClick: (t: CalendarTask) => void;
@@ -930,7 +1505,7 @@ const TaskSection: React.FC<{
   onSnooze: (t: CalendarTask) => void;
   onDelete: (t: CalendarTask) => void;
   emptyText: string;
-}> = ({ title, icon, tasks, tone, projectsById, clientsById, onTaskClick, onComplete, onSnooze, onDelete, emptyText }) => {
+}> = ({ title, icon, tasks, tone, focused = false, projectsById, clientsById, onTaskClick, onComplete, onSnooze, onDelete, emptyText }) => {
   const [open, setOpen] = useState(true);
   if (tasks.length === 0) {
     return (
@@ -968,6 +1543,7 @@ const TaskSection: React.FC<{
                 edge={edge}
                 due={due}
                 tone={tone}
+                focused={focused}
                 proj={proj}
                 cli={cli}
                 idx={idx}
@@ -1016,9 +1592,11 @@ interface SwipeableTaskCardProps {
 }
 
 const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
-  task: t, edge, due, tone, proj, cli, idx, onClick, onComplete, onSnooze, onDelete,
+  task: t, edge, due, tone, focused = false, proj, cli, idx, onClick, onComplete, onSnooze, onDelete,
 }) => {
   const reduceMotion = useReducedMotion();
+  const projectLabel = proj?.title || null;
+  const clientLabel = cli?.name || cli?.company || null;
   // x tracks the card's horizontal offset during a drag. The
   // background opacities + icon scales are derived from it via
   // useTransform so they respond live with no extra state.
@@ -1122,15 +1700,15 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         dragConstraints={{ left: -150, right: 150 }}
         dragElastic={0.15}
         dragMomentum={false}
-        style={{ x, gridTemplateColumns: '22px 1fr auto auto' }}
+        style={{ x }}
         onDragEnd={handleDragEnd}
         whileTap={{ scale: 0.995 }}
-        className="bd-msg group"
+        className={`bd-task-row group ${focused ? 'is-focused' : ''}`}
         onClick={() => onClick(t)}
       >
         {/* Priority check — sage when done, tone-edged ring when open */}
         <span
-          className="bd-task-check"
+          className={`bd-task-check ${tone}`}
           onClick={(e) => { e.stopPropagation(); onComplete(t); }}
           title="Mark done"
           style={{
@@ -1147,34 +1725,30 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         </span>
 
         {/* Body */}
-        <div className="bd-msg-body min-w-0">
-          <div className="bd-msg-head">
-            <span className="bd-msg-from truncate">{t.title}</span>
+        <div className="bd-task-main min-w-0">
+          <div className="bd-task-title-row">
+            <span className="bd-task-title">{t.title}</span>
           </div>
-          <div className="bd-msg-preview" style={{ fontSize: 11, marginTop: 1 }}>
-            {[
-              proj?.title,
-              cli && !proj ? cli.name : null,
-            ].filter(Boolean).join(' · ') || ' '}
-          </div>
+          {[
+            projectLabel || 'No project',
+            clientLabel,
+          ].filter(Boolean).length > 0 && (
+            <div className="bd-task-context">
+              {[
+                projectLabel || 'No project',
+                clientLabel,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          )}
         </div>
 
         {/* Due — mono, color-coded */}
         <span
-          className="font-mono text-[10.5px]"
-          style={{
-            color:
-              tone === 'rose'   ? '#b91c1c' :
-              tone === 'amber'  ? '#8b6a17' :
-              '#a1a1aa',
-            fontWeight: tone === 'rose' || tone === 'amber' ? 500 : 400,
-            letterSpacing: '0.04em',
-            whiteSpace: 'nowrap',
-          }}
+          className={`bd-task-due ${tone}`}
         >
           {due}
           {t.duration && (
-            <span className="ml-2 opacity-70">
+            <span className="bd-task-duration">
               {t.duration < 60 ? `${t.duration}m` : `${Math.round(t.duration / 60 * 10) / 10}h`}
             </span>
           )}
@@ -1182,26 +1756,17 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
 
         {/* Priority pill */}
         <span
-          className={`bd-msg-prio ${
+          className={`bd-task-priority ${
             t.priority === 'urgent' ? 'urgent' :
             t.priority === 'high'   ? 'action' :
             t.priority === 'low'    ? 'fyi' :
             'action'
           }`}
-          style={{ marginTop: 0 }}
         >
-          <span className="dot" style={{ width: 4, height: 4, borderRadius: 9999, background: 'currentColor' }} />
+          <span className="dot" />
           {t.priority || 'medium'}
         </span>
 
-        {/* Hover-revealed snooze button */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onSnooze(t); }}
-          title="Snooze +1 day"
-          className="absolute right-2 top-2 p-1 rounded-md text-zinc-300 dark:text-zinc-600 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all opacity-0 group-hover:opacity-100"
-        >
-          <Icons.Clock size={11} />
-        </button>
       </motion.div>
     </motion.div>
   );
@@ -1501,7 +2066,8 @@ const InboxCard: React.FC<{
   message: any;
   onOpen: () => void;
   onConvert: () => void;
-}> = ({ message, onOpen, onConvert }) => {
+  focused?: boolean;
+}> = ({ message, onOpen, onConvert, focused = false }) => {
   const cls: InboxClassification = message.ai_classification || {};
   const isRequest = cls.should_create_task === true;
   const isUrgent = cls.priority === 'high' || cls.intent === 'urgent';
@@ -1539,7 +2105,7 @@ const InboxCard: React.FC<{
 
   return (
     <div
-      className={`bd-msg ${sourceClass} ${isUnread ? 'unread' : ''} group`}
+      className={`bd-msg ${sourceClass} ${isUnread ? 'unread' : ''} ${focused ? 'is-focused' : ''} group`}
       onClick={onOpen}
     >
       {/* Avatar + source corner badge */}
@@ -1622,13 +2188,14 @@ const InboxCard: React.FC<{
 interface SwipeableInboxCardProps {
   message: any;
   idx: number;
+  focused?: boolean;
   onOpen: () => void;
   onConvert: () => void;
   onMarkDone: () => void;
 }
 
 const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
-  message, idx, onOpen, onConvert, onMarkDone,
+  message, idx, focused = false, onOpen, onConvert, onMarkDone,
 }) => {
   const reduceMotion = useReducedMotion();
   const x = useMotionValue(0);
@@ -1724,7 +2291,7 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
         whileTap={{ scale: 0.995 }}
         whileHover={{ y: -1, transition: SPRING_TAP }}
       >
-        <InboxCard message={message} onOpen={onOpen} onConvert={onConvert} />
+        <InboxCard message={message} focused={focused} onOpen={onOpen} onConvert={onConvert} />
       </motion.div>
     </motion.div>
   );

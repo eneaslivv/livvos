@@ -6,12 +6,13 @@
 
 import type { AgentDefinition, Skill } from './types';
 
-import { tasksAgent }    from './agents/tasks-agent';
-import { financeAgent }  from './agents/finance-agent';
-import { calendarAgent } from './agents/calendar-agent';
-import { clientsAgent }  from './agents/clients-agent';
-import { projectsAgent } from './agents/projects-agent';
-import { inboxAgent }    from './agents/inbox-agent';
+import { tasksAgent }       from './agents/tasks-agent';
+import { financeAgent }    from './agents/finance-agent';
+import { calendarAgent }   from './agents/calendar-agent';
+import { clientsAgent }    from './agents/clients-agent';
+import { projectsAgent }   from './agents/projects-agent';
+import { inboxAgent }      from './agents/inbox-agent';
+import { onboardingAgent } from './agents/onboarding-agent';
 
 export const AGENTS: AgentDefinition[] = [
   tasksAgent,
@@ -20,6 +21,7 @@ export const AGENTS: AgentDefinition[] = [
   clientsAgent,
   projectsAgent,
   inboxAgent,
+  onboardingAgent,
 ];
 
 export const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));
