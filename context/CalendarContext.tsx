@@ -351,6 +351,20 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const newTask = normalizeTask(payload.new)
         setTasks(prev => {
           if (prev.some(t => t.id === newTask.id)) return prev
+          // Check if an optimistic temp row already represents this
+          // task (temp IDs start with 'temp-'). If one exists with
+          // the same title + owner, replace it with the real row so
+          // the createTask response handler doesn't duplicate later.
+          const tempIdx = prev.findIndex(t =>
+            t.id.startsWith('temp-') &&
+            t.title === newTask.title &&
+            t.owner_id === newTask.owner_id
+          )
+          if (tempIdx !== -1) {
+            const copy = [...prev]
+            copy[tempIdx] = newTask
+            return copy
+          }
           return [...prev, newTask]
         })
       })
@@ -537,7 +551,21 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const { data, error: err } = await supabase.from('tasks').insert(currentPayload).select().single()
         if (!err) {
           const normalized = normalizeTask(data)
-          setTasks(prev => prev.map(t => t.id === tempId ? normalized : t))
+          // Swap optimistic temp → real row AND dedup.
+          // The realtime INSERT handler may have already added the
+          // real row (its id !== tempId so the existing dedup missed
+          // it). After mapping temp→real we may end up with two
+          // entries sharing the same real id — the filter below
+          // collapses them to one.
+          setTasks(prev => {
+            const swapped = prev.map(t => t.id === tempId ? normalized : t)
+            const seen = new Set<string>()
+            return swapped.filter(t => {
+              if (seen.has(t.id)) return false
+              seen.add(t.id)
+              return true
+            })
+          })
 
           // Notify all assignees (fire-and-forget) + log to activity feed.
           // Resolve actor name from auth so the notification reads
