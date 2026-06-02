@@ -23,11 +23,19 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '')
+  .split(',').map((s) => s.trim()).filter(Boolean)
 const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0] || '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
+
+// Optional shared secret. When set (this env var + the matching
+// app.comm_classify_secret GUC that queue_comm_classify forwards), the endpoint
+// rejects any caller that doesn't present it. Unset → no enforcement, so the
+// pipeline keeps working until both halves are configured (back-compat).
+const INTERNAL_SECRET = Deno.env.get('COMM_CLASSIFY_SECRET') || ''
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -60,6 +68,15 @@ serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST required' }), {
       status: 405, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Soft internal-auth gate (see INTERNAL_SECRET above). message_ids are
+  // unguessable UUIDs and processing is idempotent, but when the secret is
+  // configured this closes the publicly-callable hole entirely.
+  if (INTERNAL_SECRET && (req.headers.get('x-internal-secret') || '') !== INTERNAL_SECRET) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 

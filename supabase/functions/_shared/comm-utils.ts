@@ -12,17 +12,50 @@
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // ── CORS ────────────────────────────────────────────────────────────
-export const commCorsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGINS') || '*',
+// ALLOWED_ORIGINS is a comma-separated allowlist. A response may only echo a
+// single origin, so we reflect the request's Origin when it's on the list and
+// otherwise fall back to the primary (first) configured origin. '*' is used
+// ONLY when no allowlist is configured (local dev) — never for these
+// auth-bearing functions once ALLOWED_ORIGINS is set in production.
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '')
+  .split(',').map((s) => s.trim()).filter(Boolean)
+
+const baseCorsHeaders = {
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, x-custom-version, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Vary': 'Origin',
 }
 
-export const json = (body: unknown, status = 200) =>
+const resolveAllowOrigin = (origin: string | null): string => {
+  if (ALLOWED_ORIGINS.length === 0) return '*'                // dev only
+  if (ALLOWED_ORIGINS.includes('*')) return '*'
+  if (origin && ALLOWED_ORIGINS.includes(origin)) return origin
+  return ALLOWED_ORIGINS[0]                                   // primary app origin
+}
+
+/** Per-request CORS headers — reflects an allow-listed Origin. Prefer this in
+ *  handlers so the response Allow-Origin matches the actual caller. */
+export const corsHeadersFor = (req: Request) => ({
+  'Access-Control-Allow-Origin': resolveAllowOrigin(req.headers.get('Origin')),
+  ...baseCorsHeaders,
+})
+
+/** Static CORS headers (no Origin reflection): the primary configured origin,
+ *  or '*' only when no allowlist is set (dev). */
+export const commCorsHeaders = {
+  'Access-Control-Allow-Origin': resolveAllowOrigin(null),
+  ...baseCorsHeaders,
+}
+
+export const json = (
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = commCorsHeaders,
+) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...commCorsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...headers, 'Content-Type': 'application/json' },
   })
 
 // ── Supabase clients ───────────────────────────────────────────────
@@ -90,7 +123,20 @@ export async function authenticate(
 }
 
 // ── State JWT for OAuth CSRF ───────────────────────────────────────
-const STATE_SECRET = Deno.env.get('OAUTH_STATE_SECRET') || Deno.env.get('SUPABASE_JWT_SECRET') || 'dev-secret-change-me'
+// State-signing secret for the OAuth CSRF token. There is deliberately NO
+// insecure default: a predictable secret lets an attacker forge OAuth `state`
+// and bind their Google/Slack account to another tenant (or vice-versa).
+// Resolved lazily so unrelated functions importing this module don't crash when
+// the secret is absent — only the OAuth state sign/verify path fails hard.
+const getStateSecret = (): string => {
+  const s = Deno.env.get('OAUTH_STATE_SECRET') || Deno.env.get('SUPABASE_JWT_SECRET')
+  if (!s) {
+    throw new Error(
+      'OAUTH_STATE_SECRET (or SUPABASE_JWT_SECRET) is not set — refusing to sign/verify OAuth state with an insecure default',
+    )
+  }
+  return s
+}
 const enc = new TextEncoder()
 const dec = new TextDecoder()
 
@@ -106,7 +152,7 @@ const fromB64url = (str: string): Uint8Array => {
 
 async function hmac(data: string): Promise<string> {
   const key = await crypto.subtle.importKey(
-    'raw', enc.encode(STATE_SECRET),
+    'raw', enc.encode(getStateSecret()),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
   )
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data))

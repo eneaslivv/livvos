@@ -48,6 +48,30 @@ function buildFbc(fbclid?: string): string | undefined {
   return `fb.1.${Date.now()}.${fbclid}`
 }
 
+// ── Anti-abuse / rate limiting ──────────────────────────────────────────────
+// lead-ingest is a PUBLIC endpoint (service role, verify_jwt=false). Without
+// guards anyone who knows a tenant_slug can flood the leads table and fan out
+// paid Resend emails + Meta CAPI events. Layered defenses (all soft-configurable
+// so they don't break existing integrations until you opt in):
+//   1. Origin allowlist  — LEAD_INGEST_ALLOWED_ORIGINS (comma list)
+//   2. Honeypot field    — bots fill hidden inputs; humans don't
+//   3. Per-IP / per-email rate limits — backed by lead_ingest_attempts
+//   4. Optional HMAC      — LEAD_INGEST_HMAC_SECRET + x-signature header
+const LEAD_MAX_PER_IP    = parseInt(Deno.env.get('LEAD_INGEST_MAX_PER_IP')    || '8', 10)  // per 10 min
+const LEAD_MAX_PER_EMAIL = parseInt(Deno.env.get('LEAD_INGEST_MAX_PER_EMAIL') || '5', 10)  // per 60 min
+const LEAD_ALLOWED_ORIGINS = (Deno.env.get('LEAD_INGEST_ALLOWED_ORIGINS') || '')
+  .split(',').map(s => s.trim()).filter(Boolean)
+
+async function verifyLeadHmac(secret: string, rawBody: string, signature: string): Promise<boolean> {
+  try {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
+    const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+    return hex === signature.trim().toLowerCase().replace(/^sha256=/, '')
+  } catch { return false }
+}
+
 async function sendMetaCapi(params: {
   email: string
   phone?: string
@@ -141,7 +165,9 @@ serve(async (req) => {
       })
     }
 
-    const body = await req.json()
+    const rawBody = await req.text()
+    let body: any
+    try { body = rawBody ? JSON.parse(rawBody) : {} } catch { body = {} }
     const {
       name,
       email,
@@ -179,9 +205,86 @@ serve(async (req) => {
       })
     }
 
+    // ── Anti-abuse gate (cheap checks first, no DB) ──────────────────────────
+    // Field length caps — reject absurd payloads (DB bloat + email cost control).
+    if (String(name).length > 200 || String(email).length > 320 ||
+        String(message).length > 5000 || String(company || '').length > 200) {
+      return new Response(JSON.stringify({ error: 'Field too long' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Origin allowlist — only enforced when configured (won't break server-side callers).
+    if (LEAD_ALLOWED_ORIGINS.length > 0) {
+      const reqOrigin = req.headers.get('Origin') || req.headers.get('Referer') || ''
+      const allowed = LEAD_ALLOWED_ORIGINS.some(o => reqOrigin === o || reqOrigin.startsWith(o))
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // Honeypot — a hidden field real users never fill. Pretend success so bots
+    // can't distinguish a drop from an accept.
+    if (String(body._hp || body.honeypot || body.company_url_hp || '').trim() !== '') {
+      return new Response(JSON.stringify({ ok: true, lead_id: null, skipped: 'spam' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Optional HMAC signature (when LEAD_INGEST_HMAC_SECRET is set).
+    const hmacSecret = Deno.env.get('LEAD_INGEST_HMAC_SECRET')
+    if (hmacSecret) {
+      const sig = req.headers.get('x-signature') || req.headers.get('x-lead-signature') || ''
+      if (!sig || !(await verifyLeadHmac(hmacSecret, rawBody, sig))) {
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceRole, {
       auth: { persistSession: false }
     })
+
+    // ── Rate limiting (per IP / per email) backed by lead_ingest_attempts ────
+    // Fail-OPEN on store errors so a throttle hiccup never drops a real lead;
+    // fail-CLOSED (429) only when a limit is genuinely exceeded.
+    const clientIp = getClientIp(req)
+    try {
+      const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString()
+      const hourAgo   = new Date(Date.now() - 60 * 60_000).toISOString()
+
+      if (clientIp) {
+        const { count: ipCount } = await supabase
+          .from('lead_ingest_attempts')
+          .select('id', { count: 'exact', head: true })
+          .eq('ip', clientIp)
+          .gte('created_at', tenMinAgo)
+        if ((ipCount ?? 0) >= LEAD_MAX_PER_IP) {
+          return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again shortly.' }), {
+            status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+      }
+
+      const { count: emailCount } = await supabase
+        .from('lead_ingest_attempts')
+        .select('id', { count: 'exact', head: true })
+        .ilike('email', email)
+        .gte('created_at', hourAgo)
+      if ((emailCount ?? 0) >= LEAD_MAX_PER_EMAIL) {
+        return new Response(JSON.stringify({ error: 'Too many submissions for this email. Please try again later.' }), {
+          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Record this attempt (best-effort; counts toward future windows).
+      await supabase.from('lead_ingest_attempts').insert({ ip: clientIp || null, email, tenant_slug })
+    } catch (e) {
+      console.error('lead-ingest rate-limit store error (failing open):', e)
+    }
 
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')

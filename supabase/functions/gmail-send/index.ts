@@ -92,7 +92,11 @@ Deno.serve(async (req) => {
       return json({ error: 'tenant_id + to + body required' }, 400)
     }
 
-    const ctx = await authenticate(req)
+    // Validate the caller is a member of args.tenant_id specifically (not just
+    // any tenant they belong to), then use the validated ctx.tenant_id for every
+    // lookup/write below — never the raw args.tenant_id. Otherwise a member of
+    // tenant A who knows tenant B's id could send mail from / log rows into B.
+    const ctx = await authenticate(req, args.tenant_id)
     const admin = adminClient()
 
     // Resolve which Gmail token to use. If the caller named one explicitly
@@ -100,7 +104,7 @@ Deno.serve(async (req) => {
     let tokenQuery = admin.from('integration_tokens')
       .select('id, tenant_id, access_token, refresh_token, expires_at, gmail_email')
       .eq('platform', 'gmail')
-      .eq('tenant_id', args.tenant_id)
+      .eq('tenant_id', ctx.tenant_id)
       .eq('is_active', true)
       .order('connected_at', { ascending: false })
       .limit(1)
@@ -109,7 +113,7 @@ Deno.serve(async (req) => {
         .select('id, tenant_id, access_token, refresh_token, expires_at, gmail_email')
         .eq('id', args.integration_token_id)
         .eq('platform', 'gmail')
-        .eq('tenant_id', args.tenant_id)
+        .eq('tenant_id', ctx.tenant_id)
         .eq('is_active', true)
         .limit(1)
     }
@@ -143,7 +147,7 @@ Deno.serve(async (req) => {
     // Persist the outbound message so it shows up in the Inbox view.
     const nowIso = new Date().toISOString()
     const { data: msg, error: insertErr } = await admin.from('communication_messages').insert({
-      tenant_id: args.tenant_id,
+      tenant_id: ctx.tenant_id,
       integration_token_id: token.id,
       platform: 'gmail',
       direction: 'outbound',
@@ -155,6 +159,7 @@ Deno.serve(async (req) => {
       subject: args.subject,
       body_text: args.body,
       sent_at: nowIso,
+      received_at: nowIso, // keep outbound rows sortable in the inbox timeline (ordered by received_at)
       status: 'sent',
       replied_by: ctx.user_id,
       replied_at: nowIso,

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '../lib/supabase'
 import { errorLogger } from '../lib/errorLogger'
 import { notifyWithEmail } from '../lib/notifyWithEmail'
+import { useTenant } from './TenantContext'
 
 // Interfaces (copiadas de useClients.ts)
 export interface Client {
@@ -86,35 +87,23 @@ interface ClientsContextType {
 
 const ClientsContext = createContext<ClientsContextType | undefined>(undefined)
 
-// Cache tenant_id so we resolve it once
-let cachedTenantId: string | null = null
-let tenantIdResolved = false
-
-const resolveTenantId = async () => {
-  if (tenantIdResolved) return cachedTenantId
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user?.id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-      cachedTenantId = profile?.tenant_id || null
-    }
-  } catch {
-    // Continue without tenant_id
-  }
-  tenantIdResolved = true
-  return cachedTenantId
-}
-
 export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const hasLoadedRef = useRef(false)
+
+  // Tenant comes from TenantContext (ClientsProvider is nested inside
+  // TenantProvider). Deriving it here — rather than a module-level cache that
+  // survives across users and tenant switches — guarantees the clients list,
+  // its query filter, and the realtime subscription always track the ACTIVE
+  // tenant and reset cleanly on logout or tenant switch (no stale cross-tenant
+  // data). A ref mirrors it so the stable useCallback closures read the latest.
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? null
+  const tenantIdRef = useRef<string | null>(tenantId)
+  tenantIdRef.current = tenantId
 
   const fetchClients = useCallback(async (force = false) => {
     // Si ya está inicializado y no forzamos, no hacemos nada (cache hit)
@@ -131,7 +120,7 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       errorLogger.log('Fetching clients from Supabase...')
-      const tenantId = await resolveTenantId()
+      const tenantId = tenantIdRef.current
       let query = supabase
         .from('clients')
         .select('*')
@@ -165,10 +154,14 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Cargar clientes al montar el Provider (una sola vez por sesión de app)
   useEffect(() => {
-    fetchClients()
+    // Reset the per-session load guard so a tenant switch (or login as a
+    // different user) re-fetches the new tenant's clients instead of serving
+    // the previous tenant's cached list.
+    hasLoadedRef.current = false
+    fetchClients(true)
 
-    // Suscribirse a cambios en tiempo real
-    const tid = cachedTenantId
+    // Realtime subscription scoped to the ACTIVE tenant (re-created on switch).
+    const tid = tenantId
     const tenantFilter = tid ? { filter: `tenant_id=eq.${tid}` } : {}
 
     const channel = supabase
@@ -195,13 +188,13 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchClients])
+  }, [tenantId, fetchClients])
 
   const createClient = async (clientData: Omit<Client, 'id' | 'owner_id' | 'created_at' | 'updated_at'>) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.id) throw new Error('No hay usuario autenticado')
 
-    const tenantId = await resolveTenantId()
+    const tenantId = tenantIdRef.current
 
     // Clean empty strings to null so DB constraints don't fail
     const cleaned: Record<string, any> = {}
@@ -355,7 +348,7 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }
 
   const addHistoryEntry = async (historyData: Omit<ClientHistory, 'id'>) => {
-    const tenantId = await resolveTenantId()
+    const tenantId = tenantIdRef.current
     const payload: any = {
       ...historyData,
       ...(tenantId && { tenant_id: tenantId }),
