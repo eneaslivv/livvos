@@ -325,6 +325,14 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     if (action.type === 'topic_click') {
       const followUp = `Detallame los mensajes de ${action.label}`;
       void handleSend(followUp);
+    } else if (action.type === 'open_entity') {
+      const noun = action.kind === 'task' ? 'la tarea'
+        : action.kind === 'project' ? 'el proyecto'
+        : action.kind === 'message' ? 'el mensaje'
+        : action.kind === 'client' ? 'el cliente'
+        : action.kind === 'lead' ? 'el lead'
+        : 'esto';
+      void handleSend(`Abrí ${noun} «${action.label}»: mostrame el detalle y qué puedo hacer.`);
     }
   }, [handleSend]);
 

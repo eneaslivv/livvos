@@ -23,6 +23,7 @@ import React from 'react';
 // interactive block fires this with a typed payload.
 export type MarkdownAction =
   | { type: 'topic_click'; label: string; filter: string }
+  | { type: 'open_entity'; kind: string; id: string | null; label: string }
   | { type: 'navigate'; target: string; params?: Record<string, string> };
 
 type Block =
@@ -399,6 +400,16 @@ const parseInline = (text: string): React.ReactNode[] => {
         continue;
       }
     }
+    // Clickable entity reference [[kind|label]] or [[kind:id|label]]
+    if (text[i] === '[' && text[i + 1] === '[') {
+      const m = text.slice(i).match(/^\[\[(task|project|message|client|lead)(?::([^\]|]+))?\|([^\][]+)\]\]/i);
+      if (m) {
+        flush();
+        out.push(<EntityChip key={out.length} kind={m[1].toLowerCase()} id={m[2] || null} label={m[3].trim()} />);
+        i += m[0].length;
+        continue;
+      }
+    }
     // Link [text](url)
     if (text[i] === '[') {
       const m = text.slice(i).match(/^\[([^\]]+)\]\(([^)]+)\)/);
@@ -500,6 +511,33 @@ const TopicPill: React.FC<{
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
       )}
+    </button>
+  );
+};
+
+// ── Inline entity reference ─────────────────────────────────────
+// Renders [[kind|label]] / [[kind:id|label]] (kind = task|project|message|
+// client|lead) as a clickable chip so the user can open it straight from the
+// chat. Falls back to bold text when no action handler is wired.
+const ENTITY_LINK_CLASS: Record<string, string> = {
+  task:    'text-violet-600 dark:text-violet-400 decoration-violet-300/70',
+  project: 'text-indigo-600 dark:text-indigo-400 decoration-indigo-300/70',
+  message: 'text-sky-600 dark:text-sky-400 decoration-sky-300/70',
+  client:  'text-emerald-600 dark:text-emerald-400 decoration-emerald-300/70',
+  lead:    'text-amber-600 dark:text-amber-400 decoration-amber-300/70',
+};
+const EntityChip: React.FC<{ kind: string; id: string | null; label: string }> = ({ kind, id, label }) => {
+  const onAction = React.useContext(ActionCtx);
+  const cls = ENTITY_LINK_CLASS[kind] || ENTITY_LINK_CLASS.task;
+  if (!onAction) return <strong className="font-semibold text-zinc-900 dark:text-zinc-100">{label}</strong>;
+  return (
+    <button
+      type="button"
+      onClick={() => onAction({ type: 'open_entity', kind, id, label })}
+      className={`font-semibold underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer ${cls}`}
+      title={`Abrir: ${label}`}
+    >
+      {label}
     </button>
   );
 };
