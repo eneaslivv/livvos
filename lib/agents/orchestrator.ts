@@ -136,6 +136,7 @@ const runAgentSkills = async (
   agent: AgentDefinition,
   query: string,
   ctx: ExecutionContext,
+  disabledSkills: Set<string> = new Set(),
 ): Promise<Array<{ skill: Skill; result: SkillResult }>> => {
   const lowered = query.toLowerCase();
   const max = agent.maxSkillCallsPerTurn || 3;
@@ -143,6 +144,7 @@ const runAgentSkills = async (
 
   for (const skill of agent.skills) {
     if (out.length >= max) break;
+    if (disabledSkills.has(skill.id)) continue; // turned off by a tenant override
     if (skill.kind === 'write') continue; // never auto-run writes
     // For skills with required params we'd need argument extraction —
     // skip those in this version. Run only zero-arg or self-defaulted
@@ -293,7 +295,7 @@ export async function runOrchestrator(
 
   // Run skills (read-only) + record per-skill timing
   const skillT0 = Date.now();
-  const trace = await runAgentSkills(agent, input.query, input.ctx);
+  const trace = await runAgentSkills(agent, input.query, input.ctx, new Set(agentOverride?.disabled_skills || []));
   const msSkills = Date.now() - skillT0;
   const skillContextBlock = formatSkillResultsForPrompt(trace);
 

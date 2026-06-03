@@ -30,6 +30,9 @@ export interface ActiveOverride {
    *  Applied at agent-prompt-build time to swap the TS-default
    *  description with a tenant-tuned one. */
   skill_overrides: Record<string, string>;
+  /** Skill ids the tenant turned OFF — never auto-run, and the LLM is told
+   *  not to use or propose them. */
+  disabled_skills: string[];
 }
 
 // Cache active overrides per-tenant for 5 minutes. Overrides change
@@ -56,7 +59,7 @@ export async function fetchActiveOverrides(
   }
   try {
     const { data } = await db.from('agent_overrides')
-      .select('id, tenant_id, agent_id, routing_hints_add, routing_hints_remove, prompt_suffix, skill_overrides')
+      .select('id, tenant_id, agent_id, routing_hints_add, routing_hints_remove, prompt_suffix, skill_overrides, disabled_skills')
       .eq('tenant_id', tenantId)
       .eq('status', 'active');
     const rows = (data || []).map((r: any) => ({
@@ -69,6 +72,7 @@ export async function fetchActiveOverrides(
       skill_overrides: (r.skill_overrides && typeof r.skill_overrides === 'object')
         ? r.skill_overrides as Record<string, string>
         : {},
+      disabled_skills: Array.isArray(r.disabled_skills) ? r.disabled_skills : [],
     })) as ActiveOverride[];
     cache.set(tenantId, { rows, fetchedAt: Date.now() });
     return rows;
@@ -147,6 +151,11 @@ export function effectiveSystemPrompt(
     blocks.push('');
     blocks.push('── TENANT-SPECIFIC GUIDANCE (from learned overrides) ──');
     blocks.push(override.prompt_suffix);
+  }
+  if (override.disabled_skills && override.disabled_skills.length > 0) {
+    blocks.push('');
+    blocks.push('── DISABLED SKILLS (turned off for this tenant — do NOT use or propose these) ──');
+    for (const id of override.disabled_skills) blocks.push(`• ${id}`);
   }
   return blocks.join('\n');
 }
