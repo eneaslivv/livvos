@@ -85,24 +85,31 @@ export default defineConfig(() => {
             manualChunks: (id: string) => {
               if (!id.includes('node_modules')) return undefined;
               const normalized = id.replace(/\\/g, '/');
+              // React + EVERY eagerly-loaded React consumer must share ONE
+              // chunk. Splitting a React-dependent lib (recharts, framer-motion,
+              // lucide) into its own top-level chunk lets that chunk evaluate
+              // BEFORE the react chunk initializes, so a module-scope
+              // `React.forwardRef` / `React.useSyncExternalStore` reads from an
+              // undefined `React` and throws at boot → white screen. Anything
+              // that touches React at module scope lives here.
               if (
                 normalized.includes('/react/') ||
                 normalized.includes('/react-dom/') ||
+                normalized.includes('/react-is/') ||
                 normalized.includes('/scheduler/') ||
-                normalized.includes('/use-sync-external-store/')
-              ) return 'vendor-react';
-              if (normalized.includes('/@supabase/')) return 'vendor-supabase';
-              if (
+                normalized.includes('/use-sync-external-store/') ||
                 normalized.includes('/framer-motion/') ||
                 normalized.includes('/motion-dom/') ||
-                normalized.includes('/motion-utils/')
-              ) return 'vendor-motion';
-              if (
+                normalized.includes('/motion-utils/') ||
                 normalized.includes('/recharts/') ||
                 normalized.includes('/d3-') ||
-                normalized.includes('/victory-vendor/')
-              ) return 'vendor-charts';
-              if (normalized.includes('/lucide-react/')) return 'vendor-icons';
+                normalized.includes('/victory-vendor/') ||
+                normalized.includes('/lucide-react/')
+              ) return 'vendor-react';
+              // Safe to split: @supabase ships no React at module scope, and
+              // xlsx / tiptap only load via dynamic import on specific routes
+              // (so React is already initialized by the time they evaluate).
+              if (normalized.includes('/@supabase/')) return 'vendor-supabase';
               if (normalized.includes('/xlsx/')) return 'vendor-xlsx';
               if (normalized.includes('/@tiptap/') || normalized.includes('/prosemirror-')) return 'vendor-tiptap';
               return undefined;
