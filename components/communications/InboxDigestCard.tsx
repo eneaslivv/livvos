@@ -129,7 +129,10 @@ export const InboxDigestCard: React.FC<Props> = ({ tenantId, onOpenMessage, onFi
           'Authorization': `Bearer ${token}`,
           'apikey': (supabase as any).supabaseKey || '',
         },
-        body: JSON.stringify({ tenant_id: tenantId, since_hours: 72, limit: 20 }),
+        // 30-day window: the digest must reflect the real backlog, not just
+        // the last 3 days. With messages days/weeks old, a 72h window showed
+        // "0 messages" while hundreds sat pending.
+        body: JSON.stringify({ tenant_id: tenantId, since_hours: 720, limit: 25 }),
       })
       if (!res.ok) {
         const errText = await res.text()
@@ -207,7 +210,7 @@ export const InboxDigestCard: React.FC<Props> = ({ tenantId, onOpenMessage, onFi
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500 mb-0.5">
-            Inbox digest · last {digest.since_hours || 72}h
+            Inbox digest · last {Math.max(1, Math.round((digest.since_hours || 72) / 24))}d
           </div>
           <div className="text-[13.5px] font-medium text-zinc-900 dark:text-zinc-100 leading-snug">
             {digest.headline}
