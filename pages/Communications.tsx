@@ -298,6 +298,7 @@ interface InboxViewProps {
 }
 
 const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, clients, allClients, projects, onMessageUpdate, tenantId }) => {
+  const { user } = useAuth();
   const [filter, setFilter] = useState<Filter>('pending');
   const [clientFilter, setClientFilter] = useState<string>('all'); // client_id or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -338,7 +339,7 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
   const selected = selectedId ? messages.find(m => m.id === selectedId) || null : null;
 
   useEffect(() => {
-    if (!selected?.id || !currentTenant?.id || !user?.id) return;
+    if (!selected?.id || !tenantId || !user?.id) return;
     if (selected.read_at && selected.opened_at) return;
     const nowIso = new Date().toISOString();
     const patch = {
@@ -351,11 +352,11 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
       .from('communication_messages')
       .update(patch)
       .eq('id', selected.id)
-      .eq('tenant_id', currentTenant.id)
+      .eq('tenant_id', tenantId)
       .then(({ error }) => {
         if (error) errorLogger.warn('communications mark message read failed', { messageId: selected.id, error });
       });
-  }, [selected?.id, selected?.read_at, selected?.opened_at, currentTenant?.id, user?.id]);
+  }, [selected?.id, selected?.read_at, selected?.opened_at, tenantId, user?.id]);
 
   // No integrations yet — show onboarding
   if (tokens.length === 0 && !loading) {
