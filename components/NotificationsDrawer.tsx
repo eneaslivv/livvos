@@ -71,6 +71,41 @@ const getNotificationIcon = (type: Notification['type']) => {
   }
 };
 
+// ── Actor attribution ───────────────────────────────────────────────────────
+// Who/what triggered this notification: a person (direct request/change), a bot
+// (agent/Aurora action), or the system (automatic/default change). Derived
+// conservatively from metadata + type + the title. NOTE: for this to be fully
+// reliable (and to track every bot movement), notification creation should
+// stamp an explicit actor — see the metadata.actor_type convention below.
+type ActorKind = 'user' | 'bot' | 'system';
+
+const ACTOR_STYLE: Record<ActorKind, { icon: React.ReactNode; cls: string }> = {
+  user:   { icon: <Icons.Users size={9} />,     cls: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300' },
+  bot:    { icon: <Icons.Sparkles size={9} />,  cls: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300' },
+  system: { icon: <Icons.Activity size={9} />,  cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
+};
+
+const extractActorName = (title: string): string | null => {
+  // "Christie King en #frenetic-pace: ..." → "Christie King"
+  const m = title.match(/^(.{2,40}?)\s+(?:en|in)\s+[#@]/i)
+    || title.match(/^(.{2,40}?)\s+(?:requested|asked|assigned|mentioned|pidió|solicitó|comentó|mencionó|asignó|cambió)/i);
+  return m ? m[1].trim() : null;
+};
+
+const classifyActor = (n: Notification): { kind: ActorKind; label: string } => {
+  const md = n.metadata || {};
+  const src = String(md.actor_type || md.source || '').toLowerCase();
+  if (md.bot || md.agent || ['bot', 'agent', 'aurora'].includes(src)) {
+    return { kind: 'bot', label: md.actor_name || md.agent || 'Aurora' };
+  }
+  if (md.system_generated || src === 'system' || ['system', 'security', 'billing', 'deadline'].includes(n.type)) {
+    return { kind: 'system', label: md.actor_name || 'Automático' };
+  }
+  const name = md.actor_name || md.from_name || md.created_by_name || extractActorName(n.title);
+  if (name) return { kind: 'user', label: name };
+  return { kind: 'system', label: 'Sistema' };
+};
+
 // ── Date bucketing ────────────────────────────────────────────────────────
 // Groups by Today / Yesterday / This week / Older.  Returns an ORDERED
 // array so React render order is stable.
@@ -307,6 +342,8 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ open, 
                   <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                     {section.items.map(n => {
                       const reviewing = reviewingIds.has(n.id);
+                      const actor = classifyActor(n);
+                      const actorStyle = ACTOR_STYLE[actor.kind];
                       return (
                         <button
                           key={n.id}
@@ -340,12 +377,21 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ open, 
                               </p>
                             )}
                             <div className="flex items-center justify-between mt-1.5 gap-2">
-                              <span
-                                className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums"
-                                title={formatNotificationFullDate(n.created_at)}
-                              >
-                                {formatNotificationTime(n.created_at)}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold shrink-0 ${actorStyle.cls}`}
+                                  title={`Origen: ${actor.kind === 'user' ? 'pedido/cambio de una persona' : actor.kind === 'bot' ? 'acción de un bot' : 'cambio automático del sistema'}`}
+                                >
+                                  {actorStyle.icon}
+                                  <span className="truncate max-w-[120px]">{actor.label}</span>
+                                </span>
+                                <span
+                                  className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums shrink-0"
+                                  title={formatNotificationFullDate(n.created_at)}
+                                >
+                                  {formatNotificationTime(n.created_at)}
+                                </span>
+                              </div>
                               {!n.read && (
                                 <span
                                   role="button"
