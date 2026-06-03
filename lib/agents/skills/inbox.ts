@@ -24,10 +24,28 @@ const fail = (kind: SkillResult<any>['kind'], reason: string, ms?: number): Skil
 
 const MESSAGE_SELECT = 'id, platform, from_name, from_email, subject, body_text, channel_id, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at';
 
+// Deterministic relative-time label, computed in code from received_at.
+// The LLM must NOT compute times itself — it hallucinates "hace 2h" for
+// messages that are days old. It only ever copies this string verbatim.
+function relativeEs(iso?: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffMin = Math.floor((Date.now() - then) / 60000);
+  if (diffMin < 1) return 'recién';
+  if (diffMin < 60) return `hace ${diffMin}m`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `hace ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `hace ${d}d`;
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+}
+
 const annotateMessage = (message: any) => ({
   ...message,
   handled: isMessageHandled(message),
   needs_follow_up: needsMessageFollowUp(message),
+  received_label: relativeEs(message.received_at),
 });
 
 // ── inbox.pending ────────────────────────────────────────────────────
@@ -217,6 +235,7 @@ export const conversation_summary: Skill<{ platform?: 'gmail' | 'slack'; limit?:
       needs_follow_up: group.followups,
       urgent_messages: group.urgent,
       latest_at: group.latest?.received_at || null,
+      latest_label: relativeEs(group.latest?.received_at || null),
       latest_summary: group.latest?.ai_classification?.summary || group.latest?.body_text || group.latest?.subject || null,
       messages: group.messages.slice(0, 6).map((message: any) => ({
         id: message.id,
@@ -227,6 +246,7 @@ export const conversation_summary: Skill<{ platform?: 'gmail' | 'slack'; limit?:
         replied_in_platform: message.replied_in_platform === true,
         reply_count: message.reply_count || 0,
         received_at: message.received_at,
+        received_label: relativeEs(message.received_at),
         summary: message.ai_classification?.summary || String(message.body_text || message.subject || '').slice(0, 240),
         intent: message.ai_classification?.intent || null,
         priority: message.ai_classification?.priority || null,
