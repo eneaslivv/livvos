@@ -41,7 +41,7 @@ import type { MarkdownAction } from '../lib/markdown';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import type { PageView, NavParams } from '../types';
-import { InboxCards, type InboxMessage } from '../components/chat/InboxCards';
+import { type InboxMessage } from '../components/chat/InboxCards';
 
 interface HomeProps {
   onNavigate: (page: PageView, params?: NavParams) => void;
@@ -568,16 +568,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                             </div>
                           ) : (
                             <>
-                              {/* Rich inbox cards when structured data is present */}
-                              {m.inboxMessages && m.inboxMessages.length > 0 ? (
-                                <InboxCards
-                                  messages={m.inboxMessages}
-                                  aiSummary={m.content}
-                                  onAction={handleMarkdownAction}
-                                />
-                              ) : (
-                                <Markdown source={m.content} onAction={handleMarkdownAction} />
-                              )}
+                              {/* The agent digest (topic pills + summary) renders via
+                                  Markdown. The full message list with reply actions
+                                  lives on the dedicated Inbox page — rendering a second
+                                  card list here was redundant and noisy. */}
+                              <Markdown source={m.content} onAction={handleMarkdownAction} />
                               {m.actions && m.actions.length > 0 && (
                                 <div className="mt-2 space-y-1.5">
                                   {m.actions.map((a, ai) => (
