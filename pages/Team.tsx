@@ -5,6 +5,7 @@ import { useTeam, TeamMember, TeamTask } from '../context/TeamContext';
 import { useRBAC, Permission } from '../context/RBACContext';
 import { useSupabase } from '../hooks/useSupabase';
 import { useAuth } from '../hooks/useAuth';
+import { AgentsCatalog } from '../components/team/AgentsCatalog';
 
 // Friendly names for the role-preview chips. Mirrors MODULE_META in Security.tsx.
 const ROLE_MODULE_LABELS: Record<string, string> = {
@@ -357,6 +358,14 @@ export const Team: React.FC = () => {
                 ))}
             </div>
 
+            {/* AI agents catalog — the agents defined in the agent registry,
+                with their skills/actions, triggers and knowledge. */}
+            {filterTab === 'agents' && (
+                <div className="mb-6">
+                    <AgentsCatalog />
+                </div>
+            )}
+
             {/* Grid View */}
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -466,7 +475,7 @@ export const Team: React.FC = () => {
                         );
                     })}
 
-                    {filteredMembers.length === 0 && (
+                    {filteredMembers.length === 0 && filterTab !== 'agents' && (
                         <div className="col-span-full p-16 text-center bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/70 dark:border-zinc-800">
                             {filterTab === 'agents' ? (
                                 <>
