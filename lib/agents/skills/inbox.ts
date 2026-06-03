@@ -41,6 +41,33 @@ function relativeEs(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 }
 
+// Tenant team emails. A teammate's OWN message is OUTBOUND (not a pending
+// request). We match by email because profiles.slack_user_id is usually empty,
+// so slack-sync's reply detection never fires — that's why the team's own
+// messages were being flagged as "pending/urgent" forever.
+async function fetchTeamEmails(ctx: ExecutionContext): Promise<Set<string>> {
+  try {
+    const { data: members } = await ctx.db.from('tenant_members').select('user_id').eq('tenant_id', ctx.tenantId);
+    const ids = (members || []).map((m: any) => m.user_id).filter(Boolean);
+    if (ids.length === 0) return new Set();
+    const { data: profs } = await ctx.db.from('profiles').select('email').in('id', ids);
+    return new Set((profs || []).map((p: any) => String(p.email || '').toLowerCase()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+// Tag teammate-authored messages as outbound + handled (in memory only — never
+// written to the DB) so grouping / follow-up logic never counts them as a
+// pending request needing our reply.
+const tagTeamOutbound = (messages: any[], teamEmails: Set<string>): any[] =>
+  (messages || []).map(m => {
+    const fromTeam = teamEmails.size > 0 && teamEmails.has(String(m.from_email || '').toLowerCase());
+    if (!fromTeam) return { ...m, from_team: false };
+    const pendingish = ['pending', 'snoozed'].includes(String(m.status || '').toLowerCase());
+    return { ...m, from_team: true, direction: 'outbound', status: pendingish ? 'auto_resolved' : m.status };
+  });
+
 const annotateMessage = (message: any) => ({
   ...message,
   handled: isMessageHandled(message),
@@ -180,20 +207,24 @@ export const summary_stats: Skill<{}, Record<string, any>> = {
       .order('received_at', { ascending: false });
     const ms = Date.now() - t0;
     if (error) return fail('stats', error.message, ms);
-    const all = data || [];
+    const teamEmails = await fetchTeamEmails(ctx);
+    const all = tagTeamOutbound(data || [], teamEmails);
+    // Only inbound (external) messages count toward "pending / needs reply".
+    const inbound = all.filter((m: any) => !m.from_team);
     const groups = groupCommunicationMessages(all);
     const stats = {
       total_7d: all.length,
-      pending: all.filter(m => m.status === 'pending').length,
+      inbound_7d: inbound.length,
+      pending: inbound.filter((m: any) => m.status === 'pending').length,
       handled: all.filter(isMessageHandled).length,
-      needs_follow_up: all.filter(needsMessageFollowUp).length,
+      needs_follow_up: inbound.filter(needsMessageFollowUp).length,
       conversations_7d: groups.length,
       conversations_need_follow_up: groups.filter(g => g.followups > 0).length,
-      task_created: all.filter(m => m.status === 'task_created').length,
-      today: all.filter(m => m.received_at >= todayIso).length,
+      task_created: all.filter((m: any) => m.status === 'task_created').length,
+      today: inbound.filter((m: any) => m.received_at >= todayIso).length,
       by_platform: {
-        gmail: all.filter(m => m.platform === 'gmail').length,
-        slack: all.filter(m => m.platform === 'slack').length,
+        gmail: inbound.filter((m: any) => m.platform === 'gmail').length,
+        slack: inbound.filter((m: any) => m.platform === 'slack').length,
       },
     };
     return ok('stats', stats, ms);
@@ -223,23 +254,28 @@ export const conversation_summary: Skill<{ platform?: 'gmail' | 'slack'; limit?:
     if (error) return fail('conversation_group[]', error.message, ms);
     if (!data || data.length === 0) return fail('conversation_group[]', 'no_conversations_found', ms);
 
-    const grouped = groupCommunicationMessages(data.map(annotateMessage)).slice(0, 25).map(group => ({
+    const teamEmails = await fetchTeamEmails(ctx);
+    const grouped = groupCommunicationMessages(tagTeamOutbound(data, teamEmails).map(annotateMessage)).slice(0, 25).map(group => ({
       key: group.key,
       platform: group.platform,
       title: group.title,
       source: group.sourceLabel,
       participants: group.participants.slice(0, 5),
       total_messages: group.total,
-      pending_messages: group.pending,
+      // If WE sent the latest message, the conversation is handled (ball in
+      // their court) — zero out the "needs our reply" signals.
+      pending_messages: (group.latest as any)?.from_team ? 0 : group.pending,
       handled_messages: group.handled,
-      needs_follow_up: group.followups,
-      urgent_messages: group.urgent,
+      needs_follow_up: (group.latest as any)?.from_team ? 0 : group.followups,
+      urgent_messages: (group.latest as any)?.from_team ? 0 : group.urgent,
+      last_from_team: (group.latest as any)?.from_team === true,
       latest_at: group.latest?.received_at || null,
       latest_label: relativeEs(group.latest?.received_at || null),
       latest_summary: group.latest?.ai_classification?.summary || group.latest?.body_text || group.latest?.subject || null,
       messages: group.messages.slice(0, 6).map((message: any) => ({
         id: message.id,
         from: message.from_name || message.from_email || message.channel_name || 'Unknown',
+        from_team: message.from_team === true,
         status: message.status,
         handled: message.handled,
         needs_follow_up: message.needs_follow_up,
