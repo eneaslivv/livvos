@@ -573,6 +573,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                                 <InboxCards
                                   messages={m.inboxMessages}
                                   aiSummary={m.content}
+                                  onAction={handleMarkdownAction}
                                 />
                               ) : (
                                 <Markdown source={m.content} onAction={handleMarkdownAction} />

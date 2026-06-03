@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
+import { Markdown, type MarkdownAction } from '../../lib/markdown';
 import {
   getConversationTitle,
   groupCommunicationMessages,
@@ -43,8 +44,10 @@ export interface InboxMessage {
 
 export interface InboxCardsProps {
   messages: InboxMessage[];
-  /** Optional AI text summary to show above cards */
+  /** Optional AI summary (agent markdown/DSL) rendered above the cards */
   aiSummary?: string;
+  /** Forwarded to the Markdown renderer so topic pills in the summary are clickable */
+  onAction?: (action: MarkdownAction) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +203,7 @@ function ReplyComposer({
             animate={{ opacity: 1, scale: 1 }}
             className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400"
           >
-            <Icons.Check className="h-3.5 w-3.5" /> Sent
+            <Icons.Check className="h-3.5 w-3.5" /> Enviado
           </motion.div>
         ) : (
           <>
@@ -209,12 +212,12 @@ function ReplyComposer({
               onChange={e => setBody(e.target.value)}
               rows={2}
               disabled={sending}
-              placeholder="Your reply..."
+              placeholder="Tu respuesta…"
               className="w-full resize-none rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[12px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 transition-shadow"
             />
             {suggested && body === suggested && (
               <p className="mt-1 flex items-center gap-1 text-[10px] text-violet-500">
-                <Icons.Sparkles className="h-3 w-3" /> AI suggested - edit before sending
+                <Icons.Sparkles className="h-3 w-3" /> Sugerido por IA — editá antes de enviar
               </p>
             )}
             {error && (
@@ -227,10 +230,10 @@ function ReplyComposer({
                 className="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-3 py-1 text-[10px] font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
               >
                 {sending ? <Icons.Loader className="h-3 w-3 animate-spin" /> : <Icons.Send className="h-3 w-3" />}
-                {sending ? 'Sending...' : 'Send'}
+                {sending ? 'Enviando…' : 'Enviar'}
               </button>
               <button onClick={onClose} disabled={sending} className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
-                Cancel
+                Cancelar
               </button>
             </div>
           </>
@@ -304,12 +307,12 @@ function MessageRow({
             {repliedInPlatform ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
                 <Icons.Check className="h-3 w-3" />
-                replied
+                respondido
               </span>
             ) : isPending && !isHandled ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
                 <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
-                pending
+                pendiente
               </span>
             ) : null}
             {replyCount > 0 && (
@@ -334,19 +337,19 @@ function MessageRow({
             )}
             {message.ai_classification?.should_create_task && (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-violet-500 dark:text-violet-400">
-                <Icons.SquareCheck className="h-3 w-3" /> task
+                <Icons.SquareCheck className="h-3 w-3" /> tarea
               </span>
             )}
             {hasDraft && !isReplying && (
               <span className="inline-flex items-center gap-0.5 text-[9px] text-violet-500 dark:text-violet-400">
-                <Icons.Sparkles className="h-3 w-3" /> AI draft
+                <Icons.Sparkles className="h-3 w-3" /> borrador IA
               </span>
             )}
             <button
               onClick={() => setReplyingId(isReplying ? null : message.id)}
               className="ml-auto text-[10px] font-medium text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-zinc-600 dark:hover:text-zinc-300 transition-all max-sm:opacity-100"
             >
-              {isReplying ? 'close' : 'reply'}
+              {isReplying ? 'cerrar' : 'responder'}
             </button>
           </div>
         </div>
@@ -382,7 +385,9 @@ function ChannelCard({
   onSent: (id: string) => void;
   index: number;
 }) {
-  const [collapsed, setCollapsed] = useState(index > 2); // auto-collapse after 3rd group
+  // Expand the first group + anything urgent; collapse the rest so the stack
+  // stays scannable instead of a wall of open accordions.
+  const [collapsed, setCollapsed] = useState(() => index > 0 && !group.hasUrgent);
   const Icon = group.platform === 'slack' ? Icons.Hash : Icons.Mail;
   const iconCls = group.platform === 'slack'
     ? 'text-violet-500 dark:text-violet-400'
@@ -472,22 +477,22 @@ function StatsStrip({ messages }: { messages: InboxMessage[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">
-        {groupCommunicationMessages(messages).length} conversations - {total} messages
+        {groupCommunicationMessages(messages).length} conversaciones · {total} mensajes
       </span>
       {urgent > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
           <span className="w-1 h-1 rounded-full bg-rose-500" />
-          {urgent} urgent
+          {urgent} urgentes
         </span>
       )}
       {pending > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-          {pending} pending
+          {pending} pendientes
         </span>
       )}
       {actionNeeded > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-          {actionNeeded} need action
+          {actionNeeded} requieren acción
         </span>
       )}
     </div>
@@ -498,7 +503,7 @@ function StatsStrip({ messages }: { messages: InboxMessage[] }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export const InboxCards: React.FC<InboxCardsProps> = ({ messages, aiSummary }) => {
+export const InboxCards: React.FC<InboxCardsProps> = ({ messages, aiSummary, onAction }) => {
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<InboxMessage[]>(messages);
 
@@ -523,18 +528,25 @@ export const InboxCards: React.FC<InboxCardsProps> = ({ messages, aiSummary }) =
 
   return (
     <div className="flex flex-col gap-2.5">
-      {/* AI digest summary — the Markdown text from the agent */}
+      {/* AI digest summary — rendered through the Markdown/DSL parser so
+          headings, bold and :::topics::: pills come out formatted instead of
+          as raw text. */}
       {aiSummary && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={SPRING_SOFT}
-          className="flex items-start gap-2 rounded-xl bg-gradient-to-br from-violet-50/80 to-indigo-50/40 px-3 py-2.5 dark:from-violet-900/10 dark:to-indigo-900/5 border border-violet-100/50 dark:border-violet-500/10"
+          className="rounded-xl border border-zinc-200/70 bg-white px-3.5 py-3 dark:border-zinc-700/50 dark:bg-zinc-900/40"
         >
-          <Icons.Sparkles className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-500 dark:text-violet-400" />
-          <p className="text-[12px] leading-relaxed text-violet-700 dark:text-violet-300">
-            {aiSummary}
-          </p>
+          <div className="mb-1.5 inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.16em] text-violet-500/90 dark:text-violet-400/90">
+            <Icons.Sparkles className="h-3 w-3" />
+            Resumen
+          </div>
+          <Markdown
+            source={aiSummary}
+            onAction={onAction}
+            className="text-[12.5px] leading-relaxed text-zinc-700 dark:text-zinc-200"
+          />
         </motion.div>
       )}
 
