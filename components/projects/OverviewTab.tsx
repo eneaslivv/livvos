@@ -17,6 +17,36 @@ const fmtMoney = (v: number) => `$${v.toLocaleString()}`;
 const finInputClass = 'w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 transition-all';
 const finLabelClass = 'block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5';
 
+/** Textarea that grows to fit its content — no inner scrollbar, so a long
+ *  description is fully visible by default instead of trapped in a sub-scroll. */
+const AutoGrowTextarea: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}> = ({ value, onChange, placeholder, className }) => {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+  const fit = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  React.useLayoutEffect(() => { fit(); }, [value, fit]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => { onChange(e.target.value); fit(); }}
+      placeholder={placeholder}
+      rows={2}
+      className={className}
+    />
+  );
+};
+
+const DESC_URL_RE = /https?:\/\/[^\s<>"]+/;
+
 export interface OverviewTabProps {
   project: Project;
   selectedClient: Client | null;
@@ -104,16 +134,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             the textarea so the user can click straight through. */}
         <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
           <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
-          <textarea
-            rows={3}
-            value={project.description}
-            onChange={e => onUpdateProject({ description: e.target.value })}
-            placeholder="Add a project description... paste URLs and they become clickable below"
-            className="w-full text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-zinc-200 dark:focus:ring-zinc-700 rounded-lg px-2 py-1 -mx-2 -my-1"
+          <AutoGrowTextarea
+            value={project.description || ''}
+            onChange={v => onUpdateProject({ description: v })}
+            placeholder="Add a project description... paste URLs and they show up as reference links on the right"
+            className="w-full min-h-[3.5rem] text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-zinc-200 dark:focus:ring-zinc-700 rounded-lg px-2 py-1 -mx-2 -my-1"
           />
-          {project.description && (
-            <LinkifiedText text={project.description} cardsOnly className="mt-3" />
-          )}
         </div>
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -971,6 +997,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           )}
         </div>
 
+        {/* References & Links — surfaced from the description so docs/specs/
+            briefs live in the sidebar instead of being buried in the text. */}
+        {project.description && DESC_URL_RE.test(project.description) && (
+          <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+            <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">References &amp; Links</h3>
+            <LinkifiedText text={project.description} cardsOnly />
+          </div>
+        )}
+
         {/* Tags */}
         {project.tags.length > 0 && (
           <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
@@ -983,10 +1018,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
         )}
 
-        {/* Recent Activity */}
-        {project.activity.length > 0 && (
-          <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
-            <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Recent Activity</h3>
+        {/* Recent Activity — always shown so project updates have a home even
+            when there's nothing yet (keeps the sidebar from collapsing empty). */}
+        <div className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+          <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Recent Activity</h3>
+          {project.activity.length > 0 ? (
             <div className="space-y-2.5">
               {project.activity.slice(0, 5).map((a, i) => (
                 <div key={i} className="flex items-start gap-2">
@@ -998,8 +1034,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-zinc-400 leading-relaxed">No updates yet. Status changes, new tasks and payments will show up here.</p>
+          )}
+        </div>
       </div>
     </div>
   );
