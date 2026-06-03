@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { describe, expect, it, vi } from 'vitest';
 
 // Mock user and tenant
 const mockUser = {
@@ -88,30 +89,30 @@ export const waitFor = (ms: number) => new Promise(resolve => setTimeout(resolve
 
 export const createSupabaseMock = () => {
   const mock = {
-    from: jest.fn(() => mock),
-    select: jest.fn(() => mock),
-    insert: jest.fn(() => mock),
-    update: jest.fn(() => mock),
-    delete: jest.fn(() => mock),
-    eq: jest.fn(() => mock),
-    in: jest.fn(() => mock),
-    gte: jest.fn(() => mock),
-    lte: jest.fn(() => mock),
-    lt: jest.fn(() => mock),
-    gt: jest.fn(() => mock),
-    ne: jest.fn(() => mock),
-    is: jest.fn(() => mock),
-    not: jest.fn(() => mock),
-    order: jest.fn(() => mock),
-    limit: jest.fn(() => mock),
-    single: jest.fn(() => mock),
-    maybeSingle: jest.fn(() => mock),
-    rpc: jest.fn(() => mock),
-    channel: jest.fn(() => ({
-      on: jest.fn(() => mock),
-      subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
+    from: vi.fn(() => mock),
+    select: vi.fn(() => mock),
+    insert: vi.fn(() => mock),
+    update: vi.fn(() => mock),
+    delete: vi.fn(() => mock),
+    eq: vi.fn(() => mock),
+    in: vi.fn(() => mock),
+    gte: vi.fn(() => mock),
+    lte: vi.fn(() => mock),
+    lt: vi.fn(() => mock),
+    gt: vi.fn(() => mock),
+    ne: vi.fn(() => mock),
+    is: vi.fn(() => mock),
+    not: vi.fn(() => mock),
+    order: vi.fn(() => mock),
+    limit: vi.fn(() => mock),
+    single: vi.fn(() => mock),
+    maybeSingle: vi.fn(() => mock),
+    rpc: vi.fn(() => mock),
+    channel: vi.fn(() => ({
+      on: vi.fn(() => mock),
+      subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })),
     })),
-    removeChannel: jest.fn(),
+    removeChannel: vi.fn(),
   };
 
   // Mock successful responses
@@ -137,25 +138,33 @@ export const createSupabaseMock = () => {
   return mock;
 };
 
+describe('context test utilities', () => {
+  it('creates mock domain objects with overrides', () => {
+    expect(createMockNotification({ title: 'Override' }).title).toBe('Override');
+    expect(createMockAnalyticsData({ total_visits: 12 }).total_visits).toBe(12);
+    expect(createMockSystemHealth({ database: false }).database).toBe(false);
+  });
+});
+
 // Reset all mocks
 export const resetMocks = () => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   
   // Reset supabase mock
   if (supabase.from) {
-    (supabase.from as jest.Mock).mockClear();
+    vi.mocked(supabase.from).mockClear();
   }
   
   if (supabase.rpc) {
-    (supabase.rpc as jest.Mock).mockClear();
+    vi.mocked(supabase.rpc).mockClear();
   }
   
   if (supabase.channel) {
-    (supabase.channel as jest.Mock).mockClear();
+    vi.mocked(supabase.channel).mockClear();
   }
   
   if (supabase.removeChannel) {
-    (supabase.removeChannel as jest.Mock).mockClear();
+    vi.mocked(supabase.removeChannel).mockClear();
   }
 };
 
@@ -265,7 +274,7 @@ export const createErrorBoundaryTest = (
   it(`${componentName} handles errors gracefully`, () => {
     // Mock console.error to avoid noise in tests
     const originalConsoleError = console.error;
-    console.error = jest.fn();
+    console.error = vi.fn();
     
     try {
       // Render component that should trigger error

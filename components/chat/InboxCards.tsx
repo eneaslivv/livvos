@@ -2,6 +2,12 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import { supabase } from '../../lib/supabase';
+import {
+  getConversationTitle,
+  groupCommunicationMessages,
+  isMessageHandled,
+  needsMessageFollowUp,
+} from '../../lib/communications/conversations';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,14 +64,14 @@ function relativeTime(dateStr: string): string {
   if (Number.isNaN(then)) return '';
   const diffMs = now - then;
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'ahora';
+  if (diffMin < 1) return 'now';
   if (diffMin < 60) return `${diffMin}m`;
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `${diffH}h`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d`;
   const d = new Date(dateStr);
-  return d.toLocaleDateString('es-AR', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function initials(name: string | null): string {
@@ -89,7 +95,7 @@ function getSummary(msg: InboxMessage): string {
     if (clean.length > 100) return clean.slice(0, 97).trimEnd() + '…';
     return clean;
   }
-  return 'Sin contenido';
+  return 'No content';
 }
 
 /** Determine urgency from AI classification */
@@ -125,45 +131,20 @@ interface ChannelGroup {
   platform: 'gmail' | 'slack';
   messages: InboxMessage[];
   pendingCount: number;
+  handledCount: number;
   hasUrgent: boolean;
 }
 
 function groupByChannel(messages: InboxMessage[]): ChannelGroup[] {
-  const map = new Map<string, InboxMessage[]>();
-  const order: string[] = [];
-
-  for (const msg of messages) {
-    const key = msg.platform === 'slack'
-      ? `slack:${msg.channel_name ?? 'dm'}`
-      : `gmail:${msg.subject ?? msg.from_name ?? 'email'}`;
-    if (!map.has(key)) {
-      map.set(key, []);
-      order.push(key);
-    }
-    map.get(key)!.push(msg);
-  }
-
-  return order.map(key => {
-    const msgs = map.get(key)!;
-    const platform = msgs[0].platform;
-    let label: string;
-    if (platform === 'slack') {
-      const ch = msgs[0].channel_name ?? 'Direct';
-      // Capitalize nicely: frenetic-pace → Frenetic Pace
-      label = ch.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    } else {
-      label = msgs[0].subject ?? msgs[0].from_name ?? 'Email';
-    }
-    const pendingCount = msgs.filter(m => (m.status || '').toLowerCase() === 'pending').length;
-    const hasUrgent = msgs.some(m => getUrgency(m) === 'urgent');
-    return { key, label, platform, messages: msgs, pendingCount, hasUrgent };
-  })
-    // Sort: channels with urgent messages first, then by pending count, then by message count
-    .sort((a, b) => {
-      if (a.hasUrgent !== b.hasUrgent) return a.hasUrgent ? -1 : 1;
-      if (a.pendingCount !== b.pendingCount) return b.pendingCount - a.pendingCount;
-      return b.messages.length - a.messages.length;
-    });
+  return groupCommunicationMessages(messages).map(group => ({
+    key: group.key,
+    label: getConversationTitle(group.latest || group.messages[0]),
+    platform: group.platform === 'gmail' ? 'gmail' : 'slack',
+    messages: group.messages,
+    pendingCount: group.pending,
+    handledCount: group.handled,
+    hasUrgent: group.urgent > 0,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +179,7 @@ function ReplyComposer({
       onSent(message.id);
       setTimeout(() => onClose(), 1000);
     } catch (err: any) {
-      setError(err?.message ?? 'Error al enviar');
+      setError(err?.message ?? 'Could not send');
     } finally {
       setSending(false);
     }
@@ -219,7 +200,7 @@ function ReplyComposer({
             animate={{ opacity: 1, scale: 1 }}
             className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400"
           >
-            <Icons.Check className="h-3.5 w-3.5" /> Enviado
+            <Icons.Check className="h-3.5 w-3.5" /> Sent
           </motion.div>
         ) : (
           <>
@@ -228,12 +209,12 @@ function ReplyComposer({
               onChange={e => setBody(e.target.value)}
               rows={2}
               disabled={sending}
-              placeholder="Tu respuesta…"
+              placeholder="Your reply..."
               className="w-full resize-none rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[12px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 transition-shadow"
             />
             {suggested && body === suggested && (
               <p className="mt-1 flex items-center gap-1 text-[10px] text-violet-500">
-                <Icons.Sparkles className="h-3 w-3" /> Sugerido por AI — editá antes de enviar
+                <Icons.Sparkles className="h-3 w-3" /> AI suggested - edit before sending
               </p>
             )}
             {error && (
@@ -246,10 +227,10 @@ function ReplyComposer({
                 className="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-3 py-1 text-[10px] font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
               >
                 {sending ? <Icons.Loader className="h-3 w-3 animate-spin" /> : <Icons.Send className="h-3 w-3" />}
-                {sending ? 'Enviando…' : 'Enviar'}
+                {sending ? 'Sending...' : 'Send'}
               </button>
               <button onClick={onClose} disabled={sending} className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
-                Cancelar
+                Cancel
               </button>
             </div>
           </>
@@ -284,6 +265,7 @@ function MessageRow({
   const hasDraft = !!message.ai_classification?.suggested_reply;
   const sender = message.from_name || message.from_email?.split('@')[0] || '?';
   const repliedInPlatform = message.replied_in_platform === true;
+  const isHandled = isMessageHandled(message);
   const replyCount = message.reply_count || 0;
 
   return (
@@ -322,12 +304,12 @@ function MessageRow({
             {repliedInPlatform ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
                 <Icons.Check className="h-3 w-3" />
-                respondido
+                replied
               </span>
-            ) : isPending ? (
+            ) : isPending && !isHandled ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
                 <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
-                pendiente
+                pending
               </span>
             ) : null}
             {replyCount > 0 && (
@@ -352,7 +334,7 @@ function MessageRow({
             )}
             {message.ai_classification?.should_create_task && (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-violet-500 dark:text-violet-400">
-                <Icons.SquareCheck className="h-3 w-3" /> crear tarea
+                <Icons.SquareCheck className="h-3 w-3" /> task
               </span>
             )}
             {hasDraft && !isReplying && (
@@ -364,7 +346,7 @@ function MessageRow({
               onClick={() => setReplyingId(isReplying ? null : message.id)}
               className="ml-auto text-[10px] font-medium text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-zinc-600 dark:hover:text-zinc-300 transition-all max-sm:opacity-100"
             >
-              {isReplying ? '✕ cerrar' : '↩ reply'}
+              {isReplying ? 'close' : 'reply'}
             </button>
           </div>
         </div>
@@ -430,6 +412,12 @@ function ChannelCard({
             {group.pendingCount}
           </span>
         )}
+        {group.handledCount > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+            <Icons.Check className="h-3 w-3" />
+            {group.handledCount}
+          </span>
+        )}
         {group.hasUrgent && (
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
         )}
@@ -479,27 +467,27 @@ function StatsStrip({ messages }: { messages: InboxMessage[] }) {
   const total = messages.length;
   const pending = messages.filter(m => (m.status || '').toLowerCase() === 'pending').length;
   const urgent = messages.filter(m => getUrgency(m) === 'urgent').length;
-  const actionNeeded = messages.filter(m => getUrgency(m) === 'action').length;
+  const actionNeeded = messages.filter(m => needsMessageFollowUp(m)).length;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 tabular-nums">
-        {total} mensajes
+        {groupCommunicationMessages(messages).length} conversations - {total} messages
       </span>
       {urgent > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
           <span className="w-1 h-1 rounded-full bg-rose-500" />
-          {urgent} urgentes
+          {urgent} urgent
         </span>
       )}
       {pending > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-          {pending} pendientes
+          {pending} pending
         </span>
       )}
       {actionNeeded > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-          {actionNeeded} requieren acción
+          {actionNeeded} need action
         </span>
       )}
     </div>
@@ -528,7 +516,7 @@ export const InboxCards: React.FC<InboxCardsProps> = ({ messages, aiSummary }) =
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-zinc-200 bg-white px-6 py-8 text-center dark:border-zinc-700/60 dark:bg-zinc-900/50">
         <Icons.Inbox className="h-5 w-5 text-zinc-300 dark:text-zinc-600" />
-        <p className="text-[12px] text-zinc-500">No hay mensajes</p>
+        <p className="text-[12px] text-zinc-500">No messages</p>
       </div>
     );
   }

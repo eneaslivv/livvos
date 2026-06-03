@@ -1,0 +1,163 @@
+{
+  "agent": "nova",
+  "model": "claude-sonnet-4-6",
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "user_id": "22222222-2222-2222-2222-222222222222",
+  "cases": [
+    {
+      "id": "nov-001-funnel-snapshot-default-window",
+      "user_message": "Mostrame el funnel",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "canvas_required_blocks": ["stat_cards", "bar_chart"],
+        "must_state_window": true,
+        "must_state_n": true
+      }
+    },
+    {
+      "id": "nov-002-attribution",
+      "user_message": "De dónde vienen los leads",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "canvas_required_blocks": ["donut_chart", "attribution_table"],
+        "must_mention": ["Unattributed", "Web Form", "Instagram"],
+        "must_not_collapse_unattributed": true
+      }
+    },
+    {
+      "id": "nov-003-forecast-three-scenarios",
+      "user_message": "Forecast del trimestre",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "must_mention": ["best", "likely", "worst", "mejor", "probable", "peor"],
+        "must_state_window": true
+      }
+    },
+    {
+      "id": "nov-004-bottleneck-detection",
+      "user_message": "Dónde estoy perdiendo más leads?",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "must_mention_one_of": ["new", "contacted", "qualified", "proposal", "negotiation"],
+        "must_state_n": true
+      }
+    },
+    {
+      "id": "nov-005-confirm-window-ambiguous",
+      "user_message": "Como me va esta semana",
+      "assertions": {
+        "must_ask_clarifying_question": true,
+        "must_mention": ["semana", "calendario", "días"],
+        "must_not_emit_canvas": "display"
+      }
+    },
+    {
+      "id": "nov-006-small-n-refuses-trend",
+      "user_message": "Tendencia de LinkedIn",
+      "assertions": {
+        "must_mention_one_of": ["n=", "muestra", "poca", "señal incipiente"],
+        "must_not_claim_trend_with_low_n": true
+      },
+      "notes": "LinkedIn only has Diego = 1 lead"
+    },
+    {
+      "id": "nov-007-no-causation-claim",
+      "user_message": "Instagram me trae más plata?",
+      "assertions": {
+        "must_mention_one_of": ["correlación", "no implica", "aproximada"],
+        "must_not_mention": ["causa", "porque"]
+      }
+    },
+    {
+      "id": "nov-008-revenue-attribution-caveat",
+      "user_message": "Cuánta revenue trajo Web Form",
+      "assertions": {
+        "must_mention": ["aproximada", "match", "joinan"],
+        "must_emit_canvas": "display"
+      }
+    },
+    {
+      "id": "nov-009-wbr-workflow",
+      "user_message": "Hacé el WBR",
+      "assertions": {
+        "must_emit_canvas": "workflow",
+        "canvas_required_blocks": ["stepper"],
+        "must_have_6_sections": true
+      }
+    },
+    {
+      "id": "nov-010-north-star-save",
+      "user_message": "Mi north star es revenue per won deal",
+      "assertions": {
+        "must_emit_canvas": "workflow",
+        "must_mention": ["confirmar", "guardar"]
+      }
+    },
+    {
+      "id": "nov-011-refuse-12-month-forecast",
+      "user_message": "Forecast a 12 meses",
+      "assertions": {
+        "must_mention": ["trimestre", "cap", "horizonte"],
+        "must_not_emit_canvas": "display"
+      }
+    },
+    {
+      "id": "nov-012-cross-domain-deflect-sales",
+      "user_message": "Cuál lead es el más urgente hoy",
+      "assertions": {
+        "must_mention": ["Solara"],
+        "max_length_chars": 200
+      }
+    },
+    {
+      "id": "nov-013-cross-domain-deflect-finance",
+      "user_message": "Cuánto cobré ayer",
+      "assertions": {
+        "must_mention": ["Marina"],
+        "max_length_chars": 200
+      }
+    },
+    {
+      "id": "nov-014-stage-probability-tune",
+      "user_message": "Quiero ajustar las probabilidades por etapa",
+      "assertions": {
+        "must_emit_canvas": "interactive",
+        "canvas_min_controls": 5
+      }
+    },
+    {
+      "id": "nov-015-bottleneck-low-volume-suppressed",
+      "user_message": "Dónde estoy perdiendo en negotiation",
+      "assertions": {
+        "must_mention_one_of": ["n=", "muestra", "no concluir"],
+        "must_not_claim_bottleneck_with_low_n": true
+      }
+    },
+    {
+      "id": "nov-016-no-recommend-channel-on-traffic-only",
+      "user_message": "Debería invertir más en SEO?",
+      "assertions": {
+        "must_mention_one_of": ["leads", "revenue", "conversión", "no solo tráfico"],
+        "must_not_recommend_on_traffic_alone": true
+      }
+    },
+    {
+      "id": "nov-017-period-comparison",
+      "user_message": "Comparame esta semana vs la anterior",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "must_mention_one_of": ["delta", "%", "vs", "comparación"],
+        "must_state_window": true
+      }
+    },
+    {
+      "id": "nov-018-charts-include-n",
+      "user_message": "Mostrame conversion rates por stage",
+      "assertions": {
+        "must_emit_canvas": "display",
+        "must_state_n": true,
+        "canvas_required_blocks": ["bar_chart"]
+      }
+    }
+  ]
+}

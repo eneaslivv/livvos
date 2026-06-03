@@ -7,6 +7,7 @@ import {
   Calendar,
   Lightbulb,
   FileText,
+  Monitor,
   Plus,
   Search,
   CheckCircle2,
@@ -110,7 +111,8 @@ import {
   Code,
   Minus,
   Table2,
-  SquareCheckBig
+  SquareCheckBig,
+  Play
 } from 'lucide-react';
 
 export const Icons = {
@@ -121,6 +123,7 @@ export const Icons = {
   Calendar,
   Lightbulb,
   Docs: FileText,
+  FileText,
   Plus,
   Search,
   Check: CheckCircle2,
@@ -145,6 +148,7 @@ export const Icons = {
   Upload: UploadCloud,
   Filter,
   Grid: LayoutGrid,
+  Layout: LayoutGrid,
   Hash,
   FileCode,
   FileSheet: FileSpreadsheet,
@@ -229,4 +233,6 @@ export const Icons = {
   Minus,
   Table: Table2,
   SquareCheck: SquareCheckBig,
+  Monitor,
+  Play,
 };

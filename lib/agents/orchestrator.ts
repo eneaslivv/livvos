@@ -172,6 +172,7 @@ const runAgentSkills = async (
       // selected — the user expects "resumir inbox" to show real data.
       || skill.id.endsWith('recent')
       || skill.id.endsWith('summary_stats')
+      || skill.id.endsWith('conversation_summary')
       || skill.id.endsWith('slack_channels');
     if (!hitsRelevance && !isAlwaysOn && out.length > 0) continue;
     try {
@@ -318,6 +319,8 @@ export async function runOrchestrator(
 
   const aiContext = [
     `AGENT: ${agent.name} (${agent.id})`,
+    'GLOBAL LANGUAGE RULE: reply in English by default. Do not switch to Spanish because the user typed Spanish unless the user explicitly asks for Spanish output.',
+    'QUALITY RULE: give real analysis from the skill results, not generic encouragement. If data is weak or missing, say exactly what is missing and what to check next.',
     '',
     promptForAgent,
     surfaceBlock,

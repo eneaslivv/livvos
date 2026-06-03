@@ -25,12 +25,36 @@ export interface Permission {
 
 export interface UserProfile {
   id: string
-  user_id: string
+  user_id?: string
   email: string
   name: string
   tenant_id: string
   avatar_url?: string
   status: 'active' | 'inactive' | 'suspended'
+}
+
+async function getProfileForAuthUser(userId: string): Promise<UserProfile> {
+  const byId = await supabase
+    .from('profiles')
+    .select('id, user_id, email, name, tenant_id, avatar_url, status')
+    .eq('id', userId)
+    .single()
+
+  if (!byId.error && byId.data) {
+    return byId.data as UserProfile
+  }
+
+  const byUserId = await supabase
+    .from('profiles')
+    .select('id, user_id, email, name, tenant_id, avatar_url, status')
+    .eq('user_id', userId)
+    .single()
+
+  if (!byUserId.error && byUserId.data) {
+    return byUserId.data as UserProfile
+  }
+
+  throw byId.error || byUserId.error || new Error('Profile not found')
 }
 
 /**
@@ -50,17 +74,9 @@ export async function getSecurityContext(): Promise<SecurityContext> {
       }
     }
 
-    // Get user profile with tenant
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, user_id, email, name, tenant_id, avatar_url, status')
-      .eq('user_id', user.id)
-      .single()
-
-    if (profileError) {
-      console.error('Security: Failed to get profile', profileError)
-      throw new Error('Failed to retrieve user profile')
-    }
+    // Profiles are canonically keyed by auth.users.id in current migrations.
+    // A user_id fallback is kept for legacy rows/migrations during hardening.
+    const profile = await getProfileForAuthUser(user.id)
 
     // Check if user is tenant owner
     const { data: tenant, error: tenantError } = await supabase

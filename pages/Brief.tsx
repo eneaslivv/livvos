@@ -42,6 +42,13 @@ import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile,
 import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
 import { errorLogger } from '../lib/errorLogger';
 import { supabase } from '../lib/supabase';
+import {
+  getConversationKey,
+  groupCommunicationMessages,
+  isMessageHandled,
+  needsMessageFollowUp,
+  normalizeEmailSubject,
+} from '../lib/communications/conversations';
 import type { PageView, NavParams } from '../types';
 
 interface BriefProps {
@@ -136,6 +143,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent, deleteTask } = useCalendar();
   const [rightTab, setRightTab] = useState<RightTab>('tasks');
   const [pendingMessages, setPendingMessages] = useState<any[]>([]);
+  const [inboxView, setInboxView] = useState<'all' | 'unopened' | 'followup' | 'replied'>('all');
+  const [inboxPlatform, setInboxPlatform] = useState<'all' | 'gmail' | 'slack'>('all');
+  const [openedMessageIds, setOpenedMessageIds] = useState<Set<string>>(new Set());
   const { projects } = useProjects();
   const { clients } = useClients();
 
@@ -155,6 +165,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const [replyError, setReplyError] = useState<string | null>(null);
   const [replyNote, setReplyNote] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const openedStorageKey = currentTenant?.id && user?.id ? `brief:opened-messages:${currentTenant.id}:${user.id}` : null;
 
   useEffect(() => {
     const cls = openMessage?.ai_classification || {};
@@ -165,6 +176,19 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     setReplyError(null);
     setReplyNote(null);
   }, [openMessage?.id]);
+
+  useEffect(() => {
+    if (!openedStorageKey) {
+      setOpenedMessageIds(new Set());
+      return;
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(openedStorageKey) || '[]');
+      setOpenedMessageIds(new Set(Array.isArray(stored) ? stored : []));
+    } catch {
+      setOpenedMessageIds(new Set());
+    }
+  }, [openedStorageKey]);
 
   // ── Voice input ─────────────────────────────────────────────────
   // Loads the user's preferred language once, maps to a BCP-47 tag,
@@ -710,16 +734,51 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       try {
         const { data } = await supabase
           .from('communication_messages')
-          .select('id, platform, from_name, from_email, from_id, subject, body_text, body_html, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id')
+          .select('id, platform, from_name, from_email, from_id, subject, body_text, body_html, channel_id, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at, integration_token_id, opened_at, opened_by, read_at, read_by')
           .eq('tenant_id', currentTenant.id)
-          .eq('status', 'pending')
           .order('received_at', { ascending: false })
-          .limit(30);
-        if (!cancelled) setPendingMessages(data || []);
+          .limit(250);
+        if (!cancelled) {
+          const rows = data || [];
+          setPendingMessages(rows);
+          setPendingRequestsCount(rows.filter(m => m.status === 'pending' || m.status === 'snoozed').length);
+        }
       } catch { /* silent */ }
     })();
     return () => { cancelled = true; };
   }, [currentTenant?.id, rightTab]);
+
+  const openInboxMessage = (msg: any) => {
+    setOpenMessage(msg);
+    if (!msg?.id) return;
+    const nowIso = new Date().toISOString();
+    const readPatch = {
+      opened_at: msg.opened_at || nowIso,
+      opened_by: msg.opened_by || user?.id || null,
+      read_at: msg.read_at || nowIso,
+      read_by: msg.read_by || user?.id || null,
+    };
+    setOpenedMessageIds(prev => {
+      const next = new Set(prev);
+      next.add(msg.id);
+      if (openedStorageKey) {
+        try { localStorage.setItem(openedStorageKey, JSON.stringify(Array.from(next).slice(-250))); } catch {}
+      }
+      return next;
+    });
+    setPendingMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...readPatch } : m));
+    setOpenMessage((prev: any) => prev?.id === msg.id ? { ...prev, ...readPatch } : prev);
+    if (currentTenant?.id && user?.id && (!msg.read_at || !msg.opened_at)) {
+      supabase
+        .from('communication_messages')
+        .update(readPatch)
+        .eq('id', msg.id)
+        .eq('tenant_id', currentTenant.id)
+        .then(({ error }) => {
+          if (error) errorLogger.warn('brief mark message read failed', { messageId: msg.id, error });
+        });
+    }
+  };
 
   // ── Inline "Convert to task" from the Inbox card ────────────────
   // Routes through the same executor Brief already uses for AI-proposed
@@ -769,6 +828,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     }
   };
 
+  const normalizeMessageSubject = (value: string | undefined) => normalizeEmailSubject(value);
+  const getInboxConversationKey = (message: any): string => getConversationKey(message);
+
   const runReplyAI = async (
     action: ComposeCommReplyAction | 'prompt',
     extra?: { tone?: string; custom_instructions?: string },
@@ -780,6 +842,24 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     try {
       const selectedClient = openMessage.matched_client_id ? clients.find(c => c.id === openMessage.matched_client_id) : null;
       const selectedProject = openMessage.matched_project_id ? projects.find(p => p.id === openMessage.matched_project_id) : null;
+      const conversationKey = getInboxConversationKey(openMessage);
+      const relatedMessages = pendingMessages
+        .filter(m => getInboxConversationKey(m) === conversationKey)
+        .slice(0, 12)
+        .reverse();
+      const recentMessages = relatedMessages.map(m => ({
+        from: m.from_name || m.from_email || m.channel_name || 'Unknown',
+        body: (m.body_text || m.subject || '').slice(0, 900),
+        sent_at: m.received_at,
+      }));
+      const clientContext = selectedClient || recentMessages.length ? {
+        ...(selectedClient ? {
+          name: (selectedClient as any).name,
+          email: (selectedClient as any).email,
+          notes: ((selectedClient as any).notes || '').slice(0, 600),
+        } : {}),
+        recent_messages: recentMessages,
+      } : null;
       const result = await composeCommReply({
         action: action === 'prompt' ? 'generate' : action,
         draft: replyDraft,
@@ -791,11 +871,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           body: (openMessage.body_text || '').slice(0, 4000),
           received_at: openMessage.received_at,
         },
-        client_context: selectedClient ? {
-          name: (selectedClient as any).name,
-          email: (selectedClient as any).email,
-          notes: ((selectedClient as any).notes || '').slice(0, 600),
-        } : null,
+        client_context: clientContext,
         project_context: selectedProject ? {
           title: (selectedProject as any).title,
           description: ((selectedProject as any).description || '').slice(0, 600),
@@ -805,8 +881,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         params: {
           tone: extra?.tone,
           custom_instructions: action === 'prompt'
-            ? (replyPrompt.trim() || extra?.custom_instructions || 'Draft a useful reply.')
-            : extra?.custom_instructions,
+            ? `${replyPrompt.trim() || extra?.custom_instructions || 'Draft a useful reply.'} Use the full thread/channel context, preserve concrete facts, answer only what is needed, and make the next step explicit.`
+            : `${extra?.custom_instructions || ''} Use the full thread/channel context, preserve concrete facts, answer only what is needed, and make the next step explicit.`.trim(),
         },
       });
       setReplyDraft(result.reply);
@@ -855,7 +931,67 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const focusedOverdue = activeFocus?.tab === 'tasks' ? overdue.filter(t => taskMatchesFocus(t, activeFocus)) : overdue;
   const focusedDueToday = activeFocus?.tab === 'tasks' ? dueToday.filter(t => taskMatchesFocus(t, activeFocus)) : dueToday;
   const focusedDueSoon = activeFocus?.tab === 'tasks' ? dueSoon.filter(t => taskMatchesFocus(t, activeFocus)) : dueSoon;
-  const focusedMessages = activeFocus?.tab === 'inbox' ? pendingMessages.filter(m => messageMatchesFocus(m, activeFocus)) : pendingMessages;
+  const isMessageOpened = (m: any) =>
+    Boolean(m.read_at || m.opened_at) || openedMessageIds.has(m.id) || isMessageHandled(m);
+  const needsFollowUp = (m: any) => needsMessageFollowUp(m);
+  const inboxBaseMessages = activeFocus?.tab === 'inbox' ? pendingMessages.filter(m => messageMatchesFocus(m, activeFocus)) : pendingMessages;
+  const platformMessages = inboxPlatform === 'all'
+    ? inboxBaseMessages
+    : inboxBaseMessages.filter(m => m.platform === inboxPlatform);
+  const focusedMessages = platformMessages.filter(m => {
+    if (inboxView === 'unopened') return !isMessageOpened(m);
+    if (inboxView === 'followup') return needsFollowUp(m);
+    if (inboxView === 'replied') return ['replied', 'task_created', 'ignored', 'archived'].includes(m.status);
+    return true;
+  });
+  const inboxSummary = useMemo(() => {
+    const total = platformMessages.length;
+    const unopened = platformMessages.filter(m => !isMessageOpened(m)).length;
+    const followup = platformMessages.filter(needsFollowUp).length;
+    const replied = platformMessages.filter(isMessageHandled).length;
+    const gmail = inboxBaseMessages.filter(m => m.platform === 'gmail').length;
+    const slack = inboxBaseMessages.filter(m => m.platform === 'slack').length;
+    const latest = platformMessages[0];
+    const conversationGroups = groupCommunicationMessages(platformMessages);
+    const followupConversations = conversationGroups.filter(g => g.followups > 0).length;
+    const unopenedConversations = conversationGroups.filter(g => g.messages.some(m => !isMessageOpened(m))).length;
+    const topSender = platformMessages.reduce<Record<string, number>>((acc, m) => {
+      const key = m.from_name || m.from_email || m.channel_name || 'Unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const topSenderName = Object.entries(topSender).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const insight = followup > 0
+      ? `${followupConversations} conversation${followupConversations === 1 ? '' : 's'} need follow-up. Start with ${
+          platformMessages.find(needsFollowUp)?.from_name ||
+          platformMessages.find(needsFollowUp)?.from_email ||
+          platformMessages.find(needsFollowUp)?.channel_name ||
+          'the oldest pending item'
+        }.`
+      : unopened > 0
+        ? `${unopenedConversations} unopened conversation${unopenedConversations === 1 ? '' : 's'} to review before planning.`
+        : total > 0
+          ? `Inbox is reviewed. ${replied} handled item${replied === 1 ? '' : 's'} in this view.`
+          : 'No recent inbox updates in this view.';
+    return { total, unopened, followup, replied, gmail, slack, latest, topSenderName, insight, conversations: conversationGroups.length };
+  }, [inboxBaseMessages, platformMessages, openedMessageIds]);
+  const inboxGroups = useMemo(() => {
+    return groupCommunicationMessages(focusedMessages).map(group => ({
+      ...group,
+      platform: String(group.platform),
+      subtitle: group.platform === 'gmail' ? group.subtitle : 'Slack thread',
+      unopened: group.messages.filter(m => !isMessageOpened(m)).length,
+      followups: group.followups,
+      latest: group.latest || group.messages[0],
+    }));
+  }, [focusedMessages, openedMessageIds]);
+  const openMessageContext = useMemo(() => {
+    if (!openMessage) return [];
+    const key = getInboxConversationKey(openMessage);
+    return pendingMessages
+      .filter(m => getInboxConversationKey(m) === key)
+      .slice(0, 10);
+  }, [openMessage, pendingMessages, openedMessageIds]);
   const activeFocusCount = activeFocus?.tab === 'tasks'
     ? focusedOverdue.length + focusedDueToday.length + focusedDueSoon.length
     : activeFocus?.tab === 'inbox'
@@ -1265,8 +1401,72 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
           {rightTab === 'inbox' && (
             <>
+              <div className="mx-3 mb-3 rounded-2xl border border-zinc-200/70 bg-white/85 p-3 shadow-sm shadow-zinc-950/[0.03] dark:border-zinc-800 dark:bg-zinc-950/45">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                      <Icons.Activity size={12} />
+                      Inbox intelligence
+                    </div>
+                    <p className="mt-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100">
+                      {inboxSummary.insight}
+                    </p>
+                    <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      {inboxSummary.gmail} email · {inboxSummary.slack} Slack
+                      {inboxSummary.topSenderName ? ` · top sender: ${inboxSummary.topSenderName}` : ''}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+                    {inboxSummary.latest ? formatMsgTime(inboxSummary.latest.received_at) : 'clear'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {([
+                    ['all', 'All', inboxSummary.total],
+                    ['unopened', 'Unopened', inboxSummary.unopened],
+                    ['followup', 'Follow-up', inboxSummary.followup],
+                    ['replied', 'Handled', inboxSummary.replied],
+                  ] as const).map(([id, label, count]) => (
+                    <button
+                      key={id}
+                      onClick={() => setInboxView(id)}
+                      className={`rounded-xl px-2 py-2 text-left transition-colors ${
+                        inboxView === id
+                          ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+                          : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 dark:bg-zinc-900/70 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <div className="text-[15px] font-semibold tabular-nums">{count}</div>
+                      <div className="mt-0.5 truncate text-[10px] font-medium">{label}</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {([
+                    ['all', 'All sources', inboxBaseMessages.length, Icons.Activity],
+                    ['gmail', 'Mail', inboxSummary.gmail, Icons.Mail],
+                    ['slack', 'Slack', inboxSummary.slack, Icons.Message],
+                  ] as const).map(([id, label, count, Icon]) => (
+                    <button
+                      key={id}
+                      onClick={() => setInboxPlatform(id)}
+                      className={`inline-flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-[11px] font-semibold transition-colors ${
+                        inboxPlatform === id
+                          ? 'bg-amber-500/12 text-amber-800 ring-1 ring-amber-500/20 dark:text-amber-200'
+                          : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 dark:bg-zinc-900/70 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-1.5">
+                        <Icon size={12} />
+                        <span className="truncate">{label}</span>
+                      </span>
+                      <span className="tabular-nums">{count}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="bd-day flex items-center">
-                Pending messages
+                {inboxView === 'all' ? 'Recent messages' : inboxView === 'unopened' ? 'Unopened messages' : inboxView === 'followup' ? 'Needs follow-up' : 'Handled messages'}
                 <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{focusedMessages.length}</span>
                 <button
                   onClick={() => onNavigate('communications')}
@@ -1279,16 +1479,46 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                 </div>
               ) : (
                 <AnimatePresence initial={false}>
-                  {focusedMessages.map((m, idx) => (
-                    <SwipeableInboxCard
-                      key={m.id}
-                      message={m}
-                      idx={idx}
-                      focused={activeFocus?.tab === 'inbox'}
-                      onOpen={() => setOpenMessage(m)}
-                      onConvert={() => handleConvertToTask(m)}
-                      onMarkDone={() => handleMarkMessageDone(m)}
-                    />
+                  {inboxGroups.map((group, groupIdx) => (
+                    <motion.div
+                      key={group.key}
+                      layout
+                      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ ...SPRING_ENTER, delay: groupIdx < 6 ? groupIdx * 0.025 : 0 }}
+                      className="bd-inbox-group"
+                    >
+                      <div className={`bd-inbox-group-head ${group.platform === 'gmail' ? 'mail' : 'slack'}`}>
+                        <div className="bd-inbox-group-icon">
+                          {group.platform === 'gmail' ? <Icons.Mail size={13} /> : <Icons.Message size={13} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="bd-inbox-group-title">{group.title}</div>
+                          <div className="bd-inbox-group-sub">
+                            {group.platform === 'gmail' ? 'Mail thread' : group.subtitle} · {group.messages.length} message{group.messages.length === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                        <div className="bd-inbox-group-meta">
+                          {group.followups > 0 && <span className="bd-inbox-group-pill action">{group.followups} follow-up</span>}
+                          {group.unopened > 0 && <span className="bd-inbox-group-pill">{group.unopened} new</span>}
+                          <span>{formatMsgTime(group.latest?.received_at)}</span>
+                        </div>
+                      </div>
+                      {group.messages.map((m, idx) => (
+                        <SwipeableInboxCard
+                          key={m.id}
+                          message={m}
+                          idx={idx}
+                          focused={activeFocus?.tab === 'inbox'}
+                          opened={isMessageOpened(m)}
+                          needsFollowUp={needsFollowUp(m)}
+                          onOpen={() => openInboxMessage(m)}
+                          onConvert={() => handleConvertToTask(m)}
+                          onMarkDone={() => handleMarkMessageDone(m)}
+                        />
+                      ))}
+                    </motion.div>
                   ))}
                 </AnimatePresence>
               )}
@@ -1369,7 +1599,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       onClose={() => setOpenMessage(null)}
       width="lg"
       title={openMessage?.subject || openMessage?.from_name || 'Message'}
-      subtitle={openMessage ? `${openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown'} · ${formatMsgTime(openMessage.received_at)}` : undefined}
+      subtitle={openMessage ? `${openMessage.platform === 'gmail' ? 'Email' : 'Slack'} · ${openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown'} · ${formatMsgTime(openMessage.received_at)}` : undefined}
       footer={openMessage ? (
         <div className="flex gap-2 pr-24">
           <button
@@ -1390,15 +1620,46 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       {openMessage && (
         <div className="space-y-5 p-6">
           <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">From</div>
-            <div className="font-medium text-zinc-900 dark:text-zinc-100">{openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown sender'}</div>
-            {openMessage.from_email && <div className="mt-1 text-xs text-zinc-500">{openMessage.from_email}</div>}
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${openMessage.platform === 'gmail' ? 'bg-rose-500/10 text-rose-600' : 'bg-violet-500/10 text-violet-600'}`}>
+                {openMessage.platform === 'gmail' ? <Icons.Mail size={18} /> : <Icons.Message size={18} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    {openMessage.platform === 'gmail' ? 'Email' : 'Slack'}
+                  </span>
+                  {openMessage.channel_name && (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                      #{openMessage.channel_name}
+                    </span>
+                  )}
+                  {openMessage.thread_id && (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                      thread
+                    </span>
+                  )}
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                    {isMessageOpened(openMessage) ? 'opened in LIVV' : 'not opened in LIVV'}
+                  </span>
+                </div>
+                <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {openMessage.from_name || openMessage.from_email || openMessage.channel_name || 'Unknown sender'}
+                </div>
+                {openMessage.from_email && <div className="mt-0.5 text-xs text-zinc-500">{openMessage.from_email}</div>}
+                {openMessage.subject && (
+                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-medium text-zinc-800 ring-1 ring-zinc-200/70 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800">
+                    {openMessage.subject}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <div>
             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Message</div>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-              {openMessage.body_text || openMessage.subject || 'No message body.'}
-            </p>
+            <div className="max-h-64 overflow-y-auto rounded-2xl border border-zinc-200/70 bg-white p-4 text-sm leading-6 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-300">
+              <p className="whitespace-pre-wrap">{openMessage.body_text || openMessage.subject || 'No message body.'}</p>
+            </div>
           </div>
           {openMessage.ai_classification && (
             <div className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800">
@@ -1410,6 +1671,42 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               </div>
             </div>
           )}
+          <div className="rounded-2xl border border-zinc-200/70 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                Conversation context
+              </div>
+              <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {openMessage.platform === 'gmail' ? 'Mail thread' : 'Slack channel'} · {openMessageContext.length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {openMessageContext.slice(0, 5).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => openInboxMessage(m)}
+                  className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
+                    m.id === openMessage.id
+                      ? 'border-amber-500/30 bg-amber-500/10'
+                      : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                      {m.from_name || m.from_email || m.channel_name || 'Unknown'}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-zinc-400">{formatMsgTime(m.received_at)}</span>
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    {m.subject || m.body_text || 'No content'}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-400">
+              Reply AI uses this thread/channel context, plus matched client/project data, to avoid generic answers and make the next step explicit.
+            </div>
+          </div>
           <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
@@ -1496,7 +1793,6 @@ const TaskSection: React.FC<{
   icon: React.ReactNode;
   tasks: CalendarTask[];
   tone: 'rose' | 'amber' | 'indigo';
-  focused?: boolean;
   focused?: boolean;
   projectsById: Map<string, any>;
   clientsById: Map<string, any>;
@@ -2067,12 +2363,14 @@ const InboxCard: React.FC<{
   onOpen: () => void;
   onConvert: () => void;
   focused?: boolean;
-}> = ({ message, onOpen, onConvert, focused = false }) => {
+  opened?: boolean;
+  needsFollowUp?: boolean;
+}> = ({ message, onOpen, onConvert, focused = false, opened = false, needsFollowUp = false }) => {
   const cls: InboxClassification = message.ai_classification || {};
   const isRequest = cls.should_create_task === true;
   const isUrgent = cls.priority === 'high' || cls.intent === 'urgent';
   const isReplied = message.status === 'replied' || message.status === 'task_created';
-  const isUnread = !isReplied && message.status !== 'read';
+  const isUnread = !opened && !isReplied;
 
   const sender = message.from_name || message.from_email || message.channel_name || 'Anonymous';
   const subject = message.subject || message.body_text?.split('\n')[0]?.slice(0, 80) || '(no subject)';
@@ -2161,11 +2459,13 @@ const InboxCard: React.FC<{
         <span className="bd-msg-time">{time}</span>
         <span className={`bd-msg-prio ${
           isUrgent ? 'urgent' :
+          needsFollowUp ? 'action' :
           isRequest ? 'action' :
           isReplied ? 'replied' :
+          opened ? 'replied' :
           'fyi'
         }`}>
-          {isUrgent ? 'urgent' : isRequest ? 'action' : isReplied ? 'replied' : 'fyi'}
+          {isUrgent ? 'urgent' : needsFollowUp ? 'follow-up' : isRequest ? 'action' : isReplied ? 'replied' : opened ? 'opened' : 'new'}
         </span>
       </div>
     </div>
@@ -2189,13 +2489,15 @@ interface SwipeableInboxCardProps {
   message: any;
   idx: number;
   focused?: boolean;
+  opened?: boolean;
+  needsFollowUp?: boolean;
   onOpen: () => void;
   onConvert: () => void;
   onMarkDone: () => void;
 }
 
 const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
-  message, idx, focused = false, onOpen, onConvert, onMarkDone,
+  message, idx, focused = false, opened = false, needsFollowUp = false, onOpen, onConvert, onMarkDone,
 }) => {
   const reduceMotion = useReducedMotion();
   const x = useMotionValue(0);
@@ -2291,7 +2593,7 @@ const SwipeableInboxCard: React.FC<SwipeableInboxCardProps> = ({
         whileTap={{ scale: 0.995 }}
         whileHover={{ y: -1, transition: SPRING_TAP }}
       >
-        <InboxCard message={message} focused={focused} onOpen={onOpen} onConvert={onConvert} />
+        <InboxCard message={message} focused={focused} opened={opened} needsFollowUp={needsFollowUp} onOpen={onOpen} onConvert={onConvert} />
       </motion.div>
     </motion.div>
   );

@@ -1305,6 +1305,124 @@
 .bd-msg-prio.urgent   { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
 .bd-msg-prio.replied  { background: rgba(118, 146, 104, 0.13); color: #4d6b4d; }
 
+.bd-inbox-group {
+  margin: 0 8px 10px;
+  border: 1px solid rgba(214, 209, 199, 0.68);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:is(.dark) .bd-inbox-group {
+  border-color: rgba(63, 63, 70, 0.78);
+  background: rgba(9, 9, 11, 0.38);
+}
+
+.bd-inbox-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(214, 209, 199, 0.58);
+  background: linear-gradient(90deg, rgba(10, 102, 194, 0.08), rgba(255, 255, 255, 0.72));
+}
+
+.bd-inbox-group-head.slack {
+  background: linear-gradient(90deg, rgba(74, 21, 75, 0.1), rgba(255, 255, 255, 0.72));
+}
+
+:is(.dark) .bd-inbox-group-head {
+  border-bottom-color: rgba(63, 63, 70, 0.7);
+  background: linear-gradient(90deg, rgba(10, 102, 194, 0.14), rgba(24, 24, 27, 0.72));
+}
+
+:is(.dark) .bd-inbox-group-head.slack {
+  background: linear-gradient(90deg, rgba(74, 21, 75, 0.24), rgba(24, 24, 27, 0.72));
+}
+
+.bd-inbox-group-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a66c2;
+  background: rgba(10, 102, 194, 0.1);
+}
+
+.bd-inbox-group-head.slack .bd-inbox-group-icon {
+  color: #4a154b;
+  background: rgba(74, 21, 75, 0.1);
+}
+
+:is(.dark) .bd-inbox-group-head.slack .bd-inbox-group-icon {
+  color: #f1add8;
+}
+
+.bd-inbox-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #18181b;
+}
+
+:is(.dark) .bd-inbox-group-title { color: #fafafa; }
+
+.bd-inbox-group-sub {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.bd-inbox-group-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+.bd-inbox-group-pill {
+  border-radius: 999px;
+  padding: 1.5px 6px;
+  color: #71717a;
+  background: rgba(82, 82, 91, 0.08);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.bd-inbox-group-pill.action {
+  color: #8b6a17;
+  background: rgba(196, 163, 90, 0.14);
+}
+
+.bd-inbox-group .relative + .relative .bd-msg::before {
+  left: 48px;
+  right: 10px;
+}
+
+.bd-inbox-group .bd-msg {
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:is(.dark) .bd-inbox-group .bd-msg {
+  background: rgba(24, 24, 27, 0.52);
+}
+
 /* Task row (when tab=tasks) */
 .bd-task-row {
   display: grid;

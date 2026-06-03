@@ -152,8 +152,8 @@ describe('ClusterIdManager', () => {
     it('should generate a valid cluster ID format', () => {
       const clusterId = ClusterIdManager.generateClusterId();
       
-      expect(clusterId).toMatch(/^cluster-[a-z0-9]{8}-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-[a-z0-9]{8}$/);
-      expect(clusterId).toHaveLength(37); // Expected length
+      expect(clusterId).toMatch(/^cluster-[a-z0-9]{8}-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-[a-z0-9]{8}$/);
+      expect(clusterId).toHaveLength(45);
     });
 
     it('should generate unique cluster IDs', () => {

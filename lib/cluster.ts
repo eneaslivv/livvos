@@ -203,8 +203,8 @@ export type MetricType =
 
 // Cluster ID Generation and Validation
 export class ClusterIdManager {
-  private static readonly CLUSTER_ID_PATTERN = /^cluster-[a-z0-9]{8}-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-[a-z0-9]{8}$/;
-  private static readonly NODE_ID_PATTERN = /^node-[a-z0-9]{8}-\d+-[a-z0-9]{8}$/;
+  private static readonly CLUSTER_ID_PATTERN = /^cluster-[a-z0-9]{6,8}-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-[a-z0-9]{8}$/;
+  private static readonly NODE_ID_PATTERN = /^node-[a-z0-9]{6,8}-\d+-[a-z0-9]{8}$/;
 
   /**
    * Generate a unique cluster ID
@@ -212,7 +212,7 @@ export class ClusterIdManager {
    */
   static generateClusterId(): string {
     const random1 = this.generateRandomString(8);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const timestamp = new Date().toISOString().replace(/[T:.]/g, '-').slice(0, 19);
     const random2 = this.generateRandomString(8);
     
     return `cluster-${random1}-${timestamp}-${random2}`;
@@ -223,7 +223,7 @@ export class ClusterIdManager {
    * Format: node-<cluster-suffix>-<number>-<random>
    */
   static generateNodeId(clusterId: string, nodeNumber: number): string {
-    const clusterSuffix = clusterId.replace('cluster-', '').split('-').slice(0, 2).join('-');
+    const clusterSuffix = clusterId.replace('cluster-', '').split('-')[0];
     const random = this.generateRandomString(8);
     
     return `node-${clusterSuffix}-${nodeNumber}-${random}`;
@@ -480,17 +480,13 @@ export class ClusterHealthCalculator {
   static calculateNodeHealth(node: NodeInfo): NodeHealthStatus {
     const { metrics, capacity, usage } = node;
 
-    // CPU health check
-    const cpuHealth = usage.cpu / capacity.cpu;
-    const cpuStatus = cpuHealth > 0.9 ? 'critical' : cpuHealth > 0.7 ? 'warning' : 'healthy';
+    const cpuPercent = metrics.cpuUsagePercent ?? ((usage.cpu / capacity.cpu) * 100);
+    const memoryPercent = metrics.memoryUsagePercent ?? ((usage.memoryGb / capacity.memoryGb) * 100);
+    const diskPercent = metrics.diskUsagePercent ?? ((usage.storageGb / capacity.storageGb) * 100);
 
-    // Memory health check
-    const memoryHealth = usage.memoryGb / capacity.memoryGb;
-    const memoryStatus = memoryHealth > 0.9 ? 'critical' : memoryHealth > 0.8 ? 'warning' : 'healthy';
-
-    // Disk health check
-    const diskHealth = usage.storageGb / capacity.storageGb;
-    const diskStatus = diskHealth > 0.95 ? 'critical' : diskHealth > 0.8 ? 'warning' : 'healthy';
+    const cpuStatus = cpuPercent > 90 ? 'critical' : cpuPercent > 70 ? 'warning' : 'healthy';
+    const memoryStatus = memoryPercent > 90 ? 'critical' : memoryPercent > 80 ? 'warning' : 'healthy';
+    const diskStatus = diskPercent > 95 ? 'critical' : diskPercent > 80 ? 'warning' : 'healthy';
 
     // Overall health (worst case)
     const statuses = [cpuStatus, memoryStatus, diskStatus];
@@ -562,18 +558,18 @@ export class ClusterCoordinationManager {
       return null;
     }
 
-    // Sort by priority (highest first) and then by health
+    // Sort by health first, then priority. A slightly lower-priority healthy
+    // node is a better primary than a degraded high-priority node.
     onlineNodes.sort((a, b) => {
-      if (a.priority !== b.priority) {
-        return b.priority - a.priority;
-      }
-      
-      // Prefer healthy nodes
       const healthOrder = { healthy: 3, warning: 2, critical: 1, unknown: 0 };
       const aHealth = healthOrder[a.healthStatus] || 0;
       const bHealth = healthOrder[b.healthStatus] || 0;
-      
-      return bHealth - aHealth;
+
+      if (aHealth !== bHealth) {
+        return bHealth - aHealth;
+      }
+
+      return b.priority - a.priority;
     });
 
     return onlineNodes[0];
@@ -629,8 +625,9 @@ export class ClusterCoordinationManager {
     }
 
     // Check node count
-    if (onlineNodes.length < cluster.config.maxNodes * 0.5) {
-      issues.push(`Less than 50% of nodes are online (${onlineNodes.length}/${cluster.config.maxNodes})`);
+    const expectedNodes = Math.max(nodes.length, 1);
+    if (onlineNodes.length < expectedNodes * 0.5) {
+      issues.push(`Less than 50% of nodes are online (${onlineNodes.length}/${expectedNodes})`);
     }
 
     // Determine overall status

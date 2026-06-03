@@ -57,6 +57,25 @@ async function slackFetch<T = any>(botToken: string, method: string, params?: Re
   return data as T
 }
 
+const ACTIONABLE_SLACK_RE = /\b(can you|could you|please|need|needs|needed|blocked|blocker|not working|broken|issue|bug|help|asap|urgent|review|approve|approval|confirm|send|share|access|feedback|thoughts|waiting|follow up|when|where|what|how|why)\b/i
+
+function hasSlackMention(text: string, mentionIds: Set<string>): boolean {
+  if (!text) return false
+  for (const id of mentionIds) {
+    if (id && text.includes(`<@${id}>`)) return true
+  }
+  return false
+}
+
+function shouldImportSlackMessage(message: SlackMessage, mode: string | null | undefined, mentionIds: Set<string>): boolean {
+  const filterMode = mode || 'actionable'
+  if (filterMode === 'all') return true
+  const text = message.text || ''
+  const mentioned = hasSlackMention(text, mentionIds)
+  if (filterMode === 'mentions') return mentioned
+  return mentioned || text.includes('?') || ACTIONABLE_SLACK_RE.test(text)
+}
+
 // Background: classify a freshly-inserted message and write the result back.
 // Same pattern as gmail-sync — we want the inbox to populate fast and let
 // the AI classification trickle in via realtime.
@@ -163,23 +182,40 @@ Deno.serve(async (req) => {
     const oldestTs = ((Date.now() / 1000) - Math.max(1, hours) * 3600).toFixed(6)
 
     for (const tok of tokens) {
+      let tokenSynced = 0
       const botToken = tok.slack_bot_token || tok.access_token
       if (!botToken) {
         errors.push(`token ${tok.id}: no bot token`)
+        await admin.from('integration_tokens').update({
+          last_sync_status: 'error',
+          last_sync_error: 'No Slack bot token',
+          last_sync_finished_at: new Date().toISOString(),
+        }).eq('id', tok.id)
         continue
       }
+      await admin.from('integration_tokens').update({
+        last_sync_status: 'syncing',
+        last_sync_error: null,
+        last_sync_started_at: new Date().toISOString(),
+      }).eq('id', tok.id)
+
       // Add bot user ID to the team set so we can distinguish team vs external
       if (tok.slack_bot_user_id) teamSlackIds.add(tok.slack_bot_user_id)
 
       // Channels we're supposed to monitor for THIS workspace.
       const { data: channels, error: chErr } = await admin
         .from('slack_monitored_channels')
-        .select('channel_id, channel_name, channel_type, project_id')
+        .select('channel_id, channel_name, channel_type, project_id, inbound_filter')
         .eq('tenant_id', ctx.tenant_id)
         .eq('integration_token_id', tok.id)
         .eq('is_active', true)
       if (chErr) {
         errors.push(`channels ${tok.id}: ${chErr.message}`)
+        await admin.from('integration_tokens').update({
+          last_sync_status: 'error',
+          last_sync_error: chErr.message,
+          last_sync_finished_at: new Date().toISOString(),
+        }).eq('id', tok.id)
         continue
       }
       if (!channels || channels.length === 0) continue
@@ -233,6 +269,11 @@ Deno.serve(async (req) => {
           for (const m of newOnes) {
             try {
               const senderId = m.user || ''
+              const mentionIds = new Set<string>(teamSlackIds)
+              if (tok.slack_bot_user_id) mentionIds.add(tok.slack_bot_user_id)
+              if (senderId && teamSlackIds.has(senderId)) continue
+              if (!shouldImportSlackMessage(m, (ch as any).inbound_filter, mentionIds)) continue
+
               const sender = senderId ? await getUserInfo(senderId) : null
               const fromName = sender?.profile?.display_name || sender?.real_name || sender?.name || m.username || 'Unknown'
               const fromEmail = sender?.profile?.email || null
@@ -314,6 +355,7 @@ Deno.serve(async (req) => {
                 .insert({
                   tenant_id: ctx.tenant_id,
                   platform: 'slack',
+                  integration_token_id: tok.id,
                   external_id: `${ch.channel_id}:${m.ts}`,
                   thread_id: m.thread_ts || m.ts,
                   from_id: senderId,
@@ -341,6 +383,7 @@ Deno.serve(async (req) => {
                 continue
               }
               totalSynced++
+              tokenSynced++
 
               classifyAndUpdate(admin, inserted.id, {
                 platform: 'slack',
@@ -357,12 +400,30 @@ Deno.serve(async (req) => {
               errors.push(`msg ${m.ts}: ${(msgErr as Error).message}`)
             }
           }
+          const lastMessageAt = filtered[0]?.ts ? new Date(parseFloat(filtered[0].ts) * 1000).toISOString() : null
+          await admin.from('slack_monitored_channels').update({
+            last_sync_at: new Date().toISOString(),
+            last_sync_error: null,
+            last_message_at: lastMessageAt,
+          }).eq('tenant_id', ctx.tenant_id).eq('channel_id', ch.channel_id)
         } catch (chErr2) {
-          errors.push(`channel #${ch.channel_name}: ${(chErr2 as Error).message}`)
+          const message = (chErr2 as Error).message
+          errors.push(`channel #${ch.channel_name}: ${message}`)
+          await admin.from('slack_monitored_channels').update({
+            last_sync_error: message,
+            last_sync_at: new Date().toISOString(),
+          }).eq('tenant_id', ctx.tenant_id).eq('channel_id', ch.channel_id)
         }
       }
 
-      await admin.from('integration_tokens').update({ last_sync_at: new Date().toISOString() }).eq('id', tok.id)
+      const finishedAt = new Date().toISOString()
+      await admin.from('integration_tokens').update({
+        last_sync_at: finishedAt,
+        last_sync_finished_at: finishedAt,
+        last_sync_status: 'success',
+        last_sync_error: null,
+        last_sync_count: tokenSynced,
+      }).eq('id', tok.id)
     }
 
     return json({ synced: totalSynced, errors })

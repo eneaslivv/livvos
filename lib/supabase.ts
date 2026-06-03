@@ -62,8 +62,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 /**
  * @deprecated Use `supabase` instead. The service role key must never be in the client bundle.
  * Admin operations should run in Supabase Edge Functions.
- * This alias exists only to avoid breaking imports during migration.
  */
-export const supabaseAdmin = supabase
+export const supabaseAdmin = new Proxy({}, {
+  get() {
+    throw new Error('supabaseAdmin is not available in the browser. Move this operation to a Supabase Edge Function.')
+  }
+}) as typeof supabase
 
 export default supabase

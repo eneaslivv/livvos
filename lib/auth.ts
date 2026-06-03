@@ -21,9 +21,21 @@ export async function ensureProfile() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
   const email = user.email ?? 'guest@local'
-  await supabase.from('profiles').upsert({
+  const payload = {
+    id: user.id,
     user_id: user.id,
     email,
     name: user.user_metadata?.name ?? email.split('@')[0]
-  }, { onConflict: 'user_id' })
+  }
+
+  const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'id' })
+  if (!error) return
+
+  // Legacy deployments may not have profiles.user_id yet. Retry with the
+  // canonical id-only shape rather than blocking session bootstrap.
+  await supabase.from('profiles').upsert({
+    id: user.id,
+    email,
+    name: user.user_metadata?.name ?? email.split('@')[0]
+  }, { onConflict: 'id' })
 }

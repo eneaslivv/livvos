@@ -11,7 +11,7 @@ export const ENCRYPTION_CONFIG = {
 export interface EncryptedData {
   data: string; // Base64 encrypted data
   iv: string;   // Base64 initialization vector
-  tag: string;  // Base64 authentication tag (Simulated/Null for CBC)
+  tag: string;  // Base64 HMAC authentication tag
   salt: string; // Base64 salt for key derivation
   version: number; // Encryption version for future upgrades
 }
@@ -37,6 +37,10 @@ function deriveKey(password: string, salt: CryptoJS.lib.WordArray): CryptoJS.lib
     iterations: ENCRYPTION_CONFIG.iterations,
     hasher: CryptoJS.algo.SHA256
   });
+}
+
+function createAuthTag(data: string, iv: string, salt: string, key: CryptoJS.lib.WordArray): string {
+  return CryptoJS.HmacSHA256(`${salt}.${iv}.${data}`, key).toString(CryptoJS.enc.Base64);
 }
 
 /**
@@ -70,10 +74,14 @@ export function encrypt(plaintext: string, password: string): EncryptionResult {
       padding: CryptoJS.pad.Pkcs7
     });
 
+    const data = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
+    const ivBase64 = iv.toString(CryptoJS.enc.Base64);
+    const saltBase64 = salt.toString(CryptoJS.enc.Base64);
+
     const encryptedData: EncryptedData = {
-      data: encrypted.ciphertext.toString(CryptoJS.enc.Base64),
-      iv: iv.toString(CryptoJS.enc.Base64),
-      tag: '', // CBC doesn't produce an Auth Tag like GCM. We leave it empty.
+      data,
+      iv: ivBase64,
+      tag: createAuthTag(data, ivBase64, saltBase64, key),
       salt: salt.toString(CryptoJS.enc.Base64),
       version: 1
     };
@@ -102,7 +110,7 @@ export function decrypt(encryptedData: EncryptedData, password: string): Decrypt
     }
 
     // Validate required fields
-    const requiredFields = ['data', 'iv', 'salt']; // Tag not required for CBC
+    const requiredFields = ['data', 'iv', 'tag', 'salt'];
     for (const field of requiredFields) {
       if (!(field in encryptedData) || !encryptedData[field as keyof EncryptedData]) {
         return { decrypted: '', success: false, error: `Missing required field: ${field}` };
@@ -116,6 +124,11 @@ export function decrypt(encryptedData: EncryptedData, password: string): Decrypt
 
     // Derive decryption key
     const key = deriveKey(password, salt);
+
+    const expectedTag = createAuthTag(encryptedData.data, encryptedData.iv, encryptedData.salt, key);
+    if (!secureCompare(expectedTag, encryptedData.tag)) {
+      return { decrypted: '', success: false, error: 'Authentication tag verification failed' };
+    }
 
     // Decrypt parameters
     const cipherParams = CryptoJS.lib.CipherParams.create({
@@ -162,9 +175,8 @@ export function validateEncryptedFormat(data: any): data is EncryptedData {
     typeof data === 'object' &&
     typeof data.data === 'string' &&
     typeof data.iv === 'string' &&
-    // Tag is optional in this implementation (legacy compat? or just CBC)
-    // But interface has it.
-    (typeof data.tag === 'string' || data.tag === undefined || data.tag === null) &&
+    typeof data.tag === 'string' &&
+    data.tag.length > 0 &&
     typeof data.salt === 'string' &&
     typeof data.version === 'number'
   );
@@ -224,17 +236,17 @@ export function rotateEncryption(
 
 // Environment variable validation
 export function getEncryptionMasterKey(): string {
-  // Check strict Vite environment variable first
-  const masterKey = import.meta.env.VITE_ENCRYPTION_MASTER_KEY;
+  const nodeEnv = (globalThis as any).process?.env;
+  const masterKey = import.meta.env.MODE === 'test'
+    ? nodeEnv?.ENCRYPTION_MASTER_KEY
+    : (nodeEnv?.ENCRYPTION_MASTER_KEY || import.meta.env.VITE_ENCRYPTION_MASTER_KEY);
 
   if (!masterKey) {
-    if (import.meta.env.DEV) console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY is not set. Credential encryption will not work.');
-    return '';
+    throw new Error('ENCRYPTION_MASTER_KEY environment variable is not set');
   }
 
   if (masterKey.length < 32) {
-    if (import.meta.env.DEV) console.warn('[Encryption] VITE_ENCRYPTION_MASTER_KEY must be at least 32 characters for AES-256.');
-    return '';
+    throw new Error('ENCRYPTION_MASTER_KEY must be at least 32 characters long');
   }
 
   return masterKey;

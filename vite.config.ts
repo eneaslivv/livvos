@@ -58,7 +58,7 @@ export default defineConfig(() => {
       build: {
         // Lift the chunk-size warning so we don't hit it on legitimately
         // big route chunks (Finance, Projects).
-        chunkSizeWarningLimit: 800,
+        chunkSizeWarningLimit: 900,
         rollupOptions: {
           output: {
             // Conservative chunk strategy: only split out libraries that
@@ -79,10 +79,32 @@ export default defineConfig(() => {
             //     editor. Big win.
             //   • Anything else: leave it to Vite. The marginal caching
             //     benefit isn't worth the SSR / chunk-load fragility.
+            // Current rules also split React, Supabase, Motion, Charts and
+            // Icons into stable vendor chunks; React-related packages stay
+            // grouped together to avoid the shim issue described above.
             manualChunks: (id: string) => {
               if (!id.includes('node_modules')) return undefined;
-              if (id.includes('xlsx')) return 'vendor-xlsx';
-              if (id.includes('@tiptap') || id.includes('prosemirror')) return 'vendor-tiptap';
+              const normalized = id.replace(/\\/g, '/');
+              if (
+                normalized.includes('/react/') ||
+                normalized.includes('/react-dom/') ||
+                normalized.includes('/scheduler/') ||
+                normalized.includes('/use-sync-external-store/')
+              ) return 'vendor-react';
+              if (normalized.includes('/@supabase/')) return 'vendor-supabase';
+              if (
+                normalized.includes('/framer-motion/') ||
+                normalized.includes('/motion-dom/') ||
+                normalized.includes('/motion-utils/')
+              ) return 'vendor-motion';
+              if (
+                normalized.includes('/recharts/') ||
+                normalized.includes('/d3-') ||
+                normalized.includes('/victory-vendor/')
+              ) return 'vendor-charts';
+              if (normalized.includes('/lucide-react/')) return 'vendor-icons';
+              if (normalized.includes('/xlsx/')) return 'vendor-xlsx';
+              if (normalized.includes('/@tiptap/') || normalized.includes('/prosemirror-')) return 'vendor-tiptap';
               return undefined;
             },
           },

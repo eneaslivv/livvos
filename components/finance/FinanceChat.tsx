@@ -5,16 +5,21 @@ import {
   CornerDownLeft, RotateCcw, Bot,
 } from 'lucide-react';
 import { SlidePanel } from '../ui/SlidePanel';
-import { sendFinanceChat, type AdvisorChatMessage, type FinanceChatAction } from '../../lib/ai';
+import type { AdvisorChatMessage } from '../../lib/ai';
 import { useFinance } from '../../context/FinanceContext';
 import { useTenant } from '../../context/TenantContext';
 import { useClients } from '../../context/ClientsContext';
 import { useProjects } from '../../context/ProjectsContext';
+import { useAuth } from '../../hooks/useAuth';
+import { supabase } from '../../lib/supabase';
+import { runOrchestrator, executeProposedAction, type ProposedAction } from '../../lib/agents';
+import { Markdown } from '../../lib/markdown';
 
 type ActionState = 'pending' | 'executing' | 'done' | 'cancelled' | 'error';
 type Message = AdvisorChatMessage & {
   ts: number;
-  actions?: FinanceChatAction[];
+  actions?: ProposedAction[];
+  skillTrace?: Array<{ skillId: string; ok: boolean; summary: string }>;
   // action_state[i] mirrors actions[i] so the UI knows what each card is
   // doing (waiting for click, mid-mutation, or settled).
   action_state?: ActionState[];
@@ -79,10 +84,9 @@ interface FinanceChatProps {
 export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initialInput }) => {
   const {
     expenses, incomes, budgets,
-    createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome,
-    updateBudget,
   } = useFinance();
   const { currentTenant } = useTenant();
+  const { user } = useAuth();
   const { clients } = useClients();
   const { projects } = useProjects();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -217,7 +221,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
 
   const send = useCallback(async (text?: string) => {
     const question = (text ?? input).trim();
-    if (!question || isSending) return;
+    if (!question || isSending || !currentTenant?.id || !user?.id) return;
     setError(null);
     const userMsg: Message = { role: 'user', content: question, ts: Date.now() };
     const newHistory = [...messages, userMsg];
@@ -225,35 +229,33 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
     setInput('');
     setIsSending(true);
     try {
-      const result = await sendFinanceChat(
-        context,
-        newHistory.map(m => ({ role: m.role, content: m.content })),
-        question,
+      const result = await runOrchestrator(
+        {
+          query: question,
+          forcedAgentId: 'finance-agent',
+          history: newHistory.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+          surfaceHint: [
+            'The user is inside the Finance copilot panel.',
+            'Use the same universal assistant contract as every other AI surface: grounded facts, concise analysis, visible next action, and proposed actions only when a write is needed.',
+            'This panel can execute approved finance actions, so do not claim that a write already happened.',
+          ].join('\n'),
+          ctx: {
+            db: supabase as any,
+            tenantId: currentTenant.id,
+            userId: user.id,
+            now: new Date(),
+          },
+        },
+        { surface: 'finance' },
       );
-      // Defensive: drop actions the frontend can't safely execute. Targeted
-      // ops require a real id from our current state. Create ops require
-      // amount + concept. The aim is to never let an IA hallucination reach
-      // the confirm UI as a clickable action.
-      const validActions = (result.actions || []).filter(a => {
-        if (!a || !a.kind || !a.op) return false;
-        if (a.op === 'create_expense' || a.op === 'create_income') {
-          return !!(a.params && typeof a.params.amount === 'number' && a.params.amount > 0 && a.params.concept);
-        }
-        if (a.op === 'update_budget') {
-          return !!(a.target_id && budgets.some(b => b.id === a.target_id) && a.params && typeof a.params.amount === 'number');
-        }
-        if (!a.target_id) return false;
-        if (a.kind === 'expense') return expenses.some(e => e.id === a.target_id);
-        if (a.kind === 'income') return incomes.some(i => i.id === a.target_id);
-        return false;
-      });
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: result.reply,
         ts: Date.now(),
-        actions: validActions.length > 0 ? validActions : undefined,
-        action_state: validActions.length > 0 ? validActions.map(() => 'pending' as ActionState) : undefined,
-        action_error: validActions.length > 0 ? validActions.map(() => '') : undefined,
+        skillTrace: result.skillTrace,
+        actions: result.proposedActions?.length ? result.proposedActions : undefined,
+        action_state: result.proposedActions?.length ? result.proposedActions.map(() => 'pending' as ActionState) : undefined,
+        action_error: result.proposedActions?.length ? result.proposedActions.map(() => '') : undefined,
       }]);
     } catch (err: any) {
       setError(err?.message || 'Could not get a reply. Try again.');
@@ -261,7 +263,7 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
       setIsSending(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [input, isSending, messages, context, expenses, incomes, budgets]);
+  }, [input, isSending, messages, currentTenant?.id, user?.id]);
 
   const setActionState = useCallback((msgIdx: number, actionIdx: number, state: ActionState, errMsg?: string) => {
     setMessages(prev => prev.map((m, i) => {
@@ -275,63 +277,19 @@ export const FinanceChat: React.FC<FinanceChatProps> = ({ isOpen, onClose, initi
   const executeAction = useCallback(async (msgIdx: number, actionIdx: number) => {
     const msg = messages[msgIdx];
     const action = msg?.actions?.[actionIdx];
-    if (!action) return;
+    if (!action || !currentTenant?.id || !user?.id) return;
     setActionState(msgIdx, actionIdx, 'executing');
     try {
-      // Create ops (no target_id required).
-      if (action.op === 'create_expense') {
-        const p = action.params!;
-        await createExpense({
-          category: p.category || 'Operations',
-          concept: p.concept!.trim(),
-          amount: Number(p.amount || 0),
-          date: p.date || new Date().toISOString().slice(0, 10),
-          vendor: p.vendor || '',
-          status: p.status || 'pending',
-          recurring: !!p.recurring,
-          ...(p.client_id ? { client_id: p.client_id } : {}),
-          ...(p.project_id ? { project_id: p.project_id } : {}),
-          ...(p.budget_id ? { budget_id: p.budget_id } : {}),
-        });
-      } else if (action.op === 'create_income') {
-        const p = action.params!;
-        const client = p.client_id ? clients.find(c => c.id === p.client_id) : null;
-        await createIncome({
-          client_id: p.client_id || null,
-          project_id: p.project_id || null,
-          client_name: client?.name || p.client_name || (p.client_id ? 'Client' : 'No client'),
-          project_name: 'No project',
-          concept: p.concept!.trim(),
-          total_amount: Number(p.amount || 0),
-          due_date: p.date || new Date().toISOString().slice(0, 10),
-          num_installments: 1,
-        });
-      } else if (action.op === 'update_budget' && action.target_id) {
-        await updateBudget(action.target_id, { allocated_amount: Number(action.params?.amount || 0) });
-      } else if (action.kind === 'expense' && action.target_id) {
-        switch (action.op) {
-          case 'mark_paid':       await updateExpense(action.target_id, { status: 'paid' }); break;
-          case 'mark_pending':    await updateExpense(action.target_id, { status: 'pending' }); break;
-          case 'update_amount':   if (typeof action.params?.amount === 'number') await updateExpense(action.target_id, { amount: action.params.amount }); break;
-          case 'update_date':     if (action.params?.date) await updateExpense(action.target_id, { date: action.params.date }); break;
-          case 'link_budget':     if (action.params?.budget_id) await updateExpense(action.target_id, { budget_id: action.params.budget_id }); break;
-          case 'delete':          await deleteExpense(action.target_id); break;
-        }
-      } else if (action.kind === 'income' && action.target_id) {
-        switch (action.op) {
-          case 'mark_paid':       await updateIncome(action.target_id, { status: 'paid' }); break;
-          case 'mark_pending':    await updateIncome(action.target_id, { status: 'pending' }); break;
-          case 'update_amount':   if (typeof action.params?.amount === 'number') await updateIncome(action.target_id, { total_amount: action.params.amount }); break;
-          case 'update_date':     if (action.params?.date) await updateIncome(action.target_id, { due_date: action.params.date }); break;
-          case 'delete':          await deleteIncome(action.target_id); break;
-          // link_budget is expense-only — silently no-op for incomes
-        }
-      }
+      const result = await executeProposedAction(
+        action,
+        { db: supabase as any, tenantId: currentTenant.id, userId: user.id, now: new Date() },
+      );
+      if (!result.ok) throw new Error(result.error || result.summary);
       setActionState(msgIdx, actionIdx, 'done');
     } catch (err: any) {
       setActionState(msgIdx, actionIdx, 'error', err?.message || 'Could not execute');
     }
-  }, [messages, clients, createExpense, createIncome, updateExpense, updateIncome, deleteExpense, deleteIncome, updateBudget, setActionState]);
+  }, [messages, currentTenant?.id, user?.id, setActionState]);
 
   const cancelAction = useCallback((msgIdx: number, actionIdx: number) => {
     setActionState(msgIdx, actionIdx, 'cancelled');
@@ -569,8 +527,22 @@ const MessageRow: React.FC<{
             ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-tr-sm'
             : 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 border border-zinc-100 dark:border-zinc-800/60 rounded-tl-sm shadow-sm'
         }`}>
-          {m.content}
+          {isUser ? m.content : <Markdown source={m.content} />}
         </div>
+
+        {!isUser && m.skillTrace && m.skillTrace.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {m.skillTrace.filter(s => s.ok).slice(0, 4).map(s => (
+              <span
+                key={s.skillId}
+                className="inline-flex items-center gap-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 px-2 py-0.5 text-[9px] font-medium text-zinc-500 dark:text-zinc-400"
+              >
+                <CheckCircle2 size={9} />
+                {s.skillId.replace('finance.', '')}
+              </span>
+            ))}
+          </div>
+        )}
 
         {!isUser && m.actions && m.actions.length > 0 && (
           <div className="w-full space-y-2">
@@ -592,29 +564,26 @@ const MessageRow: React.FC<{
 };
 
 const ActionCard: React.FC<{
-  action: FinanceChatAction;
+  action: ProposedAction;
   state: ActionState;
   err: string;
   onExecute: () => void;
   onCancel: () => void;
 }> = ({ action: a, state, err, onExecute, onCancel }) => {
-  const isExpense = a.kind === 'expense';
-  const isDanger = a.op === 'delete';
+  const isExpense = a.kind.includes('expense');
+  const isDanger = a.kind.startsWith('delete_');
 
   // Op-level metadata: friendly label + a tiny icon so the user can scan
   // a stack of action cards without reading every word.
   const opMeta: Record<string, { label: string; icon: any }> = {
-    mark_paid:      { label: 'Mark as paid',          icon: CheckCircle2 },
-    mark_pending:   { label: 'Mark as pending',       icon: Loader2 },
-    update_amount:  { label: 'Update amount',         icon: Wand2 },
-    update_date:    { label: 'Update date',           icon: Wand2 },
-    link_budget:    { label: 'Link to budget',        icon: Wallet },
-    delete:         { label: 'Delete',                icon: XCircle },
+    mark_installment_paid:    { label: 'Mark as paid',          icon: CheckCircle2 },
+    mark_installment_pending: { label: 'Mark as pending',       icon: Loader2 },
+    delete_expense:           { label: 'Delete expense',        icon: XCircle },
+    delete_income:            { label: 'Delete income',         icon: XCircle },
     create_expense: { label: 'Create expense',        icon: ArrowUpFromLine },
     create_income:  { label: 'Create income',         icon: ArrowDownLeft },
-    update_budget:  { label: 'Update budget',         icon: Wallet },
   };
-  const meta = opMeta[a.op] || { label: a.op, icon: Wand2 };
+  const meta = opMeta[a.kind] || { label: a.kind.replace(/_/g, ' '), icon: Wand2 };
   const OpIcon = meta.icon;
 
   return (
@@ -647,7 +616,7 @@ const ActionCard: React.FC<{
             </span>
           </div>
           <div className="text-xs text-zinc-800 dark:text-zinc-200 mt-1 leading-relaxed">
-            {a.summary}
+            {a.label}
           </div>
           {err && state === 'error' && (
             <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-1.5">{err}</div>

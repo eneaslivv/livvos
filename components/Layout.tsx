@@ -952,6 +952,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           {/* Theme toggle removed — dark/light controlled via TopNavbar or
               system preference. Keeps sidebar minimal. */}
 
+          <button
+            onClick={toggleTheme}
+            className={`hidden md:flex items-center justify-center transition-colors ${
+              isSidebarExpanded
+                ? 'w-[calc(100%-24px)] mx-3 gap-2 rounded-lg px-3 py-2 text-[11px] font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/70'
+                : 'w-8 h-8 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-600 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/70'
+            }`}
+            title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {isDarkMode ? <Icons.Sun size={14} /> : <Icons.Moon size={14} />}
+            {isSidebarExpanded && <span>{isDarkMode ? 'Light mode' : 'Dark mode'}</span>}
+          </button>
+
           {/* Sidebar Toggle Button */}
           <button
             onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}

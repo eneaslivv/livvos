@@ -7,7 +7,7 @@
  *   1. Load brief_preferences for the user (or fall back to default).
  *   2. Run the enabled category loaders in parallel (data collection).
  *   3. Call synthesizeBrief which sends all data to Gemini and gets
- *      back a conversational analysis in Spanish.
+ *      back a conversational analysis in English.
  *   4. Render the analysis as a single chat-style bubble.
  *
  * Day-keyed cache prevents re-fetching on every page navigation.
@@ -28,7 +28,7 @@ import { BriefSettings } from './BriefSettings';
 const DEFAULT_ENABLED: CategoryId[] = ['today_load','cashflow','pipeline','content','inbox','team_kpis','strategy','upcoming'];
 
 // ── Day-keyed cache ───────────────────────────────────────────────
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v4-en';
 const cacheKey = (userId: string) =>
   `brief_cache:${CACHE_VERSION}:${userId}:${new Date().toISOString().slice(0, 10)}`;
 
@@ -87,6 +87,73 @@ function buildWeeklyFocus(cards: CategoryData[]): string {
 }
 
 // ── Simple markdown renderer for the briefing message ──────────────
+function buildWeeklyFocusEnglish(cards: CategoryData[]): string {
+  const focus = buildWeeklyFocus(cards);
+  if (!focus || /Buenos|tarde|Cerrando|crÃ|dÃ/i.test(focus)) {
+    const h = new Date().getHours();
+    return h < 12 ? 'Good morning - your week is clean.' : h < 18 ? 'Your afternoon is clear of urgent blockers.' : 'Closing the day with no critical blockers.';
+  }
+  return focus.replace(/ Â· /g, ' · ');
+}
+
+function cleanLocalSignal(value: string | undefined): string {
+  return String(value || '')
+    .replace(/ðŸ”¥|🔥/g, 'High priority:')
+    .replace(/ðŸŽ¯|🎯/g, '')
+    .replace(/âš |⚠/g, 'Risk:')
+    .replace(/ðŸ“…|📅/g, '')
+    .replace(/ðŸ”|🔁/g, '')
+    .replace(/✅|✓/g, '')
+    .replace(/Â·/g, '·')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildLocalBrief(cards: CategoryData[], includeRecommendation: boolean): BriefSynthesis | null {
+  const activeCards = cards.filter(c => c.status !== 'empty');
+  if (activeCards.length === 0) return null;
+
+  const attentionCards = activeCards.filter(c => c.status === 'attention');
+  const todayLoad = cards.find(c => c.id === 'today_load');
+  const overdue = Number(todayLoad?.context?.overdue_count || 0);
+  const dueToday = Number(todayLoad?.context?.due_today_count || 0);
+  const lines: string[] = [];
+
+  if (attentionCards.length > 0) {
+    lines.push(`You have ${attentionCards.length} operating ${attentionCards.length === 1 ? 'area' : 'areas'} needing attention today. The clearest pressure is ${overdue} overdue ${overdue === 1 ? 'task' : 'tasks'} and ${dueToday} due today, so the day should start with cleanup before new work.`);
+  } else {
+    lines.push('The operating picture is stable today. There are active signals to monitor, but no category is currently showing a critical blocker.');
+  }
+
+  for (const card of activeCards.slice(0, 5)) {
+    const facts = card.highlights
+      .filter(h => String(h.value) !== '' && String(h.value) !== '0' && String(h.value) !== '$0')
+      .map(h => `${h.label.toLowerCase()}: ${h.value}`)
+      .join(', ');
+    const firstSignal = cleanLocalSignal(card.bullets[0]);
+    const implication = card.status === 'attention'
+      ? 'This needs a decision or cleanup pass before it compounds.'
+      : 'This looks controlled, but it is still useful context for planning.';
+    lines.push(`**${card.title}**\n${facts || 'No major count spike'}${firstSignal ? `. Top signal: ${firstSignal}` : ''}. ${implication}`);
+  }
+
+  const nextStep = includeRecommendation
+    ? attentionCards[0]?.bullets[0]
+      ? `Clear the first ${attentionCards[0].title.toLowerCase()} blocker: ${cleanLocalSignal(attentionCards[0].bullets[0])}`
+      : overdue > 0
+        ? 'Start by closing or rescheduling the oldest overdue task.'
+        : 'Pick one priority task and protect a focused work block for it.'
+    : null;
+
+  if (nextStep) lines.push(`Main focus: ${nextStep}`);
+
+  return {
+    headline: attentionCards.length > 0 ? `${attentionCards.length} areas need attention` : 'No critical blockers',
+    message: lines.join('\n\n'),
+    next_step: nextStep,
+  };
+}
+
 function renderBriefMessage(text: string): React.ReactNode[] {
   const lines = text.split('\n');
   const nodes: React.ReactNode[] = [];
@@ -235,12 +302,16 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             learnedTraits: profile?.learned_traits || null,
             strategyContext: strategyCtx,
           });
+          if (!synthResult) {
+            synthResult = buildLocalBrief(loadedCards, usePrefs.show_top_recommendation);
+          }
           setSynthesis(synthResult);
         } finally {
           setSynthesizing(false);
         }
       } else {
-        setSynthesis(null);
+        synthResult = buildLocalBrief(loadedCards, usePrefs.show_top_recommendation);
+        setSynthesis(synthResult);
       }
       writeBriefCache(user.id, { cards: loadedCards, synthesis: synthResult });
     } catch (e) {
@@ -288,76 +359,44 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
   };
 
   const allEmpty = !loading && cards.every(c => c.status === 'empty');
-  const weeklyFocus = useMemo(() => buildWeeklyFocus(cards), [cards]);
+  const weeklyFocus = useMemo(() => buildWeeklyFocusEnglish(cards), [cards]);
 
   // Timestamp for the briefing
   const briefTime = useMemo(() => {
-    return new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }, [synthesis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="pb-3">
+    <div className="bd-brief-panel pb-3">
       {/* ── Sticky header ─────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 px-5 pt-3 pb-3 backdrop-blur"
-        style={{
-          background: 'rgba(253,251,247,0.95)',
-          borderBottom: '1px solid var(--os-border)',
-        }}
-      >
-        <div className="flex items-center gap-2">
+      <div className="bd-brief-sticky">
+        <div className="bd-brief-head">
           <span
             aria-hidden
-            className="w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 0 3px var(--accent-soft)' }}
+            className="bd-brief-pulse"
           />
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            textTransform: 'uppercase',
-            letterSpacing: '0.22em',
-            color: 'var(--os-fg-3)',
-          }}>
+          <div className="bd-brief-title">
             Today's brief
           </div>
-          {synthesizing && (
-            <span
-              className="inline-flex items-center gap-1"
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 9.5,
-                textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                color: 'var(--accent)',
-              }}
-            >
+          {synthesizing && !synthesis && (
+            <span className="bd-brief-state is-active">
               <Icons.Loader size={9} className="animate-spin" />
               analyzing
             </span>
           )}
           {refreshing && !synthesizing && !loading && (
-            <span
-              className="inline-flex items-center gap-1"
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 9.5,
-                textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                color: 'var(--os-fg-3)',
-              }}
-            >
+            <span className="bd-brief-state">
               <Icons.Loader size={9} className="animate-spin" />
               refreshing
             </span>
           )}
-          <div className="ml-auto flex items-center gap-0.5">
+          <div className="bd-brief-actions">
             <motion.button
               onClick={() => refresh()}
               disabled={refreshing}
               whileTap={{ scale: 0.92, transition: SPRING_TAP }}
               title="Refresh brief"
-              className="p-1 rounded transition-colors disabled:opacity-40"
-              style={{ color: 'var(--os-fg-3)' }}
+              className="bd-icon-btn disabled:opacity-40"
             >
               <Icons.Activity size={11} className={refreshing ? 'animate-spin' : ''} />
             </motion.button>
@@ -365,8 +404,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
               onClick={() => setSettingsOpen(true)}
               whileTap={{ scale: 0.92, transition: SPRING_TAP }}
               title="Configure categories"
-              className="p-1 rounded transition-colors"
-              style={{ color: 'var(--os-fg-3)' }}
+              className="bd-icon-btn"
             >
               <Icons.Settings size={11} />
             </motion.button>
@@ -375,30 +413,15 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
 
         {/* Weekly focus line */}
         {weeklyFocus && (
-          <div
-            className="mt-2.5 relative pl-4 pr-3 py-2 rounded-r-[10px]"
-            style={{ background: 'linear-gradient(90deg, rgba(232,188,89,0.06) 0%, transparent 100%)' }}
-          >
-            <span
-              aria-hidden
-              className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full"
-              style={{ background: 'linear-gradient(180deg, #E8BC59 0%, transparent 100%)' }}
-            />
-            <p style={{
-              fontSize: 12.5,
-              fontWeight: 500,
-              letterSpacing: '-0.01em',
-              color: 'var(--os-fg-1)',
-              lineHeight: 1.5,
-            }}>
-              {weeklyFocus}
-            </p>
+          <div className="bd-brief-focus">
+            <span aria-hidden className="bd-brief-focus-bar" />
+            <p>{weeklyFocus}</p>
           </div>
         )}
       </div>
 
       {/* ── Content area ──────────────────────────────────────────── */}
-      <div className="px-5 pt-4">
+      <div className="bd-brief-body px-5 pt-4">
 
         {/* Loading state — minimal skeleton */}
         {loading && (
@@ -419,7 +442,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             style={{ borderRadius: 14, border: '1px dashed var(--os-border-2)' }}
           >
             <p style={{ fontSize: 13, color: 'var(--os-fg-2)' }}>
-              Sin datos todavía. Sumá leads, tareas o contenido y tu brief se va a armar solo.
+              No data yet. Add leads, tasks, content, or calendar events and this brief will build itself.
             </p>
           </div>
         )}
@@ -459,7 +482,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
                       color: 'var(--accent)',
                       marginBottom: 3,
                     }}>
-                      Hacé esto primero
+                      Do this first
                     </div>
                     <div style={{ fontSize: 12.5, color: 'var(--os-ink)', lineHeight: 1.5 }}>
                       {synthesis.next_step}
@@ -502,7 +525,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
         {!loading && !synthesis && synthesizing && (
           <div className="py-6 flex items-center gap-2" style={{ color: 'var(--os-fg-3)', fontSize: 12 }}>
             <Icons.Loader size={12} className="animate-spin" style={{ color: 'var(--accent)' }} />
-            Analizando tus datos...
+            Analyzing your workspace...
           </div>
         )}
 
@@ -510,9 +533,9 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
         {!loading && !allEmpty && !synthesis && !synthesizing && (
           <div style={{ fontSize: 13, color: 'var(--os-fg-2)', lineHeight: 1.7 }}>
             <p>
-              Tenés {cards.filter(c => c.status === 'attention').length} áreas que necesitan atención
+              You have {cards.filter(c => c.status === 'attention').length} areas that need attention
               {cards.filter(c => c.status === 'ok').length > 0
-                ? ` y ${cards.filter(c => c.status === 'ok').length} que están al día.`
+                ? ` and ${cards.filter(c => c.status === 'ok').length} that are on track.`
                 : '.'
               }
             </p>
@@ -526,7 +549,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
               }}
             >
               <Icons.Activity size={10} />
-              Generar análisis
+              Generate analysis
             </button>
           </div>
         )}

@@ -178,7 +178,7 @@ describe('RLS Policies - Role-Based Access Control', () => {
       .rpc('is_tenant_owner')
 
     // Without authentication, this should return false or error
-    expect(error || !isOwner).toBeTruthy()
+    expect(ownerError || !isOwner).toBeTruthy()
   })
 
   it('should check permissions correctly', async () => {
@@ -190,7 +190,7 @@ describe('RLS Policies - Role-Based Access Control', () => {
       })
 
     // Without authentication, this should return false or error
-    expect(error || !hasProjectsPermission).toBeTruthy()
+    expect(permError || !hasProjectsPermission).toBeTruthy()
   })
 
   it('should provide user security context', async () => {
@@ -214,7 +214,7 @@ describe('RLS Policies - Project Access', () => {
       .limit(10)
 
     // Without authentication, no projects should be accessible
-    expect(error || (projects && projects.length === 0)).toBeTruthy()
+    expect(projectError || (projects && projects.length === 0)).toBeTruthy()
   })
 
   it('should enforce task access rules', async () => {
@@ -225,7 +225,7 @@ describe('RLS Policies - Project Access', () => {
       .limit(10)
 
     // Without authentication, no tasks should be accessible
-    expect(error || (tasks && tasks.length === 0)).toBeTruthy()
+    expect(taskError || (tasks && tasks.length === 0)).toBeTruthy()
   })
 
   it('should enforce milestone access rules', async () => {
@@ -236,7 +236,7 @@ describe('RLS Policies - Project Access', () => {
       .limit(10)
 
     // Without authentication, no milestones should be accessible
-    expect(error || (milestones && milestones.length === 0)).toBeTruthy()
+    expect(milestoneError || (milestones && milestones.length === 0)).toBeTruthy()
   })
 })
 
@@ -249,7 +249,7 @@ describe('RLS Policies - CRM Access', () => {
       .limit(10)
 
     // Without authentication, no leads should be accessible
-    expect(error || (leads && leads.length === 0)).toBeTruthy()
+    expect(leadError || (leads && leads.length === 0)).toBeTruthy()
   })
 
   it('should enforce client access rules', async () => {
@@ -260,7 +260,7 @@ describe('RLS Policies - CRM Access', () => {
       .limit(10)
 
     // Without authentication, no clients should be accessible
-    expect(error || (clients && clients.length === 0)).toBeTruthy()
+    expect(clientError || (clients && clients.length === 0)).toBeTruthy()
   })
 
   it('should enforce client message access rules', async () => {
@@ -271,7 +271,7 @@ describe('RLS Policies - CRM Access', () => {
       .limit(10)
 
     // Without authentication, no client messages should be accessible
-    expect(error || (messages && messages.length === 0)).toBeTruthy()
+    expect(messageError || (messages && messages.length === 0)).toBeTruthy()
   })
 })
 
@@ -284,7 +284,7 @@ describe('RLS Policies - Document Access', () => {
       .limit(10)
 
     // Without authentication, no documents should be accessible
-    expect(error || (documents && documents.length === 0)).toBeTruthy()
+    expect(docError || (documents && documents.length === 0)).toBeTruthy()
   })
 })
 
@@ -297,7 +297,7 @@ describe('RLS Policies - Calendar Access', () => {
       .limit(10)
 
     // Without authentication, no events should be accessible
-    expect(error || (events && events.length === 0)).toBeTruthy()
+    expect(eventError || (events && events.length === 0)).toBeTruthy()
   })
 
   it('should enforce calendar task access rules', async () => {
@@ -308,7 +308,7 @@ describe('RLS Policies - Calendar Access', () => {
       .limit(10)
 
     // Without authentication, no calendar tasks should be accessible
-    expect(error || (calendarTasks && calendarTasks.length === 0)).toBeTruthy()
+    expect(taskError || (calendarTasks && calendarTasks.length === 0)).toBeTruthy()
   })
 })
 
@@ -321,7 +321,7 @@ describe('RLS Policies - Financial Access', () => {
       .limit(10)
 
     // Without authentication, no financial data should be accessible
-    expect(error || (finances && finances.length === 0)).toBeTruthy()
+    expect(financeError || (finances && finances.length === 0)).toBeTruthy()
   })
 
   it('should enforce project credential access rules', async () => {
@@ -332,7 +332,7 @@ describe('RLS Policies - Financial Access', () => {
       .limit(10)
 
     // Without authentication, no credentials should be accessible
-    expect(error || (credentials && credentials.length === 0)).toBeTruthy()
+    expect(credError || (credentials && credentials.length === 0)).toBeTruthy()
   })
 })
 
@@ -345,18 +345,18 @@ describe('RLS Policies - Team Access', () => {
       .limit(10)
 
     // Without authentication, no notifications should be accessible
-    expect(error || (notifications && notifications.length === 0)).toBeTruthy()
+    expect(notifError || (notifications && notifications.length === 0)).toBeTruthy()
   })
 
   it('should enforce message access rules', async () => {
     // Test messages table RLS policies
-    const { data: messages, error: messageError } = supabase
+    const { data: messages, error: messageError } = await supabase
       .from('messages')
       .select('*')
       .limit(10)
 
     // Without authentication, no messages should be accessible
-    expect(error || (messages && messages.length === 0)).toBeTruthy()
+    expect(messageError || (messages && messages.length === 0)).toBeTruthy()
   })
 })
 
@@ -369,7 +369,7 @@ describe('RLS Policies - Configuration Access', () => {
       .limit(10)
 
     // Without authentication, no tenant data should be accessible
-    expect(error || (tenants && tenants.length === 0)).toBeTruthy()
+    expect(tenantError || (tenants && tenants.length === 0)).toBeTruthy()
   })
 
   it('should enforce tenant config access rules', async () => {
@@ -380,7 +380,7 @@ describe('RLS Policies - Configuration Access', () => {
       .limit(10)
 
     // Without authentication, no tenant config should be accessible
-    expect(error || (configs && configs.length === 0)).toBeTruthy()
+    expect(configError || (configs && configs.length === 0)).toBeTruthy()
   })
 })
 

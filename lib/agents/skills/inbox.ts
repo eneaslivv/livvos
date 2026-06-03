@@ -11,11 +11,24 @@
  */
 
 import type { Skill, SkillResult, ExecutionContext } from '../types';
+import {
+  groupCommunicationMessages,
+  isMessageHandled,
+  needsMessageFollowUp,
+} from '../../communications/conversations';
 
 const ok = <T>(kind: SkillResult<T>['kind'], data: T, ms?: number): SkillResult<T> =>
   ({ ok: true, kind, data, ms });
 const fail = (kind: SkillResult<any>['kind'], reason: string, ms?: number): SkillResult<any> =>
   ({ ok: false, kind, reason, ms });
+
+const MESSAGE_SELECT = 'id, platform, from_name, from_email, subject, body_text, channel_id, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at';
+
+const annotateMessage = (message: any) => ({
+  ...message,
+  handled: isMessageHandled(message),
+  needs_follow_up: needsMessageFollowUp(message),
+});
 
 // ── inbox.pending ────────────────────────────────────────────────────
 export const pending_messages: Skill<{ platform?: 'gmail' | 'slack' }, Array<any>> = {
@@ -26,7 +39,7 @@ export const pending_messages: Skill<{ platform?: 'gmail' | 'slack' }, Array<any
   run: async (params, ctx) => {
     const t0 = Date.now();
     let q = ctx.db.from('communication_messages')
-      .select('id, platform, from_name, from_email, subject, body_text, channel_name, received_at, ai_classification, matched_client_id, replied_in_platform, reply_count')
+      .select(MESSAGE_SELECT)
       .eq('tenant_id', ctx.tenantId)
       .eq('status', 'pending')
       .order('received_at', { ascending: false })
@@ -36,7 +49,7 @@ export const pending_messages: Skill<{ platform?: 'gmail' | 'slack' }, Array<any
     const ms = Date.now() - t0;
     if (error) return fail('message[]', error.message, ms);
     if (!data || data.length === 0) return fail('message[]', 'inbox_clear', ms);
-    return ok('message[]', data, ms);
+    return ok('message[]', data.map(annotateMessage), ms);
   },
 };
 
@@ -48,7 +61,7 @@ export const ai_flagged_requests: Skill<{}, Array<any>> = {
   run: async (_p, ctx) => {
     const t0 = Date.now();
     const { data, error } = await ctx.db.from('communication_messages')
-      .select('id, platform, from_name, subject, body_text, channel_name, ai_classification, received_at')
+      .select(MESSAGE_SELECT)
       .eq('tenant_id', ctx.tenantId)
       .neq('status', 'task_created')
       .filter('ai_classification->>should_create_task', 'eq', 'true')
@@ -57,7 +70,7 @@ export const ai_flagged_requests: Skill<{}, Array<any>> = {
     const ms = Date.now() - t0;
     if (error) return fail('message[]', error.message, ms);
     if (!data || data.length === 0) return fail('message[]', 'no_requests', ms);
-    return ok('message[]', data, ms);
+    return ok('message[]', data.map(annotateMessage), ms);
   },
 };
 
@@ -74,7 +87,7 @@ export const recent_messages: Skill<{ platform?: 'gmail' | 'slack'; limit?: numb
     const t0 = Date.now();
     const lim = Math.min(params.limit || 30, 50);
     let q = ctx.db.from('communication_messages')
-      .select('id, platform, from_name, from_email, subject, body_text, channel_name, thread_id, received_at, status, ai_classification, matched_client_id')
+      .select(MESSAGE_SELECT)
       .eq('tenant_id', ctx.tenantId)
       .order('received_at', { ascending: false })
       .limit(lim);
@@ -83,7 +96,7 @@ export const recent_messages: Skill<{ platform?: 'gmail' | 'slack'; limit?: numb
     const ms = Date.now() - t0;
     if (error) return fail('message[]', error.message, ms);
     if (!data || data.length === 0) return fail('message[]', 'no_messages_found', ms);
-    return ok('message[]', data, ms);
+    return ok('message[]', data.map(annotateMessage), ms);
   },
 };
 
@@ -107,7 +120,7 @@ export const messages_by_contact: Skill<
   run: async (params, ctx) => {
     const t0 = Date.now();
     let q = ctx.db.from('communication_messages')
-      .select('id, platform, from_name, from_email, subject, body_text, channel_name, thread_id, received_at, status, ai_classification, matched_client_id')
+      .select(MESSAGE_SELECT)
       .eq('tenant_id', ctx.tenantId)
       .order('received_at', { ascending: false })
       .limit(30);
@@ -122,7 +135,7 @@ export const messages_by_contact: Skill<
     const ms = Date.now() - t0;
     if (error) return fail('message[]', error.message, ms);
     if (!data || data.length === 0) return fail('message[]', 'no_messages_from_contact', ms);
-    return ok('message[]', data, ms);
+    return ok('message[]', data.map(annotateMessage), ms);
   },
 };
 
@@ -143,17 +156,21 @@ export const summary_stats: Skill<{}, Record<string, any>> = {
     // Fetch all msgs from last 7 days for counting (cheaper than separate count queries)
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const { data, error } = await ctx.db.from('communication_messages')
-      .select('id, platform, status, received_at')
+      .select('id, platform, status, received_at, ai_classification, replied_in_platform, reply_count, thread_id, channel_id, channel_name, from_name, from_email, subject, body_text')
       .eq('tenant_id', ctx.tenantId)
       .gte('received_at', weekAgo)
       .order('received_at', { ascending: false });
     const ms = Date.now() - t0;
     if (error) return fail('stats', error.message, ms);
     const all = data || [];
+    const groups = groupCommunicationMessages(all);
     const stats = {
       total_7d: all.length,
       pending: all.filter(m => m.status === 'pending').length,
-      done: all.filter(m => m.status === 'done' || m.status === 'archived').length,
+      handled: all.filter(isMessageHandled).length,
+      needs_follow_up: all.filter(needsMessageFollowUp).length,
+      conversations_7d: groups.length,
+      conversations_need_follow_up: groups.filter(g => g.followups > 0).length,
       task_created: all.filter(m => m.status === 'task_created').length,
       today: all.filter(m => m.received_at >= todayIso).length,
       by_platform: {
@@ -162,6 +179,62 @@ export const summary_stats: Skill<{}, Record<string, any>> = {
       },
     };
     return ok('stats', stats, ms);
+  },
+};
+
+// Recent messages grouped into cross-platform conversations. This gives
+// the LLM the same shape the UI uses: Gmail threads and Slack threads,
+// with handled/follow-up state already computed.
+export const conversation_summary: Skill<{ platform?: 'gmail' | 'slack'; limit?: number }, Array<any>> = {
+  id: 'inbox.conversation_summary',
+  description: 'Recent Gmail and Slack messages grouped by conversation/thread with follow-up state.',
+  kind: 'read',
+  validate: (p: any) => ({ platform: p?.platform, limit: p?.limit }),
+  run: async (params, ctx) => {
+    const t0 = Date.now();
+    const lim = Math.min(params.limit || 120, 200);
+    let q = ctx.db.from('communication_messages')
+      .select(MESSAGE_SELECT)
+      .eq('tenant_id', ctx.tenantId)
+      .neq('status', 'archived')
+      .order('received_at', { ascending: false })
+      .limit(lim);
+    if (params.platform) q = q.eq('platform', params.platform);
+    const { data, error } = await q;
+    const ms = Date.now() - t0;
+    if (error) return fail('conversation_group[]', error.message, ms);
+    if (!data || data.length === 0) return fail('conversation_group[]', 'no_conversations_found', ms);
+
+    const grouped = groupCommunicationMessages(data.map(annotateMessage)).slice(0, 25).map(group => ({
+      key: group.key,
+      platform: group.platform,
+      title: group.title,
+      source: group.sourceLabel,
+      participants: group.participants.slice(0, 5),
+      total_messages: group.total,
+      pending_messages: group.pending,
+      handled_messages: group.handled,
+      needs_follow_up: group.followups,
+      urgent_messages: group.urgent,
+      latest_at: group.latest?.received_at || null,
+      latest_summary: group.latest?.ai_classification?.summary || group.latest?.body_text || group.latest?.subject || null,
+      messages: group.messages.slice(0, 6).map((message: any) => ({
+        id: message.id,
+        from: message.from_name || message.from_email || message.channel_name || 'Unknown',
+        status: message.status,
+        handled: message.handled,
+        needs_follow_up: message.needs_follow_up,
+        replied_in_platform: message.replied_in_platform === true,
+        reply_count: message.reply_count || 0,
+        received_at: message.received_at,
+        summary: message.ai_classification?.summary || String(message.body_text || message.subject || '').slice(0, 240),
+        intent: message.ai_classification?.intent || null,
+        priority: message.ai_classification?.priority || null,
+        matched_client_id: message.matched_client_id || null,
+        matched_project_id: message.matched_project_id || null,
+      })),
+    }));
+    return ok('conversation_group[]', grouped, ms);
   },
 };
 
@@ -174,7 +247,7 @@ export const slack_channels: Skill<{}, Array<any>> = {
   run: async (_p, ctx) => {
     const t0 = Date.now();
     const { data, error } = await ctx.db.from('communication_messages')
-      .select('id, from_name, from_email, subject, body_text, channel_name, channel_id, received_at, status, ai_classification, replied_in_platform, reply_count')
+      .select(MESSAGE_SELECT)
       .eq('tenant_id', ctx.tenantId)
       .eq('platform', 'slack')
       .order('received_at', { ascending: false })
@@ -188,7 +261,7 @@ export const slack_channels: Skill<{}, Array<any>> = {
     for (const msg of data) {
       const ch = msg.channel_name || msg.channel_id || 'DM';
       if (!channelMap.has(ch)) channelMap.set(ch, { channel: ch, messages: [] });
-      channelMap.get(ch)!.messages.push(msg);
+      channelMap.get(ch)!.messages.push(annotateMessage(msg));
     }
     const grouped = Array.from(channelMap.values())
       .sort((a, b) => b.messages.length - a.messages.length);
@@ -200,6 +273,7 @@ export const inboxSkills = [
   pending_messages,
   ai_flagged_requests,
   recent_messages,
+  conversation_summary,
   messages_by_contact,
   summary_stats,
   slack_channels,

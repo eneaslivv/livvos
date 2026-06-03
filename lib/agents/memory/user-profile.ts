@@ -102,7 +102,9 @@ export function formatProfileForPrompt(profile: UserProfile): string {
     styleParts.push(`reply length: ${profile.preferred_reply_length}`);
   }
   if (profile.preferred_language && profile.preferred_language !== 'auto') {
-    styleParts.push(`always reply in ${profile.preferred_language}`);
+    styleParts.push(
+      `profile language preference: ${profile.preferred_language}; keep replies in English unless the user explicitly asks for another language`,
+    );
   }
   if (styleParts.length > 0) {
     bits.push(`User preferences — ${styleParts.join(', ')}.`);

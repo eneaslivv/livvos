@@ -337,6 +337,26 @@ const InboxView: React.FC<InboxViewProps> = ({ messages, loading, tokens, client
 
   const selected = selectedId ? messages.find(m => m.id === selectedId) || null : null;
 
+  useEffect(() => {
+    if (!selected?.id || !currentTenant?.id || !user?.id) return;
+    if (selected.read_at && selected.opened_at) return;
+    const nowIso = new Date().toISOString();
+    const patch = {
+      opened_at: selected.opened_at || nowIso,
+      opened_by: selected.opened_by || user.id,
+      read_at: selected.read_at || nowIso,
+      read_by: selected.read_by || user.id,
+    };
+    supabase
+      .from('communication_messages')
+      .update(patch)
+      .eq('id', selected.id)
+      .eq('tenant_id', currentTenant.id)
+      .then(({ error }) => {
+        if (error) errorLogger.warn('communications mark message read failed', { messageId: selected.id, error });
+      });
+  }, [selected?.id, selected?.read_at, selected?.opened_at, currentTenant?.id, user?.id]);
+
   // No integrations yet — show onboarding
   if (tokens.length === 0 && !loading) {
     return (
@@ -1168,6 +1188,88 @@ const MessageDetail: React.FC<MessageDetailProps> = ({ msg, allClients, projects
 // ────────────────────────────────────────────────────────────────────────
 //  SETTINGS
 // ────────────────────────────────────────────────────────────────────────
+const AccessStatusPanel: React.FC<{
+  gmailTokens: IntegrationToken[];
+  slackTokens: IntegrationToken[];
+  channels: SlackMonitoredChannel[];
+  renderSyncState: (token: IntegrationToken) => React.ReactNode;
+  renderScopes: (scope?: string | null) => React.ReactNode;
+}> = ({ gmailTokens, slackTokens, channels, renderSyncState, renderScopes }) => (
+  <div className="cx-settings-card">
+    <div className="cx-settings-head">
+      <div className="flex items-center gap-2.5">
+        <div className="cx-platform-ic" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+          <Icons.Shield size={15} />
+        </div>
+        <div>
+          <h3>Access status</h3>
+          <p className="text-[11px]" style={{ color: 'var(--os-fg-3)', marginTop: 2 }}>
+            Connected accounts, scopes, sync state, errors, and monitored channels.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div className="grid gap-3 p-4 md:grid-cols-2">
+      <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[12px] font-semibold text-zinc-800 dark:text-zinc-100">Gmail</span>
+          <span className="text-[11px] text-zinc-400">{gmailTokens.filter(t => t.is_active).length} active</span>
+        </div>
+        {gmailTokens.length === 0 ? (
+          <div className="text-[11px] text-zinc-400">Not connected</div>
+        ) : gmailTokens.map(t => (
+          <div key={t.id} className="py-2 border-t border-zinc-100 dark:border-zinc-800 first:border-t-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 text-[12px] font-medium text-zinc-800 dark:text-zinc-100 truncate">{t.gmail_email || 'Gmail account'}</div>
+              {renderSyncState(t)}
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              Last sync: {t.last_sync_at ? timeAgo(t.last_sync_at) : 'never'}
+              {t.gmail_watch_expiry ? ` · Watch expires ${timeAgo(t.gmail_watch_expiry)}` : ''}
+            </div>
+            <div className="mt-1">{renderScopes(t.scope)}</div>
+            {t.last_sync_error && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300 truncate" title={t.last_sync_error}>{t.last_sync_error}</div>}
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[12px] font-semibold text-zinc-800 dark:text-zinc-100">Slack</span>
+          <span className="text-[11px] text-zinc-400">{slackTokens.filter(t => t.is_active).length} active</span>
+        </div>
+        {slackTokens.length === 0 ? (
+          <div className="text-[11px] text-zinc-400">Not connected</div>
+        ) : slackTokens.map(t => {
+          const tokenChannels = channels.filter(c => c.integration_token_id === t.id);
+          return (
+            <div key={t.id} className="py-2 border-t border-zinc-100 dark:border-zinc-800 first:border-t-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 text-[12px] font-medium text-zinc-800 dark:text-zinc-100 truncate">{t.slack_team_name || 'Slack workspace'}</div>
+                {renderSyncState(t)}
+              </div>
+              <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                Last sync: {t.last_sync_at ? timeAgo(t.last_sync_at) : 'never'} · {tokenChannels.length} monitored
+              </div>
+              <div className="mt-1">{renderScopes(t.scope)}</div>
+              {tokenChannels.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {tokenChannels.slice(0, 8).map(c => (
+                    <span key={c.id} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-300" title={c.last_sync_error || undefined}>
+                      #{c.channel_name} · {c.inbound_filter || 'actionable'}
+                    </span>
+                  ))}
+                  {tokenChannels.length > 8 && <span className="text-[10px] text-zinc-400">+{tokenChannels.length - 8}</span>}
+                </div>
+              )}
+              {t.last_sync_error && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300 truncate" title={t.last_sync_error}>{t.last_sync_error}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+);
+
 interface SettingsViewProps {
   tenantId: string;
   tokens: IntegrationToken[];
@@ -1182,6 +1284,31 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
   const slackTokens = tokens.filter(t => t.platform === 'slack');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const renderSyncState = (token: IntegrationToken) => {
+    const state = token.last_sync_status || (token.last_sync_error ? 'error' : token.last_sync_at ? 'success' : 'idle');
+    const classes = state === 'error'
+      ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/25'
+      : state === 'syncing'
+        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/25'
+        : state === 'success'
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/25'
+          : 'bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700';
+    return <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium capitalize ${classes}`}>{state}</span>;
+  };
+
+  const renderScopes = (scope?: string | null) => {
+    if (!scope) return <span className="text-[11px] text-zinc-400">No scopes stored</span>;
+    return (
+      <div className="flex flex-wrap gap-1">
+        {scope.split(/\s+/).filter(Boolean).slice(0, 6).map(s => (
+          <span key={s} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-300 max-w-[220px] truncate" title={s}>
+            {s.replace('https://www.googleapis.com/auth/', '').replace('https://www.googleapis.com/', '')}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   const handleConnectGmail = async () => {
     setBusy(true);
@@ -1253,6 +1380,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
 
   return (
     <div className="space-y-4">
+      <AccessStatusPanel
+        gmailTokens={gmailTokens}
+        slackTokens={slackTokens}
+        channels={channels}
+        renderSyncState={renderSyncState}
+        renderScopes={renderScopes}
+      />
       {error && (
         <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200/50 text-[12px] text-rose-700 dark:text-rose-400">
           {error}

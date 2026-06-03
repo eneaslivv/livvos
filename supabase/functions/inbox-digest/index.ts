@@ -74,6 +74,73 @@ function adminClient() {
   })
 }
 
+function normalizeEmailSubject(subject: string | null | undefined): string {
+  return (subject || '').replace(/^(\s*(re|fw|fwd)\s*:\s*)+/i, '').trim().toLowerCase()
+}
+
+function conversationKey(m: any): string {
+  if (m.platform === 'gmail') {
+    return m.thread_id || `gmail:${normalizeEmailSubject(m.subject)}:${m.from_email || m.from_id || 'unknown'}`
+  }
+  return `slack:${m.channel_id || m.channel_name || 'unknown'}:${m.thread_id || m.external_id || m.id}`
+}
+
+function isHandled(m: any): boolean {
+  return ['replied', 'task_created', 'ignored', 'archived', 'sent', 'auto_resolved'].includes(m.status)
+    || Boolean(m.replied_in_platform || m.reply_count > 0 || m.last_reply_at)
+}
+
+function needsFollowUp(m: any): boolean {
+  if (isHandled(m)) return false
+  const c = m.ai_classification || {}
+  return c.should_create_task === true || ['urgent', 'new_request', 'follow_up', 'question', 'approval', 'feedback'].includes(c.intent)
+}
+
+function groupMessages(messages: any[]) {
+  const groups = new Map<string, any[]>()
+  for (const message of messages) {
+    const key = conversationKey(message)
+    groups.set(key, [...(groups.get(key) || []), message])
+  }
+  return Array.from(groups.entries()).map(([key, list]) => {
+    const sorted = list.sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime())
+    const latest = sorted[0]
+    const title = latest.platform === 'gmail'
+      ? (latest.subject || latest.from_name || latest.from_email || 'Email thread')
+      : (latest.channel_name ? `#${latest.channel_name}` : 'Slack conversation')
+    return {
+      id: key,
+      platform: latest.platform,
+      title,
+      source: latest.platform === 'gmail' ? 'Gmail' : title,
+      latest_message_id: latest.id,
+      latest_at: latest.received_at,
+      message_count: sorted.length,
+      pending_count: sorted.filter(needsFollowUp).length,
+      handled: sorted.every(isHandled),
+      urgent: sorted.some(m => m.ai_classification?.intent === 'urgent' || m.ai_classification?.priority === 'high'),
+      participants: Array.from(new Set(sorted.map(m => m.from_name || m.from_email || m.from_id || 'unknown'))).slice(0, 5),
+      matched_client_id: latest.matched_client_id || null,
+      matched_project_id: latest.matched_project_id || null,
+      messages: sorted.slice(0, 6).map(m => ({
+        id: m.id,
+        from: m.from_name || m.from_email || 'unknown',
+        at: m.received_at,
+        status: m.status,
+        intent: m.ai_classification?.intent || 'unknown',
+        priority: m.ai_classification?.priority || 'medium',
+        summary: m.ai_classification?.summary || (m.body_text || '').slice(0, 220),
+        should_create_task: Boolean(m.ai_classification?.should_create_task),
+      })),
+    }
+  }).sort((a, b) => {
+    const pa = (a.handled ? 0 : 2) + (a.urgent ? 2 : 0) + Math.min(a.pending_count, 2)
+    const pb = (b.handled ? 0 : 2) + (b.urgent ? 2 : 0) + Math.min(b.pending_count, 2)
+    if (pa !== pb) return pb - pa
+    return new Date(b.latest_at).getTime() - new Date(a.latest_at).getTime()
+  })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
   if (req.method !== 'POST') {
@@ -102,7 +169,7 @@ serve(async (req) => {
   catch { return new Response('invalid json', { status: 400, headers: cors }) }
   const tenantId: string | undefined = body.tenant_id
   const sinceHours = Number(body.since_hours) || 72
-  const limit = Math.min(40, Number(body.limit) || 20)
+  const limit = Math.min(80, Number(body.limit) || 25)
 
   if (!tenantId) {
     return new Response(JSON.stringify({ error: 'tenant_id required' }), {
@@ -153,23 +220,28 @@ async function generateDigest(admin: any, tenantId: string, sinceHours: number, 
   // won't have summary yet).
   const { data: messages, error: msgErr } = await admin
     .from('communication_messages')
-    .select('id, platform, from_name, from_email, channel_name, subject, body_text, received_at, status, ai_classification, matched_client_id, matched_project_id')
+    .select('id, platform, from_name, from_email, from_id, channel_id, channel_name, subject, body_text, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at, read_at, opened_at')
     .eq('tenant_id', tenantId)
     .gte('received_at', sinceIso)
     .eq('ai_processed', true)
     .not('ai_classification', 'is', null)
     .neq('status', 'archived')
     .order('received_at', { ascending: false })
-    .limit(limit)
+    .limit(Math.max(limit * 4, 80))
   if (msgErr) throw msgErr
+
+  const conversationGroups = groupMessages(messages || []).slice(0, limit)
 
   // Stats calculation
   const stats = {
     total: messages.length,
-    unread: messages.filter((m: any) => m.status === 'pending').length,
+    conversations: conversationGroups.length,
+    unread: messages.filter((m: any) => !m.read_at && !m.opened_at && !isHandled(m)).length,
     urgent: messages.filter((m: any) => m.ai_classification?.intent === 'urgent').length,
     new_requests: messages.filter((m: any) => m.ai_classification?.intent === 'new_request').length,
     follow_ups: messages.filter((m: any) => m.ai_classification?.intent === 'follow_up').length,
+    conversations_need_follow_up: conversationGroups.filter((g: any) => g.pending_count > 0).length,
+    handled: messages.filter(isHandled).length,
     info_only: messages.filter((m: any) => m.ai_classification?.intent === 'info_only').length,
   }
 
@@ -183,21 +255,27 @@ async function generateDigest(admin: any, tenantId: string, sinceHours: number, 
       cost_usd: 0,
       generated_at: new Date().toISOString(),
       message_count: 0,
+      conversation_count: 0,
+      conversation_groups: [],
     }
   }
 
   // Build LLM input — strip down to essentials, drop bodies if too long
-  const llmInput = messages.map((m: any) => ({
-    id: m.id,
-    platform: m.platform,
-    channel: m.channel_name || m.subject || '(direct)',
-    from: m.from_name || m.from_email || 'unknown',
-    body: (m.body_text || '').slice(0, 280),
-    intent: m.ai_classification?.intent || 'unknown',
-    summary: m.ai_classification?.summary || '',
-    has_request: m.ai_classification?.should_create_task || false,
-    matched_client_id: m.matched_client_id,
-    matched_project_id: m.matched_project_id,
+  const llmInput = conversationGroups.map((g: any) => ({
+    conversation_id: g.id,
+    title: g.title,
+    source: g.source,
+    platform: g.platform,
+    latest_message_id: g.latest_message_id,
+    latest_at: g.latest_at,
+    message_count: g.message_count,
+    pending_count: g.pending_count,
+    handled: g.handled,
+    urgent: g.urgent,
+    participants: g.participants,
+    matched_client_id: g.matched_client_id,
+    matched_project_id: g.matched_project_id,
+    messages: g.messages,
   }))
 
   const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -210,7 +288,7 @@ async function generateDigest(admin: any, tenantId: string, sinceHours: number, 
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify(llmInput) },
+        { role: 'user', content: JSON.stringify({ conversation_groups: llmInput }) },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3,
@@ -241,6 +319,8 @@ async function generateDigest(admin: any, tenantId: string, sinceHours: number, 
     cost_usd: +cost.toFixed(5),
     generated_at: new Date().toISOString(),
     message_count: messages.length,
+    conversation_count: conversationGroups.length,
+    conversation_groups: conversationGroups,
     since_hours: sinceHours,
   }
 }

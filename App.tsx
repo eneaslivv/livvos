@@ -6,6 +6,7 @@ import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { PageView, AppMode, NavParams } from './types';
 import { ensureAuthSession } from './lib/auth';
 import { supabase, cleanupLocalStorage } from './lib/supabase';
+import { logUserSignIn, logUserSignOut } from './lib/activity';
 
 // Updated Context Providers with security and enhanced features
 import { RBACProvider, useRBAC } from './context/RBACContext';
@@ -1101,11 +1102,11 @@ const App: React.FC = () => {
           if (import.meta.env.DEV) console.log('User signed in:', session?.user?.email);
           // Defer a tick so the profile row is settled before the insert.
           setTimeout(() => {
-            import('./lib/activity').then(m => m.logUserSignIn(session)).catch(() => {});
+            logUserSignIn(session).catch(() => {});
           }, 250);
         } else if (_event === 'SIGNED_OUT') {
           if (import.meta.env.DEV) console.log('User signed out');
-          import('./lib/activity').then(m => m.logUserSignOut()).catch(() => {});
+          logUserSignOut().catch(() => {});
         }
       }
     );

@@ -189,7 +189,14 @@ Deno.serve(async (req) => {
     const cap = Math.min(Math.max(1, limit), 200)
 
     for (const tok of tokens) {
+      let accountSynced = 0
       try {
+        await admin.from('integration_tokens').update({
+          last_sync_status: 'syncing',
+          last_sync_error: null,
+          last_sync_started_at: new Date().toISOString(),
+        }).eq('id', tok.id)
+
         const accessToken = await ensureFreshGmailToken(admin, tok)
 
         // 1. List recent message IDs in the INBOX.
@@ -245,6 +252,7 @@ Deno.serve(async (req) => {
               .insert({
                 tenant_id: ctx.tenant_id,
                 platform: 'gmail',
+                integration_token_id: tok.id,
                 external_id: m.id,
                 thread_id: m.threadId,
                 from_id: fromEmail,
@@ -264,6 +272,7 @@ Deno.serve(async (req) => {
               continue
             }
             totalSynced++
+            accountSynced++
 
             // 5. Classify in the background (don't await — let the response return fast).
             classifyAndUpdate(admin, inserted.id, {
@@ -282,10 +291,23 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update last_sync_at.
-        await admin.from('integration_tokens').update({ last_sync_at: new Date().toISOString() }).eq('id', tok.id)
+        const finishedAt = new Date().toISOString()
+        await admin.from('integration_tokens').update({
+          last_sync_at: finishedAt,
+          last_sync_finished_at: finishedAt,
+          last_sync_status: 'success',
+          last_sync_error: null,
+          last_sync_count: accountSynced,
+        }).eq('id', tok.id)
       } catch (accErr) {
-        errors.push(`account ${tok.gmail_email}: ${(accErr as Error).message}`)
+        const message = (accErr as Error).message
+        errors.push(`account ${tok.gmail_email}: ${message}`)
+        await admin.from('integration_tokens').update({
+          last_sync_status: 'error',
+          last_sync_error: message,
+          last_sync_finished_at: new Date().toISOString(),
+          last_sync_count: accountSynced,
+        }).eq('id', tok.id)
       }
     }
 

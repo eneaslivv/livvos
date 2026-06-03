@@ -89,14 +89,14 @@ async function loadTodayLoad(ctx: LoaderCtx): Promise<CategoryData | null> {
     const today = isoDay(ctx.now);
     const { data: tasks } = await ctx.db
       .from('tasks')
-      .select('id, title, priority, start_date, status, completed, assignee_ids, owner_id')
+      .select('id, title, priority, start_date, status, completed, assignee_id, assignee_ids, owner_id')
       .eq('tenant_id', ctx.tenantId)
       .eq('completed', false)
       .not('status', 'eq', 'cancelled')
       .not('start_date', 'is', null);
     const mine = (tasks || []).filter((t: any) => {
       const ids: string[] = Array.isArray(t.assignee_ids) ? t.assignee_ids : [];
-      return ids.includes(ctx.userId) || t.owner_id === ctx.userId;
+      return ids.includes(ctx.userId) || t.assignee_id === ctx.userId || t.owner_id === ctx.userId;
     });
     const overdue = mine.filter((t: any) => t.start_date < today);
     const dueToday = mine.filter((t: any) => t.start_date === today);

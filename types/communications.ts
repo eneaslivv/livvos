@@ -76,6 +76,7 @@ export interface CommunicationMessage {
   id: string;
   tenant_id: string;
   platform: Platform;
+  integration_token_id?: string | null;
 
   external_id: string;
   thread_id: string | null;
@@ -94,6 +95,10 @@ export interface CommunicationMessage {
   thread_context: ThreadContextItem[] | null;
 
   received_at: string;
+  opened_at?: string | null;
+  opened_by?: string | null;
+  read_at?: string | null;
+  read_by?: string | null;
 
   ai_processed: boolean;
   ai_classification: AIClassification | null;
@@ -145,6 +150,11 @@ export interface IntegrationToken {
 
   connected_at: string;
   last_sync_at: string | null;
+  last_sync_status?: 'idle' | 'syncing' | 'success' | 'error';
+  last_sync_error?: string | null;
+  last_sync_started_at?: string | null;
+  last_sync_finished_at?: string | null;
+  last_sync_count?: number;
   is_active: boolean;
   created_by: string | null;
   created_at: string;
@@ -160,6 +170,10 @@ export interface SlackMonitoredChannel {
   channel_name: string;
   channel_type: ChannelType;
   is_active: boolean;
+  inbound_filter?: 'all' | 'mentions' | 'actionable';
+  last_sync_at?: string | null;
+  last_sync_error?: string | null;
+  last_message_at?: string | null;
   /** When set, every message coming through this channel auto-fills
    *  matched_project_id on communication_messages — overrides the AI
    *  matcher and gives the inbox a stable channel→project pairing. */

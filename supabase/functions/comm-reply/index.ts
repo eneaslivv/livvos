@@ -128,20 +128,35 @@ Deno.serve(async (req) => {
     if (!msg) return json({ error: 'Message not found' }, 404)
 
     // Find the integration token that received it.
+    let tok: any = null
+    if (msg.integration_token_id) {
+      const { data: exactToken } = await admin
+        .from('integration_tokens')
+        .select('*')
+        .eq('id', msg.integration_token_id)
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('platform', msg.platform)
+        .eq('is_active', true)
+        .maybeSingle()
+      tok = exactToken
+    }
+
     let tokenQuery = admin
       .from('integration_tokens')
       .select('*')
       .eq('tenant_id', ctx.tenant_id)
       .eq('platform', msg.platform)
       .eq('is_active', true)
-    if (msg.platform === 'gmail') tokenQuery = tokenQuery.eq('gmail_email', msg.from_email || msg.from_id)
+    if (!tok && msg.platform === 'gmail') tokenQuery = tokenQuery.eq('gmail_email', msg.from_email || msg.from_id)
     // (For Gmail we can't perfectly know which connected mailbox received
     // it; for now we pick by from_email match if available, falling back
     // to the first active gmail token. A better approach would be to
     // store the receiving inbox on the message at ingest time — Phase 2.5.)
 
-    const { data: tokens } = await tokenQuery
-    let tok = tokens?.[0]
+    if (!tok) {
+      const { data: tokens } = await tokenQuery
+      tok = tokens?.[0]
+    }
 
     if (!tok && msg.platform === 'gmail') {
       // Fallback: any active Gmail token for this tenant.
@@ -198,6 +213,10 @@ Deno.serve(async (req) => {
         replied_at: new Date().toISOString(),
         replied_by: ctx.user_id,
         reply_sent: body,
+        read_at: msg.read_at || new Date().toISOString(),
+        read_by: msg.read_by || ctx.user_id,
+        opened_at: msg.opened_at || new Date().toISOString(),
+        opened_by: msg.opened_by || ctx.user_id,
       })
       .eq('id', message_id)
       .select()

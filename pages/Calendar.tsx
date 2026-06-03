@@ -1628,25 +1628,27 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
       {/* Day/Agenda View (mobile) */}
       {view === 'day' && (
-        <DayAgendaView
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-          getDayEvents={getDayEvents}
-          getDayTasks={getDayTasks}
-          getTaskColor={getTaskColor}
-          getOverdueDays={getOverdueDays}
-          getClientLabel={getClientLabel}
-          getMemberName={getMemberName}
-          onOpenTaskDetail={handleOpenTaskDetail}
-          onSlotClick={(e, dateStr, hour) => {
-            setSlotPopover({
-              clickX: e.clientX,
-              clickY: e.clientY,
-              date: dateStr,
-              hour: hour,
-            });
-          }}
-        />
+        <div className="h-[calc(100vh-220px)] min-h-[520px] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <DayAgendaView
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            getDayEvents={getDayEvents}
+            getDayTasks={getDayTasks}
+            getTaskColor={getTaskColor}
+            getOverdueDays={getOverdueDays}
+            getClientLabel={getClientLabel}
+            getMemberName={getMemberName}
+            onOpenTaskDetail={handleOpenTaskDetail}
+            onSlotClick={(e, dateStr, hour) => {
+              setSlotPopover({
+                clickX: e.clientX,
+                clickY: e.clientY,
+                date: dateStr,
+                hour: hour,
+              });
+            }}
+          />
+        </div>
       )}
 
       {/* Week View */}
@@ -2703,27 +2705,29 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
       })()}
 
       {/* Selected Date Panel + Stats */}
-      <SelectedDatePanel
-        selectedDate={selectedDate}
-        calendarMode={calendarMode}
-        getDayEvents={getDayEvents}
-        getDayTasks={getDayTasks}
-        contentPlatforms={CONTENT_PLATFORMS}
-        stats={viewStats.stats}
-        filteredEventsCount={filteredEvents.length}
-        periodLabel={viewStats.periodLabel}
-        onEditEvent={handleEditEvent}
-        onDeleteEvent={(id) => handleDeleteEvent(id)}
-        onRescheduleEvent={handleRescheduleEvent}
-        toggleTaskComplete={toggleTaskComplete}
-        onOpenTaskDetail={handleOpenTaskDetail}
-        getMemberName={getMemberName}
-        getMemberAvatar={getMemberAvatar}
-        getProjectLabel={getProjectLabel}
-        getClientLabel={getClientLabel}
-        getElapsedDays={getElapsedDays}
-        tasks={tasks}
-      />
+      {view !== 'day' && (
+        <SelectedDatePanel
+          selectedDate={selectedDate}
+          calendarMode={calendarMode}
+          getDayEvents={getDayEvents}
+          getDayTasks={getDayTasks}
+          contentPlatforms={CONTENT_PLATFORMS}
+          stats={viewStats.stats}
+          filteredEventsCount={filteredEvents.length}
+          periodLabel={viewStats.periodLabel}
+          onEditEvent={handleEditEvent}
+          onDeleteEvent={(id) => handleDeleteEvent(id)}
+          onRescheduleEvent={handleRescheduleEvent}
+          toggleTaskComplete={toggleTaskComplete}
+          onOpenTaskDetail={handleOpenTaskDetail}
+          getMemberName={getMemberName}
+          getMemberAvatar={getMemberAvatar}
+          getProjectLabel={getProjectLabel}
+          getClientLabel={getClientLabel}
+          getElapsedDays={getElapsedDays}
+          tasks={tasks}
+        />
+      )}
     </div>
   );
 };

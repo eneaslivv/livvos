@@ -254,15 +254,38 @@ async function processNotification(email: string, newHistoryId: string) {
     return
   }
 
+  await admin.from('integration_tokens').update({
+    last_sync_status: 'syncing',
+    last_sync_error: null,
+    last_sync_started_at: new Date().toISOString(),
+  }).eq('id', tok.id)
+
   // history.list needs a startHistoryId. If we've never stored one (fresh
   // setup), just stamp the new one and bail — we'll catch this account
   // on the next event (the auto-poll also runs every 90s as backup).
   if (!tok.gmail_history_id) {
-    await admin.from('integration_tokens').update({ gmail_history_id: newHistoryId }).eq('id', tok.id)
+    const finishedAt = new Date().toISOString()
+    await admin.from('integration_tokens').update({
+      gmail_history_id: newHistoryId,
+      last_sync_at: finishedAt,
+      last_sync_finished_at: finishedAt,
+      last_sync_status: 'success',
+      last_sync_count: 0,
+    }).eq('id', tok.id)
     return
   }
 
-  const accessToken = await ensureFreshToken(admin, tok)
+  let accessToken: string
+  try {
+    accessToken = await ensureFreshToken(admin, tok)
+  } catch (err) {
+    await admin.from('integration_tokens').update({
+      last_sync_status: 'error',
+      last_sync_error: (err as Error).message,
+      last_sync_finished_at: new Date().toISOString(),
+    }).eq('id', tok.id)
+    return
+  }
   const tenantId = tok.tenant_id
 
   // Pull every messageAdded since our last cursor.
@@ -298,7 +321,14 @@ async function processNotification(email: string, newHistoryId: string) {
 
   // Dedupe against existing rows.
   if (newIds.length === 0) {
-    await admin.from('integration_tokens').update({ gmail_history_id: newHistoryId }).eq('id', tok.id)
+    const finishedAt = new Date().toISOString()
+    await admin.from('integration_tokens').update({
+      gmail_history_id: newHistoryId,
+      last_sync_at: finishedAt,
+      last_sync_finished_at: finishedAt,
+      last_sync_status: 'success',
+      last_sync_count: 0,
+    }).eq('id', tok.id)
     return
   }
 
@@ -319,6 +349,7 @@ async function processNotification(email: string, newHistoryId: string) {
   const clientsCtx = (clientsList || []).map((c: any) => ({ id: c.id, name: c.name || '', email: c.email || '', company: c.company || '' }))
   const projectsCtx = (projectsList || []).map((p: any) => ({ id: p.id, title: p.title || '', client_id: p.client_id || null, client_name: p.clients?.name || null }))
 
+  let insertedCount = 0
   for (const msgId of fresh) {
     try {
       const m = await gmailFetch(accessToken, `/users/me/messages/${msgId}?format=full`) as GmailMessagePayload
@@ -346,6 +377,7 @@ async function processNotification(email: string, newHistoryId: string) {
         .insert({
           tenant_id: tenantId,
           platform: 'gmail',
+          integration_token_id: tok.id,
           external_id: m.id,
           thread_id: m.threadId,
           from_id: fromEmail,
@@ -364,6 +396,7 @@ async function processNotification(email: string, newHistoryId: string) {
         if (!insErr.message.includes('duplicate')) console.error('[gmail-events] insert:', insErr)
         continue
       }
+      insertedCount++
       classifyAndUpdate(admin, inserted.id, {
         platform: 'gmail',
         from_name: fromName,
@@ -381,8 +414,13 @@ async function processNotification(email: string, newHistoryId: string) {
   }
 
   // Advance cursor + stamp last_sync_at.
+  const finishedAt = new Date().toISOString()
   await admin.from('integration_tokens').update({
     gmail_history_id: newHistoryId,
-    last_sync_at: new Date().toISOString(),
+    last_sync_at: finishedAt,
+    last_sync_finished_at: finishedAt,
+    last_sync_status: 'success',
+    last_sync_error: null,
+    last_sync_count: insertedCount,
   }).eq('id', tok.id)
 }
