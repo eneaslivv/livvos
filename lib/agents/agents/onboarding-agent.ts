@@ -30,6 +30,7 @@ const ONBOARDING_ACTION_PROTOCOL = [
   '  create_client          name="..." email="..." company="..."',
   '  create_project         title="..." client_id="<uuid>?" deadline="YYYY-MM-DD?"',
   '  create_task            title="..." project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="urgent|high|medium|low" description="..."',
+  '  create_task_group      title="<parent>" project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..." subtasks="Subtarea 1 | Subtarea 2 | Subtarea 3"  (PREFERILO cuando hay varias tareas relacionadas: 1 padre + subtareas, NO muchas tareas sueltas; repartí con assignee_id)',
   '  update_client_notes    client_id="<uuid>" notes="..."',
   '  set_project_status     project_id="<uuid>" status="Active|Pending|Review|Completed|Archived"',
   '  set_project_deadline   project_id="<uuid>" deadline="YYYY-MM-DD"',

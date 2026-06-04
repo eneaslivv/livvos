@@ -55,6 +55,7 @@ const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
   // Tasks
   'complete_task', 'reopen_task', 'start_task',
   'update_task_priority', 'update_task_due_date', 'create_task',
+  'create_task_group',
   'assign_task', 'delete_task',
   // Finance
   'mark_installment_paid', 'mark_installment_pending',

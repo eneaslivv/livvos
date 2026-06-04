@@ -262,6 +262,8 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
     '  update_task_due_date   task_id="<uuid>" due_date="YYYY-MM-DD"',
     '  assign_task            task_id="<uuid>" assignee_id="<uuid>"',
     '  create_task            title="..." project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..."',
+    '  create_task_group      title="<parent>" project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..." subtasks="Subtarea 1 | Subtarea 2 | Subtarea 3"',
+    '    ↳ PREFER create_task_group whenever a request/plan/conversation implies SEVERAL related to-dos: emit ONE parent task with the rest as pipe-separated subtasks. NEVER spray many flat create_task — it clutters the board. Distribute work with assignee_id (a subtask may carry its own owner as "Título @<uuid>").',
     '  delete_task            task_id="<uuid>"   (DESTRUCTIVE — only emit when the user explicitly asked to delete)',
   ].join('\n'),
   finance: [
@@ -325,6 +327,7 @@ export type ActionKind =
   // Tasks
   | 'complete_task' | 'reopen_task' | 'start_task'
   | 'update_task_priority' | 'update_task_due_date' | 'create_task'
+  | 'create_task_group'
   | 'assign_task' | 'delete_task'
   // Finance
   | 'mark_installment_paid' | 'mark_installment_pending'

@@ -108,6 +108,57 @@ export async function executeProposedAction(
         return { ok: true, summary: `Created task "${action.params.title}"`, newRowId: (created as any)?.id };
       }
 
+      case 'create_task_group': {
+        // One PARENT task + pipe-separated subtasks → keeps the board clean
+        // instead of spraying many flat tasks. Each subtask may carry its own
+        // owner as "Título @<uuid>"; otherwise it inherits the parent's.
+        if (!helpers.createTask) throw new Error('createTask helper not provided');
+        const parentAssignees: string[] = action.params.assignee_id ? [action.params.assignee_id] : [];
+        const parent = await helpers.createTask({
+          title: action.params.title,
+          description: action.params.description,
+          priority: action.params.priority || 'medium',
+          status: 'todo',
+          completed: false,
+          owner_id: ctx.userId,
+          project_id: action.params.project_id,
+          client_id: action.params.client_id,
+          start_date: action.params.due_date,
+          assignee_ids: parentAssignees,
+          order_index: 0,
+        });
+        const parentId = (parent as any)?.id;
+        const subs = String(action.params.subtasks || '')
+          .split('|').map(s => s.trim()).filter(Boolean);
+        let made = 0;
+        for (let i = 0; i < subs.length; i++) {
+          let title = subs[i];
+          let subAssignees = parentAssignees;
+          const at = title.lastIndexOf('@');
+          if (at > 0) {
+            const maybe = title.slice(at + 1).trim();
+            if (/^[0-9a-fA-F-]{16,}$/.test(maybe)) { subAssignees = [maybe]; title = title.slice(0, at).trim(); }
+          }
+          if (!title) continue;
+          try {
+            await helpers.createTask({
+              title,
+              priority: action.params.priority || 'medium',
+              status: 'todo',
+              completed: false,
+              owner_id: ctx.userId,
+              project_id: action.params.project_id,
+              client_id: action.params.client_id,
+              parent_task_id: parentId,
+              assignee_ids: subAssignees,
+              order_index: i + 1,
+            });
+            made++;
+          } catch { /* skip a bad subtask, keep the rest */ }
+        }
+        return { ok: true, summary: `Created "${action.params.title}" with ${made} subtask${made === 1 ? '' : 's'}`, newRowId: parentId };
+      }
+
       case 'assign_task': {
         if (!helpers.updateTask) throw new Error('updateTask helper not provided');
         // Single-assignee for now (covers the 95% case of "asignale
