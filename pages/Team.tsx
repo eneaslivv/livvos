@@ -6,6 +6,8 @@ import { useRBAC, Permission } from '../context/RBACContext';
 import { useSupabase } from '../hooks/useSupabase';
 import { useAuth } from '../hooks/useAuth';
 import { AgentsCatalog } from '../components/team/AgentsCatalog';
+import { AGENTS } from '../lib/agents/registry';
+import { auroraRegistry } from '../lib/aurora/agents';
 
 // Friendly names for the role-preview chips. Mirrors MODULE_META in Security.tsx.
 const ROLE_MODULE_LABELS: Record<string, string> = {
@@ -105,6 +107,9 @@ export const Team: React.FC = () => {
     }, [members, filterTab, search]);
 
     const agentCount = useMemo(() => members.filter(m => m.is_agent).length, [members]);
+    // The Agents tab shows the AI agents catalog (core + Aurora) plus any human
+    // members flagged as agents — count all of them, not just is_agent humans.
+    const aiAgentCount = AGENTS.length + auroraRegistry.length;
     const peopleCount = members.length - agentCount;
 
     // Load tasks when member is selected
@@ -333,7 +338,7 @@ export const Team: React.FC = () => {
                 {([
                     { key: 'all' as FilterTab, label: 'All', count: members.length },
                     { key: 'people' as FilterTab, label: 'People', count: peopleCount },
-                    { key: 'agents' as FilterTab, label: 'Agents', count: agentCount },
+                    { key: 'agents' as FilterTab, label: 'Agents', count: agentCount + aiAgentCount },
                 ]).map(tab => (
                     <button
                         key={tab.key}

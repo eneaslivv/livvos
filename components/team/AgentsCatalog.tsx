@@ -73,6 +73,40 @@ const UsageChip: React.FC<{ usage?: Usage }> = ({ usage }) => {
   );
 };
 
+// Operational intelligence learned from real usage (agent_metrics rollups):
+// speed, confusion (re-asks), wasted calls (skills returning no data) and
+// satisfaction — plus a cost/quality hint that ties into the disable feature.
+interface IntelView { turns: number; avgSec: number; reaskRate: number; nodataRate: number; up: number; down: number }
+
+const intelInsight = (v: IntelView): { tone: 'rose' | 'amber' | 'emerald'; text: string } => {
+  if (v.nodataRate > 0.5) return { tone: 'amber', text: 'Sus skills devuelven datos vacíos seguido — desactivá las que no aportan para ahorrar tokens y latencia.' };
+  if (v.avgSec > 9) return { tone: 'amber', text: `Respuestas lentas (~${v.avgSec.toFixed(0)}s). Menos skills por turno bajan costo y tiempo.` };
+  if (v.reaskRate > 0.3) return { tone: 'amber', text: 'Genera re-preguntas seguido — afiná sus instrucciones para que acierte a la primera.' };
+  if (v.down > v.up && v.down > 0) return { tone: 'rose', text: 'Baja satisfacción — revisá el prompt o las skills activas.' };
+  return { tone: 'emerald', text: 'Operando bien según el uso reciente.' };
+};
+
+const IntelStrip: React.FC<{ v?: IntelView }> = ({ v }) => {
+  if (!v || v.turns === 0) return null;
+  const ins = intelInsight(v);
+  const toneCls = ins.tone === 'rose' ? 'text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10'
+    : ins.tone === 'amber' ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10'
+    : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10';
+  const chip = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300';
+  return (
+    <div className="mt-3 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 p-2.5">
+      <div className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1.5">Inteligencia · aprendido del uso</div>
+      <div className="flex flex-wrap gap-1.5 text-[10px]">
+        <span className={chip}><Icons.Clock size={9} /> {v.avgSec.toFixed(1)}s prom.</span>
+        <span className={chip}><Icons.RefreshCw size={9} /> {(v.reaskRate * 100).toFixed(0)}% re-pregunta</span>
+        <span className={chip}><Icons.AlertCircle size={9} /> {(v.nodataRate * 100).toFixed(0)}% sin datos</span>
+        {(v.up + v.down) > 0 && <span className={chip}>{v.up}↑ / {v.down}↓</span>}
+      </div>
+      <p className={`mt-1.5 text-[11px] px-2 py-1 rounded-md leading-snug ${toneCls}`}>{ins.text}</p>
+    </div>
+  );
+};
+
 export const AgentsCatalog: React.FC = () => {
   const { currentTenant } = useTenant();
   const { user } = useAuth();
@@ -80,6 +114,7 @@ export const AgentsCatalog: React.FC = () => {
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [usage, setUsage] = useState<Record<string, Usage>>({});
+  const [intel, setIntel] = useState<Record<string, IntelView>>({});
   const [overrides, setOverrides] = useState<Record<string, OverrideState>>({});
 
   // Edit state
@@ -108,6 +143,46 @@ export const AgentsCatalog: React.FC = () => {
           if (r.created_at > agg[id].last) agg[id].last = r.created_at;
         }
         setUsage(agg);
+      } catch { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
+  // Operational intelligence from the daily metric rollups.
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.from('agent_metrics')
+          .select('agent_id, turns, thumbs_up, thumbs_down, re_asks, avg_ms_total, skill_no_data_rate')
+          .eq('tenant_id', tenantId);
+        if (cancelled || !data) return;
+        const agg: Record<string, { turns: number; up: number; down: number; reasks: number; ms: number; nd: number }> = {};
+        for (const r of data as any[]) {
+          const id = String(r.agent_id || 'unknown');
+          const t = Number(r.turns) || 0;
+          if (!agg[id]) agg[id] = { turns: 0, up: 0, down: 0, reasks: 0, ms: 0, nd: 0 };
+          const a = agg[id];
+          a.turns += t;
+          a.up += Number(r.thumbs_up) || 0;
+          a.down += Number(r.thumbs_down) || 0;
+          a.reasks += Number(r.re_asks) || 0;
+          a.ms += (Number(r.avg_ms_total) || 0) * t;
+          a.nd += (Number(r.skill_no_data_rate) || 0) * t;
+        }
+        const view: Record<string, IntelView> = {};
+        for (const [id, a] of Object.entries(agg)) {
+          const denom = a.turns || 1;
+          view[id] = {
+            turns: a.turns,
+            avgSec: (a.ms / denom) / 1000,
+            reaskRate: a.reasks / denom,
+            nodataRate: a.nd / denom,
+            up: a.up, down: a.down,
+          };
+        }
+        setIntel(view);
       } catch { /* best-effort */ }
     })();
     return () => { cancelled = true; };
@@ -232,6 +307,8 @@ export const AgentsCatalog: React.FC = () => {
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">{reads} lectura</span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">{writes} acción</span>
                 </div>
+
+                <IntelStrip v={intel[a.id]} />
 
                 {/* Skills (disabled ones struck through) */}
                 <div className="mt-3">
