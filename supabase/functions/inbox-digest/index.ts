@@ -226,6 +226,10 @@ async function generateDigest(admin: any, tenantId: string, sinceHours: number, 
     .eq('ai_processed', true)
     .not('ai_classification', 'is', null)
     .neq('status', 'archived')
+    // Exclude our own messages (sent mail / a linked self/team identity) — the
+    // self-identity trigger tags them direction='outbound'. The digest should
+    // summarize what NEEDS attention, not what the operator wrote themselves.
+    .neq('direction', 'outbound')
     .order('received_at', { ascending: false })
     .limit(Math.max(limit * 4, 80))
   if (msgErr) throw msgErr
