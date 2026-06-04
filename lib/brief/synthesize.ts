@@ -39,6 +39,9 @@ export interface SynthesizeArgs {
   includeRecommendation: boolean;
   learnedTraits?: string | null;
   strategyContext?: string | null;
+  /** Learned topic weights (agent domain → 0..1). Orders the brief by what
+   *  the user actually works on most. */
+  topicWeights?: Record<string, number>;
 }
 
 export async function synthesizeBrief(args: SynthesizeArgs): Promise<BriefSynthesis | null> {
@@ -46,7 +49,21 @@ export async function synthesizeBrief(args: SynthesizeArgs): Promise<BriefSynthe
   const partOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
 
-  const cardBlock = args.cards.map(c => {
+  // Order the briefing by what the user actually works on most (learned topic
+  // weights), so the most-relevant topics lead instead of a fixed order.
+  const CARD_DOMAIN: Record<string, string> = {
+    today_load: 'tasks', upcoming: 'calendar', cashflow: 'finance',
+    pipeline: 'clients', inbox: 'inbox', content: 'content', team_kpis: 'team', strategy: 'strategy',
+  };
+  const tw = args.topicWeights || {};
+  const weightOf = (id: string) => tw[CARD_DOMAIN[id] || id] || 0;
+  const cards = [...args.cards].sort((a, b) => weightOf(b.id) - weightOf(a.id));
+  const topDomains = Object.entries(tw).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => d);
+  const priorityLine = topDomains.length
+    ? `The user works most on: ${topDomains.join(', ')}. Lead the briefing with those topics, then cover the rest.`
+    : '';
+
+  const cardBlock = cards.map(c => {
     const highlights = c.highlights.map(h => `${h.label}=${h.value}`).join(' | ');
     const bullets = c.bullets.length > 0
       ? c.bullets.map(b => `    - ${cleanBriefText(b)}`).join('\n')
@@ -59,6 +76,7 @@ export async function synthesizeBrief(args: SynthesizeArgs): Promise<BriefSynthe
     `Today is ${dayName}, ${partOfDay}. The user is ${args.userName || 'the operator'}.`,
     TONE_HINTS[args.tone] || TONE_HINTS.concise,
     args.learnedTraits ? `Known user preferences:\n${args.learnedTraits}` : '',
+    priorityLine,
     args.strategyContext ? `Strategic context:\n${args.strategyContext}` : '',
     '',
     'REAL DATA. These are the ONLY facts. Do not invent data, names, dates, amounts, clients, or progress.',

@@ -295,18 +295,26 @@ export async function executeProposedAction(
         // Pull the message to derive client/project linkage from its
         // existing ai_classification.
         const { data: msg } = await ctx.db.from('communication_messages')
-          .select('matched_client_id, matched_project_id, body_text')
+          .select('matched_client_id, matched_project_id, body_text, ai_classification')
           .eq('id', action.params.message_id).maybeSingle();
+        // Carry urgency + a due date over from the message so tasks born from
+        // Slack/mail land with the right priority/deadline instead of as flat
+        // medium items. Priority: explicit param → AI classification → medium.
+        const cls = (msg as any)?.ai_classification || {};
+        const clsPriority = String(cls.priority || '').toLowerCase();
+        const taskPriority = action.params.priority
+          || (['urgent', 'high', 'medium', 'low'].includes(clsPriority) ? clsPriority : 'medium');
         const created = await helpers.createTask({
-          title: action.params.task_title || 'Task from inbox',
+          title: action.params.task_title || (cls.summary ? String(cls.summary).slice(0, 80) : 'Task from inbox'),
           description: (msg as any)?.body_text?.slice(0, 500) || undefined,
           status: 'todo',
           completed: false,
           owner_id: ctx.userId,
           client_id: (msg as any)?.matched_client_id || undefined,
           project_id: (msg as any)?.matched_project_id || undefined,
-          priority: 'medium',
-          assignee_ids: [],
+          priority: taskPriority,
+          start_date: action.params.due_date || undefined,
+          assignee_ids: action.params.assignee_id ? [action.params.assignee_id] : [],
           order_index: 0,
         });
         // Mark message as converted so it stops appearing in "requests"

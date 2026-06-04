@@ -300,6 +300,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             tone: usePrefs.synthesis_tone,
             includeRecommendation: usePrefs.show_top_recommendation,
             learnedTraits: profile?.learned_traits || null,
+            topicWeights: (profile as any)?.topic_weights || {},
             strategyContext: strategyCtx,
           });
           if (!synthResult) {

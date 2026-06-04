@@ -285,7 +285,8 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
   inbox: [
     'Supported actions for this agent:',
     '  mark_message_done      message_id="<uuid>"',
-    '  convert_to_task        message_id="<uuid>" task_title="..."',
+    '  convert_to_task        message_id="<uuid>" task_title="..." priority="urgent|high|medium|low?" due_date="YYYY-MM-DD?" assignee_id="<uuid>?"',
+    '    ↳ Heredá la urgencia del mensaje (clasificación), poné due_date si pide un plazo, y asigná con assignee_id a la persona que corresponde.',
     '  draft_reply            message_id="<uuid>" reply_body="..."',
   ].join('\n'),
   clients: [
