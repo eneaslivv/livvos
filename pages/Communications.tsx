@@ -1196,7 +1196,8 @@ const AccessStatusPanel: React.FC<{
   renderSyncState: (token: IntegrationToken) => React.ReactNode;
   renderScopes: (scope?: string | null) => React.ReactNode;
   onChannelsChange?: () => void;
-}> = ({ gmailTokens, slackTokens, channels, renderSyncState, renderScopes, onChannelsChange }) => (
+  onReconnectGmail?: () => void;
+}> = ({ gmailTokens, slackTokens, channels, renderSyncState, renderScopes, onChannelsChange, onReconnectGmail }) => (
   <div className="cx-settings-card">
     <div className="cx-settings-head">
       <div className="flex items-center gap-2.5">
@@ -1230,7 +1231,26 @@ const AccessStatusPanel: React.FC<{
               {t.gmail_watch_expiry ? ` · Watch expires ${timeAgo(t.gmail_watch_expiry)}` : ''}
             </div>
             <div className="mt-1">{renderScopes(t.scope)}</div>
-            {t.last_sync_error && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300 truncate" title={t.last_sync_error}>{t.last_sync_error}</div>}
+            {t.last_sync_error && (
+              /invalid_grant|token refresh failed|invalid_token|unauthor|\b40[13]\b/i.test(t.last_sync_error) ? (
+                <div className="mt-1.5 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-500/10 p-2">
+                  <div className="text-[11px] font-medium text-rose-700 dark:text-rose-300">La conexión con Gmail expiró</div>
+                  <div className="mt-0.5 text-[10.5px] text-rose-600/80 dark:text-rose-300/70">
+                    Google pidió volver a autorizar (el token de actualización venció o se revocó). Reconectá para retomar la sincronización.
+                  </div>
+                  {onReconnectGmail && (
+                    <button
+                      onClick={onReconnectGmail}
+                      className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-rose-700"
+                    >
+                      <Icons.RefreshCw size={10} /> Reconectar Gmail
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300 truncate" title={t.last_sync_error}>{t.last_sync_error}</div>
+              )
+            )}
           </div>
         ))}
       </div>
@@ -1563,6 +1583,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
         renderSyncState={renderSyncState}
         renderScopes={renderScopes}
         onChannelsChange={onChannelsChange}
+        onReconnectGmail={handleConnectGmail}
       />
       <SelfIdentitiesPanel tenantId={tenantId} />
       {error && (
