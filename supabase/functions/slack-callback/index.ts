@@ -105,6 +105,28 @@ Deno.serve(async (req) => {
       if (error) return redirectBack('error', error.message.slice(0, 80))
     }
 
+    // Auto-link the connecting user's OWN Slack identity (authed_user.id is the
+    // person who authorized the install). This means their own messages in
+    // monitored channels are recognized as self and never surfaced as inbound
+    // follow-ups. Best-effort — a failure here must not fail the connect.
+    const authedUserId = data.authed_user?.id
+    if (authedUserId && verified.user_id) {
+      try {
+        const { data: prof } = await admin
+          .from('profiles')
+          .select('slack_user_id, comm_self_slack_ids')
+          .eq('id', verified.user_id)
+          .maybeSingle()
+        const existingSelf: string[] = (prof?.comm_self_slack_ids as string[]) || []
+        if (!existingSelf.includes(authedUserId)) {
+          await admin.from('profiles').update({
+            slack_user_id: prof?.slack_user_id || authedUserId,
+            comm_self_slack_ids: Array.from(new Set([...existingSelf, authedUserId])),
+          }).eq('id', verified.user_id)
+        }
+      } catch { /* non-fatal: identity auto-link is a convenience */ }
+    }
+
     return redirectBack('success', teamName)
   } catch (err) {
     return redirectBack('error', (err as Error).message.slice(0, 100))

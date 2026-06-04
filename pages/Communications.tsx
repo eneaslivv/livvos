@@ -1290,6 +1290,162 @@ const AccessStatusPanel: React.FC<{
   </div>
 );
 
+// ────────────────────────────────────────────────────────────────────────
+// SelfIdentitiesPanel — lets the operator mark which external senders are
+// actually THEM (a personal Slack account, an alternate email) even when they
+// differ from the LIVV OS login. Linking records the identity on the profile
+// AND retroactively re-tags the user's own past messages as outbound + seen,
+// so they drop out of "unopened" / "follow-up" and the system can tell which
+// comments come from the account owner. Backed by the link_comm_self_identity RPC.
+type SelfSenderRow = {
+  platform: string;
+  key: string;
+  external_id: string | null;
+  email: string | null;
+  name: string;
+  count: number;
+};
+
+const SelfIdentitiesPanel: React.FC<{ tenantId: string }> = ({ tenantId }) => {
+  const [linkedSlack, setLinkedSlack] = useState<Set<string>>(new Set());
+  const [linkedEmail, setLinkedEmail] = useState<Set<string>>(new Set());
+  const [senders, setSenders] = useState<SelfSenderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth?.user?.id || null;
+      if (userId) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('comm_self_slack_ids, comm_self_emails')
+          .eq('id', userId)
+          .maybeSingle();
+        setLinkedSlack(new Set((((prof as any)?.comm_self_slack_ids as string[]) || []).filter(Boolean)));
+        setLinkedEmail(new Set((((prof as any)?.comm_self_emails as string[]) || []).map((e: string) => e.toLowerCase())));
+      }
+      const { data: msgs } = await supabase
+        .from('communication_messages')
+        .select('platform, from_id, from_name, from_email, received_at')
+        .eq('tenant_id', tenantId)
+        .order('received_at', { ascending: false })
+        .limit(500);
+      const map = new Map<string, SelfSenderRow>();
+      for (const m of (msgs || []) as any[]) {
+        const platform = m.platform || 'unknown';
+        const isGmail = platform === 'gmail';
+        const external_id = isGmail ? null : (m.from_id || null);
+        const email = isGmail ? (m.from_email || m.from_id || null) : null;
+        if (!external_id && !email) continue;
+        const key = `${platform}:${String(external_id || email).toLowerCase()}`;
+        const existing = map.get(key);
+        if (existing) existing.count += 1;
+        else map.set(key, { platform, key, external_id, email, name: m.from_name || email || external_id || 'Desconocido', count: 1 });
+      }
+      setSenders(Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 30));
+    } catch { /* best-effort */ } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const isLinked = (s: SelfSenderRow) =>
+    s.platform === 'gmail'
+      ? (s.email ? linkedEmail.has(s.email.toLowerCase()) : false)
+      : (s.external_id ? linkedSlack.has(s.external_id) : false);
+
+  const toggle = async (s: SelfSenderRow) => {
+    const linked = isLinked(s);
+    setBusyKey(s.key);
+    setNote(null);
+    try {
+      const { data, error } = await supabase.rpc('link_comm_self_identity', {
+        p_tenant: tenantId,
+        p_platform: s.platform,
+        p_external_id: s.platform === 'gmail' ? null : s.external_id,
+        p_email: s.platform === 'gmail' ? s.email : null,
+        p_unlink: linked,
+      });
+      if (error) throw error;
+      if (s.platform === 'gmail' && s.email) {
+        const next = new Set(linkedEmail);
+        if (linked) next.delete(s.email.toLowerCase()); else next.add(s.email.toLowerCase());
+        setLinkedEmail(next);
+      } else if (s.external_id) {
+        const next = new Set(linkedSlack);
+        if (linked) next.delete(s.external_id); else next.add(s.external_id);
+        setLinkedSlack(next);
+      }
+      const updated = (data as any)?.messages_updated ?? 0;
+      setNote(linked
+        ? `Desvinculado · ${updated} mensaje${updated === 1 ? '' : 's'} vuelve${updated === 1 ? '' : 'n'} al inbox.`
+        : `Listo, sos vos · ${updated} mensaje${updated === 1 ? '' : 's'} salió de pendientes y quedó como visto.`);
+    } catch (e) {
+      setNote((e as Error).message || 'No se pudo guardar la identidad.');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <div className="cx-settings-card">
+      <div className="cx-settings-head">
+        <div className="flex items-center gap-2.5">
+          <div className="cx-platform-ic" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+            <Icons.User size={15} />
+          </div>
+          <div>
+            <h3>¿Cuáles de estos sos vos?</h3>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Marcá tus propias cuentas de Slack o mail —aunque uses otro usuario—. Tus mensajes dejan de aparecer como pendientes y quedan marcados como vistos.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 space-y-0.5">
+        {loading ? (
+          <div className="text-[12px] text-zinc-400 py-2">Cargando remitentes…</div>
+        ) : senders.length === 0 ? (
+          <div className="text-[12px] text-zinc-400 py-2">Todavía no hay mensajes sincronizados para mostrar.</div>
+        ) : senders.map(s => {
+          const linked = isLinked(s);
+          return (
+            <div key={s.key} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+              <div className="min-w-0 flex items-center gap-2">
+                <span className="shrink-0 text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                  {s.platform === 'gmail' ? 'Mail' : 'Slack'}
+                </span>
+                <span className="truncate text-[12px] text-zinc-800 dark:text-zinc-100">{s.name}</span>
+                <span className="truncate text-[11px] text-zinc-400 hidden sm:inline">{s.email || s.external_id}</span>
+                <span className="shrink-0 text-[10px] text-zinc-400">· {s.count}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggle(s)}
+                disabled={busyKey === s.key}
+                className={`shrink-0 inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${
+                  linked
+                    ? 'text-white border-transparent'
+                    : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                }`}
+                style={linked ? { background: 'var(--accent)' } : undefined}
+              >
+                {busyKey === s.key ? '…' : linked ? '✓ Soy yo' : 'Soy yo'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {note && <div className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{note}</div>}
+    </div>
+  );
+};
+
 interface SettingsViewProps {
   tenantId: string;
   tokens: IntegrationToken[];
@@ -1408,6 +1564,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
         renderScopes={renderScopes}
         onChannelsChange={onChannelsChange}
       />
+      <SelfIdentitiesPanel tenantId={tenantId} />
       {error && (
         <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200/50 text-[12px] text-rose-700 dark:text-rose-400">
           {error}

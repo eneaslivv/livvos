@@ -24,6 +24,11 @@ export type CommunicationMessageLike = {
   replied_in_platform?: boolean | null;
   reply_count?: number | null;
   last_reply_at?: string | null;
+  /** 'inbound' | 'outbound'. Outbound = sent by us / authored by a linked
+   *  self/team identity — never an inbound follow-up. */
+  direction?: string | null;
+  opened_at?: string | null;
+  read_at?: string | null;
 };
 
 export type CommunicationConversation<T extends CommunicationMessageLike = CommunicationMessageLike> = {
@@ -104,6 +109,9 @@ export function getConversationSubtitle(message: CommunicationMessageLike): stri
 
 export function isMessageHandled(message: CommunicationMessageLike): boolean {
   const status = String(message.status || '').toLowerCase();
+  // Outbound = we sent it, or it was authored by a linked self/team identity.
+  // Either way it is never an inbound item the operator must act on.
+  if (String(message.direction || '').toLowerCase() === 'outbound') return true;
   return HANDLED_STATUSES.has(status) || message.replied_in_platform === true;
 }
 
