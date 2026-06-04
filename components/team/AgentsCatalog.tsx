@@ -116,6 +116,7 @@ export const AgentsCatalog: React.FC = () => {
   const [usage, setUsage] = useState<Record<string, Usage>>({});
   const [intel, setIntel] = useState<Record<string, IntelView>>({});
   const [overrides, setOverrides] = useState<Record<string, OverrideState>>({});
+  const [proposed, setProposed] = useState<Record<string, any[]>>({});
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -194,18 +195,38 @@ export const AgentsCatalog: React.FC = () => {
     if (!tenantId) return;
     try {
       const { data } = await supabase.from('agent_overrides')
-        .select('agent_id, prompt_suffix, disabled_skills')
-        .eq('tenant_id', tenantId).eq('status', 'active');
-      const map: Record<string, OverrideState> = {};
+        .select('id, agent_id, status, prompt_suffix, disabled_skills, rationale, confidence')
+        .eq('tenant_id', tenantId).in('status', ['active', 'proposed']);
+      const active: Record<string, OverrideState> = {};
+      const prop: Record<string, any[]> = {};
       for (const r of (data || []) as any[]) {
-        map[r.agent_id] = {
-          prompt_suffix: r.prompt_suffix || null,
-          disabled_skills: Array.isArray(r.disabled_skills) ? r.disabled_skills : [],
-        };
+        if (r.status === 'active') {
+          active[r.agent_id] = {
+            prompt_suffix: r.prompt_suffix || null,
+            disabled_skills: Array.isArray(r.disabled_skills) ? r.disabled_skills : [],
+          };
+        } else if (r.status === 'proposed') {
+          (prop[r.agent_id] = prop[r.agent_id] || []).push(r);
+        }
       }
-      setOverrides(map);
+      setOverrides(active);
+      setProposed(prop);
     } catch { /* best-effort */ }
   }, [tenantId]);
+
+  // Approve (→ active, applied live) or reject a learned suggestion.
+  const reviewProposal = async (id: string, decision: 'active' | 'rejected') => {
+    if (!tenantId) return;
+    const patch = decision === 'active'
+      ? { status: 'active', applied_at: new Date().toISOString(), applied_by: user?.id ?? null }
+      : { status: 'rejected', rejected_at: new Date().toISOString(), rejected_by: user?.id ?? null };
+    try {
+      const { error } = await supabase.from('agent_overrides').update(patch).eq('id', id);
+      if (error) throw error;
+      invalidateOverridesCache(tenantId);
+      await loadOverrides();
+    } catch { /* surface nothing — best-effort review */ }
+  };
 
   useEffect(() => { void loadOverrides(); }, [loadOverrides]);
 
@@ -309,6 +330,26 @@ export const AgentsCatalog: React.FC = () => {
                 </div>
 
                 <IntelStrip v={intel[a.id]} />
+
+                {/* Learned suggestions awaiting approval (human-in-the-loop) */}
+                {(proposed[a.id] || []).map((p: any) => (
+                  <div key={p.id} className="mt-3 rounded-lg border border-sky-200 dark:border-sky-500/30 bg-sky-50/50 dark:bg-sky-500/5 p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icons.Sparkles size={11} className="text-sky-500" />
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Sugerencia aprendida</span>
+                      {p.confidence && <span className="text-[9px] text-zinc-400">· {p.confidence}</span>}
+                    </div>
+                    {p.rationale && <p className="text-[11.5px] text-zinc-600 dark:text-zinc-300 leading-snug">{clean(p.rationale)}</p>}
+                    {Array.isArray(p.disabled_skills) && p.disabled_skills.length > 0 && (
+                      <p className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-1">Desactivaría: <span className="font-mono">{p.disabled_skills.join(', ')}</span></p>
+                    )}
+                    {p.prompt_suffix && <p className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">Agregaría: “{clean(p.prompt_suffix)}”</p>}
+                    <div className="flex items-center gap-2 mt-2">
+                      <button onClick={() => reviewProposal(p.id, 'active')} className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold inline-flex items-center gap-1"><Icons.Check size={10} /> Aprobar</button>
+                      <button onClick={() => reviewProposal(p.id, 'rejected')} className="px-2.5 py-1 rounded-md text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 text-[10px] font-medium">Rechazar</button>
+                    </div>
+                  </div>
+                ))}
 
                 {/* Skills (disabled ones struck through) */}
                 <div className="mt-3">
