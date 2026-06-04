@@ -17,7 +17,7 @@
  * reschedule — the right panel updates live since it reads from
  * CalendarContext which already has realtime subscriptions.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { Icons } from '../components/ui/Icons';
 import { SlidePanel } from '../components/ui/SlidePanel';
@@ -143,6 +143,8 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const { tasks: allTasks, events, updateTask, createTask, createEvent, updateEvent, deleteEvent, deleteTask } = useCalendar();
   const [rightTab, setRightTab] = useState<RightTab>('tasks');
   const [pendingMessages, setPendingMessages] = useState<any[]>([]);
+  const [inboxRefreshing, setInboxRefreshing] = useState(false);
+  const [lastInboxRefreshAt, setLastInboxRefreshAt] = useState<string | null>(null);
   const [inboxView, setInboxView] = useState<'all' | 'unopened' | 'followup' | 'replied'>('all');
   const [inboxPlatform, setInboxPlatform] = useState<'all' | 'gmail' | 'slack'>('all');
   const [openedMessageIds, setOpenedMessageIds] = useState<Set<string>>(new Set());
@@ -727,26 +729,31 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   };
 
   // ── Load pending inbox messages for the Inbox tab ───────────────
+  const refreshInbox = useCallback(async () => {
+    if (!currentTenant?.id) return;
+    setInboxRefreshing(true);
+    try {
+      const { data } = await supabase
+        .from('communication_messages')
+        .select('id, platform, from_name, from_email, from_id, subject, body_text, body_html, channel_id, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at, integration_token_id, opened_at, opened_by, read_at, read_by')
+        .eq('tenant_id', currentTenant.id)
+        .order('received_at', { ascending: false })
+        .limit(250);
+      const rows = data || [];
+      setPendingMessages(rows);
+      setPendingRequestsCount(rows.filter(m => m.status === 'pending' || m.status === 'snoozed').length);
+      setLastInboxRefreshAt(new Date().toISOString());
+    } catch (err) {
+      errorLogger.warn('brief inbox refresh failed', err);
+    } finally {
+      setInboxRefreshing(false);
+    }
+  }, [currentTenant?.id]);
+
   useEffect(() => {
     if (!currentTenant?.id || rightTab !== 'inbox') return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('communication_messages')
-          .select('id, platform, from_name, from_email, from_id, subject, body_text, body_html, channel_id, channel_name, thread_id, external_id, received_at, status, ai_classification, matched_client_id, matched_project_id, replied_in_platform, reply_count, last_reply_at, integration_token_id, opened_at, opened_by, read_at, read_by')
-          .eq('tenant_id', currentTenant.id)
-          .order('received_at', { ascending: false })
-          .limit(250);
-        if (!cancelled) {
-          const rows = data || [];
-          setPendingMessages(rows);
-          setPendingRequestsCount(rows.filter(m => m.status === 'pending' || m.status === 'snoozed').length);
-        }
-      } catch { /* silent */ }
-    })();
-    return () => { cancelled = true; };
-  }, [currentTenant?.id, rightTab]);
+    refreshInbox();
+  }, [currentTenant?.id, rightTab, refreshInbox]);
 
   const openInboxMessage = (msg: any) => {
     setOpenMessage(msg);
@@ -975,6 +982,37 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           : 'No recent inbox updates in this view.';
     return { total, unopened, followup, replied, gmail, slack, latest, topSenderName, insight, conversations: conversationGroups.length };
   }, [inboxBaseMessages, platformMessages, openedMessageIds]);
+  const inboxActionPlan = useMemo(() => {
+    const groups = groupCommunicationMessages(platformMessages)
+      .map(group => {
+        const latest = group.latest || group.messages[0];
+        const urgent = group.messages.some(m => {
+          const cls = m.ai_classification || {};
+          return cls.priority === 'high' || cls.intent === 'urgent';
+        });
+        const actionables = group.messages.filter(m => {
+          const cls = m.ai_classification || {};
+          return needsFollowUp(m) || cls.should_create_task === true || cls.intent === 'urgent';
+        }).length;
+        const unopened = group.messages.filter(m => !isMessageOpened(m)).length;
+        const score = (urgent ? 30 : 0) + group.followups * 8 + actionables * 5 + unopened * 2;
+        const title = group.title || latest?.from_name || latest?.from_email || latest?.channel_name || 'Conversation';
+        const reason = urgent
+          ? 'Urgent'
+          : group.followups > 0
+            ? `${group.followups} follow-up${group.followups === 1 ? '' : 's'}`
+            : actionables > 0
+              ? `${actionables} action${actionables === 1 ? '' : 's'}`
+              : unopened > 0
+                ? `${unopened} unread`
+                : 'Review';
+        return { key: group.key, title, reason, latest, score, platform: group.platform, messages: group.messages };
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score || new Date(b.latest?.received_at || 0).getTime() - new Date(a.latest?.received_at || 0).getTime())
+      .slice(0, 3);
+    return groups;
+  }, [platformMessages, openedMessageIds]);
   const inboxGroups = useMemo(() => {
     return groupCommunicationMessages(focusedMessages).map(group => ({
       ...group,
@@ -992,6 +1030,14 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       .filter(m => getInboxConversationKey(m) === key)
       .slice(0, 10);
   }, [openMessage, pendingMessages, openedMessageIds]);
+  const openMessageThread = useMemo(
+    () => [...openMessageContext].sort((a, b) => new Date(a.received_at || 0).getTime() - new Date(b.received_at || 0).getTime()),
+    [openMessageContext]
+  );
+  const openMessageProject = openMessage?.matched_project_id ? projectsById.get(openMessage.matched_project_id) : null;
+  const openMessageClient = openMessage?.matched_client_id
+    ? clientsById.get(openMessage.matched_client_id)
+    : (openMessageProject?.client_id ? clientsById.get(openMessageProject.client_id) : null);
   const activeFocusCount = activeFocus?.tab === 'tasks'
     ? focusedOverdue.length + focusedDueToday.length + focusedDueSoon.length
     : activeFocus?.tab === 'inbox'
@@ -1416,10 +1462,50 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                       {inboxSummary.topSenderName ? ` · top sender: ${inboxSummary.topSenderName}` : ''}
                     </div>
                   </div>
-                  <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
-                    {inboxSummary.latest ? formatMsgTime(inboxSummary.latest.received_at) : 'clear'}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+                      {inboxSummary.latest ? formatMsgTime(inboxSummary.latest.received_at) : 'clear'}
+                    </span>
+                    <button
+                      onClick={refreshInbox}
+                      disabled={inboxRefreshing}
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-800 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
+                    >
+                      <Icons.RefreshCw size={10} className={inboxRefreshing ? 'animate-spin' : ''} />
+                      {inboxRefreshing ? 'Updating' : 'Refresh'}
+                    </button>
+                  </div>
                 </div>
+                {inboxActionPlan.length > 0 && (
+                  <div className="mb-3 rounded-xl border border-zinc-200/70 bg-zinc-50/70 p-2 dark:border-zinc-800 dark:bg-zinc-900/55">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Attack next</span>
+                      {lastInboxRefreshAt && (
+                        <span className="text-[10px] text-zinc-400">updated {formatMsgTime(lastInboxRefreshAt)}</span>
+                      )}
+                    </div>
+                    <div className="grid gap-1.5">
+                      {inboxActionPlan.map((item, idx) => (
+                        <button
+                          key={item.key}
+                          onClick={() => {
+                            setInboxView(item.reason.toLowerCase().includes('unread') ? 'unopened' : 'followup');
+                            setInboxPlatform(item.platform === 'gmail' || item.platform === 'slack' ? item.platform : 'all');
+                            if (item.messages[0]) openInboxMessage(item.messages[0]);
+                          }}
+                          className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-zinc-100 dark:bg-zinc-950/55 dark:hover:bg-zinc-800"
+                        >
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white dark:bg-zinc-100 dark:text-zinc-950">{idx + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-semibold text-zinc-800 dark:text-zinc-100">{item.title}</span>
+                            <span className="block truncate text-zinc-500 dark:text-zinc-400">{item.reason} · {formatMsgTime(item.latest?.received_at)}</span>
+                          </span>
+                          <Icons.ChevronRight size={12} className="shrink-0 text-zinc-400" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-1.5">
                   {([
                     ['all', 'All', inboxSummary.total],
@@ -1671,42 +1757,15 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               </div>
             </div>
           )}
-          <div className="rounded-2xl border border-zinc-200/70 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                Conversation context
-              </div>
-              <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                {openMessage.platform === 'gmail' ? 'Mail thread' : 'Slack channel'} · {openMessageContext.length}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {openMessageContext.slice(0, 5).map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => openInboxMessage(m)}
-                  className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
-                    m.id === openMessage.id
-                      ? 'border-amber-500/30 bg-amber-500/10'
-                      : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                      {m.from_name || m.from_email || m.channel_name || 'Unknown'}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-mono text-zinc-400">{formatMsgTime(m.received_at)}</span>
-                  </div>
-                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    {m.subject || m.body_text || 'No content'}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-400">
-              Reply AI uses this thread/channel context, plus matched client/project data, to avoid generic answers and make the next step explicit.
-            </div>
-          </div>
+          <ConversationThreadView
+            openMessage={openMessage}
+            thread={openMessageThread}
+            project={openMessageProject}
+            client={openMessageClient}
+            refreshing={inboxRefreshing}
+            onRefresh={refreshInbox}
+            onOpen={openInboxMessage}
+          />
           <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
@@ -2356,6 +2415,140 @@ const formatMsgTime = (iso: string | undefined): string => {
   const diffDay = Math.round(diffHr / 24);
   if (diffDay < 7) return `${diffDay}d`;
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+};
+
+const formatMsgDateTime = (iso: string | undefined): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const ConversationThreadView: React.FC<{
+  openMessage: any;
+  thread: any[];
+  project?: any | null;
+  client?: any | null;
+  refreshing?: boolean;
+  onRefresh: () => void;
+  onOpen: (message: any) => void;
+}> = ({ openMessage, thread, project, client, refreshing = false, onRefresh, onOpen }) => {
+  const sourceLabel = openMessage.platform === 'gmail' ? 'Mail thread' : 'Slack thread';
+  const platformLabel = openMessage.platform === 'gmail' ? 'Email' : 'Slack';
+  const latest = thread[thread.length - 1] || openMessage;
+
+  return (
+    <div className="rounded-2xl border border-zinc-200/70 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+            Conversation thread
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+              {sourceLabel} · {thread.length}
+            </span>
+            {openMessage.channel_name && (
+              <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                #{openMessage.channel_name}
+              </span>
+            )}
+            {project && (
+              <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                {project.title || project.name || 'Project'}
+              </span>
+            )}
+            {client && (
+              <span className="rounded-full bg-sky-500/10 px-2 py-1 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                {client.name || client.company || 'Client'}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          {refreshing ? <Icons.Loader size={11} className="animate-spin" /> : <Icons.RefreshCw size={11} />}
+          Refresh
+        </button>
+      </div>
+
+      <div className="max-h-[430px] space-y-3 overflow-y-auto rounded-2xl bg-zinc-50/80 p-3 dark:bg-zinc-900/55">
+        {thread.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-zinc-200 bg-white p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400">
+            No thread context found yet.
+          </div>
+        ) : thread.map((m) => {
+          const selected = m.id === openMessage.id;
+          const sender = m.from_name || m.from_email || m.channel_name || 'Unknown sender';
+          const body = m.body_text || m.subject || 'No message body.';
+          const initials = sender
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part: string) => part[0])
+            .join('')
+            .toUpperCase() || '?';
+
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onOpen(m)}
+              className={`group/thread grid w-full grid-cols-[32px_minmax(0,1fr)] gap-3 rounded-2xl border p-3 text-left transition-colors ${
+                selected
+                  ? 'border-amber-500/40 bg-amber-500/10'
+                  : 'border-transparent bg-white hover:border-zinc-200 dark:bg-zinc-950/45 dark:hover:border-zinc-800'
+              }`}
+            >
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold ${
+                m.platform === 'gmail'
+                  ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                  : 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+              }`}>
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {sender}
+                  </span>
+                  <span className="text-[11px] text-zinc-400">
+                    {formatMsgDateTime(m.received_at)}
+                  </span>
+                  {selected && (
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+                      selected
+                    </span>
+                  )}
+                </div>
+                {m.subject && (
+                  <div className="mt-1 line-clamp-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    {m.subject}
+                  </div>
+                )}
+                <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                  {body}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-400">
+        Latest: {formatMsgDateTime(latest?.received_at)} · Reply AI uses this {platformLabel} context with matched client/project data.
+      </div>
+    </div>
+  );
 };
 
 const InboxCard: React.FC<{
