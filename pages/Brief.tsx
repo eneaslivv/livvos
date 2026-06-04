@@ -41,6 +41,7 @@ import type { MarkdownAction } from '../lib/markdown';
 import { runOrchestrator, recordFeedback, executeProposedAction, getUserProfile, type ProposedAction } from '../lib/agents';
 import { composeCommReply, type ComposeCommReplyAction } from '../lib/ai';
 import { errorLogger } from '../lib/errorLogger';
+import { InboxDigestCard } from '../components/communications/InboxDigestCard';
 import { supabase } from '../lib/supabase';
 import {
   getConversationKey,
@@ -982,37 +983,6 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
           : 'No recent inbox updates in this view.';
     return { total, unopened, followup, replied, gmail, slack, latest, topSenderName, insight, conversations: conversationGroups.length };
   }, [inboxBaseMessages, platformMessages, openedMessageIds]);
-  const inboxActionPlan = useMemo(() => {
-    const groups = groupCommunicationMessages(platformMessages)
-      .map(group => {
-        const latest = group.latest || group.messages[0];
-        const urgent = group.messages.some(m => {
-          const cls = m.ai_classification || {};
-          return cls.priority === 'high' || cls.intent === 'urgent';
-        });
-        const actionables = group.messages.filter(m => {
-          const cls = m.ai_classification || {};
-          return needsFollowUp(m) || cls.should_create_task === true || cls.intent === 'urgent';
-        }).length;
-        const unopened = group.messages.filter(m => !isMessageOpened(m)).length;
-        const score = (urgent ? 30 : 0) + group.followups * 8 + actionables * 5 + unopened * 2;
-        const title = group.title || latest?.from_name || latest?.from_email || latest?.channel_name || 'Conversation';
-        const reason = urgent
-          ? 'Urgent'
-          : group.followups > 0
-            ? `${group.followups} follow-up${group.followups === 1 ? '' : 's'}`
-            : actionables > 0
-              ? `${actionables} action${actionables === 1 ? '' : 's'}`
-              : unopened > 0
-                ? `${unopened} unread`
-                : 'Review';
-        return { key: group.key, title, reason, latest, score, platform: group.platform, messages: group.messages };
-      })
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score || new Date(b.latest?.received_at || 0).getTime() - new Date(a.latest?.received_at || 0).getTime())
-      .slice(0, 3);
-    return groups;
-  }, [platformMessages, openedMessageIds]);
   const inboxGroups = useMemo(() => {
     return groupCommunicationMessages(focusedMessages).map(group => ({
       ...group,
@@ -1447,25 +1417,26 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
           {rightTab === 'inbox' && (
             <>
+              {/* Same rich AI digest as the Communications page (inbox-digest
+                  edge fn): recency-aware headline + topics + "Hoy" priorities
+                  with suggested actions — replaces the old local heuristic that
+                  surfaced weeks-old mail as "attack next". */}
+              <div className="mx-3 mb-3">
+                <InboxDigestCard
+                  tenantId={currentTenant?.id || null}
+                  onOpenMessage={(id) => {
+                    const m = pendingMessages.find((x: any) => x.id === id);
+                    if (m) openInboxMessage(m);
+                  }}
+                />
+              </div>
               <div className="mx-3 mb-3 rounded-2xl border border-zinc-200/70 bg-white/85 p-3 shadow-sm shadow-zinc-950/[0.03] dark:border-zinc-800 dark:bg-zinc-950/45">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                      <Icons.Activity size={12} />
-                      Inbox intelligence
-                    </div>
-                    <p className="mt-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100">
-                      {inboxSummary.insight}
-                    </p>
-                    <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      {inboxSummary.gmail} email · {inboxSummary.slack} Slack
-                      {inboxSummary.topSenderName ? ` · top sender: ${inboxSummary.topSenderName}` : ''}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
-                      {inboxSummary.latest ? formatMsgTime(inboxSummary.latest.received_at) : 'clear'}
-                    </span>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Filtrar mensajes</span>
+                  <div className="flex items-center gap-2">
+                    {lastInboxRefreshAt && (
+                      <span className="text-[10px] text-zinc-400">actualizado {formatMsgTime(lastInboxRefreshAt)}</span>
+                    )}
                     <button
                       onClick={refreshInbox}
                       disabled={inboxRefreshing}
@@ -1476,36 +1447,6 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                     </button>
                   </div>
                 </div>
-                {inboxActionPlan.length > 0 && (
-                  <div className="mb-3 rounded-xl border border-zinc-200/70 bg-zinc-50/70 p-2 dark:border-zinc-800 dark:bg-zinc-900/55">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Attack next</span>
-                      {lastInboxRefreshAt && (
-                        <span className="text-[10px] text-zinc-400">updated {formatMsgTime(lastInboxRefreshAt)}</span>
-                      )}
-                    </div>
-                    <div className="grid gap-1.5">
-                      {inboxActionPlan.map((item, idx) => (
-                        <button
-                          key={item.key}
-                          onClick={() => {
-                            setInboxView(item.reason.toLowerCase().includes('unread') ? 'unopened' : 'followup');
-                            setInboxPlatform(item.platform === 'gmail' || item.platform === 'slack' ? item.platform : 'all');
-                            if (item.messages[0]) openInboxMessage(item.messages[0]);
-                          }}
-                          className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-zinc-100 dark:bg-zinc-950/55 dark:hover:bg-zinc-800"
-                        >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white dark:bg-zinc-100 dark:text-zinc-950">{idx + 1}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold text-zinc-800 dark:text-zinc-100">{item.title}</span>
-                            <span className="block truncate text-zinc-500 dark:text-zinc-400">{item.reason} · {formatMsgTime(item.latest?.received_at)}</span>
-                          </span>
-                          <Icons.ChevronRight size={12} className="shrink-0 text-zinc-400" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <div className="grid grid-cols-4 gap-1.5">
                   {([
                     ['all', 'All', inboxSummary.total],
