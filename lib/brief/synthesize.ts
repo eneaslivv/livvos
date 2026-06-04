@@ -42,6 +42,8 @@ export interface SynthesizeArgs {
   /** Learned topic weights (agent domain → 0..1). Orders the brief by what
    *  the user actually works on most. */
   topicWeights?: Record<string, number>;
+  /** One-line hint about the user's typical active hours (learned from usage). */
+  activeHoursHint?: string | null;
 }
 
 export async function synthesizeBrief(args: SynthesizeArgs): Promise<BriefSynthesis | null> {
@@ -77,6 +79,7 @@ export async function synthesizeBrief(args: SynthesizeArgs): Promise<BriefSynthe
     TONE_HINTS[args.tone] || TONE_HINTS.concise,
     args.learnedTraits ? `Known user preferences:\n${args.learnedTraits}` : '',
     priorityLine,
+    args.activeHoursHint || '',
     args.strategyContext ? `Strategic context:\n${args.strategyContext}` : '',
     '',
     'REAL DATA. These are the ONLY facts. Do not invent data, names, dates, amounts, clients, or progress.',

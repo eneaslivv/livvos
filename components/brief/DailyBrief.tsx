@@ -289,9 +289,24 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
       if (usePrefs.ai_synthesis_enabled && loadedCards.length > 0) {
         setSynthesizing(true);
         try {
-          const [profile, strategyCtx] = await Promise.all([
+          const [profile, strategyCtx, activeHoursHint] = await Promise.all([
             getUserProfile(supabase as any, { userId: user.id, tenantId: currentTenant.id }).catch(() => null),
             loadStrategyContext(),
+            (async (): Promise<string | null> => {
+              try {
+                const since = new Date(Date.now() - 30 * 86400000).toISOString();
+                const { data } = await (supabase as any).from('agent_conversations')
+                  .select('created_at').eq('user_id', user.id).eq('tenant_id', currentTenant.id)
+                  .gte('created_at', since).limit(1000);
+                if (!data || data.length < 8) return null;
+                const buckets = new Array(24).fill(0);
+                for (const r of data as any[]) { const h = new Date(r.created_at).getHours(); if (h >= 0 && h < 24) buckets[h]++; }
+                const top = buckets.map((c: number, h: number) => ({ h, c })).filter((x: any) => x.c > 0)
+                  .sort((a: any, b: any) => b.c - a.c).slice(0, 3).map((x: any) => x.h).sort((a: number, b: number) => a - b);
+                if (!top.length) return null;
+                return `The user is typically active around ${top.map((h: number) => String(h).padStart(2, '0') + 'h').join(', ')} (learned from usage). Frame the briefing for that daily rhythm.`;
+              } catch { return null; }
+            })(),
           ]);
           const firstName = ((user as any)?.user_metadata?.name || (user as any)?.email || '').split(/[\s@]/)[0] || null;
           synthResult = await synthesizeBrief({
@@ -301,6 +316,7 @@ export const DailyBrief: React.FC<DailyBriefProps> = ({ onAskFollowUp, onNavigat
             includeRecommendation: usePrefs.show_top_recommendation,
             learnedTraits: profile?.learned_traits || null,
             topicWeights: (profile as any)?.topic_weights || {},
+            activeHoursHint,
             strategyContext: strategyCtx,
           });
           if (!synthResult) {
