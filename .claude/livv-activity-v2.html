@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LIVV OS — Activity</title>
+<link rel="stylesheet" href="livv-os-styles.css">
+<style>
+/* ───────────────────────────────────────────────────────────
+   ACTIVITY · community + team pulse
+   Built on the LIVV OS design tokens
+   ─────────────────────────────────────────────────────────── */
+.act-page { padding: 24px 32px 80px; max-width: 1320px; margin: 0 auto; }
+
+/* Page header */
+.act-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; margin-bottom: 22px;
+}
+.act-head h1 {
+  margin: 0;
+  font-size: 30px; font-weight: 300;
+  letter-spacing: -0.03em; color: var(--os-fg-0);
+  display: inline-flex; align-items: center; gap: 14px;
+}
+.act-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: rgba(118,146,104,0.13);
+  color: var(--ok);
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  font-weight: 600;
+}
+.act-live .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(118,146,104,0.18);
+  animation: act-pulse 2s ease-in-out infinite;
+}
+@keyframes act-pulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(118,146,104,0.18); }
+  50%     { box-shadow: 0 0 0 6px rgba(118,146,104,0.05); }
+}
+.act-head-meta {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--os-fg-2);
+  display: inline-flex; align-items: center; gap: 14px;
+}
+.act-refresh {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11.5px; color: var(--os-fg-1);
+  transition: all .2s var(--ios-ease);
+}
+.act-refresh:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+/* Page layout — main + community sidebar */
+.act-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+/* KPI strip */
+.act-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.act-stat {
+  padding: 14px 16px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 13px;
+  display: flex; gap: 12px; align-items: flex-start;
+  cursor: pointer;
+  transition: all .25s var(--ios-ease);
+  position: relative;
+  overflow: hidden;
+}
+.act-stat:hover { transform: translateY(-1px); box-shadow: var(--shadow-card); border-color: rgba(90,62,62,0.22); }
+.act-stat-ic {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.act-stat-body { flex: 1; min-width: 0; }
+.act-stat-l {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--os-fg-2);
+  margin-bottom: 4px;
+}
+.act-stat-v {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.act-stat-num {
+  font-size: 22px; font-weight: 300;
+  letter-spacing: -0.025em; color: var(--os-fg-0);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.act-stat-num.delta-down { color: var(--err); }
+.act-stat-num.delta-up { color: var(--ok); }
+.act-stat-sub {
+  font-size: 11px; color: var(--os-fg-2);
+}
+.act-stat-sub strong { color: var(--os-fg-1); font-weight: 500; font-family: var(--font-sans); }
+.act-stat-spark {
+  position: absolute;
+  bottom: 6px; right: 8px;
+  height: 14px;
+  display: flex; align-items: flex-end; gap: 1.5px;
+}
+.act-stat-spark span {
+  width: 3px; background: var(--c); opacity: 0.6;
+  border-radius: 1px;
+}
+
+/* Team leaderboard */
+.act-team {
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.act-team-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px dashed rgba(90,62,62,0.12);
+}
+.act-team-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--os-fg-2);
+}
+.act-team-meta {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--os-fg-3);
+}
+.act-team-toggle {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: transparent; border: 0;
+  color: var(--os-fg-3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.act-team-row {
+  display: grid;
+  grid-template-columns: 28px 28px minmax(0, 130px) 1fr auto auto 22px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--os-divider);
+  transition: background .15s var(--ios-ease);
+  cursor: pointer;
+}
+.act-team-row:last-child { border-bottom: 0; }
+.act-team-row:hover { background: var(--os-surface); }
+.act-team-rank {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-3); text-align: right;
+}
+.act-team-row:first-of-type .act-team-rank,
+.act-team-row.top .act-team-rank { color: var(--accent); font-weight: 600; }
+.act-team-av {
+  width: 24px; height: 24px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: #fff;
+}
+.act-team-name {
+  font-size: 12.5px; color: var(--os-fg-0);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-team-bar {
+  height: 5px;
+  background: var(--os-surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.act-team-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ok) 0%, color-mix(in oklab, var(--ok) 65%, var(--accent)) 100%);
+  border-radius: 999px;
+  transition: width .4s var(--ios-ease);
+}
+.act-team-row.idle .act-team-fill {
+  background: color-mix(in oklab, var(--os-fg-3) 35%, var(--os-divider));
+  opacity: 0.4;
+}
+.act-team-count {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--os-fg-0); font-weight: 500;
+  text-align: right; min-width: 28px;
+}
+.act-team-row.idle .act-team-count { color: var(--os-fg-3); }
+.act-team-delta {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-width: 60px;
+  justify-content: flex-end;
+}
+.act-team-delta .neg { color: var(--err); }
+.act-team-delta .pos { color: var(--ok); }
+.act-team-chev { color: var(--os-fg-3); }
+
+/* Tabs + composer */
+.act-tabs-row {
+  display: flex; align-items: center; gap: 4px;
+  padding: 14px 18px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px 14px 0 0;
+  border-bottom: 0;
+}
+.act-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: transparent; border: 0; cursor: pointer;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-2);
+  border-radius: 999px;
+  transition: all .2s var(--ios-ease);
+}
+.act-tab:hover { color: var(--os-fg-0); }
+.act-tab.active {
+  background: var(--os-ink); color: var(--livv-cream-50);
+}
+.act-tab-count {
+  font-family: var(--font-mono); font-size: 9.5px;
+  padding: 1px 6px; border-radius: 5px;
+  background: var(--os-surface); color: var(--os-fg-2);
+}
+.act-tab.active .act-tab-count {
+  background: rgba(255,255,255,0.16); color: var(--livv-cream-50);
+}
+.act-tabs-row-right { margin-left: auto; display: flex; gap: 6px; }
+.act-filter-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-1); cursor: pointer;
+}
+.act-filter-btn:hover { background: var(--os-surface-2); color: var(--os-fg-0); }
+
+/* Composer */
+.act-composer {
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-top: 0;
+  padding: 18px;
+  display: flex; gap: 12px; align-items: flex-start;
+  border-bottom: 1px dashed rgba(90,62,62,0.10);
+}
+.act-composer-av {
+  width: 34px; height: 34px; border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #a855f7);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+  flex-shrink: 0;
+}
+.act-composer-body { flex: 1; min-width: 0; }
+.act-composer-input {
+  display: block; width: 100%;
+  border: 0; outline: none;
+  background: transparent;
+  font: inherit; font-size: 14px;
+  color: var(--os-fg-0);
+  resize: none;
+  padding: 6px 0;
+  min-height: 38px;
+  font-family: var(--font-sans);
+}
+.act-composer-input::placeholder { color: var(--os-fg-3); }
+.act-composer-tools {
+  display: flex; align-items: center; gap: 4px;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px dashed rgba(90,62,62,0.08);
+}
+.act-tool {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-2);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s var(--ios-ease);
+}
+.act-tool:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.act-tool-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-1);
+  cursor: pointer;
+  margin-left: 4px;
+}
+.act-tool-chip:hover { background: var(--os-surface); }
+.act-post-btn {
+  margin-left: auto;
+  padding: 7px 18px;
+  background: var(--os-ink); color: var(--livv-cream-50);
+  border: 0; border-radius: 999px;
+  font-size: 12.5px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all .2s var(--ios-ease);
+}
+.act-post-btn:hover { background: var(--wine); }
+.act-post-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Feed */
+.act-feed {
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  padding: 10px 0 14px;
+}
+
+.act-day-label {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 18px 10px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--os-fg-2); font-weight: 600;
+}
+.act-day-label::after {
+  content: ''; flex: 1; height: 1px;
+  background: var(--os-divider);
+}
+
+.act-item {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: 12px;
+  padding: 11px 18px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--os-divider);
+  transition: background .15s var(--ios-ease);
+}
+.act-item:last-child { border-bottom: 0; }
+.act-item:hover { background: var(--os-surface-2); }
+.act-item-av {
+  width: 30px; height: 30px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: #fff;
+  flex-shrink: 0;
+  position: relative;
+  margin-top: 2px;
+}
+.act-item-av-mark {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 14px; height: 14px;
+  border-radius: 999px;
+  background: var(--os-panel);
+  display: flex; align-items: center; justify-content: center;
+}
+.act-item-av-mark.complete { color: var(--ok); }
+.act-item-av-mark.message  { color: var(--sky); }
+.act-item-av-mark.create   { color: var(--accent); }
+.act-item-av-mark.status   { color: var(--purple); }
+
+.act-item-body { min-width: 0; }
+.act-item-text {
+  font-size: 13px; line-height: 1.5;
+  color: var(--os-fg-0);
+}
+.act-item-text strong { font-weight: 500; }
+.act-item-text .verb {
+  color: var(--os-fg-2); font-weight: 400;
+  margin: 0 4px;
+}
+.act-item-text .obj {
+  color: var(--os-fg-0); font-weight: 500;
+}
+.act-item-text .module-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px;
+  background: color-mix(in oklab, var(--c) 12%, var(--os-surface));
+  color: var(--c);
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  margin-left: 6px;
+  font-weight: 600;
+}
+.act-item-meta {
+  display: inline-flex; align-items: center; gap: 12px;
+  margin-top: 7px;
+  font-size: 11.5px; color: var(--os-fg-2);
+}
+.act-item-meta button {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent; border: 0;
+  color: var(--os-fg-2); cursor: pointer;
+  padding: 2px 0;
+  font-size: 11.5px;
+  transition: color .15s var(--ios-ease);
+}
+.act-item-meta button:hover { color: var(--os-fg-0); }
+.act-item-meta .liked { color: var(--err); }
+
+.act-item-time {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Update card with body */
+.act-item-update {
+  margin-top: 8px;
+  padding: 11px 13px;
+  background: var(--os-surface);
+  border: 0.5px solid rgba(90,62,62,0.08);
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--os-fg-1);
+}
+.act-item-update strong { color: var(--os-fg-0); font-weight: 500; }
+
+/* Status change badges */
+.act-status-from-to {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 5px;
+  font-size: 11.5px;
+}
+.act-status-badge {
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.act-status-badge.b1 { background: var(--os-surface); color: var(--os-fg-2); }
+.act-status-badge.b2 { background: rgba(118,146,104,0.13); color: var(--ok); }
+
+/* Attachments */
+.act-item-attach {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 7px;
+  padding: 7px 11px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 8px;
+  font-size: 11.5px; color: var(--os-fg-1);
+  width: fit-content;
+  cursor: pointer;
+}
+.act-item-attach:hover { background: var(--os-surface-2); }
+.act-item-attach-ic {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: var(--os-panel);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+}
+
+/* Reactions */
+.act-reactions {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 7px;
+}
+.act-reaction {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border);
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--os-fg-1);
+  transition: all .2s var(--ios-ease);
+}
+.act-reaction:hover { background: var(--os-surface-2); }
+.act-reaction.mine {
+  background: var(--accent-soft);
+  border-color: var(--accent-strong);
+  color: #8b6a17;
+  font-weight: 500;
+}
+.act-reaction-add {
+  width: 20px; height: 20px; border-radius: 999px;
+  background: transparent; border: 0.5px dashed var(--os-border-2);
+  color: var(--os-fg-3);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.act-reaction-add:hover { color: var(--accent); border-color: var(--accent-strong); border-style: solid; }
+
+/* ───── SIDEBAR (community + announcements) ───── */
+.act-side {
+  display: flex; flex-direction: column; gap: 12px;
+  position: sticky; top: 16px;
+}
+.act-side-card {
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 13px;
+  overflow: hidden;
+}
+.act-side-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px dashed rgba(90,62,62,0.12);
+}
+.act-side-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-0);
+}
+.act-side-title-ic {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--os-surface);
+  color: var(--os-fg-1);
+  display: flex; align-items: center; justify-content: center;
+}
+.act-side-meta {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-3);
+}
+
+.act-side-body { padding: 6px 8px 10px; }
+.act-side-body.pad-more { padding: 12px 16px; }
+
+/* Announcement */
+.act-announce {
+  padding: 14px 16px;
+  background: linear-gradient(135deg, var(--accent-soft) 0%, var(--os-panel) 70%);
+  border: 0.5px solid var(--accent-strong);
+  border-radius: 13px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.act-announce-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600;
+}
+.act-announce-eyebrow .pulse {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(196,163,90,0.18);
+  animation: act-pulse 2s ease-in-out infinite;
+}
+.act-announce-title {
+  font-size: 14.5px; font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--os-fg-0);
+}
+.act-announce-desc {
+  font-size: 12px; line-height: 1.5;
+  color: var(--os-fg-1);
+}
+.act-announce-foot {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 4px;
+  font-size: 11px; color: var(--os-fg-2);
+}
+.act-announce-cta {
+  margin-left: auto;
+  padding: 5px 11px;
+  background: var(--os-ink); color: var(--livv-cream-50);
+  border: 0; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+}
+.act-announce-cta:hover { background: var(--wine); }
+
+/* Online / presence */
+.act-presence-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.act-presence-row:hover { background: var(--os-surface); }
+.act-presence-av {
+  width: 24px; height: 24px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: #fff;
+  position: relative;
+}
+.act-presence-status {
+  position: absolute;
+  bottom: -1px; right: -1px;
+  width: 8px; height: 8px; border-radius: 999px;
+  border: 1.5px solid var(--os-panel);
+}
+.act-presence-status.online { background: var(--ok); }
+.act-presence-status.away   { background: var(--accent); }
+.act-presence-status.off    { background: var(--os-fg-3); }
+.act-presence-meta {
+  display: flex; flex-direction: column; min-width: 0;
+}
+.act-presence-name {
+  font-size: 12.5px; color: var(--os-fg-0);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-presence-doing {
+  font-size: 10.5px; color: var(--os-fg-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-presence-time {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--os-fg-3); letter-spacing: 0.05em;
+}
+
+/* Discussion threads */
+.act-thread {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s var(--ios-ease);
+}
+.act-thread:hover { background: var(--os-surface); }
+.act-thread-title {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-0);
+  letter-spacing: -0.005em;
+}
+.act-thread-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px; color: var(--os-fg-2);
+  font-family: var(--font-mono);
+}
+.act-thread-meta .unread {
+  padding: 1px 6px;
+  background: var(--accent);
+  color: var(--os-ink);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.act-thread-avs {
+  display: inline-flex;
+}
+.act-thread-avs .av {
+  width: 16px; height: 16px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7.5px; font-weight: 700; color: #fff;
+  border: 1.5px solid var(--os-panel);
+  margin-left: -5px;
+}
+.act-thread-avs .av:first-child { margin-left: 0; }
+
+/* Clients online */
+.act-client-card {
+  padding: 11px 13px;
+  background: var(--os-surface);
+  border: 0.5px solid rgba(90,62,62,0.08);
+  border-radius: 10px;
+  margin: 0 8px 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.act-client-card:last-child { margin-bottom: 0; }
+.act-client-av {
+  width: 30px; height: 30px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.act-client-body { flex: 1; min-width: 0; }
+.act-client-name { font-size: 12.5px; font-weight: 500; color: var(--os-fg-0); }
+.act-client-doing {
+  font-size: 10.5px; color: var(--os-fg-2);
+  margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-client-status {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.act-client-status.in   { background: rgba(118,146,104,0.13); color: var(--ok); }
+.act-client-status.signed { background: rgba(196,163,90,0.15); color: #8b6a17; }
+.act-client-status.away { background: var(--os-surface-2); color: var(--os-fg-3); }
+
+/* Pinned messages / community */
+.act-pinned {
+  padding: 11px 13px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex; gap: 10px;
+}
+.act-pinned:hover { background: var(--os-surface); }
+.act-pinned-ic {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.act-pinned-body { flex: 1; min-width: 0; }
+.act-pinned-title {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-0);
+}
+.act-pinned-text {
+  font-size: 11.5px; color: var(--os-fg-2);
+  margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.act-pinned-meta {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+  margin-top: 5px;
+}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="livv-os-data.jsx"></script>
+<script type="text/babel" src="livv-os-shell.jsx"></script>
+<script type="text/babel">
+const { useState: useS } = React;
+
+// ── DATA ─────────────────────────────────────────────────────
+const STATS = [
+  { l: 'Completed', icon: 'tasks',    c: 'var(--ok)',     v: 14, sub: <>tasks · top <strong>Eneas (6)</strong></>, spark: [2,3,2,4,3,5,4,6], delta: null },
+  { l: 'Velocity',   icon: 'activity', c: 'var(--accent)', v: '+18%', sub: <><strong>1.2 vs 1.0</strong> last week</>, spark: [3,3,4,4,5,4,5,6], delta: 'up' },
+  { l: 'Discussions', icon: 'chat',    c: 'var(--sky)',    v: 4, sub: <><strong>2</strong> unread</>, spark: [1,2,1,2,3,2,3,4], delta: null },
+  { l: 'Sign-ins',   icon: 'user',    c: 'var(--purple)', v: 12, sub: <>this week · <strong>9</strong> distinct</>, spark: [1,2,2,1,2,2,2,3], delta: null },
+];
+
+const TEAM = [
+  { rank: 1, name: 'Eneas',          done: 6,  delta: '+2',   when: '5/19', color: 'var(--accent)',  pct: 100 },
+  { rank: 2, name: 'Lucía',          done: 4,  delta: '+1',   when: '5/18', color: 'var(--sky)',     pct: 67 },
+  { rank: 3, name: 'Mateo',          done: 3,  delta: '0',    when: '5/19', color: 'var(--pink)',    pct: 50 },
+  { rank: 4, name: 'Sara',           done: 1,  delta: '-2',   when: '5/17', color: 'var(--sage)',    pct: 17 },
+  { rank: 5, name: 'Tomás',          done: 0,  delta: '0',    when: '—',     color: '#A855F7',        pct: 0, idle: true },
+  { rank: 6, name: 'Iris (advisor)', done: 0,  delta: '0',    when: '—',     color: 'var(--wine)',    pct: 0, idle: true },
+];
+
+const TODAY = [
+  { id: 1, who: 'Eneas',   av: 'EN', avC: 'var(--accent)', kind: 'update',   text: <>Shipping the new pricing page tomorrow. <strong>Mulberry</strong> proposal v2 went out at 8:42 — counter coming back Tue.</>, mod: 'Growth', modC: 'var(--accent)', when: '12m ago', likes: 3, comments: 2, liked: true },
+  { id: 2, who: 'Lucía',   av: 'LU', avC: 'var(--sky)', kind: 'complete', text: <><strong>Lucía</strong><span className="verb">completed</span><span className="obj">Sunnyside checkpoint review</span></>, mod: 'Delivery', modC: 'var(--sage)', when: '1h ago', likes: 4, comments: 0, attach: { name: 'Sunnyside_checkpoint_notes.pdf', size: '2.1 MB' } },
+  { id: 3, who: 'Agent',  av: 'AI',  avC: 'var(--os-ink)', kind: 'create', text: <><strong>Agent</strong><span className="verb">flagged</span><span className="obj">Halcyon AI · 6 days stuck in Call Done</span></>, mod: 'Growth', modC: 'var(--accent)', when: '2h ago', likes: 1, comments: 1, suggestion: 'Send recap email · drafted in agency-playbook tone.' },
+  { id: 4, who: 'Mateo',   av: 'MA', avC: 'var(--pink)', kind: 'create', text: <><strong>Mateo</strong><span className="verb">published</span><span className="obj">Why agencies miss their cadence</span></>, mod: 'Content', modC: 'var(--pink)', when: '3h ago', likes: 8, comments: 4, reactions: [{ e: '🔥', n: 5, mine: true }, { e: '👀', n: 2 }] },
+];
+
+const YESTERDAY = [
+  { id: 11, who: 'Eneas', av: 'EN', avC: 'var(--accent)', kind: 'complete', text: <><strong>Eneas</strong><span className="verb">completed</span><span className="obj">Finalize remaining page designs</span></>, mod: 'Content', modC: 'var(--pink)', when: '9h ago', likes: 5, comments: 1 },
+  { id: 12, who: 'Eneas', av: 'EN', avC: 'var(--accent)', kind: 'status', text: <><strong>Eneas</strong><span className="verb">changed status of</span><span className="obj">Phase 2 — Design Finalization</span></>, statusFrom: 'In progress', statusTo: 'Completed', mod: 'Growth', modC: 'var(--accent)', when: '9h ago', likes: 2, comments: 0 },
+  { id: 13, who: 'Sara',   av: 'SA', avC: 'var(--sage)', kind: 'create', text: <><strong>Sara</strong><span className="verb">uploaded</span><span className="obj">Mulberry brand kit · v3</span></>, mod: 'Content', modC: 'var(--pink)', when: '11h ago', likes: 6, comments: 2, attach: { name: 'Mulberry_kit_v3.fig', size: '8.4 MB' } },
+  { id: 14, who: 'Lucía',  av: 'LU', avC: 'var(--sky)', kind: 'update', text: <>Loving the new <strong>Brand voice</strong> sliders — it auto-fixed three drafts that were sounding too corporate.</>, mod: 'Content', modC: 'var(--pink)', when: '14h ago', likes: 7, comments: 3 },
+];
+
+const PRESENCE = [
+  { name: 'Eneas',    av: 'EN', avC: 'var(--accent)', status: 'online', doing: 'Growth → Pulse',      when: 'now' },
+  { name: 'Lucía',    av: 'LU', avC: 'var(--sky)',     status: 'online', doing: 'Content → Pipeline',  when: 'now' },
+  { name: 'Mateo',    av: 'MA', avC: 'var(--pink)',    status: 'away',   doing: 'last seen 12m ago',    when: '12m' },
+  { name: 'Sara',     av: 'SA', avC: 'var(--sage)',    status: 'online', doing: 'Content → Brands',     when: 'now' },
+  { name: 'Tomás',    av: 'TO', avC: '#A855F7',         status: 'off',    doing: 'offline',              when: '4h' },
+  { name: 'Iris',     av: 'IR', avC: 'var(--wine)',    status: 'off',    doing: 'offline',              when: '2d' },
+];
+
+const CLIENTS = [
+  { name: 'Mulberry Group',  initials: 'M',  bg: 'linear-gradient(135deg, #1F1611, #C4A35A)', fg: '#F5EFE8', doing: 'reviewing proposal v2',     status: 'in' },
+  { name: 'Cremona Capital',  initials: 'C',  bg: 'linear-gradient(135deg, #0F1B2D, #6DBEDC)', fg: '#E8EFF6', doing: 'signed Agency OS · ready',  status: 'signed' },
+  { name: 'Sunnyside',         initials: 'S',  bg: 'linear-gradient(135deg, #23150E, #F1ADD8)', fg: '#FBF2EC', doing: 'last login 2d ago',           status: 'away' },
+];
+
+const THREADS = [
+  { id: 1, title: 'Should we templatize the agency-OS proposal?', avs: ['EN','LU','MA'], replies: 12, unread: 3, when: '1h' },
+  { id: 2, title: 'Q3 hiring: senior strategist vs ops first?',     avs: ['EN','LU'],      replies: 8,  unread: 0, when: '4h' },
+  { id: 3, title: 'Pinterest sync going stale on Mulberry board',    avs: ['SA','EN'],      replies: 4,  unread: 1, when: '8h' },
+];
+
+const PINNED = [
+  { id: 1, title: 'Welcome to LIVV OS · v0.9 internal',            text: 'Read this if you joined this month — covers the 5 modules, the Agent, and the rituals.', when: 'Pinned · 14d', ic: 'sparkle' },
+  { id: 2, title: 'Friday demo · Sunnyside outcomes',              text: 'Eneas walks through the cadence system we deployed for Sunnyside — 90 days, zero misses.', when: 'Pinned · 3d',  ic: 'play' },
+];
+
+// ── COMPONENTS ──────────────────────────────────────────────
+const ActHeader = () => (
+  <header className="act-head">
+    <div>
+      <h1>
+        Activity
+        <span className="act-live"><span className="dot"/>Live</span>
+      </h1>
+      <div className="act-head-meta" style={{ marginTop: 8 }}>
+        <span>Tue, May 19 · Week 21</span>
+        <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+        <span><strong style={{ color: 'var(--os-fg-1)', fontFamily: 'var(--font-sans)', fontWeight: 500 }}>9</strong> people in workspace</span>
+        <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+        <span><strong style={{ color: 'var(--os-fg-1)', fontFamily: 'var(--font-sans)', fontWeight: 500 }}>3</strong> clients online</span>
+      </div>
+    </div>
+    <button className="act-refresh">
+      <OS_ICON name="bolt" size={11}/>Refresh
+    </button>
+  </header>
+);
+
+const Stats = () => (
+  <div className="act-stats">
+    {STATS.map((s, i) => (
+      <div key={i} className="act-stat" style={{ '--c': s.c }}>
+        <div className="act-stat-ic"><OS_ICON name={s.icon} size={14}/></div>
+        <div className="act-stat-body">
+          <div className="act-stat-l">{s.l}</div>
+          <div className="act-stat-v">
+            <span className={`act-stat-num ${s.delta === 'up' ? 'delta-up' : ''}`}>{s.v}</span>
+            <span className="act-stat-sub">{s.sub}</span>
+          </div>
+        </div>
+        <div className="act-stat-spark">
+          {s.spark.map((h, j) => (
+            <span key={j} style={{ height: `${(h / 6) * 100}%` }}/>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const Team = () => {
+  const [open, setOpen] = useS(true);
+  return (
+    <section className="act-team">
+      <header className="act-team-head">
+        <span className="act-team-eyebrow">
+          <OS_ICON name="team" size={11}/>Team · this week
+        </span>
+        <span className="act-team-meta">14 completed · ranked by velocity</span>
+        <button className="act-team-toggle" onClick={() => setOpen(!open)}>
+          <OS_ICON name={open ? 'chevup' : 'chevdown'} size={12}/>
+        </button>
+      </header>
+      {open && TEAM.map(m => (
+        <div key={m.rank} className={`act-team-row ${m.idle ? 'idle' : ''}`}>
+          <span className="act-team-rank">{m.rank}</span>
+          <span className="act-team-av" style={{ background: m.color }}>{m.name.slice(0,2).toUpperCase()}</span>
+          <span className="act-team-name">{m.name}</span>
+          <div className="act-team-bar"><div className="act-team-fill" style={{ width: `${m.pct}%` }}/></div>
+          <span className="act-team-count">{m.done}</span>
+          <span className="act-team-delta">
+            {m.delta !== '0' && (
+              <span className={m.delta.startsWith('+') ? 'pos' : 'neg'}>{m.delta}</span>
+            )}
+            <span style={{ color: 'var(--os-fg-3)' }}>{m.when}</span>
+          </span>
+          <OS_ICON name="chev" size={11} style={{ color: 'var(--os-fg-3)' }}/>
+        </div>
+      ))}
+    </section>
+  );
+};
+
+const ActivityItem = ({ a }) => (
+  <div className="act-item">
+    <div className="act-item-av" style={{ background: a.avC }}>
+      {a.av}
+      {a.kind === 'complete' && <span className="act-item-av-mark complete"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12l5 5 9-11"/></svg></span>}
+      {a.kind === 'update' && <span className="act-item-av-mark message"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg></span>}
+      {a.kind === 'create' && <span className="act-item-av-mark create"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg></span>}
+      {a.kind === 'status' && <span className="act-item-av-mark status"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M7 7l10 10M7 17L17 7"/></svg></span>}
+    </div>
+    <div className="act-item-body">
+      <div className="act-item-text">
+        {a.text}
+        <span className="module-chip" style={{ '--c': a.modC }}>{a.mod}</span>
+      </div>
+      {a.kind === 'update' && a.id === 1 && null}
+      {a.statusFrom && (
+        <div className="act-status-from-to">
+          <span className="act-status-badge b1">{a.statusFrom}</span>
+          <OS_ICON name="arrow" size={10} style={{ color: 'var(--os-fg-3)' }}/>
+          <span className="act-status-badge b2">{a.statusTo}</span>
+        </div>
+      )}
+      {a.attach && (
+        <div className="act-item-attach">
+          <span className="act-item-attach-ic"><OS_ICON name="docs" size={12}/></span>
+          <span><strong style={{ color: 'var(--os-fg-0)', fontWeight: 500 }}>{a.attach.name}</strong> · {a.attach.size}</span>
+        </div>
+      )}
+      {a.suggestion && (
+        <div className="act-item-update" style={{ borderLeft: '2px solid var(--accent)', background: 'color-mix(in oklab, var(--accent) 5%, var(--os-surface))' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 600, marginRight: 8 }}>SUGGESTION</span>
+          {a.suggestion}
+        </div>
+      )}
+      {a.reactions && (
+        <div className="act-reactions">
+          {a.reactions.map((r, i) => (
+            <button key={i} className={`act-reaction ${r.mine ? 'mine' : ''}`}>
+              <span>{r.e}</span><span>{r.n}</span>
+            </button>
+          ))}
+          <button className="act-reaction-add"><OS_ICON name="plus" size={9} stroke={2}/></button>
+        </div>
+      )}
+      <div className="act-item-meta">
+        <button className={a.liked ? 'liked' : ''}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill={a.liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          {a.likes}
+        </button>
+        <button>
+          <OS_ICON name="chat" size={11}/>{a.comments}
+        </button>
+        <button>
+          <OS_ICON name="arrow" size={11}/>Open
+        </button>
+      </div>
+    </div>
+    <span className="act-item-time">{a.when}</span>
+  </div>
+);
+
+const Feed = () => {
+  const [tab, setTab] = useS('all');
+  const [draft, setDraft] = useS('');
+  return (
+    <>
+      <div className="act-tabs-row">
+        {[
+          { id: 'all',      label: 'All Activity', n: 573 },
+          { id: 'mine',     label: 'My Updates',   n: 369 },
+          { id: 'comments', label: 'Comments',     n: 4 },
+          { id: 'files',    label: 'Files' },
+        ].map(t => (
+          <button key={t.id} className={`act-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            {t.label}
+            {t.n != null && <span className="act-tab-count">{t.n}</span>}
+          </button>
+        ))}
+        <div className="act-tabs-row-right">
+          <button className="act-filter-btn"><OS_ICON name="strategy" size={11}/>Module ▾</button>
+          <button className="act-filter-btn"><OS_ICON name="user" size={11}/>Anyone ▾</button>
+        </div>
+      </div>
+
+      <div className="act-composer">
+        <div className="act-composer-av">EN</div>
+        <div className="act-composer-body">
+          <textarea className="act-composer-input" placeholder="Share an update, ask a question, or @ someone…" rows={1} value={draft} onChange={e => setDraft(e.target.value)}/>
+          <div className="act-composer-tools">
+            <button className="act-tool" title="Attach"><OS_ICON name="docs" size={13}/></button>
+            <button className="act-tool" title="Image"><OS_ICON name="content" size={13}/></button>
+            <button className="act-tool" title="Mention"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v6a4 4 0 0 0 8 0v-2a10 10 0 1 0-4 8"/></svg></button>
+            <button className="act-tool" title="Insert link"><OS_ICON name="link" size={13}/></button>
+            <button className="act-tool-chip"><OS_ICON name="strategy" size={10}/>Module</button>
+            <button className="act-tool-chip"><OS_ICON name="sparkle" size={10}/>Ask Agent to draft</button>
+            <button className="act-post-btn" disabled={!draft.trim()}>
+              Post
+              <OS_ICON name="arrow" size={11}/>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="act-feed">
+        <div className="act-day-label">Today</div>
+        {TODAY.map(a => <ActivityItem key={a.id} a={a}/>)}
+        <div className="act-day-label">Yesterday</div>
+        {YESTERDAY.map(a => <ActivityItem key={a.id} a={a}/>)}
+      </div>
+    </>
+  );
+};
+
+const Sidebar = () => (
+  <aside className="act-side">
+    <div className="act-announce">
+      <div className="act-announce-eyebrow"><span className="pulse"/>Team announcement</div>
+      <div className="act-announce-title">Monday demo at 10:00 — Sunnyside cadence wins</div>
+      <div className="act-announce-desc">Eneas walks through the 90-day system that took Mulberry from 6 misses to zero. 25 min. Recording will be in the Reports library.</div>
+      <div className="act-announce-foot">
+        <span>9 invited</span><span style={{ color: 'var(--os-fg-3)' }}>·</span><span>6 confirmed</span>
+        <button className="act-announce-cta">Join</button>
+      </div>
+    </div>
+
+    <section className="act-side-card">
+      <header className="act-side-head">
+        <span className="act-side-title">
+          <span className="act-side-title-ic"><OS_ICON name="team" size={11}/></span>
+          Team online
+        </span>
+        <span className="act-side-meta">{PRESENCE.filter(p => p.status === 'online').length} / {PRESENCE.length}</span>
+      </header>
+      <div className="act-side-body">
+        {PRESENCE.map(p => (
+          <div key={p.name} className="act-presence-row">
+            <span className="act-presence-av" style={{ background: p.avC }}>
+              {p.av}
+              <span className={`act-presence-status ${p.status}`}/>
+            </span>
+            <div className="act-presence-meta">
+              <span className="act-presence-name">{p.name}</span>
+              <span className="act-presence-doing">{p.doing}</span>
+            </div>
+            <span className="act-presence-time">{p.when}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section className="act-side-card">
+      <header className="act-side-head">
+        <span className="act-side-title">
+          <span className="act-side-title-ic"><OS_ICON name="clients" size={11}/></span>
+          Clients in workspace
+        </span>
+        <span className="act-side-meta">{CLIENTS.length} connected</span>
+      </header>
+      <div className="act-side-body" style={{ padding: '8px 0 4px' }}>
+        {CLIENTS.map(c => (
+          <div key={c.name} className="act-client-card">
+            <span className="act-client-av" style={{ background: c.bg, color: c.fg }}>{c.initials}</span>
+            <div className="act-client-body">
+              <div className="act-client-name">{c.name}</div>
+              <div className="act-client-doing">{c.doing}</div>
+            </div>
+            <span className={`act-client-status ${c.status}`}>
+              {c.status === 'in' ? '● Live' : c.status === 'signed' ? '✓ Won' : 'away'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section className="act-side-card">
+      <header className="act-side-head">
+        <span className="act-side-title">
+          <span className="act-side-title-ic"><OS_ICON name="chat" size={11}/></span>
+          Discussions
+        </span>
+        <span className="act-side-meta">{THREADS.reduce((s,t)=>s+t.unread,0)} unread</span>
+      </header>
+      <div className="act-side-body">
+        {THREADS.map(t => (
+          <div key={t.id} className="act-thread">
+            <div className="act-thread-title">{t.title}</div>
+            <div className="act-thread-meta">
+              <div className="act-thread-avs">
+                {t.avs.map((a, i) => (
+                  <span key={i} className="av" style={{ background: ['var(--accent)','var(--sky)','var(--pink)'][i % 3] }}>{a}</span>
+                ))}
+              </div>
+              <span>{t.replies} replies · {t.when}</span>
+              {t.unread > 0 && <span className="unread" style={{ marginLeft: 'auto' }}>{t.unread}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section className="act-side-card">
+      <header className="act-side-head">
+        <span className="act-side-title">
+          <span className="act-side-title-ic"><OS_ICON name="bookmark" size={11}/></span>
+          Pinned
+        </span>
+      </header>
+      <div className="act-side-body">
+        {PINNED.map(p => (
+          <div key={p.id} className="act-pinned">
+            <span className="act-pinned-ic"><OS_ICON name={p.ic} size={12}/></span>
+            <div className="act-pinned-body">
+              <div className="act-pinned-title">{p.title}</div>
+              <div className="act-pinned-text">{p.text}</div>
+              <div className="act-pinned-meta">{p.when}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  </aside>
+);
+
+// ── APP ───────────────────────────────────────────────────────
+// Use the same OS shell — but with a thinner sidebar of just module icons.
+// We patch MODULES to include Activity as the active module.
+const ACT_MODULES = (typeof MODULES !== 'undefined' ? MODULES : []).map(m => ({ ...m }));
+if (!ACT_MODULES.find(m => m.id === 'activity')) {
+  ACT_MODULES.unshift({ id: 'activity', icon: 'activity', label: 'Activity', badge: 3 });
+}
+
+const ActSidebar = () => (
+  <aside className="sb" data-screen-label="Sidebar">
+    <div className="sb-logo">L</div>
+    <nav className="sb-rail">
+      {ACT_MODULES.map(m => (
+        <button key={m.id} className={`sb-item ${m.id === 'activity' ? 'active' : ''}`}>
+          <OS_ICON name={m.icon} size={18}/>
+          {m.badge > 0 && <span className="sb-badge">{m.badge}</span>}
+          <span className="sb-tooltip">{m.label}</span>
+        </button>
+      ))}
+    </nav>
+    <div className="sb-avatar" title="Eneas">E</div>
+  </aside>
+);
+
+const ActTopbar = () => (
+  <header className="tb">
+    <div className="crumbs">
+      <span className="mod-chip">
+        <span className="ic"><OS_ICON name="activity" size={11}/></span>
+        Activity
+      </span>
+      <span className="sep">/</span>
+      <span className="seg-active">Live feed</span>
+    </div>
+    <div className="tb-spacer"/>
+    <button className="tb-search">
+      <OS_ICON name="search" size={14}/>
+      <span>Search updates, files, people…</span>
+      <span className="kbd">⌘K</span>
+    </button>
+    <div className="tb-actions">
+      <button className="tb-iconbtn" title="Notifications">
+        <OS_ICON name="bell" size={15}/>
+        <span className="dot">3</span>
+      </button>
+    </div>
+    <button className="tb-new">
+      <OS_ICON name="plus" size={13}/>
+      New
+    </button>
+  </header>
+);
+
+const App = () => (
+  <div className="os">
+    <ActSidebar/>
+    <div className="main">
+      <ActTopbar/>
+      <div className="scroll">
+        <div className="act-page">
+          <ActHeader/>
+          <Stats/>
+          <div className="act-grid">
+            <div>
+              <Team/>
+              <Feed/>
+            </div>
+            <Sidebar/>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

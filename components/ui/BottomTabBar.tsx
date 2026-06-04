@@ -12,12 +12,15 @@ interface BottomTabBarProps {
 
 const TABS: { id: PageView; label: string; icon: keyof typeof Icons }[] = [
   { id: 'home', label: 'Home', icon: 'Home' },
-  { id: 'projects', label: 'Projects', icon: 'Briefcase' },
+  { id: 'brief', label: 'Brief', icon: 'Sparkles' },
+  { id: 'sales_dashboard', label: 'Sales', icon: 'Chart' },
   { id: 'calendar', label: 'Calendar', icon: 'Calendar' },
-  { id: 'team_clients', label: 'Clients', icon: 'Users' },
 ]
 
 const MORE_ITEMS: { id: PageView | 'theme'; label: string; icon: keyof typeof Icons }[] = [
+  { id: 'build_hub', label: 'Growth OS', icon: 'Briefcase' },
+  { id: 'projects', label: 'Projects', icon: 'Briefcase' },
+  { id: 'team_clients', label: 'Clients', icon: 'Users' },
   { id: 'activity', label: 'Activity', icon: 'Activity' },
   { id: 'docs', label: 'Documents', icon: 'Docs' },
   { id: 'finance', label: 'Finance', icon: 'DollarSign' },
@@ -27,9 +30,9 @@ const MORE_ITEMS: { id: PageView | 'theme'; label: string; icon: keyof typeof Ic
 
 const TAB_COLORS: Record<string, string> = {
   home: 'text-zinc-900 dark:text-zinc-100',
-  projects: 'text-emerald-600 dark:text-emerald-400',
+  brief: 'text-violet-600 dark:text-violet-400',
+  sales_dashboard: 'text-rose-600 dark:text-rose-400',
   calendar: 'text-orange-600 dark:text-orange-400',
-  team_clients: 'text-blue-600 dark:text-blue-400',
 }
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({
@@ -42,11 +45,15 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
 
   const isActive = (id: PageView) =>
     currentPage === id ||
-    (id === 'team_clients' && (currentPage === 'team' || currentPage === 'clients'))
+    (id === 'team_clients' && (currentPage === 'team' || currentPage === 'clients')) ||
+    (id === 'brief' && currentPage === 'communications') ||
+    (id === 'sales_dashboard' && ['sales_dashboard', 'sales_pipeline', 'sales_leads', 'sales_analytics'].includes(currentPage))
 
-  const isMoreActive = MORE_ITEMS.some(
-    item => item.id !== 'theme' && currentPage === item.id
-  )
+  const isMoreActive = MORE_ITEMS.some(item => {
+    if (item.id === 'theme') return false
+    if (item.id === currentPage) return true
+    return item.id === 'build_hub' && ['build_hub', 'growth_dashboard', 'agent', 'strategy_hub', 'content_engine', 'products', 'strategy_toolkit', 'team_scaling'].includes(currentPage)
+  })
 
   return (
     <>

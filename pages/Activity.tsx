@@ -85,6 +85,7 @@ function getActivityBadge(type: string): ActivityBadge | null {
     case 'status_change':   return { icon: Icons.Flag,        tone: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400' };
     case 'user_login':      return { icon: Icons.LogIn,       tone: 'text-teal-500 bg-teal-50 dark:bg-teal-500/10 dark:text-teal-400' };
     case 'user_logout':     return { icon: Icons.LogOut,      tone: 'text-zinc-500 bg-zinc-50 dark:bg-zinc-500/10 dark:text-zinc-400' };
+    case 'page_view':       return { icon: Icons.Eye,         tone: 'text-sky-500 bg-sky-50 dark:bg-sky-500/10 dark:text-sky-400' };
     default: return null;
   }
 }
@@ -371,6 +372,7 @@ export const Activity: React.FC<ActivityProps> = ({ onNavigate }) => {
                         a.type === 'project_created' ? 'created project' :
                         a.type === 'user_login' ? 'signed in to' :
                         a.type === 'user_logout' ? 'signed out of' :
+                        a.type === 'page_view' ? 'opened' :
                         (a.action || 'updated'),
           target: a.target || 'General',
           taskId: a.metadata?.task_id || a.details?.task_id || null,

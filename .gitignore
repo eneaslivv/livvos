@@ -31,3 +31,4 @@ mcp-server/.env
 
 # One-shot consolidated migration files (paste into Supabase SQL Editor, then delete)
 apply-pending-migrations.sql
+.vercel

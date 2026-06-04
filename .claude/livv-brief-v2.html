@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LIVV OS — Brief</title>
+<link rel="stylesheet" href="livv-os-styles.css">
+<style>
+.bf-page { padding: 24px 32px 24px; max-width: 1500px; margin: 0 auto; height: calc(100vh - 56px); display: flex; flex-direction: column; min-height: 0; }
+.bf-cols {
+  display: grid; grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px; align-items: start;
+  flex: 1; min-height: 0;
+}
+.bf-left {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.bf-left-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex; flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+.bf-left-scroll::-webkit-scrollbar { width: 5px; }
+.bf-left-scroll::-webkit-scrollbar-thumb { background: rgba(90,62,62,0.10); border-radius: 999px; }
+.bf-left-scroll::-webkit-scrollbar-thumb:hover { background: rgba(90,62,62,0.20); }
+.bf-right {
+  height: 100%;
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.bf-card {
+  background: var(--os-panel);
+  border: 0.5px solid rgba(214,209,199,0.55);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset, 0 1px 2px rgba(44,4,5,0.03);
+}
+.bf-card-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px dashed rgba(90,62,62,0.12);
+}
+.bf-card-title {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 500;
+  color: var(--os-fg-0);
+}
+.bf-card-title .ic {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-card-action {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-2); cursor: pointer;
+  letter-spacing: 0.06em;
+}
+.bf-card-action:hover { color: var(--os-fg-0); }
+.bf-card-body { padding: 12px 16px; }
+
+/* LEFT — date strip + aphorism */
+.bf-date-strip {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px;
+  background: var(--os-panel);
+  border: 0.5px solid rgba(214,209,199,0.55);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset;
+}
+.bf-date-meet {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--os-fg-1);
+}
+.bf-date-meet .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(118,146,104,0.18);
+}
+.bf-date {
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--os-fg-1); font-weight: 500;
+}
+
+.bf-brief-head {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+.bf-brief-head .eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--os-fg-2);
+}
+.bf-brief-head .eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.bf-brief-head .head-actions {
+  margin-left: auto;
+  display: inline-flex; gap: 4px;
+}
+.bf-brief-head .head-actions button {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-brief-head .head-actions button:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+.bf-aphorism {
+  padding: 12px 14px;
+  background: linear-gradient(110deg, color-mix(in oklab, var(--accent) 5%, var(--os-panel)) 0%, var(--os-panel) 100%);
+  border: 0.5px solid rgba(214,209,199,0.55);
+  border-radius: 14px;
+  border-left: 2px solid var(--accent);
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--os-fg-1);
+  font-style: italic;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset;
+}
+.bf-aphorism em {
+  display: block;
+  color: var(--os-fg-0); font-weight: 500; font-style: italic;
+  margin-top: 3px;
+}
+
+/* Zone cards in left column */
+.bf-zone {
+  --tone: var(--accent);
+  padding: 13px 14px;
+  background: var(--os-panel);
+  border: 0.5px solid rgba(214,209,199,0.55);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset, 0 1px 2px rgba(44,4,5,0.03);
+  transition: box-shadow .25s var(--ios-ease);
+}
+.bf-zone:hover { box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset, 0 4px 14px -6px rgba(44,4,5,0.08); }
+.bf-zone::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--tone) 0%, transparent 100%);
+  opacity: 0.6;
+}
+.bf-zone-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.bf-zone-head .ic {
+  width: 18px; height: 18px; border-radius: 5px;
+  background: color-mix(in oklab, var(--tone) 14%, var(--os-surface));
+  color: var(--tone);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-zone-head .title { font-size: 13px; font-weight: 500; color: var(--os-fg-0); }
+.bf-zone-head .pulse {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--tone);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--tone) 22%, transparent);
+}
+
+.bf-pills {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  margin-bottom: 9px;
+}
+.bf-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px;
+  background: var(--os-surface);
+  border-radius: 999px;
+  font-size: 10.5px;
+}
+.bf-pill .l {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--os-fg-2);
+}
+.bf-pill .v {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  color: var(--os-fg-0); font-weight: 600;
+}
+.bf-pill.hot {
+  background: color-mix(in oklab, var(--tone) 10%, var(--os-surface));
+  border: 0.5px solid color-mix(in oklab, var(--tone) 22%, transparent);
+}
+.bf-pill.hot .v { color: var(--tone); }
+.bf-pill.muted .v { color: var(--os-fg-3); font-weight: 500; }
+
+.bf-zone-list {
+  display: flex; flex-direction: column;
+  margin: 0 -10px;
+}
+.bf-zone-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 7px;
+  font-size: 12px; line-height: 1.35;
+  color: var(--os-fg-1);
+  transition: background .15s var(--ios-ease);
+}
+.bf-zone-item:hover { background: color-mix(in oklab, var(--tone) 6%, transparent); }
+.bf-zone-item .ic {
+  width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.bf-zone-item .ic.fire { color: var(--err); }
+.bf-zone-item .ic.cp   { color: var(--sky); }
+.bf-zone-item .ic.msg  { color: var(--accent); }
+.bf-zone-item .ic.date {
+  width: auto; padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in oklab, var(--tone) 12%, var(--os-surface));
+  color: var(--tone);
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.04em; font-weight: 600;
+}
+.bf-zone-item .body {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bf-zone-item .meta {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* Quick chips + Ask */
+.bf-chips {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  margin-bottom: 8px;
+}
+.bf-chip {
+  padding: 5px 11px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-1);
+  cursor: pointer;
+  transition: all .2s var(--ios-ease);
+}
+.bf-chip:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.bf-chip.cat-tasks    { color: var(--err); border-color: color-mix(in oklab, var(--err) 24%, var(--os-border-2)); }
+.bf-chip.cat-mail     { color: var(--sky); border-color: color-mix(in oklab, var(--sky) 24%, var(--os-border-2)); }
+.bf-chip.cat-cal      { color: var(--sage); border-color: color-mix(in oklab, var(--sage) 24%, var(--os-border-2)); }
+.bf-chip.cat-finance  { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 24%, var(--os-border-2)); }
+
+.bf-ask {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 8px 8px 14px;
+  background: var(--os-panel);
+  border: 0.5px solid rgba(214,209,199,0.55);
+  border-radius: 16px;
+  transition: all .25s var(--ios-ease);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset, 0 2px 8px -2px rgba(44,4,5,0.05);
+}
+.bf-ask:focus-within { border-color: var(--accent-strong); box-shadow: 0 0 0 4px var(--accent-soft); }
+.bf-ask input {
+  flex: 1; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 13px;
+  color: var(--os-fg-0); padding: 5px 0;
+  font-family: var(--font-sans);
+}
+.bf-ask input::placeholder { color: var(--os-fg-3); }
+.bf-ask-btn {
+  width: 28px; height: 28px; border-radius: 999px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-2);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s var(--ios-ease);
+}
+.bf-ask-btn:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.bf-ask-btn.primary { background: var(--os-ink); color: var(--livv-cream-50); }
+.bf-ask-btn.primary:hover { background: var(--wine); }
+
+/* ─── RIGHT — Inbox/Tasks/Cal ─── */
+.bf-tabs-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 6px 4px 4px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px 14px 0 0;
+  border-bottom: 0;
+}
+.bf-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px;
+  background: transparent; border: 0; cursor: pointer;
+  font-size: 13px; font-weight: 500;
+  color: var(--os-fg-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all .2s var(--ios-ease);
+  border-radius: 8px 8px 0 0;
+}
+.bf-tab:hover { color: var(--os-fg-0); }
+.bf-tab.active {
+  color: var(--os-fg-0);
+  border-bottom-color: var(--os-ink);
+}
+.bf-tab .count {
+  font-family: var(--font-mono); font-size: 9.5px;
+  padding: 1px 6px; border-radius: 5px;
+  background: var(--os-surface); color: var(--os-fg-2);
+}
+.bf-tab.active .count { background: var(--os-ink); color: var(--livv-cream-50); }
+.bf-tabs-right { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-right: 8px; }
+.bf-open-full {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--accent); cursor: pointer;
+  letter-spacing: 0.06em;
+}
+.bf-open-full:hover { color: var(--wine); }
+
+/* Filter bar (sources, urgency, search) */
+.bf-filterbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--os-panel);
+  border-left: 0.5px solid var(--os-border-2);
+  border-right: 0.5px solid var(--os-border-2);
+  border-bottom: 1px dashed rgba(90,62,62,0.10);
+  flex-wrap: wrap;
+}
+.bf-search-mini {
+  flex: 1; min-width: 200px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 11px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border);
+  border-radius: 999px;
+  color: var(--os-fg-2);
+  font-size: 12px;
+}
+.bf-search-mini input {
+  flex: 1; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 12px; color: var(--os-fg-0);
+}
+.bf-search-mini input::placeholder { color: var(--os-fg-3); }
+
+.bf-source-pills { display: flex; gap: 4px; }
+.bf-src {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px 5px 8px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border);
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-1);
+  cursor: pointer;
+  transition: all .2s var(--ios-ease);
+}
+.bf-src:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.bf-src.active {
+  background: color-mix(in oklab, var(--c) 12%, var(--os-panel));
+  border-color: color-mix(in oklab, var(--c) 30%, transparent);
+  color: var(--c);
+  font-weight: 500;
+}
+.bf-src .ic {
+  width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-src .n {
+  font-family: var(--font-mono); font-size: 9.5px;
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--os-surface); color: var(--os-fg-2);
+}
+.bf-src.active .n {
+  background: color-mix(in oklab, var(--c) 20%, transparent);
+  color: var(--c);
+}
+
+.bf-urgency {
+  display: inline-flex; align-items: center;
+  padding: 2px;
+  background: var(--os-surface);
+  border-radius: 999px;
+}
+.bf-urgency-btn {
+  padding: 4px 11px;
+  background: transparent; border: 0; cursor: pointer;
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-2);
+  font-weight: 500;
+  transition: all .2s var(--ios-ease);
+}
+.bf-urgency-btn.active {
+  background: var(--os-ink); color: var(--livv-cream-50);
+}
+
+.bf-filter-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border);
+  border-radius: 999px;
+  font-size: 11px; color: var(--os-fg-1);
+  cursor: pointer;
+}
+.bf-filter-btn:hover { background: var(--os-surface); }
+
+/* Ask chat reply with preview */
+.bf-ask-thread {
+  margin-top: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.bf-ask-bubble {
+  display: flex; gap: 10px;
+  animation: bf-msg-in .35s var(--ios-ease) both;
+}
+.bf-ask-bubble-av {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: var(--os-ink); color: var(--accent-bright);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; position: relative;
+}
+.bf-ask-bubble-av::before {
+  content: ''; position: absolute; inset: -1px; border-radius: 8px;
+  background: conic-gradient(from 0deg, #E8BC59, #769268, #6DBEDC, #F1ADD8, #E8BC59);
+  z-index: -1; filter: blur(3px); opacity: 0.4;
+}
+.bf-ask-bubble-body {
+  flex: 1; min-width: 0;
+  padding: 9px 12px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 11px;
+  border-top-left-radius: 4px;
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--os-fg-0);
+}
+.bf-ask-bubble-body strong { font-weight: 500; }
+
+.bf-ask-preview {
+  margin-top: 8px;
+  padding: 0;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 9px;
+  overflow: hidden;
+  animation: bf-msg-in .4s .1s var(--ios-ease) both;
+}
+.bf-ask-preview-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 11px;
+  background: linear-gradient(110deg, color-mix(in oklab, var(--c) 8%, var(--os-panel)) 0%, var(--os-panel) 100%);
+  border-bottom: 0.5px dashed rgba(90,62,62,0.10);
+}
+.bf-ask-preview-ic {
+  width: 18px; height: 18px; border-radius: 5px;
+  background: color-mix(in oklab, var(--c) 16%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.bf-ask-preview-title {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--c); font-weight: 600;
+}
+.bf-ask-preview-open {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--os-fg-2); cursor: pointer;
+}
+.bf-ask-preview-open:hover { color: var(--os-fg-0); }
+.bf-ask-preview-body { padding: 9px 11px; }
+
+.bf-prev-task {
+  display: grid; grid-template-columns: 16px 1fr auto;
+  gap: 9px; align-items: center;
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+.bf-prev-task + .bf-prev-task {
+  border-top: 1px dashed rgba(90,62,62,0.06);
+}
+.bf-prev-task .check {
+  width: 14px; height: 14px; border-radius: 999px;
+  border: 1.4px solid var(--os-border-2);
+  background: var(--os-panel);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-prev-task .check.done { background: var(--ok); border-color: var(--ok); color: #fff; }
+.bf-prev-task .t { font-size: 11.5px; color: var(--os-fg-0); }
+.bf-prev-task .when {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--os-fg-3);
+}
+.bf-prev-task .when.overdue { color: var(--err); }
+
+.bf-prev-cal {
+  display: grid; grid-template-columns: 42px 1fr;
+  gap: 9px; align-items: center;
+  padding: 6px 4px;
+}
+.bf-prev-cal + .bf-prev-cal { border-top: 1px dashed rgba(90,62,62,0.06); }
+.bf-prev-cal .time {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--os-fg-0); font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.bf-prev-cal .l {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--os-fg-0);
+}
+.bf-prev-cal .dot { width: 6px; height: 6px; border-radius: 999px; }
+
+.bf-prev-msg {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 6px 4px;
+}
+.bf-prev-msg + .bf-prev-msg { border-top: 1px dashed rgba(90,62,62,0.06); }
+.bf-prev-msg .av {
+  width: 18px; height: 18px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8.5px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.bf-prev-msg .body { flex: 1; min-width: 0; }
+.bf-prev-msg .who { font-size: 11px; font-weight: 500; color: var(--os-fg-0); }
+.bf-prev-msg .sub { font-size: 11px; color: var(--os-fg-2); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.bf-ask-actions {
+  display: flex; gap: 5px;
+  margin-top: 8px;
+  padding: 8px 11px 9px;
+  background: var(--os-surface-2);
+  border-top: 1px dashed rgba(90,62,62,0.08);
+}
+.bf-ask-action {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  font-size: 10.5px; color: var(--os-fg-1);
+  cursor: pointer;
+}
+.bf-ask-action:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.bf-ask-action.primary { background: var(--os-ink); color: var(--livv-cream-50); border-color: var(--os-ink); }
+.bf-ask-action.primary:hover { background: var(--wine); }
+
+/* ─── INBOX FEED · iOS-style grouped ─── */
+.bf-feed {
+  background: linear-gradient(180deg, var(--os-panel) 0%, var(--os-surface-2) 100%);
+  border: 0.5px solid var(--os-border-2);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  padding: 6px;
+}
+.bf-day {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 6px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--os-fg-3); font-weight: 600;
+}
+.bf-day::after { content: ''; flex: 1; height: 1px; background: transparent; }
+
+.bf-msg {
+  display: grid;
+  grid-template-columns: 30px 1fr 90px;
+  gap: 14px;
+  padding: 12px 14px;
+  align-items: flex-start;
+  cursor: pointer;
+  background: var(--os-panel);
+  border-radius: 0;
+  position: relative;
+  transition:
+    background .25s var(--ios-ease),
+    transform .35s var(--spring),
+    box-shadow .25s var(--ios-ease);
+  animation: bf-msg-in .35s var(--ios-ease) both;
+}
+@keyframes bf-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bf-msg + .bf-msg::before {
+  content: '';
+  position: absolute; top: 0; left: 56px; right: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(90,62,62,0.07) 20%, rgba(90,62,62,0.07) 80%, transparent);
+}
+.bf-msg:first-of-type { border-radius: 12px 12px 0 0; }
+.bf-msg:last-of-type  { border-radius: 0 0 12px 12px; }
+.bf-msg:only-of-type  { border-radius: 12px; }
+
+.bf-msg:hover {
+  background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 4%, var(--os-panel)) 0%, var(--os-panel) 100%);
+  transform: translateX(2px);
+  z-index: 2;
+  box-shadow: 0 4px 18px -8px rgba(44,4,5,0.10);
+}
+.bf-msg:hover + .bf-msg::before,
+.bf-msg:hover::before { opacity: 0; }
+.bf-msg:active { transform: scale(0.995); }
+
+.bf-msg.unread {
+  background:
+    linear-gradient(110deg, color-mix(in oklab, var(--accent) 7%, var(--os-panel)) 0%, var(--os-panel) 60%);
+}
+.bf-msg.unread:hover {
+  background: linear-gradient(110deg, color-mix(in oklab, var(--accent) 12%, var(--os-panel)) 0%, color-mix(in oklab, var(--accent) 3%, var(--os-panel)) 100%);
+}
+
+/* Source-tinted left edge accent on unread */
+.bf-msg.unread::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 16%; bottom: 16%;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 0 999px 999px 0;
+}
+.bf-msg.source-mail.unread::after  { background: #0A66C2; }
+.bf-msg.source-slack.unread::after { background: #4A154B; }
+.bf-msg.source-msg.unread::after   { background: var(--sky); }
+
+.bf-msg-av {
+  width: 28px; height: 28px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 600; color: #fff;
+  position: relative;
+  margin-top: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+.bf-msg-src {
+  position: absolute;
+  bottom: -3px; right: -3px;
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--c);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.bf-msg-body { min-width: 0; }
+.bf-msg-head {
+  display: flex; align-items: center; gap: 7px;
+  margin-bottom: 4px;
+}
+.bf-msg-tag {
+  display: inline-flex; align-items: center;
+  padding: 1.5px 7px;
+  background: color-mix(in oklab, var(--tc) 12%, var(--os-surface));
+  color: var(--tc);
+  border-radius: 4px;
+  font-family: var(--font-mono); font-size: 8.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 600;
+}
+.bf-msg-from {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-0);
+  letter-spacing: -0.005em;
+}
+.bf-msg.unread .bf-msg-from::after {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}
+.bf-msg-channel {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-2);
+  letter-spacing: 0.04em;
+}
+.bf-msg-subject {
+  font-size: 13px;
+  color: var(--os-fg-0);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.bf-msg.unread .bf-msg-subject { font-weight: 500; }
+.bf-msg-preview {
+  font-size: 12px; line-height: 1.45;
+  color: var(--os-fg-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bf-msg-foot {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-top: 7px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity .2s var(--ios-ease),
+    transform .25s var(--ios-ease);
+}
+.bf-msg:hover .bf-msg-foot {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bf-msg-action {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-2);
+  font-size: 11px; padding: 2px 0;
+}
+.bf-msg-action:hover { color: var(--accent); }
+.bf-msg-attach {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-2); letter-spacing: 0.04em;
+}
+
+.bf-msg-time {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-3); letter-spacing: 0.04em;
+  text-align: right;
+  white-space: nowrap;
+}
+.bf-msg-prio {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  margin-top: 4px;
+  transition: transform .3s var(--spring);
+}
+.bf-msg:hover .bf-msg-prio { transform: scale(1.05); }
+.bf-msg-prio.fyi      { background: var(--os-surface); color: var(--os-fg-2); }
+.bf-msg-prio.action   { background: rgba(196,163,90,0.13); color: #8b6a17; }
+.bf-msg-prio.urgent   { background: rgba(239,68,68,0.12); color: var(--err); }
+.bf-msg-prio.replied  { background: rgba(118,146,104,0.13); color: var(--ok); }
+
+/* Tasks list (when tab=tasks) */
+.bf-task-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--os-divider);
+  cursor: pointer;
+  transition: background .15s var(--ios-ease);
+}
+.bf-task-row:hover { background: var(--os-surface-2); }
+.bf-task-check {
+  width: 18px; height: 18px; border-radius: 999px;
+  border: 1.5px solid var(--os-border-2);
+  background: var(--os-panel); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--os-fg-0);
+  transition: all .2s var(--ios-ease);
+}
+.bf-task-check.done {
+  background: var(--ok); border-color: var(--ok); color: #fff;
+}
+.bf-task-body { min-width: 0; }
+.bf-task-title { font-size: 13px; color: var(--os-fg-0); font-weight: 500; }
+.bf-task-title.done { text-decoration: line-through; color: var(--os-fg-3); font-weight: 400; }
+.bf-task-meta {
+  display: flex; gap: 10px; align-items: center;
+  margin-top: 3px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--os-fg-2); letter-spacing: 0.04em;
+}
+.bf-task-when.overdue { color: var(--err); font-weight: 500; }
+.bf-task-when.today { color: var(--accent); font-weight: 500; }
+
+/* MODAL — slide-over from right inside the page */
+.bf-modal-back {
+  position: fixed; inset: 0;
+  background: rgba(44,4,5,0.25);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  opacity: 0;
+  animation: so-fade .25s var(--ios-ease) forwards;
+}
+.bf-modal {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 560px;
+  max-width: 96vw;
+  background: var(--os-panel);
+  box-shadow: -40px 0 80px -24px rgba(44,4,5,0.12);
+  z-index: 100;
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  animation: so-in .35s var(--ios-ease) forwards;
+}
+.bf-modal-head {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px dashed rgba(90,62,62,0.14);
+}
+.bf-modal-av {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; color: #fff;
+  flex-shrink: 0;
+  position: relative;
+}
+.bf-modal-line { flex: 1; min-width: 0; }
+.bf-modal-from {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14.5px; font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--os-fg-0);
+}
+.bf-modal-subj {
+  font-size: 16px; font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--os-fg-0);
+  margin-top: 4px;
+}
+.bf-modal-sub {
+  margin-top: 4px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--os-fg-2);
+  display: inline-flex; gap: 8px; align-items: center;
+}
+.bf-modal-actions { display: flex; gap: 4px; }
+.bf-modal-iconbtn {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-1);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s var(--ios-ease);
+}
+.bf-modal-iconbtn:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+.bf-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.bf-modal-msg {
+  font-size: 13.5px; line-height: 1.65;
+  color: var(--os-fg-0);
+}
+.bf-modal-msg p { margin: 0 0 12px; }
+.bf-modal-attach {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 9px;
+  margin-top: 14px;
+  cursor: pointer;
+}
+.bf-modal-attach:hover { background: var(--os-surface-2); }
+.bf-modal-attach-ic {
+  width: 30px; height: 36px; border-radius: 5px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.bf-modal-ai {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: linear-gradient(110deg, var(--accent-soft) 0%, var(--os-panel) 70%);
+  border: 0.5px solid var(--accent-strong);
+  border-radius: 11px;
+  display: flex; gap: 11px; align-items: flex-start;
+}
+.bf-modal-ai-ic {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--os-ink); color: var(--accent-bright);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.bf-modal-ai-ic::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 10px;
+  background: conic-gradient(from 0deg, #E8BC59, #769268, #6DBEDC, #F1ADD8, #E8BC59);
+  z-index: -1; filter: blur(4px); opacity: 0.35;
+}
+.bf-modal-ai-eyebrow {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600;
+  margin-bottom: 4px;
+}
+.bf-modal-ai-text { font-size: 12.5px; line-height: 1.5; color: var(--os-fg-0); }
+.bf-modal-ai-cta { display: flex; gap: 6px; margin-top: 9px; }
+.bf-modal-ai-btn {
+  padding: 5px 11px;
+  background: var(--os-ink); color: var(--livv-cream-50);
+  border: 0; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.bf-modal-ai-btn:hover { background: var(--wine); }
+.bf-modal-ai-btn.ghost {
+  background: transparent; color: var(--os-fg-1);
+  border: 0.5px solid var(--os-border-2);
+}
+.bf-modal-ai-btn.ghost:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+.bf-modal-foot {
+  padding: 14px 24px;
+  border-top: 1px dashed rgba(90,62,62,0.14);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.bf-modal-foot-row {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 8px 8px 14px;
+  background: var(--os-surface);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 14px;
+}
+.bf-modal-foot-row textarea {
+  flex: 1; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 13px; line-height: 1.5;
+  color: var(--os-fg-0);
+  resize: none; padding: 5px 0;
+  font-family: var(--font-sans);
+  min-height: 22px; max-height: 120px;
+}
+.bf-modal-foot-row textarea::placeholder { color: var(--os-fg-3); }
+.bf-modal-foot-tools {
+  display: flex; align-items: center; gap: 4px;
+}
+.bf-modal-send {
+  padding: 7px 16px;
+  background: var(--os-ink); color: var(--livv-cream-50);
+  border: 0; border-radius: 999px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.bf-modal-send:hover { background: var(--wine); }
+.bf-modal-actions-row {
+  display: flex; gap: 6px;
+}
+.bf-modal-actions-row button {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 12px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 9px;
+  font-size: 11.5px; font-weight: 500;
+  color: var(--os-fg-1); cursor: pointer;
+  transition: all .2s var(--ios-ease);
+}
+.bf-modal-actions-row button:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+/* ─── AGENT PREVIEW ─── */
+.bf-agent-mini {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+  background: linear-gradient(110deg, rgba(124,92,255,0.10) 0%, var(--os-panel) 100%);
+  border: 0.5px solid rgba(124,92,255,0.22);
+  border-radius: 11px;
+  animation: bf-msg-in .35s var(--ios-ease) both;
+}
+.bf-agent-mini-ic {
+  width: 24px; height: 24px; border-radius: 7px;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+.bf-agent-mini-title { font-size: 12px; font-weight: 500; color: var(--os-fg-0); }
+.bf-agent-mini-sub {
+  font-family: var(--font-mono); font-size: 10px;
+  color: #7C5CFF; letter-spacing: 0.04em; margin-top: 2px;
+}
+.bf-agent-mini-x {
+  width: 20px; height: 20px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-agent-mini-x:hover { background: var(--os-surface); color: var(--err); }
+
+/* Preview tab style */
+.bf-tab-preview {
+  background: linear-gradient(135deg, rgba(124,92,255,0.10) 0%, var(--os-panel) 100%);
+  border: 0.5px solid rgba(124,92,255,0.22);
+  border-radius: 8px 8px 0 0 !important;
+  margin-bottom: -1px;
+}
+.bf-tab-preview.active {
+  background: linear-gradient(180deg, var(--os-panel) 0%, color-mix(in oklab, #7C5CFF 4%, var(--os-panel)) 100%);
+  border-bottom-color: #7C5CFF !important;
+  color: var(--os-fg-0);
+}
+.bf-tab-preview-ic {
+  width: 16px; height: 16px; border-radius: 5px;
+  background: #7C5CFF; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.bf-preview {
+  background: linear-gradient(180deg, var(--os-panel) 0%, color-mix(in oklab, #7C5CFF 2%, var(--os-panel)) 100%);
+  border: 0.5px solid var(--os-border-2);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.bf-preview-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px dashed rgba(124,92,255,0.18);
+}
+.bf-preview-head-l { display: flex; align-items: center; gap: 12px; flex: 1; }
+.bf-preview-ic {
+  width: 32px; height: 32px; border-radius: 9px;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px -1px rgba(0,0,0,0.12);
+  position: relative;
+}
+.bf-preview-ic::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 11px;
+  background: conic-gradient(from 0deg, #E8BC59, #769268, #6DBEDC, #F1ADD8, #E8BC59);
+  z-index: -1; filter: blur(5px); opacity: 0.4;
+  animation: spin 6s linear infinite;
+}
+.bf-preview-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: #7C5CFF; font-weight: 600;
+}
+.bf-preview-pulse {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: #7C5CFF;
+  box-shadow: 0 0 0 3px rgba(124,92,255,0.18);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+.bf-preview-title {
+  margin: 4px 0 0;
+  font-size: 16px; font-weight: 500;
+  letter-spacing: -0.015em; color: var(--os-fg-0);
+}
+
+.bf-preview-summary {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 14px 18px;
+  background: linear-gradient(110deg, color-mix(in oklab, #7C5CFF 5%, var(--os-panel)) 0%, var(--os-panel) 100%);
+  border-bottom: 1px dashed rgba(124,92,255,0.10);
+}
+.bf-preview-summary-ic {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: rgba(124,92,255,0.13); color: #7C5CFF;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.bf-preview-summary p {
+  margin: 0; font-size: 13px; line-height: 1.55;
+  color: var(--os-fg-0);
+}
+
+.bf-preview-target {
+  padding: 12px 18px 14px;
+  border-bottom: 1px dashed rgba(124,92,255,0.10);
+}
+.bf-preview-target-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  margin-top: 6px;
+  background: var(--os-surface-2);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.bf-preview-target-card strong { font-weight: 500; color: var(--os-fg-0); }
+.bf-preview-target-ic {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: rgba(124,92,255,0.13); color: #7C5CFF;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.bf-preview-list {
+  padding: 4px 0 10px;
+  flex: 1;
+}
+.bf-preview-item {
+  display: grid;
+  grid-template-columns: 26px 1fr 28px;
+  gap: 12px; align-items: center;
+  padding: 11px 18px;
+  cursor: pointer;
+  transition: background .2s var(--ios-ease), transform .25s var(--spring);
+  animation: bf-msg-in .4s var(--ios-ease) both;
+}
+.bf-preview-item:hover {
+  background: color-mix(in oklab, #7C5CFF 4%, var(--os-panel));
+  transform: translateX(2px);
+}
+.bf-preview-item-kind {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: color-mix(in oklab, var(--c) 14%, var(--os-surface));
+  color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+}
+.bf-preview-item-text {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--os-fg-0); letter-spacing: -0.005em;
+}
+.bf-preview-item-dest {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 3px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--os-fg-2); letter-spacing: 0.04em;
+}
+.bf-preview-item-dest strong { color: var(--os-fg-0); font-weight: 500; }
+.bf-preview-item-mod {
+  padding: 1px 7px;
+  background: color-mix(in oklab, var(--c) 10%, var(--os-surface));
+  color: var(--c);
+  border-radius: 999px;
+  font-size: 9px; letter-spacing: 0.16em;
+  text-transform: uppercase; font-weight: 600;
+}
+.bf-preview-item-edit {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--os-fg-3);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity .2s var(--ios-ease);
+}
+.bf-preview-item:hover .bf-preview-item-edit { opacity: 1; }
+.bf-preview-item-edit:hover { background: var(--os-surface); color: var(--os-fg-0); }
+
+.bf-preview-foot {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 18px;
+  border-top: 1px dashed rgba(124,92,255,0.18);
+  background: linear-gradient(180deg, var(--os-panel) 0%, color-mix(in oklab, #7C5CFF 3%, var(--os-panel)) 100%);
+}
+.bf-preview-edit {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 12px;
+  background: var(--os-panel);
+  border: 0.5px solid var(--os-border-2);
+  border-radius: 999px;
+  font-size: 11.5px; color: var(--os-fg-1);
+  cursor: pointer;
+  transition: all .2s var(--ios-ease);
+}
+.bf-preview-edit:hover { background: var(--os-surface); color: var(--os-fg-0); }
+.bf-preview-apply {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background: #7C5CFF;
+  color: #fff;
+  border: 0; border-radius: 999px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px -2px rgba(124,92,255,0.4);
+  transition: all .2s var(--ios-ease);
+}
+.bf-preview-apply:hover { background: #6B47FF; transform: translateY(-1px); box-shadow: 0 4px 14px -2px rgba(124,92,255,0.5); }
+.bf-preview-apply:active { transform: scale(0.98); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="livv-os-data.jsx"></script>
+<script type="text/babel" src="livv-os-shell.jsx"></script>
+<script type="text/babel">
+const { useState: useS, useEffect: useE } = React;
+
+const SOURCES = {
+  mail:   { c: '#0A66C2', label: 'Mail',   ic: 'M' },
+  slack:  { c: '#4A154B', label: 'Slack',  ic: 'S' },
+  msg:    { c: 'var(--sky)', label: 'DM',  ic: 'D' },
+  task:   { c: 'var(--accent)', label: 'Tasks', ic: 'T' },
+};
+
+const TAGS = {
+  fyi:      { l: 'FYI',      c: 'var(--os-fg-2)' },
+  approval: { l: 'Approval', c: '#8b6a17' },
+  bug:      { l: 'Bug',      c: 'var(--err)' },
+  feedback: { l: 'Feedback', c: 'var(--sky)' },
+  sales:    { l: 'Sales',    c: 'var(--accent)' },
+  finance:  { l: 'Finance',  c: 'var(--ok)' },
+  hr:       { l: 'HR',       c: 'var(--pink)' },
+};
+
+const PRIORITY_OPTS = [
+  { id: 'all',     l: 'All' },
+  { id: 'urgent',  l: 'Urgent' },
+  { id: 'action',  l: 'Action' },
+  { id: 'fyi',     l: 'FYI' },
+];
+
+const MESSAGES = [
+  { id: 1, from: 'Christie King', av: 'CK', avC: 'var(--pink)', source: 'mail',  subject: 'Re: Homepage hero direction — small note',  preview: 'Loving the new direction overall. One small note about the typography weight — feels a bit heavy on mobile. Could we test 500 vs 600?', tag: 'feedback', prio: 'action',  when: '10h', day: 'today',     unread: true,  attach: 'hero-mockup_v3.fig' },
+  { id: 2, from: 'Christie King', av: 'CK', avC: 'var(--pink)', source: 'mail',  subject: 'Logos updated — want to tone down the yellow?',   preview: 'He just sent over updated logos. Im wondering if we should tone down the yellow a bit and add more white or gray with po…', tag: 'feedback', prio: 'fyi',     when: '10h', day: 'today',     unread: true },
+  { id: 3, from: 'Eneas',         av: 'EN', avC: 'var(--accent)', source: 'slack', subject: '<@U0ATTQ1EU0L>',                                  preview: 'Mensaje en #design-review · pingueando a Lucía sobre el handoff de Sunnyside antes del demo del lunes.', tag: 'fyi', prio: 'fyi',  when: '10h', day: 'today',     unread: false, channel: '#design-review' },
+  { id: 4, from: 'Eneas',         av: 'EN', avC: 'var(--accent)', source: 'slack', subject: 'tryclou.com/r/806de4f46f053',                     preview: 'Found a reference for the lifecycle workflow we discussed yesterday — exactly the cadence Mulberry needs.', tag: 'fyi', prio: 'fyi',  when: '10h', day: 'today',     unread: false, channel: '#research' },
+  { id: 5, from: 'Eneas',         av: 'EN', avC: 'var(--accent)', source: 'slack', subject: 'Images already impact ~60% of the page style',      preview: 'OK, the only thing is that I feel the images could already impact about 60% of the overall style of the page, depending…', tag: 'feedback', prio: 'action',  when: '10h', day: 'today',     unread: false, channel: '#christie-king' },
+  { id: 6, from: 'Christie King', av: 'CK', avC: 'var(--pink)', source: 'mail',  subject: 'Latest copy update — love the animation',         preview: 'Here is the latest copy update. I am loving the animation and movement you have going!! I think we just need to make sure…', tag: 'feedback', prio: 'action',  when: '10h', day: 'today',     unread: false },
+  { id: 7, from: 'Christie King', av: 'CK', avC: 'var(--pink)', source: 'slack', subject: 'got it!!',                                          preview: 'Quick reply on the proposal scope discussion. Will read the full doc tomorrow morning.', tag: 'fyi', prio: 'replied',  when: '10h', day: 'today',     unread: false, channel: '#christie-king' },
+  { id: 8, from: 'Stripe',         av: '$',  avC: 'var(--ok)',     source: 'mail',  subject: 'Payment received · $1,414 from Christie King',     preview: 'You received a payment from Christie King via Stripe. Invoice INV-0042 marked as paid.', tag: 'finance', prio: 'fyi',  when: 'Yest', day: 'yesterday', unread: false, attach: 'INV-0042.pdf' },
+  { id: 9, from: 'Sunnyside · Mireia', av: 'SU', avC: 'var(--sage)', source: 'mail', subject: 'Brand audit handoff — ready for review',          preview: 'Hi Eneas, sending over the brand audit draft. Highlights at top, full analysis after page 4. Looking forward to next steps.', tag: 'sales', prio: 'action', when: 'Yest', day: 'yesterday', unread: false, attach: 'sunnyside-brand-audit.pdf' },
+  { id:10, from: 'Halcyon AI · Rune', av: 'HA', avC: 'var(--sage)', source: 'mail', subject: 'Internal approval still pending — next week',     preview: 'Hey — board meeting moved to next Tuesday. We will revisit the proposal after that. Apologies for the delay.', tag: 'sales', prio: 'urgent', when: 'Yest', day: 'yesterday', unread: false },
+];
+
+const TASKS = [
+  { id: 'a', title: 'Build Mulberry proposal v2 — 30/60/90 frame', when: 'today',    overdue: false, project: 'Mulberry', source: 'task' },
+  { id: 'b', title: 'Follow up on Verdant Hill — ROI doc reply',   when: 'today',    overdue: false, project: 'Verdant Hill', source: 'task' },
+  { id: 'c', title: 'Approve Q3 hire — Senior Strategist role',   when: 'Thu',       overdue: false, project: 'Internal',  source: 'task' },
+  { id: 'd', title: 'Reply Calder Brands — bump email',            when: 'Tue',       overdue: false, project: 'Calder',    source: 'task' },
+  { id: 'e', title: 'Phase 1 — Architecture & Setup',              when: '5d overdue',overdue: true,  project: 'Sunnyside', source: 'task' },
+  { id: 'f', title: 'Framer project setup: pages, breakpoints',    when: '4d overdue',overdue: true,  project: 'Livv',      source: 'task' },
+];
+
+const CAL_TODAY = [
+  { id: 'c1', title: 'Async standup · Livv team',         time: '09:00', dur: '15m', color: 'var(--sage)' },
+  { id: 'c2', title: 'Sunnyside checkpoint review',        time: '11:30', dur: '45m', color: 'var(--accent)' },
+  { id: 'c3', title: 'Strategy · Christie King roadmap',   time: '14:00', dur: '60m', color: 'var(--pink)' },
+  { id: 'c4', title: 'Pricing call · Ethos Group',         time: '16:30', dur: '30m', color: 'var(--sky)' },
+];
+
+const SourceIcon = ({ source }) => {
+  if (source === 'mail') return <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>;
+  if (source === 'slack') return <strong>S</strong>;
+  if (source === 'msg') return <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-4-1L3 21l1-5a8.4 8.4 0 0 1-1-4 8.4 8.4 0 0 1 17 0z"/></svg>;
+  return null;
+};
+
+const AGENT_PRESETS = {
+  'plan my week': {
+    title: 'Plan this week',
+    icon: 'calendar',
+    color: 'var(--err)',
+    summary: 'I redistributed 8 tasks across Tue–Fri based on your owners\' capacity. 3 tasks moved off Monday.',
+    actions: [
+      { kind: 'task', text: 'Build Mulberry proposal v2', dest: 'Tue · 10:00', mod: 'Sales',     c: 'var(--accent)' },
+      { kind: 'task', text: 'Follow up Verdant Hill ROI',  dest: 'Tue · 14:00', mod: 'Sales',     c: 'var(--accent)' },
+      { kind: 'task', text: 'Phase 1 — Architecture',       dest: 'Wed · 9:30',  mod: 'Delivery',  c: 'var(--sage)' },
+      { kind: 'event', text: 'Strategy review · Christie',  dest: 'Thu · 14:00', mod: 'Strategy',  c: 'var(--sky)' },
+      { kind: 'task', text: 'Approve Q3 hire',              dest: 'Fri · 11:00', mod: 'Scaling',   c: 'var(--purple)' },
+    ],
+    target: { tab: 'calendar', label: 'Calendar · Tue-Fri view' },
+  },
+  "what's blocked": {
+    title: 'What\'s blocked',
+    icon: 'alert',
+    color: 'var(--err)',
+    summary: '3 items blocking momentum. Two need a decision from you, one needs a teammate ping.',
+    actions: [
+      { kind: 'flag',   text: 'Halcyon AI · 6d in Call Done',     dest: 'Awaiting CFO',  mod: 'Sales',    c: 'var(--accent)' },
+      { kind: 'flag',   text: 'Sable Loft proposal · awaiting CFO', dest: 'Bump email',   mod: 'Sales',    c: 'var(--accent)' },
+      { kind: 'flag',   text: 'Sara at 110% load · brand kits',     dest: 'Hire contractor', mod: 'Scaling', c: 'var(--purple)' },
+    ],
+    target: { tab: 'tasks', label: 'Tasks · Overdue + Today' },
+  },
+  'follow-ups': {
+    title: 'Draft follow-ups',
+    icon: 'mail',
+    color: 'var(--sky)',
+    summary: 'Drafted 3 follow-up emails using each lead\'s ICP playbook + brand voice. Ready to review.',
+    actions: [
+      { kind: 'mail', text: 'To Halcyon AI · Rune Eriksen',     dest: '"Recap + next steps"',   mod: 'Mail', c: 'var(--sky)' },
+      { kind: 'mail', text: 'To Sable Loft · Nora Vasquez',      dest: '"CFO context"',           mod: 'Mail', c: 'var(--sky)' },
+      { kind: 'mail', text: 'To Atlas Retainer · Gabriel Müller', dest: '"Counter on MRR"',       mod: 'Mail', c: 'var(--sky)' },
+    ],
+    target: { tab: 'inbox', label: 'Inbox · 3 drafts ready' },
+  },
+  'catch me up': {
+    title: 'Catch me up',
+    icon: 'sparkle',
+    color: 'var(--sage)',
+    summary: 'In the last 24h: 6 messages need reply, Cremona moved to Won, content cadence hit 80%.',
+    actions: [
+      { kind: 'event', text: 'Cremona Capital · moved to Won',    dest: '+$28K impl',   mod: 'Sales',   c: 'var(--ok)' },
+      { kind: 'flag',  text: 'Cadence compliance · 80%',           dest: 'On track',     mod: 'Content', c: 'var(--pink)' },
+      { kind: 'mail',  text: 'Christie King · 2 unread',           dest: 'Feedback',     mod: 'Mail',    c: 'var(--sky)' },
+    ],
+    target: { tab: 'inbox', label: 'Inbox · last 24h digest' },
+  },
+  'cash flow': {
+    title: 'Cash flow snapshot',
+    icon: 'money',
+    color: 'var(--accent)',
+    summary: '$15.3K pending across 4 invoices · projected to collect this week.',
+    actions: [
+      { kind: 'flag', text: 'Christie King · INV-0042',  dest: '$1,414 · paid today',  mod: 'Finance', c: 'var(--ok)' },
+      { kind: 'flag', text: 'Mulberry · INV-0039',         dest: '$4,200 · due Wed',     mod: 'Finance', c: 'var(--accent)' },
+      { kind: 'flag', text: 'Sunnyside · INV-0041',        dest: '$8,200 · due Fri',     mod: 'Finance', c: 'var(--accent)' },
+      { kind: 'flag', text: 'Quill Studio · INV-0040',     dest: '$1,500 · overdue',     mod: 'Finance', c: 'var(--err)' },
+    ],
+    target: { tab: 'inbox', label: 'Mail · finance thread' },
+  },
+};
+
+const App = () => {
+  const [tab, setTab] = useS('inbox');
+  const [openMsg, setOpenMsg] = useS(null);
+  const [sources, setSources] = useS(['mail','slack','msg']);
+  const [priority, setPriority] = useS('all');
+  const [search, setSearch] = useS('');
+  const [agentPreview, setAgentPreview] = useS(null);
+  const [askReply, setAskReply] = useS(null);
+
+  useE(() => {
+    const onKey = (e) => { if (e.key === 'Escape') setOpenMsg(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const toggleSrc = (s) => setSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+
+  const filtered = MESSAGES.filter(m =>
+    sources.includes(m.source)
+    && (priority === 'all' || priority === m.prio)
+    && (!search || m.from.toLowerCase().includes(search.toLowerCase()) || m.subject.toLowerCase().includes(search.toLowerCase()) || m.preview.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const today = filtered.filter(m => m.day === 'today');
+  const yest  = filtered.filter(m => m.day === 'yesterday');
+
+  return (
+    <div className="os">
+      <aside className="sb">
+        <div className="sb-logo">L</div>
+        <nav className="sb-rail">
+          <button className="sb-item active">
+            <OS_ICON name="sparkle" size={18}/>
+            <span className="sb-tooltip">Brief</span>
+          </button>
+          {MODULES.map(m => (
+            <button key={m.id} className="sb-item">
+              <OS_ICON name={m.icon} size={18}/>
+              {m.badge > 0 && <span className="sb-badge">{m.badge}</span>}
+              <span className="sb-tooltip">{m.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sb-avatar">E</div>
+      </aside>
+
+      <div className="main">
+        <header className="tb">
+          <div className="crumbs">
+            <span className="mod-chip"><span className="ic"><OS_ICON name="sparkle" size={11}/></span>Brief</span>
+            <span className="sep">/</span>
+            <span className="seg-active">Inbox pulse</span>
+          </div>
+          <div className="tb-spacer"/>
+          <button className="tb-search">
+            <OS_ICON name="search" size={14}/>
+            <span>Search anything…</span>
+            <span className="kbd">⌘K</span>
+          </button>
+          <div className="tb-actions">
+            <button className="tb-iconbtn"><OS_ICON name="bell" size={15}/><span className="dot">3</span></button>
+          </div>
+          <button className="tb-new"><OS_ICON name="plus" size={13}/>New<span className="kbd">⌘N</span></button>
+        </header>
+
+        <div className="scroll">
+          <div className="bf-page">
+            <div className="bf-cols">
+              {/* LEFT */}
+              <aside className="bf-left">
+                <div className="bf-left-scroll">
+                  <div className="bf-date-strip">
+                    <span className="bf-date-meet"><span className="dot"/>No meetings ahead</span>
+                    <span className="bf-date">Tuesday · May 19</span>
+                  </div>
+
+                  <div className="bf-brief-head" style={{ paddingBottom: 0 }}>
+                    <span className="eyebrow"><span className="dot"/>© Today's brief</span>
+                    <div className="head-actions">
+                      <button title="Activity"><OS_ICON name="activity" size={11}/></button>
+                      <button title="Settings"><OS_ICON name="cog" size={11}/></button>
+                    </div>
+                  </div>
+
+                  <div className="bf-aphorism">
+                    La calidad del input determina la calidad del output.<br/>
+                    <em>Cuidá tu dieta de info.</em>
+                  </div>
+
+                  <article className="bf-zone" style={{ '--tone': 'var(--err)' }}>
+                    <header className="bf-zone-head">
+                      <span className="ic"><OS_ICON name="clock" size={11}/></span>
+                      <span className="title">Today's load</span>
+                      <span className="pulse"/>
+                    </header>
+                    <div className="bf-pills">
+                      <span className="bf-pill hot"><span className="l">Overdue</span><span className="v">26</span></span>
+                      <span className="bf-pill"><span className="l">Due today</span><span className="v">1</span></span>
+                    </div>
+                    <div className="bf-zone-list">
+                      <div className="bf-zone-item">
+                        <span className="ic cp"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 13l2 2 4-4"/></svg></span>
+                        <span className="body">Checkpoint 1 — Architecture approval</span>
+                        <span className="meta">4d</span>
+                      </div>
+                      <div className="bf-zone-item">
+                        <span className="ic fire"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2 5 6 6 6 11a6 6 0 0 1-12 0c0-3 1-4 2-6 1 2 2 3 3 3 0-3-1-5 1-8z"/></svg></span>
+                        <span className="body">Upgrade portofio livv</span>
+                        <span className="meta">6d</span>
+                      </div>
+                      <div className="bf-zone-item">
+                        <span className="ic fire"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2 5 6 6 6 11a6 6 0 0 1-12 0c0-3 1-4 2-6 1 2 2 3 3 3 0-3-1-5 1-8z"/></svg></span>
+                        <span className="body">Phase 1 — Architecture &amp; Setup</span>
+                        <span className="meta">5d</span>
+                      </div>
+                      <div className="bf-zone-item">
+                        <span className="ic fire"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2 5 6 6 6 11a6 6 0 0 1-12 0c0-3 1-4 2-6 1 2 2 3 3 3 0-3-1-5 1-8z"/></svg></span>
+                        <span className="body">Phase 2 — Design Finalization</span>
+                        <span className="meta">3d</span>
+                      </div>
+                      <div className="bf-zone-item" style={{ color: 'var(--os-fg-2)', fontSize: 11 }}>
+                        <span className="body" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>+22 more</span>
+                        <OS_ICON name="chev" size={10} style={{ color: 'var(--os-fg-3)' }}/>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="bf-zone" style={{ '--tone': 'var(--accent)' }}>
+                    <header className="bf-zone-head">
+                      <span className="ic"><OS_ICON name="mail" size={11}/></span>
+                      <span className="title">Inbox signals</span>
+                    </header>
+                    <div className="bf-pills">
+                      <span className="bf-pill hot"><span className="l">Pending</span><span className="v">50</span></span>
+                      <span className="bf-pill muted"><span className="l">Urgent</span><span className="v">0</span></span>
+                      <span className="bf-pill muted"><span className="l">Requests</span><span className="v">0</span></span>
+                    </div>
+                  </article>
+
+                  <article className="bf-zone" style={{ '--tone': 'var(--sage)' }}>
+                    <header className="bf-zone-head">
+                      <span className="ic"><OS_ICON name="calendar" size={11}/></span>
+                      <span className="title">What's coming</span>
+                    </header>
+                    <div className="bf-pills">
+                      <span className="bf-pill muted"><span className="l">Events 7d</span><span className="v">0</span></span>
+                      <span className="bf-pill"><span className="l">Deadlines 7d</span><span className="v">30</span></span>
+                    </div>
+                    <div className="bf-zone-list">
+                      {[
+                        { d: '05·20', l: 'Finalize remaining page designs' },
+                        { d: '05·20', l: 'Lucky sub-brand experience locked' },
+                        { d: '05·25', l: 'Create mood boards' },
+                        { d: '05·26', l: 'Select color palette' },
+                      ].map(it => (
+                        <div key={it.d + it.l} className="bf-zone-item">
+                          <span className="ic date">{it.d}</span>
+                          <span className="body">{it.l}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+
+                  {askReply && <AskReply kind={askReply} onClose={() => setAskReply(null)} onOpen={(t) => setTab(t)}/>}
+                </div>
+
+                <div>
+                  <div className="bf-chips">
+                    <button className="bf-chip cat-tasks" onClick={() => { setAskReply('week');      setAgentPreview(AGENT_PRESETS['plan my week']);   setTab('preview'); }}>Plan my week</button>
+                    <button className="bf-chip cat-tasks" onClick={() => { setAskReply('blocked');   setAgentPreview(AGENT_PRESETS["what's blocked"]); setTab('preview'); }}>What's blocked?</button>
+                    <button className="bf-chip cat-mail"  onClick={() => { setAskReply('followups'); setAgentPreview(AGENT_PRESETS['follow-ups']);    setTab('preview'); }}>Follow-ups</button>
+                    <button className="bf-chip cat-cal"   onClick={() => { setAskReply('today');     setAgentPreview(AGENT_PRESETS['catch me up']);   setTab('preview'); }}>Catch me up</button>
+                    <button className="bf-chip cat-finance" onClick={() => { setAgentPreview(AGENT_PRESETS['cash flow']);   setTab('preview'); }}>Cash flow</button>
+                  </div>
+                  <div className="bf-ask">
+                    <input placeholder="Ask anything about your inbox, tasks or calendar…"/>
+                    <button className="bf-ask-btn" title="Voice"><OS_ICON name="mic" size={13}/></button>
+                    <button className="bf-ask-btn primary"><OS_ICON name="send" size={12}/></button>
+                  </div>
+                </div>
+              </aside>
+
+              {/* RIGHT */}
+              <section className="bf-right">
+                <div className="bf-tabs-bar">
+                  {[
+                    { id: 'tasks', l: 'Tasks', ic: 'tasks', n: TASKS.length },
+                    { id: 'calendar', l: 'Calendar', ic: 'calendar', n: CAL_TODAY.length },
+                    { id: 'inbox', l: 'Inbox', ic: 'mail', n: MESSAGES.length },
+                  ].map(t => (
+                    <button key={t.id} className={`bf-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+                      <OS_ICON name={t.ic} size={12}/>{t.l}
+                      <span className="count">{t.n}</span>
+                    </button>
+                  ))}
+                  {agentPreview && (
+                    <button className={`bf-tab bf-tab-preview ${tab === 'preview' ? 'active' : ''}`} onClick={() => setTab('preview')}>
+                      <span className="bf-tab-preview-ic"><OS_ICON name="sparkle" size={11}/></span>
+                      Preview
+                      <span className="count">{agentPreview.actions.length}</span>
+                    </button>
+                  )}
+                  <div className="bf-tabs-right">
+                    <span className="bf-open-full">Open full →</span>
+                  </div>
+                </div>
+
+                {tab === 'preview' && agentPreview && (
+                  <PreviewPanel preview={agentPreview} onApply={() => { setTab(agentPreview.target.tab); setAgentPreview(null); }} onClose={() => { setAgentPreview(null); setTab('inbox'); }}/>
+                )}
+                {tab === 'inbox' && (
+                  <>
+                    <div className="bf-filterbar">
+                      <div className="bf-source-pills">
+                        {Object.entries(SOURCES).filter(([id]) => id !== 'task').map(([id, s]) => {
+                          const n = MESSAGES.filter(m => m.source === id).length;
+                          return (
+                            <button key={id} className={`bf-src ${sources.includes(id) ? 'active' : ''}`} onClick={() => toggleSrc(id)} style={{ '--c': s.c }}>
+                              <span className="ic"><SourceIcon source={id}/></span>
+                              {s.label}
+                              <span className="n">{n}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="bf-urgency">
+                        {PRIORITY_OPTS.map(p => (
+                          <button key={p.id} className={`bf-urgency-btn ${priority === p.id ? 'active' : ''}`} onClick={() => setPriority(p.id)}>{p.l}</button>
+                        ))}
+                      </div>
+
+                      <div className="bf-search-mini">
+                        <OS_ICON name="search" size={12}/>
+                        <input placeholder="Filter messages…" value={search} onChange={e => setSearch(e.target.value)}/>
+                      </div>
+                      <button className="bf-filter-btn"><OS_ICON name="user" size={11}/>From ▾</button>
+                      <button className="bf-filter-btn"><OS_ICON name="strategy" size={11}/>Tag ▾</button>
+                    </div>
+
+                    <div className="bf-feed">
+                      {today.length > 0 && <div className="bf-day">Today</div>}
+                      {today.map(m => <Msg key={m.id} m={m} onClick={() => setOpenMsg(m)}/>)}
+                      {yest.length > 0 && <div className="bf-day">Yesterday</div>}
+                      {yest.map(m => <Msg key={m.id} m={m} onClick={() => setOpenMsg(m)}/>)}
+                      {filtered.length === 0 && (
+                        <div style={{ padding: '40px 18px', textAlign: 'center', color: 'var(--os-fg-2)', fontSize: 12.5 }}>
+                          No messages match these filters.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {tab === 'tasks' && (
+                  <div className="bf-feed">
+                    <div className="bf-day">Today &amp; this week</div>
+                    {TASKS.map(t => (
+                      <TaskRow key={t.id} t={t} onClick={() => setOpenMsg({ ...t, from: t.title, subject: t.title, source: 'task', kind: 'task' })}/>
+                    ))}
+                  </div>
+                )}
+
+                {tab === 'calendar' && (
+                  <div className="bf-feed">
+                    <div className="bf-day">Tuesday · May 19</div>
+                    {CAL_TODAY.map(e => (
+                      <div key={e.id} className="bf-msg" style={{ gridTemplateColumns: '60px 1fr 80px' }} onClick={() => setOpenMsg({ ...e, from: e.title, subject: e.title, source: 'cal', kind: 'event' })}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--os-fg-0)', fontWeight: 600, letterSpacing: '0.04em' }}>{e.time}</span>
+                        <div className="bf-msg-body">
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--os-fg-0)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 999, background: e.color }}/>
+                            {e.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--os-fg-2)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>{e.dur} duration</div>
+                        </div>
+                        <span className="bf-msg-time">{e.dur}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {openMsg && <DetailModal m={openMsg} onClose={() => setOpenMsg(null)}/>}
+    </div>
+  );
+};
+
+const Msg = ({ m, onClick }) => {
+  const src = SOURCES[m.source];
+  const tag = TAGS[m.tag];
+  return (
+    <div className={`bf-msg source-${m.source} ${m.unread ? 'unread' : ''}`} onClick={onClick}>
+      <div className="bf-msg-av" style={{ background: m.avC }}>
+        {m.av}
+        <span className="bf-msg-src" style={{ '--c': src?.c }}>
+          <SourceIcon source={m.source}/>
+        </span>
+      </div>
+      <div className="bf-msg-body">
+        <div className="bf-msg-head">
+          {tag && <span className="bf-msg-tag" style={{ '--tc': tag.c }}>{tag.l}</span>}
+          <span className="bf-msg-from">{m.from}</span>
+          {m.channel && <span className="bf-msg-channel">{m.channel}</span>}
+        </div>
+        <div className="bf-msg-subject">{m.subject}</div>
+        <div className="bf-msg-preview">{m.preview}</div>
+        <div className="bf-msg-foot">
+          <button className="bf-msg-action" onClick={e => { e.stopPropagation(); onClick(); }}>
+            <OS_ICON name="mail" size={11}/>Draft reply
+          </button>
+          {m.attach && (
+            <span className="bf-msg-attach">
+              <OS_ICON name="docs" size={11}/>{m.attach}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <span className="bf-msg-time">{m.when}</span>
+        <span className={`bf-msg-prio ${m.prio}`}>{m.prio}</span>
+      </div>
+    </div>
+  );
+};
+
+const TaskRow = ({ t, onClick }) => {
+  const [done, setDone] = useS(false);
+  return (
+    <div className="bf-task-row" onClick={onClick}>
+      <div className={`bf-task-check ${done ? 'done' : ''}`} onClick={e => { e.stopPropagation(); setDone(!done); }}>
+        {done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12l5 5 9-11"/></svg>}
+      </div>
+      <div className="bf-task-body">
+        <div className={`bf-task-title ${done ? 'done' : ''}`}>{t.title}</div>
+        <div className="bf-task-meta">
+          <span>{t.project}</span>
+          <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+          <span className={`bf-task-when ${t.overdue ? 'overdue' : t.when === 'today' ? 'today' : ''}`}>{t.when}</span>
+        </div>
+      </div>
+      <span className="bf-msg-time">{t.when}</span>
+      <OS_ICON name="chev" size={12} style={{ color: 'var(--os-fg-3)' }}/>
+    </div>
+  );
+};
+
+// ─── AGENT PREVIEW — inline mini chip in left column when agent fires
+const AgentPreview = ({ preview, onClear }) => (
+  <div className="bf-agent-mini">
+    <span className="bf-agent-mini-ic" style={{ background: preview.color }}>
+      <OS_ICON name={preview.icon} size={11}/>
+    </span>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="bf-agent-mini-title">{preview.title}</div>
+      <div className="bf-agent-mini-sub">{preview.actions.length} actions queued · open Preview tab →</div>
+    </div>
+    <button className="bf-agent-mini-x" onClick={onClear}>
+      <OS_ICON name="close" size={11} stroke={2}/>
+    </button>
+  </div>
+);
+
+// ─── PREVIEW PANEL — full right-pane preview of what Agent will do
+const PreviewPanel = ({ preview, onApply, onClose }) => (
+  <div className="bf-preview">
+    <header className="bf-preview-head">
+      <div className="bf-preview-head-l">
+        <span className="bf-preview-ic" style={{ background: preview.color }}>
+          <OS_ICON name={preview.icon} size={14}/>
+        </span>
+        <div>
+          <div className="bf-preview-eyebrow">
+            <span className="bf-preview-pulse"/>
+            © Agent preview
+            <span style={{ padding: '1px 7px', background: 'rgba(124,92,255,0.13)', color: '#7C5CFF', borderRadius: 999, fontSize: 9, letterSpacing: '0.14em', fontWeight: 600, marginLeft: 4 }}>RUNNING</span>
+          </div>
+          <h3 className="bf-preview-title">{preview.title}</h3>
+        </div>
+      </div>
+      <button className="bf-modal-iconbtn" onClick={onClose} title="Discard"><OS_ICON name="close" size={14} stroke={2}/></button>
+    </header>
+
+    <div className="bf-preview-summary">
+      <span className="bf-preview-summary-ic"><OS_ICON name="sparkle" size={11}/></span>
+      <p>{preview.summary}</p>
+    </div>
+
+    <div className="bf-preview-target">
+      <div className="bf-preview-eyebrow">© Will land in</div>
+      <div className="bf-preview-target-card">
+        <span className="bf-preview-target-ic"><OS_ICON name="arrow" size={11}/></span>
+        <strong>{preview.target.label}</strong>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)' }}>Preview live</span>
+      </div>
+    </div>
+
+    <div className="bf-preview-list">
+      <div className="bf-preview-eyebrow" style={{ padding: '8px 18px 6px' }}>© {preview.actions.length} items to be created</div>
+      {preview.actions.map((a, i) => (
+        <div key={i} className="bf-preview-item" style={{ animationDelay: `${i * 60}ms` }}>
+          <span className="bf-preview-item-kind" style={{ '--c': a.c }}>
+            {a.kind === 'task'  && <OS_ICON name="tasks" size={11}/>}
+            {a.kind === 'event' && <OS_ICON name="calendar" size={11}/>}
+            {a.kind === 'mail'  && <OS_ICON name="mail" size={11}/>}
+            {a.kind === 'flag'  && <OS_ICON name="alert" size={11}/>}
+          </span>
+          <div className="bf-preview-item-body">
+            <div className="bf-preview-item-text">{a.text}</div>
+            <div className="bf-preview-item-dest">
+              <span>→</span>
+              <strong>{a.dest}</strong>
+              <span className="bf-preview-item-mod" style={{ '--c': a.c }}>{a.mod}</span>
+            </div>
+          </div>
+          <button className="bf-preview-item-edit" title="Edit"><OS_ICON name="edit" size={11}/></button>
+        </div>
+      ))}
+    </div>
+
+    <footer className="bf-preview-foot">
+      <button className="bf-modal-iconbtn" onClick={onClose} style={{ width: 'auto', padding: '0 12px', fontSize: 11.5, gap: 5 }}>Discard</button>
+      <button className="bf-preview-edit" style={{ marginLeft: 4 }}><OS_ICON name="edit" size={11}/>Edit prompt</button>
+      <button className="bf-preview-apply" onClick={onApply}>
+        <OS_ICON name="sparkle" size={11}/>Apply all
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, padding: '1.5px 6px', background: 'rgba(255,255,255,0.13)', borderRadius: 4, marginLeft: 4 }}>⌘↵</span>
+      </button>
+    </footer>
+  </div>
+);
+
+const DetailModal = ({ m, onClose }) => {
+  const src = SOURCES[m.source] || {};
+  const isMail = m.source === 'mail';
+  const isSlack = m.source === 'slack';
+  const isTask = m.kind === 'task' || m.source === 'task';
+  const isCal = m.kind === 'event' || m.source === 'cal';
+  return (
+    <>
+      <div className="bf-modal-back" onClick={onClose}/>
+      <aside className="bf-modal">
+        <header className="bf-modal-head">
+          <div className="bf-modal-av" style={{ background: m.avC || 'var(--accent)' }}>
+            {m.av || m.from?.slice(0,1).toUpperCase()}
+            {src.c && (
+              <span style={{ position: 'absolute', bottom: -4, right: -4, width: 18, height: 18, borderRadius: 5, background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: src.c }}>
+                <SourceIcon source={m.source}/>
+              </span>
+            )}
+          </div>
+          <div className="bf-modal-line">
+            <div className="bf-modal-from">{m.from || m.title}</div>
+            <div className="bf-modal-subj">{m.subject || m.title}</div>
+            <div className="bf-modal-sub">
+              {isMail && <span>📧 Email · 2 in thread</span>}
+              {isSlack && <span>💬 Slack · {m.channel || '#general'}</span>}
+              {isTask && <span>✓ Task · {m.project}</span>}
+              {isCal && <span>📅 Event · {m.time} · {m.dur}</span>}
+              <span style={{ color: 'var(--os-fg-3)' }}>·</span>
+              <span>{m.when || 'today'}</span>
+            </div>
+          </div>
+          <div className="bf-modal-actions">
+            <button className="bf-modal-iconbtn" title="Star"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9-5-4.9 6.9-1L12 2z"/></svg></button>
+            <button className="bf-modal-iconbtn" title="Archive"><OS_ICON name="docs" size={14}/></button>
+            <button className="bf-modal-iconbtn" onClick={onClose}><OS_ICON name="close" size={14} stroke={2}/></button>
+          </div>
+        </header>
+
+        <div className="bf-modal-body">
+          {isMail && (
+            <div className="bf-modal-msg">
+              <p>Hi Eneas,</p>
+              <p>{m.preview} I think the system you're building is really starting to come together. The animation feels just right — neither too aggressive nor too passive.</p>
+              <p>Two specific notes:</p>
+              <p>• <strong>Mobile typography:</strong> on the headline, can we test weight 500 vs 600? On my iPhone the 600 reads almost like a bold-banner, and I'd love it to feel a touch more editorial.</p>
+              <p>• <strong>Spacing on the hero CTA:</strong> the button feels close to the headline on mobile. Maybe add 12-16px more above it?</p>
+              <p>Let me know your take. No rush — I'd rather we get this one right than ship it Friday.</p>
+              <p style={{ color: 'var(--os-fg-2)', fontStyle: 'italic' }}>— Christie</p>
+              {m.attach && (
+                <div className="bf-modal-attach">
+                  <span className="bf-modal-attach-ic">{m.attach.split('.').pop().toUpperCase()}</span>
+                  <div>
+                    <div style={{ fontSize: 12.5, color: 'var(--os-fg-0)', fontWeight: 500 }}>{m.attach}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)' }}>3.4 MB · attached</div>
+                  </div>
+                  <button className="bf-modal-iconbtn" style={{ marginLeft: 'auto' }}><OS_ICON name="arrow" size={12}/></button>
+                </div>
+              )}
+            </div>
+          )}
+          {isSlack && (
+            <div className="bf-modal-msg">
+              <p>{m.preview}</p>
+              <p style={{ color: 'var(--os-fg-2)', fontFamily: 'var(--font-mono)', fontSize: 11, marginTop: 16 }}>
+                Channel: {m.channel || '#general'} · Posted by {m.from} · 10h ago
+              </p>
+            </div>
+          )}
+          {isTask && (
+            <div className="bf-modal-msg">
+              <p style={{ fontSize: 13, color: 'var(--os-fg-1)' }}>This task is part of <strong style={{ color: 'var(--os-fg-0)' }}>{m.project}</strong>. Marking it done will trigger the cadence-compliance automation and notify the project channel.</p>
+              <div className="bf-modal-attach">
+                <span className="bf-modal-attach-ic" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '0.5px solid var(--accent-strong)' }}><OS_ICON name="tasks" size={13}/></span>
+                <div>
+                  <div style={{ fontSize: 12.5, color: 'var(--os-fg-0)', fontWeight: 500 }}>{m.project} · linked project</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)' }}>3 related tasks · open project →</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {isCal && (
+            <div className="bf-modal-msg">
+              <p>Scheduled for <strong>{m.time}</strong> · {m.dur} duration. The team page also shows availability for the next 14 days.</p>
+            </div>
+          )}
+
+          <div className="bf-modal-ai">
+            <div className="bf-modal-ai-ic"><OS_ICON name="sparkle" size={13}/></div>
+            <div style={{ flex: 1 }}>
+              <div className="bf-modal-ai-eyebrow">© Agent · suggestion</div>
+              <div className="bf-modal-ai-text">
+                Based on your tone with <strong>Christie</strong> on the last 3 threads, I'd open with the typography acknowledgement and propose weight 500 with a Loom showing the comparison. Estimated reply: 1m to draft, 4m to record.
+              </div>
+              <div className="bf-modal-ai-cta">
+                <button className="bf-modal-ai-btn"><OS_ICON name="sparkle" size={11}/>Draft reply</button>
+                <button className="bf-modal-ai-btn ghost">Generate Loom</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer className="bf-modal-foot">
+          {isMail && (
+            <div className="bf-modal-foot-row">
+              <textarea rows={1} placeholder={`Reply to ${m.from?.split(' ')[0]}…`}/>
+              <div className="bf-modal-foot-tools">
+                <button className="bf-modal-iconbtn"><OS_ICON name="docs" size={13}/></button>
+                <button className="bf-modal-iconbtn"><OS_ICON name="sparkle" size={13}/></button>
+                <button className="bf-modal-send"><OS_ICON name="send" size={11}/>Send</button>
+              </div>
+            </div>
+          )}
+          {(isTask || isCal) && (
+            <div className="bf-modal-actions-row">
+              <button><OS_ICON name="check" size={12}/>Mark done</button>
+              <button><OS_ICON name="calendar" size={12}/>Reschedule</button>
+              <button><OS_ICON name="arrow" size={12}/>Open</button>
+            </div>
+          )}
+          {isSlack && (
+            <div className="bf-modal-actions-row">
+              <button><OS_ICON name="chat" size={12}/>Reply in thread</button>
+              <button><OS_ICON name="arrow" size={12}/>Open Slack</button>
+            </div>
+          )}
+        </footer>
+      </aside>
+    </>
+  );
+};
+
+const AskReply = ({ kind, onClose, onOpen }) => {
+  const REPLIES = {
+    week: {
+      text: <>Looking at your week — <strong>6 tasks pending</strong>, half overdue. Below are the 3 to ship today plus their owners. Want me to redistribute the rest across Wed–Fri?</>,
+      preview: { c: 'var(--accent)', ic: 'tasks', label: 'Tasks · today',
+        body: (
+          <>
+            {[
+              { l: 'Build Mulberry proposal v2', when: 'today',     overdue: false, done: false },
+              { l: 'Follow up Verdant Hill',     when: 'today',     overdue: false, done: false },
+              { l: 'Phase 1 — Architecture',     when: '5d overdue', overdue: true,  done: false },
+            ].map((t, i) => (
+              <div key={i} className="bf-prev-task">
+                <span className={`check ${t.done ? 'done' : ''}`}>{t.done && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12l5 5 9-11"/></svg>}</span>
+                <span className="t">{t.l}</span>
+                <span className={`when ${t.overdue ? 'overdue' : ''}`}>{t.when}</span>
+              </div>
+            ))}
+          </>
+        ),
+        tab: 'tasks',
+      },
+      actions: [
+        { l: 'Plan this week', primary: true,  ic: 'sparkle' },
+        { l: 'Redistribute',   primary: false, ic: 'bolt' },
+      ],
+    },
+    blocked: {
+      text: <>3 things are blocking your week. The big one: <strong>Halcyon AI</strong> hasn't moved in 6 days. Internal approval is the gate.</>,
+      preview: { c: 'var(--err)', ic: 'alert', label: 'Blockers',
+        body: (
+          <>
+            {[
+              { l: 'Halcyon AI · stuck in Call Done', when: '6d' },
+              { l: 'Sable Loft · CFO sign-off pending', when: '5d' },
+              { l: 'Pinterest sync stale on Mulberry', when: '3d' },
+            ].map((t, i) => (
+              <div key={i} className="bf-prev-task">
+                <span className="check" style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'var(--err)', color: 'var(--err)' }}><svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg></span>
+                <span className="t">{t.l}</span>
+                <span className="when overdue">{t.when}</span>
+              </div>
+            ))}
+          </>
+        ),
+        tab: 'tasks',
+      },
+      actions: [
+        { l: 'Send recap email · Halcyon', primary: true, ic: 'mail' },
+        { l: 'Open all',                   primary: false, ic: 'arrow' },
+      ],
+    },
+    followups: {
+      text: <>5 follow-ups suggested — leads that replied but you haven't responded to. Drafted in their ICP voice.</>,
+      preview: { c: 'var(--sky)', ic: 'mail', label: 'Mail · drafts ready',
+        body: (
+          <>
+            {[
+              { av: 'CK', avC: 'var(--pink)',    who: 'Christie King', sub: 'Re: Homepage hero — typography weight 500 vs 600' },
+              { av: 'OB', avC: 'var(--sky)',     who: 'Olga · Cremona', sub: 'Re: Onboarding kickoff Mon — 3 logistics items' },
+              { av: 'RE', avC: 'var(--sage)',    who: 'Rune · Halcyon', sub: 'Recap + 30/60/90 timeline for CFO approval' },
+            ].map((m, i) => (
+              <div key={i} className="bf-prev-msg">
+                <span className="av" style={{ background: m.avC }}>{m.av}</span>
+                <div className="body">
+                  <div className="who">{m.who}</div>
+                  <div className="sub">{m.sub}</div>
+                </div>
+              </div>
+            ))}
+          </>
+        ),
+        tab: 'inbox',
+      },
+      actions: [
+        { l: 'Send all 5',     primary: true,  ic: 'send' },
+        { l: 'Review one-by-one', primary: false, ic: 'eye' },
+      ],
+    },
+    today: {
+      text: <>Your day: <strong>4 events</strong>, mostly afternoon. <strong>Sunnyside checkpoint at 11:30</strong> needs the brand audit. Other than that, you're open before lunch — good window for the Mulberry proposal.</>,
+      preview: { c: 'var(--sage)', ic: 'calendar', label: 'Calendar · today',
+        body: (
+          <>
+            {[
+              { time: '09:00', l: 'Async standup · Livv team', dot: 'var(--sage)' },
+              { time: '11:30', l: 'Sunnyside checkpoint review', dot: 'var(--accent)' },
+              { time: '14:00', l: 'Strategy · Christie King roadmap', dot: 'var(--pink)' },
+              { time: '16:30', l: 'Pricing call · Ethos Group', dot: 'var(--sky)' },
+            ].map((c, i) => (
+              <div key={i} className="bf-prev-cal">
+                <span className="time">{c.time}</span>
+                <span className="l">
+                  <span className="dot" style={{ background: c.dot }}/>
+                  {c.l}
+                </span>
+              </div>
+            ))}
+          </>
+        ),
+        tab: 'calendar',
+      },
+      actions: [
+        { l: 'Generate brand audit summary', primary: true, ic: 'sparkle' },
+        { l: 'Open calendar',                primary: false, ic: 'calendar' },
+      ],
+    },
+  };
+  const r = REPLIES[kind];
+  if (!r) return null;
+  return (
+    <div className="bf-ask-thread">
+      <div className="bf-ask-bubble">
+        <div className="bf-ask-bubble-av"><OS_ICON name="sparkle" size={11}/></div>
+        <div className="bf-ask-bubble-body">
+          {r.text}
+          <div className="bf-ask-preview" style={{ '--c': r.preview.c }}>
+            <header className="bf-ask-preview-head">
+              <span className="bf-ask-preview-ic"><OS_ICON name={r.preview.ic} size={10}/></span>
+              <span className="bf-ask-preview-title">{r.preview.label}</span>
+              <span className="bf-ask-preview-open" onClick={() => onOpen?.(r.preview.tab)}>Open →</span>
+            </header>
+            <div className="bf-ask-preview-body">{r.preview.body}</div>
+          </div>
+          <div className="bf-ask-actions">
+            {r.actions.map((a, i) => (
+              <button key={i} className={`bf-ask-action ${a.primary ? 'primary' : ''}`}>
+                <OS_ICON name={a.ic} size={10}/>{a.l}
+              </button>
+            ))}
+            <button className="bf-ask-action" style={{ marginLeft: 'auto' }} onClick={onClose}>Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

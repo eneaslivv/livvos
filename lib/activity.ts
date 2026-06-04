@@ -14,6 +14,7 @@ export type ActivityType =
   | 'comment'
   | 'user_login'
   | 'user_logout'
+  | 'page_view'
 
 interface NotifyTarget {
   userId: string
@@ -153,4 +154,41 @@ export async function logUserSignOut() {
       target: 'the workspace',
     })
   } catch {}
+}
+
+export async function logPageView(entry: {
+  page: string
+  label: string
+  mode?: string
+  params?: Record<string, any> | null
+}) {
+  if (typeof window === 'undefined') return
+
+  const normalizedParams = entry.params
+    ? Object.fromEntries(Object.entries(entry.params).filter(([key]) => key !== '_nonce'))
+    : null
+  const paramsKey = normalizedParams ? JSON.stringify(normalizedParams) : ''
+  const dedupeKey = `__livv_page_view:${entry.page}:${paramsKey}`
+
+  try {
+    const last = Number(sessionStorage.getItem(dedupeKey) || 0)
+    if (Date.now() - last < 30_000) return
+    sessionStorage.setItem(dedupeKey, String(Date.now()))
+  } catch {}
+
+  try {
+    await logActivity({
+      type: 'page_view',
+      action: 'opened',
+      target: entry.label,
+      metadata: {
+        page: entry.page,
+        mode: entry.mode,
+        params: normalizedParams,
+        path: window.location.pathname,
+      },
+    })
+  } catch {
+    // Best-effort only; page navigation must never depend on auditing.
+  }
 }

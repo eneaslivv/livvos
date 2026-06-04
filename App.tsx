@@ -6,7 +6,7 @@ import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { PageView, AppMode, NavParams } from './types';
 import { ensureAuthSession } from './lib/auth';
 import { supabase, cleanupLocalStorage } from './lib/supabase';
-import { logUserSignIn, logUserSignOut } from './lib/activity';
+import { logPageView, logUserSignIn, logUserSignOut } from './lib/activity';
 
 // Updated Context Providers with security and enhanced features
 import { RBACProvider, useRBAC } from './context/RBACContext';
@@ -986,6 +986,42 @@ cleanupLocalStorage();
 
 const LAST_PAGE_KEY = 'eneas:lastPage';
 const LAST_MODE_KEY = 'eneas:lastMode';
+const AUDIT_PAGE_LABELS: Partial<Record<PageView, string>> = {
+  home: 'Home',
+  brief: 'Brief',
+  projects: 'Projects',
+  clients: 'Clients',
+  team: 'Team',
+  team_clients: 'Clients & Team',
+  calendar: 'Calendar',
+  docs: 'Docs',
+  activity: 'Activity',
+  communications: 'Inbox',
+  finance: 'Finance',
+  sales_dashboard: 'Sales',
+  sales_leads: 'Sales inbox',
+  sales_analytics: 'Sales analytics',
+  sales_pipeline: 'Sales pipeline',
+  tenant_settings: 'Settings',
+  content_cms: 'Content CMS',
+  platform_admin: 'Master dashboard',
+  platform_customers: 'Master customers',
+  platform_roles: 'Master roles',
+  platform_features: 'Master features',
+  platform_audit: 'Master audit',
+  platform_slack_agent: 'Slack agent',
+  platform_sales_agent: 'Sales agent',
+  strategy_hub: 'Strategy',
+  content_engine: 'Content',
+  team_scaling: 'Scaling',
+  growth_dashboard: 'Growth',
+  strategy_toolkit: 'Toolkit',
+  bundle_preview: 'Bundle preview',
+  agent: 'Agents',
+  products: 'Products',
+  build_hub: 'Growth OS',
+};
+const AUDITED_PAGES = new Set<PageView>(Object.keys(AUDIT_PAGE_LABELS) as PageView[]);
 const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'home', 'brief', 'projects', 'clients', 'team', 'team_clients', 'calendar', 'docs',
   'activity', 'communications', 'finance', 'sales_dashboard', 'sales_leads', 'sales_analytics',
@@ -1055,6 +1091,18 @@ const App: React.FC = () => {
   useEffect(() => {
     try { window.localStorage.setItem(LAST_MODE_KEY, appMode); } catch {}
   }, [appMode]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!AUDITED_PAGES.has(currentPage)) return;
+    const label = AUDIT_PAGE_LABELS[currentPage] || currentPage;
+    logPageView({
+      page: currentPage,
+      label,
+      mode: appMode,
+      params: navParams,
+    }).catch(() => {});
+  }, [isAuthenticated, currentPage, appMode, navParams]);
 
   useEffect(() => {
     if (portalFlag === 'client') {

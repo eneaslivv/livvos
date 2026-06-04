@@ -188,16 +188,24 @@ export const BuildHub: React.FC<BuildHubProps> = ({ onNavigate }) => {
     },
   ], [counts]);
 
+  const agentCards = [
+    { name: 'Orion', area: 'Brief + Inbox', page: 'brief' as PageView, icon: 'Sparkles' as keyof typeof Icons, accent: '#7C3AED', copy: 'Resume el dia, ordena mensajes y convierte pendientes en acciones.' },
+    { name: 'Solara', area: 'Sales + Pipeline', page: 'sales_dashboard' as PageView, icon: 'Chart' as keyof typeof Icons, accent: '#E11D74', copy: 'Usa ICPs, ofertas y objetivos para priorizar leads y follow-ups.' },
+    { name: 'Nova', area: 'Growth', page: 'growth_dashboard' as PageView, icon: 'Activity' as keyof typeof Icons, accent: '#2563EB', copy: 'Cruza funnel, fuentes y forecast contra los objetivos del trimestre.' },
+    { name: 'Lumen', area: 'Strategy', page: 'strategy_hub' as PageView, icon: 'Target' as keyof typeof Icons, accent: '#9333EA', copy: 'Mantiene ICPs, posicionamiento y contenido alineados al sistema.' },
+    { name: 'Marina', area: 'Finance', page: 'finance' as PageView, icon: 'DollarSign' as keyof typeof Icons, accent: '#059669', copy: 'Lee cashflow, cobros y salud financiera desde las mismas prioridades.' },
+  ];
+
   return (
     <div className="max-w-[1320px] mx-auto px-6 py-6">
       {/* Page header */}
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-            Workspace
+            Configuration
           </div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mt-0.5">
-            Build
+            Growth OS
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl">
             Los cimientos del negocio. Configurá una vez, editás cuando cambia. Cada módulo
@@ -210,7 +218,7 @@ export const BuildHub: React.FC<BuildHubProps> = ({ onNavigate }) => {
       <section className="mb-7 p-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-gradient-to-br from-amber-50/40 via-white to-emerald-50/30 dark:from-amber-950/10 dark:via-zinc-900 dark:to-emerald-950/10">
         <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300 inline-flex items-center gap-1.5 mb-3">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-          Objetivos del trimestre
+          Objetivos base
         </div>
         {loading ? (
           <div className="text-[12.5px] text-zinc-400">Cargando…</div>
@@ -225,7 +233,7 @@ export const BuildHub: React.FC<BuildHubProps> = ({ onNavigate }) => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[12px] font-semibold hover:opacity-90"
             >
               <Icons.Plus size={11} />
-              Definir objetivos
+              Configurar objetivos
             </button>
           </div>
         ) : (
@@ -259,6 +267,52 @@ export const BuildHub: React.FC<BuildHubProps> = ({ onNavigate }) => {
             })}
           </div>
         )}
+      </section>
+
+      <section className="mb-7">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-300">
+            Agentes basados en estos objetivos
+          </h2>
+          <button
+            onClick={() => onNavigate?.('agent')}
+            className="text-[10.5px] font-mono uppercase tracking-wider text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 inline-flex items-center gap-1"
+          >
+            Abrir agentes
+            <Icons.ChevronRight size={11} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          {agentCards.map(agent => {
+            const IconCmp = Icons[agent.icon] || Icons.Sparkles;
+            return (
+              <button
+                key={agent.name}
+                onClick={() => onNavigate?.(agent.page)}
+                className="text-left p-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: `color-mix(in oklab, ${agent.accent} 12%, transparent)`, color: agent.accent }}
+                  >
+                    <IconCmp size={15} />
+                  </div>
+                  <span className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-400">
+                    {agent.area}
+                  </span>
+                </div>
+                <div className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">
+                  {agent.name}
+                </div>
+                <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400 mt-1">
+                  {agent.copy}
+                </p>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Modules grid */}

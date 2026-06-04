@@ -1195,7 +1195,8 @@ const AccessStatusPanel: React.FC<{
   channels: SlackMonitoredChannel[];
   renderSyncState: (token: IntegrationToken) => React.ReactNode;
   renderScopes: (scope?: string | null) => React.ReactNode;
-}> = ({ gmailTokens, slackTokens, channels, renderSyncState, renderScopes }) => (
+  onChannelsChange?: () => void;
+}> = ({ gmailTokens, slackTokens, channels, renderSyncState, renderScopes, onChannelsChange }) => (
   <div className="cx-settings-card">
     <div className="cx-settings-head">
       <div className="flex items-center gap-2.5">
@@ -1255,8 +1256,26 @@ const AccessStatusPanel: React.FC<{
               {tokenChannels.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {tokenChannels.slice(0, 8).map(c => (
-                    <span key={c.id} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-300" title={c.last_sync_error || undefined}>
-                      #{c.channel_name} · {c.inbound_filter || 'actionable'}
+                    <span key={c.id} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-600 dark:text-zinc-300" title={c.last_sync_error || 'Qué mensajes de este canal entran al inbox'}>
+                      <span className="truncate max-w-[120px]">#{c.channel_name}</span>
+                      <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                      <select
+                        value={c.inbound_filter || 'actionable'}
+                        onClick={e => e.stopPropagation()}
+                        onChange={async e => {
+                          const value = e.target.value;
+                          try {
+                            await supabase.from('slack_monitored_channels').update({ inbound_filter: value }).eq('id', c.id);
+                            onChannelsChange?.();
+                          } catch { /* non-blocking: keep UI responsive */ }
+                        }}
+                        className="bg-transparent text-[10px] text-zinc-500 dark:text-zinc-400 focus:outline-none cursor-pointer -my-0.5 pr-0.5"
+                        title="Qué mensajes ingerir: accionables (con intención de tarea), solo menciones, o todos"
+                      >
+                        <option value="actionable">accionables</option>
+                        <option value="mentions">menciones</option>
+                        <option value="all">todos</option>
+                      </select>
                     </span>
                   ))}
                   {tokenChannels.length > 8 && <span className="text-[10px] text-zinc-400">+{tokenChannels.length - 8}</span>}
@@ -1387,6 +1406,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ tenantId, tokens, channels,
         channels={channels}
         renderSyncState={renderSyncState}
         renderScopes={renderScopes}
+        onChannelsChange={onChannelsChange}
       />
       {error && (
         <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200/50 text-[12px] text-rose-700 dark:text-rose-400">

@@ -590,7 +590,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   // OS sidebar grouped by purpose: dashboard items first, then content/work
   // surfaces, then the clients tree (rendered separately). Reordered per the
   // user's request — Home/Activity together, then Calendar/Docs.
-  type NavItemDef = { id: PageView; label: string; icon: React.ReactNode; permission?: { module: any, action: any }; feature?: keyof import('../context/TenantContext').TenantConfig['features'] };
+  type NavItemDef = {
+    id: PageView;
+    label: string;
+    icon: React.ReactNode;
+    permission?: { module: any, action: any };
+    feature?: keyof import('../context/TenantContext').TenantConfig['features'];
+    activeIds?: PageView[];
+  };
   const osNavGroups: NavItemDef[][] = [
     [
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
@@ -636,17 +643,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     {
       label: 'Run',
       items: [
-        { id: 'sales_dashboard', label: 'Sales Overview', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module' },
-        { id: 'sales_pipeline',  label: 'Pipeline',       icon: <Icons.Target /> },
-        { id: 'communications',  label: 'Inbox',          icon: <Icons.Mail /> },
+        { id: 'sales_dashboard', label: 'Sales', icon: <Icons.Chart />, permission: { module: 'sales', action: 'view_dashboard' }, feature: 'sales_module', activeIds: ['sales_dashboard', 'sales_pipeline', 'sales_leads', 'sales_analytics'] },
+        { id: 'brief',           label: 'Brief',          icon: <Icons.Sparkles />, activeIds: ['brief', 'communications'] },
         { id: 'finance',         label: 'Finance',        icon: <Icons.DollarSign />, permission: { module: 'finance', action: 'view' }, feature: 'finance_module' },
-      ],
-    },
-    {
-      label: 'Insights',
-      items: [
-        { id: 'sales_analytics',  label: 'Analytics', icon: <Icons.Activity />, permission: { module: 'sales', action: 'view_analytics' }, feature: 'sales_module' },
-        { id: 'growth_dashboard', label: 'Growth',    icon: <Icons.Chart /> },
       ],
     },
     {
@@ -656,14 +655,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       // métricas) o vacío (muted, con purpose copy + CTA configurar).
       label: 'Build',
       items: [
-        { id: 'build_hub', label: 'Workspace', icon: <Icons.Briefcase /> },
+        { id: 'build_hub', label: 'Growth OS', icon: <Icons.Briefcase />, activeIds: ['build_hub', 'growth_dashboard', 'agent', 'strategy_hub', 'content_engine', 'products', 'strategy_toolkit', 'team_scaling'] },
       ],
     },
   ];
-  // Agent — surfaced solo, separated. Aurora dock cubre la mayoría de los
-  // casos, pero la página Agent sigue valiendo como home del workspace IA.
-  const salesAgent: NavItemDef = { id: 'agent', label: 'Agent', icon: <Icons.Sparkles /> };
-  const salesNavItems: NavItemDef[] = [...salesNavGroups.flatMap(g => g.items), salesAgent];
+  const salesNavItems: NavItemDef[] = salesNavGroups.flatMap(g => g.items);
+  const isNavItemActive = (item: NavItemDef) => item.activeIds?.includes(currentPage) || currentPage === item.id;
 
   // Master mode (platform admin) sidebar. No permission gates — the entire
   // mode is gated at the switch level by `isPlatformAdmin`. Each page also
@@ -854,7 +851,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
                     id={item.id}
                     icon={item.icon}
                     label={item.label}
-                    active={currentPage === item.id}
+                    active={isNavItemActive(item)}
                     expanded={isSidebarExpanded}
                     onClick={() => onNavigate(item.id)}
                   />
@@ -870,7 +867,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
               id={item.id}
               icon={item.icon}
               label={item.label}
-              active={currentPage === item.id}
+              active={isNavItemActive(item)}
               expanded={isSidebarExpanded}
               onClick={() => onNavigate(item.id)}
             />
@@ -908,23 +905,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
                         id={item.id}
                         icon={item.icon}
                         label={item.label}
-                        active={currentPage === item.id}
+                        active={isNavItemActive(item)}
                         expanded={isSidebarExpanded}
                         onClick={() => onNavigate(item.id)}
                       />
                     ))}
                   </React.Fragment>
                 ))}
-                {/* Agent — separated with a thicker spacer + subtle label */}
-                <div className={`shrink-0 ${isSidebarExpanded ? 'w-[calc(100%-24px)] mx-3' : 'w-8 mx-auto'} mt-2 mb-1 h-px bg-zinc-200/60 dark:bg-zinc-700/40`} />
-                <NavItem
-                  id={salesAgent.id}
-                  icon={salesAgent.icon}
-                  label={salesAgent.label}
-                  active={currentPage === salesAgent.id}
-                  expanded={isSidebarExpanded}
-                  onClick={() => onNavigate(salesAgent.id)}
-                />
               </>
             );
           })()}
