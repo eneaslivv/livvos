@@ -526,13 +526,19 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 
         try {
             // Calculate current usage
-            const [usersResult, projectsResult, storageResult] = await Promise.all([
-                supabase.from('profiles').select('id').eq('tenant_id', currentTenant.id),
+            const [membersResult, projectsResult, storageResult] = await Promise.all([
+                // Stable membership (tenant_members ∪ owner) via SECURITY DEFINER RPC.
+                // NOT `profiles.tenant_id` — switch_active_tenant() rewrites that to
+                // the user's *currently active* workspace, so members who switched
+                // into another workspace were dropped and drifted non-members were
+                // miscounted. current_users gates max_users enforcement (canAddMember),
+                // so it must match the Members panel exactly — same RPC, one source of truth.
+                supabase.rpc('get_tenant_members', { p_tenant_id: currentTenant.id }),
                 supabase.from('projects').select('id').eq('tenant_id', currentTenant.id),
                 supabase.rpc('calculate_tenant_storage_usage', { p_tenant_id: currentTenant.id })
             ]);
 
-            const currentUsers = usersResult.data?.length || 0;
+            const currentUsers = membersResult.data?.length || 0;
             const currentProjects = projectsResult.data?.length || 0;
             const storageUsed = storageResult.data || 0;
 
