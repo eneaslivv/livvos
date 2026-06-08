@@ -497,18 +497,58 @@ async function updateLead(args: z.infer<typeof UpdateLeadInput>) {
 }
 
 async function listTeamMembers() {
-  const { data, error } = await db
-    .from('tenant_members')
-    .select('user_id, role, status, profiles!inner(id, name, email)')
-    .eq('tenant_id', TENANT_ID)
-    .eq('status', 'active');
-  if (error) return err(error.message);
-  const flat = (data ?? []).map((m: any) => ({
-    id:    m.user_id,
-    name:  m.profiles?.name || null,
-    email: m.profiles?.email || null,
-    role:  m.role,
+  // tenant_members.user_id FKs to auth.users(id), NOT profiles(id), so PostgREST
+  // has no relationship to embed `profiles(...)` through — the embed fails with
+  // "Could not find a relationship ... in the schema cache". Since this server
+  // uses the service-role key (RLS-exempt), we run the join ourselves: it needs
+  // no FK migration and is immune to schema-cache staleness. We also union the
+  // tenant owner (who may be absent from tenant_members), mirroring the
+  // get_tenant_members RPC that backs the app's Members panel.
+  //
+  // NB: tenant_members has no `status` column (membership is row-presence;
+  // removal deletes the row). The old `.eq('status','active')` filter referenced
+  // a phantom column — it only "worked" because the embed error above short-
+  // circuited PostgREST before it validated columns. So we list all members.
+  const [membersRes, tenantRes] = await Promise.all([
+    db.from('tenant_members')
+      .select('user_id, role')
+      .eq('tenant_id', TENANT_ID),
+    db.from('tenants')
+      .select('owner_id')
+      .eq('id', TENANT_ID)
+      .maybeSingle(),
+  ]);
+  if (membersRes.error) return err(membersRes.error.message);
+  if (tenantRes.error)  return err(tenantRes.error.message);
+
+  // Distinct user_ids (all members ∪ owner), keeping each member's role.
+  const roleByUser = new Map<string, string | null>();
+  for (const m of membersRes.data ?? []) roleByUser.set(m.user_id, m.role ?? null);
+  const ownerId = tenantRes.data?.owner_id ?? null;
+  if (ownerId && !roleByUser.has(ownerId)) roleByUser.set(ownerId, 'owner');
+
+  const userIds = [...roleByUser.keys()];
+  if (userIds.length === 0) return json({ count: 0, members: [] });
+
+  const { data: profiles, error: profErr } = await db
+    .from('profiles')
+    .select('id, name, email')
+    .in('id', userIds);
+  if (profErr) return err(profErr.message);
+
+  const profById = new Map<string, any>(
+    (profiles ?? []).map((p: any) => [p.id, p] as [string, any]),
+  );
+  const flat = userIds.map((uid) => ({
+    id:    uid,
+    name:  profById.get(uid)?.name  ?? null,
+    email: profById.get(uid)?.email ?? null,
+    role:  roleByUser.get(uid) ?? null,
   }));
+  // Owner first, then alphabetical by name — stable, friendly ordering.
+  flat.sort((a, b) =>
+    a.id === ownerId ? -1 : b.id === ownerId ? 1 : (a.name ?? '').localeCompare(b.name ?? ''),
+  );
   return json({ count: flat.length, members: flat });
 }
 
