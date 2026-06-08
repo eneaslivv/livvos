@@ -941,7 +941,7 @@ export const Projects: React.FC<{
     setTaskError(null);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: 'General', start_date: today, due_date: today } as any);
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', status: 'todo', group_name: 'General', start_date: today, due_date: today } as any);
       setQuickTaskTitle('');
       setTimeout(() => refreshTasks(), 1000);
       await logActivity({ action: 'added task', target: title, project_title: selectedProject.title, type: 'task_created' });
@@ -960,7 +960,7 @@ export const Projects: React.FC<{
     setTaskError(null);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', group_name: groupName, start_date: today, due_date: today } as any);
+      await addSyncedTask({ title, completed: false, project_id: selectedProject.id, client_id: (selectedProject as any).client_id || null, assignee_id: currentUser?.id || null, priority: 'medium', status: 'todo', group_name: groupName, start_date: today, due_date: today } as any);
       setNewTaskTitle(prev => ({ ...prev, [groupIdx]: '' }));
       // Safety net: refresh tasks after a short delay in case realtime doesn't fire
       setTimeout(() => refreshTasks(), 1000);
@@ -2238,6 +2238,7 @@ export const Projects: React.FC<{
                     onToggleTask={handleToggleTask}
                     onDeleteTask={handleDeleteTask}
                     onAddTask={handleAddTask}
+                    onOpenTask={setOpenTaskId}
                     newTaskTitle={newTaskTitle}
                     onNewTaskTitleChange={setNewTaskTitle}
                     quickTaskTitle={quickTaskTitle}

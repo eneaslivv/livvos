@@ -24,11 +24,14 @@ const COLUMNS: ColumnConfig[] = [
   { id: 'cancelled',    label: 'Cancelado',  dot: 'bg-rose-400',    ring: 'ring-rose-400/40',    tint: 'bg-rose-500/[0.04]' },
 ];
 
-// Tasks without a status default to 'todo'. We also coerce `completed=true`
-// rows to 'done' so legacy tasks still group correctly.
+// Map a task to its board column. Any status that isn't one of the four
+// columns — null, a legacy value, or the DB default 'pending' — falls back
+// to 'todo' so the task is NEVER silently dropped from the board. We also
+// coerce `completed=true` rows to 'done'.
 const taskColumn = (task: CalendarTask): TaskStatus => {
   if (task.completed) return 'done';
-  return (task.status as TaskStatus) || 'todo';
+  const s = task.status as TaskStatus;
+  return COLUMNS.some(c => c.id === s) ? s : 'todo';
 };
 
 interface Props {

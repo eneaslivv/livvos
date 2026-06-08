@@ -14,6 +14,8 @@ export interface TasksTabProps {
   onToggleTask: (groupIdx: number, taskId: string) => void;
   onDeleteTask: (taskId: string, taskTitle: string) => void;
   onAddTask: (groupIdx: number) => void;
+  /** Open the full task detail panel (same as clicking a board card). */
+  onOpenTask?: (taskId: string) => void;
   newTaskTitle: Record<number, string>;
   onNewTaskTitleChange: (val: Record<number, string>) => void;
   // Quick task
@@ -62,6 +64,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   onToggleTask,
   onDeleteTask,
   onAddTask,
+  onOpenTask,
   newTaskTitle,
   onNewTaskTitleChange,
   quickTaskTitle,
@@ -465,9 +468,13 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                       >
                         <Icons.Check size={11} strokeWidth={3} />
                       </button>
-                      <div className="flex-1 min-w-0">
+                      <div
+                        className={`flex-1 min-w-0 ${onOpenTask ? 'cursor-pointer' : ''}`}
+                        onClick={() => onOpenTask?.(task.id)}
+                        title={onOpenTask ? 'Open task' : undefined}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm transition-colors truncate ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                          <span className={`text-sm transition-colors truncate ${onOpenTask ? 'hover:underline' : ''} ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200'}`}>
                             {task.title}
                           </span>
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
