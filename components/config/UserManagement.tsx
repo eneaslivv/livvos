@@ -144,7 +144,11 @@ export const UserManagement: React.FC = () => {
     setIsLoading(true);
     try {
       const [profilesRes, userRolesRes, rolesRes, invitesRes, permsRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('tenant_id', currentTenant.id),
+        // Stable membership (tenant_members ∪ owner) via SECURITY DEFINER RPC.
+        // NOT `profiles.tenant_id` — switch_active_tenant() rewrites that to the
+        // user's *currently active* workspace, so members who switched into
+        // another workspace (or who belong to several) used to vanish here.
+        supabase.rpc('get_tenant_members', { p_tenant_id: currentTenant.id }),
         supabase.from('user_roles').select('user_id, role_id, roles(name, is_system)'),
         supabase.from('roles').select('*'),
         supabase.from('invitations').select('*').eq('status', 'pending').eq('tenant_id', currentTenant.id),
@@ -156,12 +160,16 @@ export const UserManagement: React.FC = () => {
       setAllPermissions(permsRes.data || []);
 
       // Build member rows
-      const profiles = profilesRes.data || [];
+      const profiles = (profilesRes.data || []) as any[];
       const userRoles = userRolesRes.data || [];
 
       const memberRows: MemberRow[] = profiles.map(p => {
         const ur = userRoles.find((r: any) => r.user_id === p.id);
-        const roleName = ur ? (Array.isArray(ur.roles) ? (ur.roles as any)[0]?.name : (ur.roles as any)?.name) : 'No Role';
+        // Prefer the explicit per-tenant role; fall back to the stable
+        // membership role (owner/admin/member) before showing "No Role".
+        const roleName = ur
+          ? (Array.isArray(ur.roles) ? (ur.roles as any)[0]?.name : (ur.roles as any)?.name)
+          : (p.member_role || 'No Role');
         const isSystem = ur ? (Array.isArray(ur.roles) ? (ur.roles as any)[0]?.is_system : (ur.roles as any)?.is_system) : false;
 
         return {
