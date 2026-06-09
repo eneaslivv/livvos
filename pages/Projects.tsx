@@ -377,7 +377,7 @@ const ClientViewPreview: React.FC<{
   const previewClientId = (project as any).client_id as string | undefined;
   const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
     if (!previewClientId || !currentTenant?.id) {
-      throw new Error('Este proyecto no tiene un cliente asignado.');
+      throw new Error('This project has no client assigned.');
     }
     const { data: { user } } = await supabase.auth.getUser();
     const { error: insertError } = await supabase.from('orders').insert({

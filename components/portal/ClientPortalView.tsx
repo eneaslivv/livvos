@@ -583,7 +583,7 @@ export const ClientPortalView: React.FC = () => {
   // transient profiles.tenant_id.
   const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
     if (!user || !clientId || !clientTenantId) {
-      throw new Error('No pudimos identificar tu cuenta. Recargá la página e intentá de nuevo.');
+      throw new Error('We could not identify your account. Please reload the page and try again.');
     }
     const projectId = selectedProjectId || data?.projects?.[0]?.id || null;
     const { error: insertError } = await supabase.from('orders').insert({

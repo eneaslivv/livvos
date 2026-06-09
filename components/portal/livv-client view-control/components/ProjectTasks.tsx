@@ -94,9 +94,9 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
             <button
               onClick={onNewOrder}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white bg-[#2C0405] hover:bg-[#1a0203] shadow-sm shadow-[#2C0405]/20 transition-colors"
-              title="Pedir una nueva tarea al equipo"
+              title="Request a new task from the team"
             >
-              <Plus size={12} strokeWidth={2.5} /> Pedir tarea
+              <Plus size={12} strokeWidth={2.5} /> New request
             </button>
           )}
           <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
