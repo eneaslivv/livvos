@@ -1,0 +1,91 @@
+/* ============================================================
+   LIVV portal/auth — ported from the Claude Design handoff
+   (livv-cliente-view/project/assets/portal.css + auth.jsx).
+   Light, warm, editorial. Self-scoped (pa- prefix) so it can't
+   collide with the rest of the app's Tailwind.
+   ============================================================ */
+
+.pa-eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #78736A;
+  margin: 0;
+}
+
+.pa-h {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  color: #09090B;
+  margin: 0;
+}
+
+.pa-sub { color: #2A1818; font-size: 14px; line-height: 1.55; }
+
+.pa-field {
+  width: 100%;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  color: #09090B;
+  background: #F5F2EB;
+  border: 1px solid #E6E2D8;
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color .2s cubic-bezier(0.16,1,0.3,1), box-shadow .2s cubic-bezier(0.16,1,0.3,1);
+}
+.pa-field::placeholder { color: #A8A29A; }
+.pa-field:focus { border-color: #C4A35A; box-shadow: 0 0 0 3px rgba(196,163,90,0.25); }
+
+.pa-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; border: 1px solid transparent; border-radius: 9999px;
+  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
+  cursor: pointer; padding: 13px 20px;
+  transition: transform .25s cubic-bezier(0.16,1,0.3,1), box-shadow .25s cubic-bezier(0.16,1,0.3,1),
+              background .25s, opacity .25s, border-color .25s;
+}
+.pa-btn:active { transform: scale(0.985); }
+.pa-btn-wine { background: #2C0405; color: #EDE5D8; }
+.pa-btn-wine:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 32px -10px rgba(44,4,5,0.30); }
+.pa-btn-wine:disabled { opacity: 0.5; cursor: not-allowed; }
+.pa-btn-ghost { background: #fff; color: #2A1818; border-color: #E6E2D8; }
+.pa-btn-ghost:hover:not(:disabled) { background: #F5F2EB; border-color: #D6D1C7; }
+
+.pa-checkc {
+  width: 18px; height: 18px; border-radius: 9999px;
+  border: 1.75px solid #D6D1C7;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  color: transparent; cursor: pointer; transition: all .2s cubic-bezier(0.16,1,0.3,1);
+}
+.pa-checkc[data-done="true"] { background: #2C0405; border-color: #2C0405; color: #EDE5D8; }
+
+.pa-link { color: #2C0405; text-decoration: underline; cursor: pointer; background: none; border: none; font: inherit; padding: 0; }
+.pa-link:hover { color: #1A0203; }
+
+.pa-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9999px;
+  border: none; background: none; color: #78736A; cursor: pointer;
+  transition: color .2s, background .2s;
+}
+.pa-icon-btn:hover { color: #09090B; background: #F5F2EB; }
+
+.pa-avatar {
+  border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 12px; flex: none;
+}
+
+/* tab underline (sign in / create) */
+.pa-tab { position: relative; padding: 6px 2px; font-size: 13px; font-weight: 500; color: #A8A29A; background: none; border: none; cursor: pointer; font-family: 'Inter', sans-serif; transition: color .2s; }
+.pa-tab:hover { color: #2A1818; }
+.pa-tab[data-active="true"] { color: #09090B; }
+.pa-tab[data-active="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; background: #C4A35A; border-radius: 9999px; }
+
+/* entrance — visible end-state is the base (print/reduced-motion safe) */
+@keyframes paRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.pa-rise { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) { .pa-rise { animation: paRise 800ms cubic-bezier(0.16,1,0.3,1) both; } }

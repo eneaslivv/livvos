@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Icons } from '../components/ui/Icons'
+import { AuthSplitLayout, type AuthFeature } from '../components/auth/AuthSplitLayout'
+import { Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 interface AuthProps {
   onAuthenticated: () => void
@@ -10,40 +11,33 @@ interface AuthProps {
 export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = false }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [show, setShow] = useState(false)
   const [mode, setMode] = useState<'signin' | 'signup' | 'magic' | 'forgot'>('signin')
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [tenantLogo, setTenantLogo] = useState<string | null>(null)
-  const [tenantLogoDark, setTenantLogoDark] = useState<string | null>(null)
   const [tenantName, setTenantName] = useState<string | null>(null)
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) onAuthenticated()
     })
-    return () => {
-      sub.subscription.unsubscribe()
-    }
+    return () => { sub.subscription.unsubscribe() }
   }, [])
 
   useEffect(() => {
     supabase.rpc('get_tenant_branding')
       .then(({ data }) => {
         const tenant = Array.isArray(data) ? data[0] : data
-        if (tenant?.logo_url) setTenantLogo(tenant.logo_url)
-        if (tenant?.logo_url_dark) setTenantLogoDark(tenant.logo_url_dark)
         if (tenant?.name) setTenantName(tenant.name)
       })
   }, [])
 
   // Read the optional ?return_to=… so OAuth (and any future SSO) can land
-  // the user back on the exact page they came from. AcceptConnection.tsx's
-  // "Sign in" button URL-encodes the path it wants to return to.
+  // the user back on the exact page they came from.
   const returnTo = (() => {
     try {
       const raw = new URLSearchParams(window.location.search).get('return_to');
       if (!raw) return null;
-      // Restrict to internal paths to prevent open-redirect.
       const decoded = decodeURIComponent(raw);
       return decoded.startsWith('/') ? decoded : null;
     } catch { return null; }
@@ -59,15 +53,10 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         provider: 'google',
         options: {
           redirectTo: oauthRedirect,
-          // Always show the account chooser so the wrong-account scenario
-          // (which happens a lot on shared computers / multi-Google users)
-          // is just one click away from being fixed.
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
-      // The browser will redirect to Google now — no further state change
-      // needed here. If it errors out, surface as a normal message.
     } catch (err: any) {
       setMessage({
         text: err?.message || 'Google sign-in unavailable — make sure the provider is enabled in Supabase Auth → Providers.',
@@ -96,23 +85,17 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
         const { data: signUpData, error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
         if (isClientPortal && signUpData?.user?.id) {
-          // Link auth user to client record by email
           await supabase
             .from('clients')
             .update({ auth_user_id: signUpData.user.id })
             .eq('email', email)
             .is('auth_user_id', null)
-          // Auto-login if session was created immediately
-          if (signUpData.session) {
-            onAuthenticated()
-            return
-          }
+          if (signUpData.session) { onAuthenticated(); return }
         }
-        setMessage({ text: 'Account created successfully. You can now sign in.', type: 'success' })
+        setMessage({ text: 'Account created. You can now sign in.', type: 'success' })
       } else {
         const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        // On portal login, link auth_user_id if not yet linked
         if (isClientPortal && signInData?.user?.id) {
           await supabase
             .from('clients')
@@ -129,420 +112,168 @@ export const Auth: React.FC<AuthProps> = ({ onAuthenticated, isClientPortal = fa
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSubmit()
-  }
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSubmit() }
 
-  /* ─── Client Portal Login ─── */
-  if (isClientPortal) {
-    return (
-      <div className="min-h-screen flex">
-        {/* Left Panel - Dark with client branding */}
-        <div className="hidden lg:flex lg:w-1/2 bg-[#0a0a0a] text-white flex-col justify-between p-12 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-[#2C0405]/20 via-transparent to-transparent" />
-
-          <div className="relative z-10">
-            {(tenantLogoDark || tenantLogo) ? (
-              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-14 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
-            ) : (
-              <div className="flex items-center gap-3">
-                <img src="/icon.svg" alt="LIVV" className="w-10 h-10 rounded-lg" />
-                <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-                  livv<span className="text-[#e8b4b4]">~</span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="relative z-10 space-y-6">
-            <div>
-              <h1 className="text-4xl font-light leading-tight mb-4" style={{ fontFamily: 'serif' }}>
-                Your <span className="text-[#e8b4b4]">project</span>,<br />
-                in real time
-              </h1>
-              <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
-                Access the portal to track progress, payments, documents and communicate directly with the team.
-              </p>
-            </div>
-
-            <div className="space-y-5 mt-8">
-              {[
-                { icon: '◎', title: 'Live Tracking', desc: 'Milestones, timeline and updated progress.' },
-                { icon: '◈', title: 'Financial Status', desc: 'Completed payments, pending and next due date.' },
-                { icon: '⌘', title: 'Direct Communication', desc: 'Messages and team updates.' },
-              ].map((f, i) => (
-                <div key={i} className="flex items-start gap-4 group">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#e8b4b4] text-lg group-hover:border-[#e8b4b4]/30 transition-colors">
-                    {f.icon}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-[#e8b4b4]">{f.title}</h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">{f.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-            <span className="text-[#e8b4b4]">SECURE PORTAL</span>
-            <span className="text-zinc-700">&bull;</span>
-            <span>Encrypted data</span>
-          </div>
-        </div>
-
-        {/* Right Panel - Client login form */}
-        <div className="flex-1 flex items-center justify-center p-8 lg:p-12" style={{ backgroundColor: '#faf9f7' }}>
-          <div className="w-full max-w-md">
-            <div className="text-center mb-10">
-              <div className="w-14 h-14 bg-[#2C0405]/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icons.Users size={22} className="text-[#2C0405]" />
-              </div>
-              <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
-                Client Portal
-              </h2>
-              <p className="text-zinc-500 text-sm">
-                Sign in with your credentials to access your project.
-              </p>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex justify-center gap-6 mb-8">
-              {(['signin', 'signup', 'forgot'] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => { setMode(m); setMessage(null); }}
-                  className={`text-sm transition-all pb-1 border-b-2 ${mode === m
-                    ? 'text-zinc-900 border-[#2C0405]'
-                    : 'text-zinc-400 border-transparent hover:text-zinc-600'
-                  }`}
-                >
-                  {m === 'signin' ? 'Sign In' : m === 'signup' ? 'Create Account' : 'Reset Password'}
-                </button>
-              ))}
-            </div>
-
-            {mode !== 'forgot' && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={loading}
-                  className="w-full mb-4 py-3 bg-white border border-zinc-200 rounded-xl text-zinc-800 font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <GoogleLogo />
-                  Continue with Google
-                </button>
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="flex-1 h-px bg-zinc-200" />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">or with email</span>
-                  <span className="flex-1 h-px bg-zinc-200" />
-                </div>
-              </>
-            )}
-
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Email</label>
-                <div className="relative">
-                  <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="tu@email.com"
-                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#2C0405]/15 focus:border-[#2C0405] transition-all"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              {(mode === 'signin' || mode === 'signup') && (
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Password</label>
-                  <div className="relative">
-                    <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={mode === 'signup' ? 'Minimum 6 characters' : '••••••••••••'}
-                      className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#2C0405]/15 focus:border-[#2C0405] transition-all"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {mode === 'forgot' && (
-                <p className="text-sm text-zinc-500 text-center">
-                  Enter your email and we'll send you a link to reset your password.
-                </p>
-              )}
-
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="w-full py-3.5 mt-2 bg-[#2C0405] hover:bg-[#1a0203] text-white font-medium rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#2C0405]/20"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {mode === 'signin' ? 'Access Portal' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
-                    <Icons.ChevronRight size={16} />
-                  </>
-                )}
-              </button>
-
-              {message && (
-                <div className={`p-4 rounded-xl text-sm ${message.type === 'success'
-                  ? 'bg-[#2C0405]/5 border border-[#2C0405]/15 text-[#2C0405]'
-                  : 'bg-red-50 border border-red-200 text-red-700'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    {message.type === 'success'
-                      ? <Icons.CheckCircle size={16} className="text-[#e8b4b4]" />
-                      : <Icons.AlertCircle size={16} className="text-red-500" />}
-                    {message.text}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
-              <p className="text-zinc-400 text-xs">
-                {mode === 'signup'
-                  ? 'Already have an account? '
-                  : "Don't have an account? "}
-                <button
-                  onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setMessage(null); }}
-                  className="text-[#2C0405] hover:text-[#2C0405] font-medium"
-                >
-                  {mode === 'signup' ? 'Sign in' : 'Create an account'}
-                </button>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  /* ─── Standard Platform Login ─── */
-  const features = [
-    { icon: '⌘', title: 'Project Command', desc: 'Real-time KPI tracking and lifecycle management.' },
-    { icon: '◈', title: 'Financial Oversight', desc: 'Wall-list monitoring and operational expenses.' },
-    { icon: '◎', title: 'Client Infrastructure', desc: 'Secure vaults, legal assets, and portal configuration.' },
+  const clientFeatures: AuthFeature[] = [
+    { icon: 'progress', title: 'Live progress', desc: 'Follow every phase, task, and milestone in real time.' },
+    { icon: 'payments', title: 'Payments', desc: "Your full schedule — what's paid, pending, and next." },
+    { icon: 'docs', title: 'Secure documents', desc: 'Contracts, deliverables, and credentials in one place.' },
+  ]
+  const platformFeatures: AuthFeature[] = [
+    { icon: 'command', title: 'Project command', desc: 'Boards, tasks, and timelines across every client.' },
+    { icon: 'finance', title: 'Finance & clients', desc: 'Pipeline, payments, and the full client picture.' },
+    { icon: 'infra', title: 'One workspace', desc: 'Calendar, docs, portals, and the team in one place.' },
   ]
 
+  const cfg = isClientPortal
+    ? {
+        eyebrow: '© CLIENT PORTAL ポータル',
+        headline: <>Your studio space,<br />built around you.</>,
+        subtitle: 'A calm, single place to follow your project with Livv — progress, payments, files, and a direct line to the team.',
+        features: clientFeatures,
+        formEyebrow: 'CLIENT PORTAL',
+        formSubtitle: 'Sign in to access your project space.',
+        emailPlaceholder: 'you@email.com',
+        showMagic: false,
+        footer: 'SECURE PORTAL · ENCRYPTED',
+        primaryLabel: { signin: 'Enter your portal', signup: 'Create account', magic: 'Send magic link', forgot: 'Send reset link' } as const,
+      }
+    : {
+        eyebrow: '© LIVV OS ポータル',
+        headline: <>Run the studio,<br />end to end.</>,
+        subtitle: 'Projects, clients, finance, and the team — one calm command surface for the whole studio.',
+        features: platformFeatures,
+        formEyebrow: tenantName ? tenantName.toUpperCase() : 'LIVV OS',
+        formSubtitle: 'Enter your credentials to continue.',
+        emailPlaceholder: 'you@livv.studio',
+        showMagic: true,
+        footer: 'RESTRICTED ACCESS · INVITE ONLY',
+        primaryLabel: { signin: 'Sign in', signup: 'Create account', magic: 'Send magic link', forgot: 'Send reset link' } as const,
+      }
+
+  const tabs: ('signin' | 'signup' | 'magic')[] = cfg.showMagic ? ['signin', 'signup', 'magic'] : ['signin', 'signup']
+  const tabLabel = (m: string) => (m === 'signin' ? 'Sign in' : m === 'signup' ? 'Create account' : 'Magic link')
+  const showPassword = mode === 'signin' || mode === 'signup'
+
+  const spinner = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <span className="animate-spin" style={{ width: 16, height: 16, border: '2px solid rgba(237,229,216,0.4)', borderTopColor: '#EDE5D8', borderRadius: 9999, display: 'inline-block' }} />
+      Processing…
+    </span>
+  )
+
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Dark with branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-zinc-950 text-white flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-900/10 via-transparent to-transparent" />
+    <AuthSplitLayout
+      eyebrow={cfg.eyebrow}
+      headline={cfg.headline}
+      subtitle={cfg.subtitle}
+      features={cfg.features}
+      footer={cfg.footer}
+    >
+      <p className="pa-eyebrow" style={{ marginBottom: 10 }}>{cfg.formEyebrow}</p>
+      <h2 className="pa-h" style={{ fontSize: 32 }}>Welcome back</h2>
+      <p className="pa-sub" style={{ color: '#5A3E3E', marginTop: 8, marginBottom: 26 }}>{cfg.formSubtitle}</p>
 
-        <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            {(tenantLogoDark || tenantLogo) ? (
-              <img src={tenantLogoDark || tenantLogo!} alt={tenantName || ''} className={`h-14 object-contain ${!tenantLogoDark && tenantLogo ? 'invert' : ''}`} />
-            ) : (
-              <>
-                <img src="/icon.svg" alt="LIVV" className="w-10 h-10 rounded-lg" />
-                <span className="text-2xl font-light tracking-wider" style={{ fontFamily: 'serif' }}>
-                  livv<span className="text-amber-500">~</span>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="relative z-10 space-y-8">
-          <div>
-            <h1 className="text-4xl font-light leading-tight mb-4" style={{ fontFamily: 'serif' }}>
-              <span className="text-amber-500">Mission</span> Control Center
-            </h1>
-            <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
-              Orchestrate projects, track finances, and manage client infrastructure from a central command node.
-            </p>
-          </div>
-
-          <div className="space-y-6 mt-12">
-            {features.map((feature, idx) => (
-              <div key={idx} className="flex items-start gap-4 group">
-                <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-500 text-lg group-hover:border-amber-500/50 transition-colors">
-                  {feature.icon}
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-amber-500">{feature.title}</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">{feature.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative z-10 flex items-center gap-2 text-xs text-zinc-600">
-          <span>v3.4.0</span>
-          <span className="text-zinc-700">&bull;</span>
-          <span className="text-amber-600">SYSTEMS OPERATIONAL</span>
-        </div>
-      </div>
-
-      {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-12" style={{ backgroundColor: '#faf9f7' }}>
-        <div className="w-full max-w-md">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-light text-zinc-800 mb-2" style={{ fontFamily: 'serif' }}>
-              Welcome back
-            </h2>
-            <p className="text-zinc-500 text-sm">
-              Please enter your credentials to continue.
-            </p>
-          </div>
-
-          <div className="flex justify-center gap-6 mb-8">
-            {(['signin', 'signup', 'magic'] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`text-sm transition-all pb-1 border-b-2 ${mode === m
-                  ? 'text-zinc-900 border-amber-500'
-                  : 'text-zinc-400 border-transparent hover:text-zinc-600'
-                }`}
-              >
-                {m === 'signin' ? 'Sign In' : m === 'signup' ? 'Create Account' : 'Magic Link'}
-              </button>
-            ))}
-          </div>
-
-          {mode !== 'forgot' && (
-            <>
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={loading}
-                className="w-full mb-4 py-3 bg-white border border-zinc-200 rounded-xl text-zinc-800 font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <GoogleLogo />
-                Continue with Google
-              </button>
-              <div className="flex items-center gap-3 mb-6">
-                <span className="flex-1 h-px bg-zinc-200" />
-                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">or with email</span>
-                <span className="flex-1 h-px bg-zinc-200" />
-              </div>
-            </>
-          )}
-
-          <div className="space-y-5">
-            <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Email</label>
-              <div className="relative">
-                <Icons.Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="admin@livv.studio"
-                  className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
-                />
-              </div>
-            </div>
-
-            {mode !== 'magic' && mode !== 'forgot' && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider">Password</label>
-                  <button
-                    type="button"
-                    onClick={() => { setMode('forgot'); setMessage(null); }}
-                    className="text-xs text-amber-600 hover:text-amber-700"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Icons.Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="••••••••••••"
-                    className="w-full pl-11 pr-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
-            {mode === 'forgot' && (
-              <div className="text-center">
-                <p className="text-sm text-zinc-500 mb-4">Enter your email and we'll send you a reset link.</p>
-                <button
-                  type="button"
-                  onClick={() => { setMode('signin'); setMessage(null); }}
-                  className="text-xs text-amber-600 hover:text-amber-700"
-                >
-                  &larr; Back to Sign In
-                </button>
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full py-3.5 mt-4 bg-zinc-900 text-white font-medium rounded-full hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : mode === 'forgot' ? 'Send Reset Link' : 'Send Magic Link'}
-                  <Icons.ChevronRight size={16} />
-                </>
-              )}
+      {/* Tabs */}
+      {mode !== 'forgot' && (
+        <div style={{ display: 'flex', gap: 22, marginBottom: 24 }}>
+          {tabs.map((m) => (
+            <button key={m} className="pa-tab" data-active={mode === m} onClick={() => { setMode(m); setMessage(null); }}>
+              {tabLabel(m)}
             </button>
+          ))}
+        </div>
+      )}
 
-            {message && (
-              <div className={`p-4 rounded-xl text-sm ${message.type === 'success'
-                ? 'bg-[#2C0405]/5 border border-[#2C0405]/15 text-[#2C0405]'
-                : 'bg-red-50 border border-red-200 text-red-700'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {message.type === 'success'
-                    ? <Icons.CheckCircle size={16} className="text-[#e8b4b4]" />
-                    : <Icons.AlertCircle size={16} className="text-red-500" />}
-                  {message.text}
-                </div>
-              </div>
+      {/* Google */}
+      {mode !== 'forgot' && (
+        <>
+          <button type="button" className="pa-btn pa-btn-ghost" onClick={handleGoogleSignIn} disabled={loading} style={{ marginBottom: 14 }}>
+            <GoogleLogo /> Continue with Google
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0 18px' }}>
+            <span style={{ flex: 1, height: 1, background: '#E6E2D8' }} />
+            <span className="pa-eyebrow" style={{ fontSize: 9 }}>or with email</span>
+            <span style={{ flex: 1, height: 1, background: '#E6E2D8' }} />
+          </div>
+        </>
+      )}
+
+      {/* Email */}
+      <label className="pa-eyebrow" style={{ display: 'block', marginBottom: 8 }}>EMAIL</label>
+      <input
+        className="pa-field" type="email" value={email}
+        onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyDown}
+        placeholder={cfg.emailPlaceholder} style={{ marginBottom: showPassword ? 16 : 18 }} autoFocus
+      />
+
+      {/* Password */}
+      {showPassword && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <label className="pa-eyebrow">PASSWORD</label>
+            {mode === 'signin' && (
+              <button type="button" className="pa-link" style={{ fontSize: 11, textDecoration: 'none' }} onClick={() => { setMode('forgot'); setMessage(null); }}>
+                Forgot?
+              </button>
             )}
           </div>
-
-          <div className="mt-10 pt-8 border-t border-zinc-200 text-center">
-            <p className="text-zinc-400 text-xs">
-              Restricted Access &bull; Invite Only
-            </p>
+          <div style={{ position: 'relative', marginBottom: 18 }}>
+            <input
+              className="pa-field" type={show ? 'text' : 'password'} value={password}
+              onChange={(e) => setPassword(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••••••'} style={{ paddingRight: 44 }}
+            />
+            <button type="button" className="pa-icon-btn" onClick={() => setShow(s => !s)} aria-label="Toggle password" style={{ position: 'absolute', right: 6, top: 6 }}>
+              {show ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
+        </>
+      )}
+
+      {mode === 'forgot' && (
+        <p className="pa-sub" style={{ color: '#78736A', fontSize: 13, marginBottom: 18 }}>
+          Enter your email and we'll send a link to reset your password.
+        </p>
+      )}
+
+      {/* Submit */}
+      <button className="pa-btn pa-btn-wine" onClick={handleSubmit} disabled={loading}>
+        {loading ? spinner : <>{cfg.primaryLabel[mode]} <ArrowRight size={16} /></>}
+      </button>
+
+      {/* Message */}
+      {message && (
+        <div style={{
+          marginTop: 16, padding: '11px 13px', borderRadius: 12, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
+          background: message.type === 'success' ? 'rgba(44,4,5,0.05)' : '#FBEAEA',
+          border: message.type === 'success' ? '1px solid rgba(44,4,5,0.15)' : '1px solid #F2C9C9',
+          color: message.type === 'success' ? '#2C0405' : '#9B2C2C',
+        }}>
+          {message.type === 'success' ? <CheckCircle2 size={15} style={{ flex: 'none' }} /> : <AlertCircle size={15} style={{ flex: 'none' }} />}
+          {message.text}
         </div>
+      )}
+
+      {mode === 'forgot' && (
+        <button type="button" className="pa-link" style={{ display: 'block', margin: '16px auto 0', fontSize: 12.5 }} onClick={() => { setMode('signin'); setMessage(null); }}>
+          ← Back to sign in
+        </button>
+      )}
+
+      <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid #E6E2D8', textAlign: 'center' }}>
+        <p style={{ fontSize: 12, color: '#A8A29A' }}>
+          {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
+          <button type="button" className="pa-link" onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setMessage(null); }}>
+            {mode === 'signup' ? 'Sign in' : 'Create one'}
+          </button>
+        </p>
       </div>
-    </div>
+    </AuthSplitLayout>
   )
 }
 
-// Inline SVG of the official Google "G" mark — avoids pulling a logo
-// asset and keeps the colours intact in dark mode without inversion.
+// Inline SVG of the official Google "G" mark.
 const GoogleLogo: React.FC = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
     <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" />
