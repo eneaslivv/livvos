@@ -22,6 +22,10 @@ interface UseTaskCommentsReturn {
   loading: boolean;
   addComment: (text: string, isInternal: boolean) => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
+  /** Set when a comment saved but couldn't be mirrored to a configured Slack
+   *  channel (e.g. the bot isn't in it). null when all good / no channel set. */
+  slackHint: string | null;
+  dismissSlackHint: () => void;
 }
 
 interface TaskNotifyInfo {
@@ -37,6 +41,7 @@ export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo
   const { members } = useTeam();
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [slackHint, setSlackHint] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Get current user's display info
@@ -145,13 +150,19 @@ export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo
       if (import.meta.env.DEV) console.warn('[useTaskComments] insert error:', error.message);
     } else {
       // Best-effort: mirror the comment into the project's connected Slack
-      // channel as a per-task thread. Never blocks the comment.
-      void notifyTaskCommentToSlack({
+      // channel as a per-task thread. Never blocks the comment — but surface a
+      // hint when a channel IS configured and the post failed (e.g. the bot
+      // isn't in the channel) so it doesn't fail silently.
+      notifyTaskCommentToSlack({
         tenantId: currentTenant.id,
         task: { id: taskId, title: taskInfo?.title || 'Task', project_id: taskInfo?.project_id ?? null },
         comment: trimmed,
         authorName: userName,
         isInternal,
+      }).then((r) => {
+        setSlackHint(r.error
+          ? "Saved — but couldn't post to the linked Slack channel. The bot may need to be invited to it."
+          : null);
       }).catch(() => {});
     }
     // Notifications (owner, assignee, @mentions) are handled by the
@@ -174,5 +185,5 @@ export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo
     }
   }, []);
 
-  return { comments, loading, addComment, deleteComment };
+  return { comments, loading, addComment, deleteComment, slackHint, dismissSlackHint: () => setSlackHint(null) };
 }

@@ -703,25 +703,56 @@ export async function notifyTaskCompletedToSlack(args: {
 // remember its ts in task_slack_threads; later comments reply in that thread.
 // Best-effort — if the project has no linked channel (or Slack errors), it
 // silently no-ops. A failed Slack post NEVER blocks the comment.
+export interface TaskCommentSlackResult {
+  /** How many channels we posted the comment into. */
+  posted: number;
+  /** True when no Slack channel is configured at all (not an error — silent). */
+  skipped: boolean;
+  /** Set when a channel IS configured but the post failed (actionable, e.g.
+   *  "not_in_channel" → the bot needs to be invited). Surfaced in the UI. */
+  error: string | null;
+}
+
 export async function notifyTaskCommentToSlack(args: {
   tenantId: string;
   task: { id: string; title: string; project_id?: string | null };
   comment: string;
   authorName: string;
   isInternal: boolean;
-}): Promise<void> {
-  if (!args.task.project_id) return;
+}): Promise<TaskCommentSlackResult> {
+  const result: TaskCommentSlackResult = { posted: 0, skipped: true, error: null };
+  if (!args.task.project_id) return result;
   try {
-    // Active Slack channels linked to this task's project.
+    // 1. Channels explicitly linked to this task's project.
     const { data: links } = await supabase
       .from('slack_monitored_channels')
-      .select('channel_id, integration_token_id')
+      .select('channel_id, channel_name, integration_token_id')
       .eq('tenant_id', args.tenantId)
       .eq('project_id', args.task.project_id)
       .eq('is_active', true);
-    if (!links || links.length === 0) return; // no connected channel → nothing to do
+    let targets: { channel_id: string; channel_name?: string | null; integration_token_id?: string | null }[] =
+      (links as any[]) || [];
 
-    // Existing thread roots for this task, keyed by channel.
+    // 2. Fallback: the workspace's default notify channel, so a tenant that set
+    //    one default channel gets task threads even without per-project linking.
+    if (targets.length === 0) {
+      const { data: tok } = await supabase
+        .from('integration_tokens')
+        .select('id, slack_notify_channel_id')
+        .eq('tenant_id', args.tenantId)
+        .eq('platform', 'slack')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (tok?.slack_notify_channel_id) {
+        targets = [{ channel_id: tok.slack_notify_channel_id, integration_token_id: tok.id }];
+      }
+    }
+
+    if (targets.length === 0) return result; // genuinely no channel configured → silent
+    result.skipped = false;
+
+    // 3. Existing thread roots for this task, keyed by channel.
     const { data: threads } = await supabase
       .from('task_slack_threads')
       .select('channel_id, thread_ts')
@@ -734,7 +765,7 @@ export async function notifyTaskCommentToSlack(args: {
     const body = args.comment.replace(/@\[([^\]]+)\]\([0-9a-fA-F-]{36}\)/g, '@$1');
     const visibility = args.isInternal ? '' : '  _· shared with client_';
 
-    for (const link of links as any[]) {
+    for (const link of targets) {
       try {
         let threadTs = threadByChannel.get(link.channel_id);
         if (!threadTs) {
@@ -765,9 +796,19 @@ export async function notifyTaskCommentToSlack(args: {
           threadTs,
           text: `*${args.authorName}*: ${body}${visibility}`,
         });
-      } catch { /* per-channel best-effort */ }
+        result.posted++;
+      } catch (err: any) {
+        result.error = err?.message || 'failed';
+        if (import.meta.env.DEV) {
+          console.warn(`[slack] task comment post failed (#${link.channel_name || link.channel_id}):`, result.error);
+        }
+      }
     }
-  } catch { /* best-effort — never throw */ }
+  } catch (err: any) {
+    result.error = err?.message || 'failed';
+    if (import.meta.env.DEV) console.warn('[slack] notifyTaskCommentToSlack:', result.error);
+  }
+  return result;
 }
 
 // ── Pull recent messages from monitored channels ──────────────────────────

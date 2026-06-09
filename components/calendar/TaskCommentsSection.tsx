@@ -67,7 +67,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   const { currentTenant } = useTenant();
   const { members } = useTeam();
   const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId, project_id: taskProjectId ?? null } : undefined, [taskTitle, taskOwnerId, taskAssigneeId, taskProjectId]);
-  const { comments, loading, addComment } = useTaskComments(taskId, taskInfo);
+  const { comments, loading, addComment, slackHint, dismissSlackHint } = useTaskComments(taskId, taskInfo);
   const [activeTab, setActiveTab] = useState<'internal' | 'client'>('internal');
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
@@ -350,6 +350,16 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
           ))
         )}
       </div>
+
+      {/* Slack-mirror hint — only when a channel IS configured but the post
+          failed (e.g. bot not in channel), so it never fails silently. */}
+      {slackHint && (
+        <div className="mb-1.5 flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[10px] leading-snug bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-500/30">
+          <Icons.AlertCircle size={11} className="shrink-0 mt-0.5" />
+          <span className="flex-1">{slackHint}</span>
+          <button onClick={dismissSlackHint} className="shrink-0 text-amber-500 hover:text-amber-700 font-bold leading-none" title="Dismiss">×</button>
+        </div>
+      )}
 
       {/* Input — textarea so multi-line + image previews work; Enter sends,
           Shift+Enter adds a newline. Paste/drop/click an image to attach. */}
