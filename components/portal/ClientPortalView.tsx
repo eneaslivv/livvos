@@ -189,17 +189,22 @@ export const ClientPortalView: React.FC = () => {
           }
         }
 
-        // If no client yet, try auth_user_id, email, then owner_id (admin)
+        // If no client yet, try auth_user_id, email, then owner_id (admin).
+        // Use order+limit(1)+maybeSingle (NOT .single()): a person who is a client
+        // of more than one agency — or whose email appears on multiple client
+        // records — has >1 row, and .single() would error and drop them to the
+        // "Could not find your client record" screen. Picking the most recent
+        // deterministically keeps the login working instead of failing.
         if (!client) {
           const { data: cd1 } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('auth_user_id', user.id).single(),
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('auth_user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
           client = cd1;
         }
         if (!client && user.email) {
           const { data: cd2 } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('email', user.email).single(),
+            supabase.from('clients').select('id,name,email,company,avatar_url').eq('email', user.email).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
           client = cd2;

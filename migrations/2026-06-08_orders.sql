@@ -106,6 +106,45 @@ CREATE POLICY orders_client_select ON orders
     )
   );
 
+-- ── Notify all agency staff on a new pedido ─────────────────────────────────
+-- Delivers the order to EVERY member of the owning tenant — the native owner
+-- (Christie) AND connected partners (Livv/Eneas, once shared into CK) — so it
+-- reaches "both of us" without anyone polling. Best-effort: a notification
+-- failure must never block the client from submitting their pedido.
+CREATE OR REPLACE FUNCTION orders_notify_staff()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_client_name TEXT;
+  v_member RECORD;
+BEGIN
+  SELECT name INTO v_client_name FROM clients WHERE id = NEW.client_id;
+  BEGIN
+    FOR v_member IN
+      SELECT user_id FROM tenant_members WHERE tenant_id = NEW.tenant_id
+    LOOP
+      PERFORM create_notification(
+        v_member.user_id,
+        'task',                                              -- valid notifications.type
+        'Nuevo pedido de ' || COALESCE(v_client_name, 'un cliente'),
+        NEW.title,
+        NULL,
+        jsonb_build_object('kind', 'order', 'order_id', NEW.id,
+                           'client_id', NEW.client_id, 'project_id', NEW.project_id),
+        NEW.tenant_id
+      );
+    END LOOP;
+  EXCEPTION WHEN OTHERS THEN
+    NULL; -- never block the pedido on a notification hiccup
+  END;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_orders_notify_staff ON orders;
+CREATE TRIGGER trg_orders_notify_staff
+  AFTER INSERT ON orders
+  FOR EACH ROW EXECUTE FUNCTION orders_notify_staff();
+
 -- ── Realtime ────────────────────────────────────────────────────────────────
 -- The dashboard inbox + portal list subscribe via postgres_changes, so the
 -- table must be in the supabase_realtime publication (guarded for idempotency).
