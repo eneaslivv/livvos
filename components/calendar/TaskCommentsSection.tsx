@@ -66,7 +66,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
   const { user } = useAuth();
   const { currentTenant } = useTenant();
   const { members } = useTeam();
-  const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId } : undefined, [taskTitle, taskOwnerId, taskAssigneeId]);
+  const taskInfo = useMemo(() => taskTitle ? { title: taskTitle, owner_id: taskOwnerId, assignee_id: taskAssigneeId, project_id: taskProjectId ?? null } : undefined, [taskTitle, taskOwnerId, taskAssigneeId, taskProjectId]);
   const { comments, loading, addComment } = useTaskComments(taskId, taskInfo);
   const [activeTab, setActiveTab] = useState<'internal' | 'client'>('internal');
   const [inputText, setInputText] = useState('');
@@ -286,7 +286,7 @@ export const TaskCommentsSection: React.FC<TaskCommentsSectionProps> = ({ taskId
       {/* Comments list */}
       <div
         ref={scrollRef}
-        className="max-h-52 overflow-y-auto space-y-1 mb-2 scroll-smooth"
+        className="max-h-72 overflow-y-auto space-y-1 mb-2 scroll-smooth"
       >
         {loading ? (
           <div className="flex items-center justify-center py-6">

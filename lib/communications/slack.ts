@@ -167,6 +167,8 @@ export async function postToSlack(args: {
   text: string;
   blocks?: any[];
   integrationTokenId?: string;
+  /** When set, posts as a reply in this thread (Slack message ts). */
+  threadTs?: string;
 }): Promise<{ ok: true; ts: string; channel: string; workspace?: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -183,6 +185,7 @@ export async function postToSlack(args: {
         text: args.text,
         blocks: args.blocks,
         integration_token_id: args.integrationTokenId,
+        thread_ts: args.threadTs,
       }),
     },
   );
@@ -693,6 +696,78 @@ export async function notifyTaskCompletedToSlack(args: {
     projectName: args.projectName,
     actorName: args.completedByName || null,
   });
+}
+
+// ── Mirror a task comment into the project's Slack channel(s), threaded ────
+// One thread per task: the first comment posts a root "thread header" and we
+// remember its ts in task_slack_threads; later comments reply in that thread.
+// Best-effort — if the project has no linked channel (or Slack errors), it
+// silently no-ops. A failed Slack post NEVER blocks the comment.
+export async function notifyTaskCommentToSlack(args: {
+  tenantId: string;
+  task: { id: string; title: string; project_id?: string | null };
+  comment: string;
+  authorName: string;
+  isInternal: boolean;
+}): Promise<void> {
+  if (!args.task.project_id) return;
+  try {
+    // Active Slack channels linked to this task's project.
+    const { data: links } = await supabase
+      .from('slack_monitored_channels')
+      .select('channel_id, integration_token_id')
+      .eq('tenant_id', args.tenantId)
+      .eq('project_id', args.task.project_id)
+      .eq('is_active', true);
+    if (!links || links.length === 0) return; // no connected channel → nothing to do
+
+    // Existing thread roots for this task, keyed by channel.
+    const { data: threads } = await supabase
+      .from('task_slack_threads')
+      .select('channel_id, thread_ts')
+      .eq('task_id', args.task.id);
+    const threadByChannel = new Map<string, string>(
+      (threads || []).map((t: any) => [t.channel_id, t.thread_ts]),
+    );
+
+    // Render @[Name](uuid) mention markup down to a readable @Name for Slack.
+    const body = args.comment.replace(/@\[([^\]]+)\]\([0-9a-fA-F-]{36}\)/g, '@$1');
+    const visibility = args.isInternal ? '' : '  _· shared with client_';
+
+    for (const link of links as any[]) {
+      try {
+        let threadTs = threadByChannel.get(link.channel_id);
+        if (!threadTs) {
+          // First comment on this task for this channel → post the thread root.
+          const root = await postToSlack({
+            tenantId: args.tenantId,
+            channelId: link.channel_id,
+            integrationTokenId: link.integration_token_id || undefined,
+            text: `💬 ${args.task.title}`,
+            blocks: [{
+              type: 'section',
+              text: { type: 'mrkdwn', text: `💬 *${args.task.title}*\n_Task thread — comments appear below._` },
+            }],
+          });
+          threadTs = root.ts;
+          await supabase.from('task_slack_threads').insert({
+            task_id: args.task.id,
+            tenant_id: args.tenantId,
+            channel_id: link.channel_id,
+            integration_token_id: link.integration_token_id || null,
+            thread_ts: threadTs,
+          });
+        }
+        await postToSlack({
+          tenantId: args.tenantId,
+          channelId: link.channel_id,
+          integrationTokenId: link.integration_token_id || undefined,
+          threadTs,
+          text: `*${args.authorName}*: ${body}${visibility}`,
+        });
+      } catch { /* per-channel best-effort */ }
+    }
+  } catch { /* best-effort — never throw */ }
 }
 
 // ── Pull recent messages from monitored channels ──────────────────────────

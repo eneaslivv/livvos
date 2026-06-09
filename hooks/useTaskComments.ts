@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useTeam } from '../context/TeamContext';
+import { notifyTaskCommentToSlack } from '../lib/communications/slack';
 
 export interface TaskComment {
   id: string;
@@ -27,6 +28,7 @@ interface TaskNotifyInfo {
   title: string;
   owner_id?: string;
   assignee_id?: string;
+  project_id?: string | null;
 }
 
 export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo): UseTaskCommentsReturn {
@@ -141,6 +143,16 @@ export function useTaskComments(taskId: string | null, taskInfo?: TaskNotifyInfo
       // Remove optimistic on failure
       setComments(prev => prev.filter(c => c.id !== tempId));
       if (import.meta.env.DEV) console.warn('[useTaskComments] insert error:', error.message);
+    } else {
+      // Best-effort: mirror the comment into the project's connected Slack
+      // channel as a per-task thread. Never blocks the comment.
+      void notifyTaskCommentToSlack({
+        tenantId: currentTenant.id,
+        task: { id: taskId, title: taskInfo?.title || 'Task', project_id: taskInfo?.project_id ?? null },
+        comment: trimmed,
+        authorName: userName,
+        isInternal,
+      }).catch(() => {});
     }
     // Notifications (owner, assignee, @mentions) are handled by the
     // notify_on_task_comment DB trigger — see migration

@@ -66,8 +66,9 @@ Deno.serve(async (req) => {
       text?: string
       blocks?: any[]
       integration_token_id?: string
+      thread_ts?: string
     }
-    const { tenant_id, channel_id, text, blocks, integration_token_id } = body
+    const { tenant_id, channel_id, text, blocks, integration_token_id, thread_ts } = body
     if (!tenant_id) return json({ error: 'tenant_id required' }, 400)
     if (!text) return json({ error: 'text required' }, 400)
 
@@ -102,6 +103,7 @@ Deno.serve(async (req) => {
       text, // required as fallback even when blocks are present
     }
     if (Array.isArray(blocks) && blocks.length > 0) payload.blocks = blocks
+    if (thread_ts) payload.thread_ts = thread_ts // reply in-thread (task comment threads)
 
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
