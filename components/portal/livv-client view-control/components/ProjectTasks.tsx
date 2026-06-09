@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, ListChecks, LayoutList, Columns3 } from 'lucide-react';
+import { Check, ChevronDown, ListChecks, LayoutList, Columns3, Plus } from 'lucide-react';
 import { PortalTask } from '../types';
 
 interface StageGroup {
@@ -37,7 +37,7 @@ function inferBoardStatus(t: PortalTask): BoardStatus {
   return 'todo';
 }
 
-const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalTask) => void }> = ({ tasks, onTaskClick }) => {
+const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalTask) => void; onNewOrder?: () => void }> = ({ tasks, onTaskClick, onNewOrder }) => {
   // Persist the chosen view per-portal-tab so reopening the project keeps
   // the client's preferred layout. Defaults to 'list' to match what
   // they're already used to.
@@ -90,6 +90,15 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
           Project Tasks
         </h3>
         <div className="flex items-center gap-3">
+          {onNewOrder && (
+            <button
+              onClick={onNewOrder}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white bg-[#2C0405] hover:bg-[#1a0203] shadow-sm shadow-[#2C0405]/20 transition-colors"
+              title="Pedir una nueva tarea al equipo"
+            >
+              <Plus size={12} strokeWidth={2.5} /> Pedir tarea
+            </button>
+          )}
           <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
             {totalCompleted}/{tasks.length}
           </span>

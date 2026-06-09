@@ -254,6 +254,7 @@ const ClientViewPreview: React.FC<{
   derivedGroups: { name: string; tasks: any[] }[];
 }> = ({ project, tasks, derivedGroups }) => {
   const { incomes } = useFinance();
+  const { currentTenant } = useTenant();
 
   // Build real payments from project incomes
   const projectIncomes = useMemo(() => incomes.filter(i => i.project_id === project.id), [incomes, project.id]);
@@ -352,8 +353,44 @@ const ClientViewPreview: React.FC<{
       ],
       assets,
       credentials: [],
+      // BUGFIX: the preview built milestones (stages) but never passed the actual
+      // task list, so PortalApp's ProjectTasks got `data.tasks === undefined` and
+      // rendered "No tasks in this project" even when the project had dozens.
+      tasks: tasks.map((t: any) => ({
+        id: t.id,
+        title: t.title || 'Untitled',
+        completed: !!(t.completed ?? t.done),
+        completedAt: t.completed_at || t.completedAt || undefined,
+        startDate: t.start_date || t.startDate || undefined,
+        dueDate: t.due_date || t.dueDate || undefined,
+        groupName: t.group_name || t.groupName || 'General',
+        status: t.status || undefined,
+        priority: t.priority || undefined,
+      })),
     };
   }, [project, tasks, derivedGroups, budgetTotal, budgetPaid, nextPending, payments]);
+
+  // Wire the portal's "Pedir tarea" button so the preview is faithful and the
+  // operator can drop a pedido on the client's behalf. created_by = the staff
+  // user; the orders_staff_all RLS policy allows it, and orders_notify_staff
+  // then alerts the whole agency.
+  const previewClientId = (project as any).client_id as string | undefined;
+  const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
+    if (!previewClientId || !currentTenant?.id) {
+      throw new Error('Este proyecto no tiene un cliente asignado.');
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: insertError } = await supabase.from('orders').insert({
+      tenant_id: currentTenant.id,
+      client_id: previewClientId,
+      project_id: project.id,
+      created_by: user?.id,
+      title: input.title,
+      description: input.description || null,
+      priority: input.priority,
+    });
+    if (insertError) throw new Error(insertError.message);
+  };
 
   return (
     <PortalApp
@@ -364,6 +401,7 @@ const ClientViewPreview: React.FC<{
       disableLoading
       hideCreatorToggle
       hiddenResourceTabs={hiddenResourceTabs}
+      onCreateOrder={previewClientId ? handleCreateOrder : undefined}
     />
   );
 };

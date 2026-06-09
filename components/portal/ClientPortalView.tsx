@@ -20,6 +20,7 @@ type ClientRecord = {
   email?: string | null;
   company?: string | null;
   avatar_url?: string | null;
+  tenant_id?: string | null;
 };
 
 type ProjectRecord = {
@@ -123,6 +124,7 @@ export const ClientPortalView: React.FC = () => {
   const [clientLogo, setClientLogo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | undefined>();
+  const [clientTenantId, setClientTenantId] = useState<string | undefined>();
   const [clientName, setClientName] = useState<string | undefined>();
   const [clientEmail, setClientEmail] = useState<string | undefined>();
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
@@ -168,7 +170,7 @@ export const ClientPortalView: React.FC = () => {
         // --- Resolve client (with clientId param: single fast lookup) ---
         if (clientIdParam) {
           const { data } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('id', clientIdParam).single(),
+            supabase.from('clients').select('id,name,email,company,avatar_url,tenant_id').eq('id', clientIdParam).single(),
             null as ClientRecord | null, 5000
           );
           client = data;
@@ -182,7 +184,7 @@ export const ClientPortalView: React.FC = () => {
           project = data;
           if (!client && project?.client_id) {
             const { data: cd } = await safeQuery(
-              supabase.from('clients').select('id,name,email,company,avatar_url').eq('id', project.client_id).single(),
+              supabase.from('clients').select('id,name,email,company,avatar_url,tenant_id').eq('id', project.client_id).single(),
               null as ClientRecord | null, 5000
             );
             client = cd;
@@ -197,21 +199,21 @@ export const ClientPortalView: React.FC = () => {
         // deterministically keeps the login working instead of failing.
         if (!client) {
           const { data: cd1 } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('auth_user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('clients').select('id,name,email,company,avatar_url,tenant_id').eq('auth_user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
           client = cd1;
         }
         if (!client && user.email) {
           const { data: cd2 } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('email', user.email).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('clients').select('id,name,email,company,avatar_url,tenant_id').eq('email', user.email).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
           client = cd2;
         }
         if (!client) {
           const { data: cd3 } = await safeQuery(
-            supabase.from('clients').select('id,name,email,company,avatar_url').eq('owner_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('clients').select('id,name,email,company,avatar_url,tenant_id').eq('owner_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
             null as ClientRecord | null, 4000
           );
           if (cd3 && import.meta.env.DEV) console.log('[Portal] Admin access:', cd3.name);
@@ -243,8 +245,9 @@ export const ClientPortalView: React.FC = () => {
           return;
         }
 
-        // Store client identity for header/chat
+        // Store client identity for header/chat + order creation
         setClientId(client.id);
+        setClientTenantId(client.tenant_id || undefined);
         setClientName(client.name);
         setClientEmail(client.email || undefined);
 
@@ -574,6 +577,27 @@ export const ClientPortalView: React.FC = () => {
     window.history.replaceState({}, '', url.toString());
   };
 
+  // Client submits a "pedido" → inserts into orders (RLS: client can insert for
+  // their own client record; the orders_notify_staff trigger then alerts every
+  // agency member). tenant_id comes from the client's own record, not the
+  // transient profiles.tenant_id.
+  const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
+    if (!user || !clientId || !clientTenantId) {
+      throw new Error('No pudimos identificar tu cuenta. Recargá la página e intentá de nuevo.');
+    }
+    const projectId = selectedProjectId || data?.projects?.[0]?.id || null;
+    const { error: insertError } = await supabase.from('orders').insert({
+      tenant_id: clientTenantId,
+      client_id: clientId,
+      project_id: projectId,
+      created_by: user.id,
+      title: input.title,
+      description: input.description || null,
+      priority: input.priority,
+    });
+    if (insertError) throw new Error(insertError.message);
+  };
+
   return (
     <PortalApp
       initialData={data}
@@ -589,6 +613,7 @@ export const ClientPortalView: React.FC = () => {
       onLogout={handleLogout}
       onProjectSwitch={handleProjectSwitch}
       selectedProjectId={selectedProjectId || data.projects?.[0]?.id}
+      onCreateOrder={handleCreateOrder}
     />
   );
 };

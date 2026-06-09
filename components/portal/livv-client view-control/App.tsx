@@ -26,6 +26,7 @@ import Onboarding from './components/Onboarding';
 import ChatSupport from './components/ChatSupport';
 import PreferencesPanel from './components/PreferencesPanel';
 import CreatorPanel from './components/CreatorPanel';
+import NewOrderModal, { NewOrderInput } from './components/NewOrderModal';
 
 const INITIAL_DATA: DashboardData = {
   progress: 74,
@@ -77,6 +78,7 @@ interface ClientPortalAppProps {
   hiddenResourceTabs?: ('finance' | 'access' | 'docs')[];
   roleBadge?: React.ReactNode;
   hideSupport?: boolean;
+  onCreateOrder?: (input: NewOrderInput) => Promise<void>;
 }
 
 const App: React.FC<ClientPortalAppProps> = ({
@@ -95,7 +97,8 @@ const App: React.FC<ClientPortalAppProps> = ({
   selectedProjectId,
   hiddenResourceTabs,
   roleBadge,
-  hideSupport
+  hideSupport,
+  onCreateOrder
 }) => {
   const [data, setData] = useState<DashboardData>(initialData || INITIAL_DATA);
   const [projectTitle, setProjectTitle] = useState(projectTitleProp || "My Project");
@@ -108,6 +111,7 @@ const App: React.FC<ClientPortalAppProps> = ({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<PortalTask | null>(null);
 
   // Dark mode
@@ -276,7 +280,7 @@ const App: React.FC<ClientPortalAppProps> = ({
               {/* Row 2: Tasks (List ⇄ Board toggle) — always render so the
                   client sees the module structure even when empty. */}
               <div className="md:col-span-12">
-                <ProjectTasks tasks={data.tasks || []} onTaskClick={setSelectedTask} />
+                <ProjectTasks tasks={data.tasks || []} onTaskClick={setSelectedTask} onNewOrder={onCreateOrder ? () => setIsNewOrderOpen(true) : undefined} />
               </div>
 
               {/* Row 3: Combined Resources (Finance + Access + Docs) */}
@@ -314,6 +318,9 @@ const App: React.FC<ClientPortalAppProps> = ({
 
       {/* Modals */}
       <AnimatePresence>
+        {isNewOrderOpen && onCreateOrder && (
+          <NewOrderModal onClose={() => setIsNewOrderOpen(false)} onSubmit={onCreateOrder} projectTitle={projectTitle} />
+        )}
         {isChatOpen && <ChatSupport onClose={() => setIsChatOpen(false)} clientId={clientId} clientName={clientName} />}
         {isConfigOpen && <PreferencesPanel onClose={() => setIsConfigOpen(false)} />}
         {isCreatorOpen && mode === 'creator' && (
