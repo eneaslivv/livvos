@@ -347,11 +347,27 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
             if (import.meta.env.DEV) console.log('[TenantContext] Tenant loaded:', tenantResult.data.id);
 
             if (configResult.data && !configResult.error) {
+                // Some tenant_config rows (e.g. child tenants seeded via an older
+                // path) carry NULL features/resource_limits jsonb. Spreading those
+                // straight through left tenantConfig.resource_limits === null, and
+                // isWithinResourceLimit / checkAndEnforceLimits then threw
+                // "Cannot read properties of null (reading 'max_users')" — crashing
+                // every usage-gated screen for THAT tenant only (e.g. CK Studio).
+                // Coalesce to safe defaults so the gates degrade gracefully.
                 const parsedConfig = {
                     ...configResult.data,
                     branding: typeof configResult.data.branding === 'string'
                         ? JSON.parse(configResult.data.branding)
-                        : configResult.data.branding
+                        : configResult.data.branding,
+                    features: configResult.data.features ?? {
+                        projects_module: true, team_management: true, sales_module: true,
+                        finance_module: true, documents_module: true, notifications: true,
+                        ai_assistant: false, analytics: true, calendar_integration: true,
+                        client_portal: false, document_versioning: false, advanced_permissions: false,
+                    },
+                    resource_limits: configResult.data.resource_limits ?? {
+                        max_users: 10, max_projects: 50, max_storage_mb: 5000, max_api_calls_per_month: 10000,
+                    },
                 };
                 setTenantConfig(parsedConfig);
             }
