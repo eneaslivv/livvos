@@ -128,6 +128,7 @@ export const ClientPortalView: React.FC = () => {
   const [clientName, setClientName] = useState<string | undefined>();
   const [clientEmail, setClientEmail] = useState<string | undefined>();
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Auth timeout: if user isn't available after 6s, stop waiting
   useEffect(() => {
@@ -535,7 +536,7 @@ export const ClientPortalView: React.FC = () => {
     };
 
     loadPortal();
-  }, [user, clientIdParam, projectIdParam, selectedProjectId]);
+  }, [user, clientIdParam, projectIdParam, selectedProjectId, refreshKey]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-zinc-500 dark:text-zinc-400 dark:bg-zinc-950">Loading portal...</div>;
@@ -577,25 +578,30 @@ export const ClientPortalView: React.FC = () => {
     window.history.replaceState({}, '', url.toString());
   };
 
-  // Client submits a "pedido" → inserts into orders (RLS: client can insert for
-  // their own client record; the orders_notify_staff trigger then alerts every
-  // agency member). tenant_id comes from the client's own record, not the
-  // transient profiles.tenant_id.
+  // A client request lands as a TASK in the same project (not a separate inbox),
+  // so it shows up on the shared project board and the team works it like any
+  // task. owner_id = the client's portal user, which the trg_tasks_notify_client_request
+  // trigger keys on to alert every agency member. tenant_id comes from the
+  // client's own record (clients.tenant_id), not the transient profiles.tenant_id.
   const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
     if (!user || !clientId || !clientTenantId) {
       throw new Error('We could not identify your account. Please reload the page and try again.');
     }
     const projectId = selectedProjectId || data?.projects?.[0]?.id || null;
-    const { error: insertError } = await supabase.from('orders').insert({
+    const { error: insertError } = await supabase.from('tasks').insert({
       tenant_id: clientTenantId,
-      client_id: clientId,
       project_id: projectId,
-      created_by: user.id,
+      client_id: clientId,
+      owner_id: user.id,
       title: input.title,
       description: input.description || null,
       priority: input.priority,
+      status: 'todo',
+      completed: false,
+      group_name: 'Client Requests',
     });
     if (insertError) throw new Error(insertError.message);
+    setRefreshKey((k) => k + 1); // re-load so the new task appears on the board
   };
 
   return (

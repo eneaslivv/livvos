@@ -370,24 +370,28 @@ const ClientViewPreview: React.FC<{
     };
   }, [project, tasks, derivedGroups, budgetTotal, budgetPaid, nextPending, payments]);
 
-  // Wire the portal's "Pedir tarea" button so the preview is faithful and the
-  // operator can drop a pedido on the client's behalf. created_by = the staff
-  // user; the orders_staff_all RLS policy allows it, and orders_notify_staff
-  // then alerts the whole agency.
+  // Wire the portal's "New request" button so the preview is faithful and the
+  // operator can drop a request on the client's behalf. It lands as a task in
+  // the project (same as a real client request), via the staff tasks insert
+  // policy. owner_id = the operator, so it won't fire the client-request
+  // notification (that's reserved for real client-submitted tasks).
   const previewClientId = (project as any).client_id as string | undefined;
   const handleCreateOrder = async (input: { title: string; description: string; priority: 'low' | 'medium' | 'high' | 'urgent' }) => {
     if (!previewClientId || !currentTenant?.id) {
       throw new Error('This project has no client assigned.');
     }
     const { data: { user } } = await supabase.auth.getUser();
-    const { error: insertError } = await supabase.from('orders').insert({
+    const { error: insertError } = await supabase.from('tasks').insert({
       tenant_id: currentTenant.id,
-      client_id: previewClientId,
       project_id: project.id,
-      created_by: user?.id,
+      client_id: previewClientId,
+      owner_id: user?.id,
       title: input.title,
       description: input.description || null,
       priority: input.priority,
+      status: 'todo',
+      completed: false,
+      group_name: 'Client Requests',
     });
     if (insertError) throw new Error(insertError.message);
   };
