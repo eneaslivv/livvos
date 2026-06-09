@@ -104,7 +104,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 overflow-hidden h-full flex flex-col"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-[#E6E2D8] dark:border-zinc-800 shadow-[0_1px_2px_rgba(44,4,5,0.04)] overflow-hidden h-full flex flex-col"
     >
       {/* Tab bar */}
       <div className="flex items-center border-b border-zinc-100 dark:border-zinc-800 px-1 pt-1">
@@ -467,7 +467,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                   className="flex items-center justify-between p-2.5 bg-zinc-50/80 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-zinc-200 dark:hover:border-zinc-600 transition-all cursor-pointer group"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg text-zinc-300 dark:text-zinc-600 group-hover:text-indigo-500 transition-colors border border-zinc-100 dark:border-zinc-800">
+                    <div className="p-1.5 bg-white dark:bg-zinc-900 rounded-lg text-zinc-300 dark:text-zinc-600 group-hover:text-[#C4A35A] transition-colors border border-zinc-100 dark:border-zinc-800">
                       {getDocIcon(a.type)}
                     </div>
                     <div>
@@ -482,7 +482,7 @@ const ResourcesPanel: React.FC<ResourcesPanelProps> = ({ credentials, assets, bu
                       <p className="text-[9px] text-zinc-300 dark:text-zinc-600">{a.size} · {a.type}</p>
                     </div>
                   </div>
-                  <button className="p-1 text-zinc-200 dark:text-zinc-700 group-hover:text-indigo-500 transition-all">
+                  <button className="p-1 text-zinc-200 dark:text-zinc-700 group-hover:text-[#C4A35A] transition-all">
                     <Download size={13} />
                   </button>
                 </div>

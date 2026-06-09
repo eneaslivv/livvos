@@ -57,7 +57,7 @@ const NewOrderModal: React.FC<{
       onClick={onClose}
     >
       <motion.div
-        className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/70 dark:border-zinc-800 shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl border border-[#E6E2D8] dark:border-zinc-800 shadow-2xl overflow-hidden"
         initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 24, scale: 0.97 }}

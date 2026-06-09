@@ -32,11 +32,11 @@ const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTas
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, x: 16 }, visible: { opacity: 1, x: 0 } }}
-      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8 h-full flex flex-col"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-[#E6E2D8] dark:border-zinc-800 shadow-[0_1px_2px_rgba(44,4,5,0.04)] p-6 md:p-8 h-full flex flex-col"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Project Stages</h3>
+        <h3 className="text-[10px] font-mono font-medium text-[#A8A29A] dark:text-zinc-500 uppercase tracking-[0.16em]">Project Stages</h3>
         <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
           {completed}/{total}
         </span>
@@ -45,7 +45,7 @@ const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTas
       {/* Progress bar */}
       <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-6 overflow-hidden">
         <motion.div
-          className="h-full rounded-full bg-[#2C0405]"
+          className="h-full rounded-full bg-[#C4A35A]"
           initial={{ width: 0 }}
           animate={{ width: `${progressPct}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -69,7 +69,7 @@ const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTas
                 <div className={`
                   w-6 h-6 rounded-full flex items-center justify-center transition-all
                   ${done ? 'bg-[#2C0405] text-white' : ''}
-                  ${active ? 'bg-indigo-500 text-white ring-[3px] ring-indigo-100 dark:ring-indigo-900/60' : ''}
+                  ${active ? 'bg-[#C4A35A] text-white ring-[3px] ring-[#C4A35A]/20 dark:ring-[#C4A35A]/30' : ''}
                   ${!done && !active ? 'bg-zinc-100 dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700' : ''}
                 `}>
                   {done && <Check size={12} strokeWidth={3} />}
@@ -91,11 +91,11 @@ const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTas
                 >
                   <h4 className={`text-[13px] font-semibold leading-tight ${
                     done ? 'text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-300 dark:decoration-zinc-700' : ''
-                  } ${active ? 'text-indigo-600 dark:text-indigo-400' : ''} ${!done && !active ? 'text-zinc-500 dark:text-zinc-400' : ''}`}>
+                  } ${active ? 'text-[#2C0405] dark:text-[#e8a0a2]' : ''} ${!done && !active ? 'text-zinc-500 dark:text-zinc-400' : ''}`}>
                     {m.title}
                   </h4>
                   {active && (
-                    <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-500 dark:text-indigo-400 text-[9px] font-bold rounded uppercase tracking-wide">
+                    <span className="px-1.5 py-0.5 bg-[#C4A35A]/15 dark:bg-[#C4A35A]/15 text-[#8a6d2e] dark:text-[#d9b86a] text-[9px] font-bold rounded uppercase tracking-wide">
                       In Progress
                     </span>
                   )}
@@ -148,7 +148,7 @@ const LiveRoadmap: React.FC<LiveRoadmapProps> = ({ milestones, tasks = [], onTas
                       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="mt-2 space-y-0.5 rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden bg-zinc-50/50 dark:bg-zinc-800/30">
+                      <div className="mt-2 space-y-0.5 rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden bg-[#FAF6EE] dark:bg-zinc-800/30">
                         {milestoneTasks.map(task => {
                           const isOverdue = task.dueDate && !task.completed && new Date(task.dueDate) < new Date(new Date().toISOString().slice(0, 10));
                           return (

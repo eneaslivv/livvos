@@ -13,11 +13,11 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8 h-full flex flex-col"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-[#E6E2D8] dark:border-zinc-800 shadow-[0_1px_2px_rgba(44,4,5,0.04)] p-6 md:p-8 h-full flex flex-col"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Project Progress</h3>
+        <h3 className="text-[10px] font-mono font-medium text-[#A8A29A] dark:text-zinc-500 uppercase tracking-[0.16em]">Project Progress</h3>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${data.onTrack ? 'bg-[#2C0405]/5 dark:bg-[#822b2e]/20 text-[#2C0405] dark:text-[#e8a0a2]' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${data.onTrack ? 'bg-[#2C0405] dark:bg-[#e8a0a2]' : 'bg-amber-400'}`} />
           {data.onTrack ? 'On Track' : 'Delayed'}
@@ -49,25 +49,25 @@ const TimelinePulse: React.FC<{ data: DashboardData }> = ({ data }) => {
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(data.progress, 100)}%` }}
           transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
-          className={`absolute top-0 left-0 h-full rounded-full ${data.progress >= 100 ? 'bg-[#2C0405]' : 'bg-indigo-500'}`}
+          className={`absolute top-0 left-0 h-full rounded-full ${data.progress >= 100 ? 'bg-[#2C0405]' : 'bg-[#C4A35A]'}`}
         />
       </div>
 
       {/* Dates Row */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl">
+        <div className="p-3.5 bg-[#FAF6EE] dark:bg-zinc-800/60 rounded-xl">
           <div className="flex items-center gap-1.5 mb-1.5">
             <CalendarDays size={12} className="text-zinc-300 dark:text-zinc-600" />
             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Start</p>
           </div>
           <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{data.startDate}</p>
         </div>
-        <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl">
+        <div className="p-3.5 bg-[#FAF6EE] dark:bg-zinc-800/60 rounded-xl">
           <div className="flex items-center gap-1.5 mb-1.5">
             <Clock size={12} className="text-zinc-300 dark:text-zinc-600" />
             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wide">Estimated Delivery</p>
           </div>
-          <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">{data.etaDate}</p>
+          <p className="text-sm font-semibold text-[#2C0405] dark:text-[#e8a0a2]">{data.etaDate}</p>
         </div>
       </div>
 

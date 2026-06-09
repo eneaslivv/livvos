@@ -81,11 +81,11 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-[#E6E2D8] dark:border-zinc-800 shadow-[0_1px_2px_rgba(44,4,5,0.04)] p-6 md:p-8"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2 gap-3">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+        <h3 className="text-[10px] font-mono font-medium text-[#A8A29A] dark:text-zinc-500 uppercase tracking-[0.16em] flex items-center gap-2">
           <ListChecks size={13} className="text-zinc-300 dark:text-zinc-600" />
           Project Tasks
         </h3>
@@ -133,7 +133,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
       {/* Overall progress bar */}
       <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mb-6 overflow-hidden">
         <motion.div
-          className="h-full rounded-full bg-[#2C0405]"
+          className="h-full rounded-full bg-[#C4A35A]"
           initial={{ width: 0 }}
           animate={{ width: `${tasks.length ? Math.round((totalCompleted / tasks.length) * 100) : 0}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -148,7 +148,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
             return (
               <div
                 key={col.key}
-                className="rounded-xl bg-zinc-50/40 dark:bg-zinc-800/30 border border-zinc-100 dark:border-zinc-800 p-2.5 min-h-[140px]"
+                className="rounded-xl bg-[#FAF6EE] dark:bg-zinc-800/30 border border-[#EFEAE0] dark:border-zinc-800 p-2.5 min-h-[140px]"
               >
                 {/* Column header */}
                 <div className="flex items-center justify-between mb-2">
@@ -225,7 +225,7 @@ const ProjectTasks: React.FC<{ tasks: PortalTask[]; onTaskClick?: (task: PortalT
               {/* Group header */}
               <button
                 onClick={() => toggleGroup(group.name)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                className="w-full px-4 py-3 flex items-center justify-between bg-[#FAF6EE] dark:bg-zinc-800/50 hover:bg-[#F5F2EB] dark:hover:bg-zinc-800 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
                   <div className={`w-2 h-2 rounded-full ${

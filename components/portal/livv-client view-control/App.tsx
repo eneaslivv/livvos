@@ -154,7 +154,7 @@ const App: React.FC<ClientPortalAppProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-300">
+    <div className="min-h-screen bg-[#FDFBF7] dark:bg-zinc-950 selection:bg-[#C4A35A]/25 dark:selection:bg-[#C4A35A]/20 transition-colors duration-300">
       {/* Creator Toggle */}
       {!hideCreatorToggle && (
         <div className="fixed bottom-6 left-6 z-[100]">
@@ -181,7 +181,7 @@ const App: React.FC<ClientPortalAppProps> = ({
               </div>
             )}
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{projectTitle}</h1>
+              <h1 className="text-2xl font-light tracking-[-0.02em] text-[#09090B] dark:text-zinc-50">{projectTitle}</h1>
               {projectSubtitle && (
                 <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium mt-0.5">{projectSubtitle}</p>
               )}
@@ -202,7 +202,7 @@ const App: React.FC<ClientPortalAppProps> = ({
               <select
                 value={selectedProjectId || data.projects[0]?.id || ''}
                 onChange={(e) => onProjectSwitch?.(e.target.value)}
-                className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-indigo-200 dark:focus:ring-indigo-800 focus:border-indigo-300 transition-all cursor-pointer mr-1"
+                className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-[#C4A35A]/30 dark:focus:ring-[#C4A35A]/40 focus:border-[#C4A35A] transition-all cursor-pointer mr-1"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',

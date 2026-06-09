@@ -7,7 +7,7 @@ import { LogEntry } from '../types';
 const typeConfig: Record<string, { icon: React.ElementType; bg: string; text: string }> = {
   milestone: { icon: CheckCircle2, bg: 'bg-[#2C0405]/5 dark:bg-[#822b2e]/20', text: 'text-[#2C0405] dark:text-[#e8a0a2]' },
   payment: { icon: CreditCard, bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-500 dark:text-blue-400' },
-  delivery: { icon: Package, bg: 'bg-indigo-50 dark:bg-indigo-950/40', text: 'text-indigo-500 dark:text-indigo-400' },
+  delivery: { icon: Package, bg: 'bg-[#C4A35A]/12 dark:bg-[#C4A35A]/15', text: 'text-[#8a6d2e] dark:text-[#d9b86a]' },
   review: { icon: MessageSquare, bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-500 dark:text-amber-400' },
   update: { icon: Activity, bg: 'bg-zinc-50 dark:bg-zinc-800', text: 'text-zinc-400 dark:text-zinc-500' },
 };
@@ -16,10 +16,10 @@ const SystemLogs: React.FC<{ logs: LogEntry[]; showProjectTags?: boolean }> = ({
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-      className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-6 md:p-8"
+      className="bg-white dark:bg-zinc-900 rounded-2xl border border-[#E6E2D8] dark:border-zinc-800 shadow-[0_1px_2px_rgba(44,4,5,0.04)] p-6 md:p-8"
     >
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+        <h3 className="text-[10px] font-mono font-medium text-[#A8A29A] dark:text-zinc-500 uppercase tracking-[0.16em] flex items-center gap-2">
           <Clock size={13} className="text-zinc-300 dark:text-zinc-600" />
           Recent Activity
         </h3>
