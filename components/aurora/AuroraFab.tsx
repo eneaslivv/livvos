@@ -35,7 +35,10 @@ export const AuroraFab: React.FC = () => {
             transition={{ type: 'spring', stiffness: 360, damping: 24 }}
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.94 }}
-            className="group fixed bottom-5 right-5 z-[60] inline-flex items-center gap-2 h-11 pl-3 pr-4 rounded-full bg-zinc-900/95 dark:bg-zinc-100/95 text-white dark:text-zinc-900 backdrop-blur-sm border border-white/10 dark:border-zinc-900/10 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35),0_2px_4px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.12)] transition-shadow"
+            // Mobile: lifted above the BottomTabBar (h-16 + safe area) so it
+            // never covers the Calendar/More tabs, and icon-only to stay out
+            // of the way. Desktop keeps the labelled pill bottom-right.
+            className="group fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] right-4 md:bottom-5 md:right-5 z-[60] inline-flex items-center gap-2 h-11 pl-3 pr-3 sm:pr-4 rounded-full bg-zinc-900/95 dark:bg-zinc-100/95 text-white dark:text-zinc-900 backdrop-blur-sm border border-white/10 dark:border-zinc-900/10 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35),0_2px_4px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.12)] transition-shadow"
             style={cssVarsForAgent(agent)}
             title={`${label} · ${meta.tagline}`}
           >
@@ -55,7 +58,7 @@ export const AuroraFab: React.FC = () => {
               />
             </motion.span>
 
-            <span className="text-[12px] font-medium tracking-tight pr-0.5">
+            <span className="hidden sm:inline text-[12px] font-medium tracking-tight pr-0.5">
               Aurora
             </span>
           </motion.button>

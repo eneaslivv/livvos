@@ -1021,6 +1021,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
           onNavigate={onNavigate}
           isDarkMode={isDarkMode}
           onToggleTheme={toggleTheme}
+          onOpenNewTask={() => setIsTaskModalOpen(true)}
+          onOpenSearch={() => setShowCommandPalette(true)}
         />
       )}
     </div>

@@ -53,7 +53,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const { projects } = useProjects();
   const { clients } = useClients();
   const { members } = useTeam();
-  const { events } = useCalendar();
+  const { events, tasks } = useCalendar();
 
   // Reset state when opened
   useEffect(() => {
@@ -148,6 +148,27 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       });
     });
 
+    // Tasks — open ones first, completed last; jump into the task's
+    // project (or Calendar when it has no project).
+    const matchedTasks = (tasks || [])
+      .filter(t => `${t.title} ${t.description || ''}`.toLowerCase().includes(q))
+      .sort((a, b) => Number(!!a.completed) - Number(!!b.completed))
+      .slice(0, 4);
+
+    matchedTasks.forEach(t => {
+      const projectName = (projects || []).find(p => p.id === t.project_id)?.title;
+      all.push({
+        id: `task-${t.id}`,
+        label: t.title,
+        sublabel: [t.completed ? 'done' : (t.status || 'open'), projectName, t.due_date].filter(Boolean).join(' · '),
+        category: 'Tasks',
+        icon: <Icons.Check size={16} />,
+        action: () => t.project_id
+          ? navigate('projects', { projectId: t.project_id })
+          : navigate('calendar'),
+      });
+    });
+
     // Clients
     const matchedClients = (clients || [])
       .filter(c => {
@@ -228,7 +249,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
 
     return all;
-  }, [query, projects, clients, members, events, currentMode, navigate, onSwitchMode, onClose]);
+  }, [query, projects, clients, members, events, tasks, currentMode, navigate, onSwitchMode, onClose]);
 
   // Clamp selected index
   useEffect(() => {
@@ -285,7 +306,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Find anything — leads, projects, clients, brands, pages…"
+            placeholder="Find anything — tasks, projects, clients, pages…"
           />
         </div>
 

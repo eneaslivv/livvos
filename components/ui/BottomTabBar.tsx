@@ -8,16 +8,22 @@ interface BottomTabBarProps {
   onNavigate: (page: PageView, params?: NavParams) => void
   isDarkMode: boolean
   onToggleTheme: () => void
+  /** Opens the quick task-create modal (Layout's CreateTaskModal). */
+  onOpenNewTask: () => void
+  /** Opens the global CommandPalette (search tasks/projects/clients). */
+  onOpenSearch: () => void
 }
 
+// 4 tabs + a raised center "+" — Sales moved into the More sheet so the
+// daily-driver actions (create a task, search) get first-class placement.
 const TABS: { id: PageView; label: string; icon: keyof typeof Icons }[] = [
   { id: 'home', label: 'Home', icon: 'Home' },
   { id: 'brief', label: 'Brief', icon: 'Sparkles' },
-  { id: 'sales_dashboard', label: 'Sales', icon: 'Chart' },
   { id: 'calendar', label: 'Calendar', icon: 'Calendar' },
 ]
 
 const MORE_ITEMS: { id: PageView | 'theme'; label: string; icon: keyof typeof Icons }[] = [
+  { id: 'sales_dashboard', label: 'Sales', icon: 'Chart' },
   { id: 'build_hub', label: 'Growth OS', icon: 'Briefcase' },
   { id: 'projects', label: 'Projects', icon: 'Briefcase' },
   { id: 'team_clients', label: 'Clients', icon: 'Users' },
@@ -40,6 +46,8 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   onNavigate,
   isDarkMode,
   onToggleTheme,
+  onOpenNewTask,
+  onOpenSearch,
 }) => {
   const [showMore, setShowMore] = useState(false)
 
@@ -81,6 +89,18 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
                 <div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
               </div>
 
+              {/* Search — thumb-reach entry to the global palette (tasks,
+                  projects, clients, pages). */}
+              <div className="px-4 pb-3">
+                <button
+                  onClick={() => { setShowMore(false); onOpenSearch(); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 active:bg-zinc-200 dark:active:bg-zinc-700 transition-colors"
+                >
+                  <Icons.Search size={17} strokeWidth={2} />
+                  <span className="text-[13px] font-medium">Search tasks, projects, clients…</span>
+                </button>
+              </div>
+
               <div className="px-4 pb-4 grid grid-cols-4 gap-2">
                 {MORE_ITEMS.map(item => {
                   const IconComponent = Icons[item.icon === 'Moon' && isDarkMode ? 'Sun' : item.icon]
@@ -119,29 +139,41 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex items-center justify-around h-16 px-2">
-          {TABS.map(tab => {
+          {TABS.map((tab, idx) => {
             const active = isActive(tab.id)
             const IconComponent = Icons[tab.icon]
             const colorClass = active ? TAB_COLORS[tab.id] || TAB_COLORS.home : 'text-zinc-400 dark:text-zinc-500'
 
             return (
-              <button
-                key={tab.id}
-                onClick={() => onNavigate(tab.id)}
-                className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-all ${colorClass}`}
-              >
-                <IconComponent size={22} strokeWidth={active ? 2.5 : 1.8} />
-                <span className={`text-[10px] font-medium ${active ? 'font-semibold' : ''}`}>
-                  {tab.label}
-                </span>
-                {active && (
-                  <motion.div
-                    layoutId="bottomTabIndicator"
-                    className="absolute -top-0.5 w-5 h-0.5 rounded-full bg-current"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
+              <React.Fragment key={tab.id}>
+                <button
+                  onClick={() => onNavigate(tab.id)}
+                  className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] min-h-[44px] transition-all ${colorClass}`}
+                >
+                  <IconComponent size={22} strokeWidth={active ? 2.5 : 1.8} />
+                  <span className={`text-[10px] font-medium ${active ? 'font-semibold' : ''}`}>
+                    {tab.label}
+                  </span>
+                  {active && (
+                    <motion.div
+                      layoutId="bottomTabIndicator"
+                      className="absolute -top-0.5 w-5 h-0.5 rounded-full bg-current"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                </button>
+
+                {/* Raised center "+" — quick task create, after Brief */}
+                {idx === 1 && (
+                  <button
+                    onClick={onOpenNewTask}
+                    aria-label="New task"
+                    className="relative -mt-6 flex items-center justify-center w-[52px] h-[52px] rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-lg shadow-black/25 ring-4 ring-white/80 dark:ring-zinc-900/80 active:scale-95 transition-transform"
+                  >
+                    <Icons.Plus size={24} strokeWidth={2.2} />
+                  </button>
                 )}
-              </button>
+              </React.Fragment>
             )
           })}
 
