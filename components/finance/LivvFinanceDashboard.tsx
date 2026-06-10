@@ -1001,6 +1001,25 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
     }
   }, [activity, actFilter]);
 
+  // ─── Collections — the front-and-center block ───────────────
+  // Left: what's still out there (soonest due first, overdue flagged).
+  // Right: what actually came in, with the REAL collection date.
+  const collections = useMemo(() => {
+    const pending: ActivityItem[] = [];
+    const collected: ActivityItem[] = [];
+    activity.forEach(a => {
+      if (a.kind !== 'income') return;
+      (a.status === 'paid' ? collected : pending).push(a);
+    });
+    pending.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+    collected.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const ym = new Date().toISOString().slice(0, 7);
+    const collectedThisMonth = collected
+      .filter(c => (c.date || '').startsWith(ym))
+      .reduce((s, c) => s + c.amount, 0);
+    return { pending, collected, collectedThisMonth };
+  }, [activity]);
+
   return (
     <div style={{
       background: C.cream, color: C.ink, fontFamily: 'Inter',
@@ -1085,11 +1104,87 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
         </div>
       </div>
 
+      {/* ─── Collections — por cobrar / cobrado ──────────────────
+          THE block the user works from daily: what's still out there
+          (one tap on the circle = collected today) and what actually
+          came in, with the real collection date. */}
+      <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        {/* To collect */}
+        <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+            <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
+              To collect
+            </h3>
+            <span style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: 400, color: C.gold, fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(outstandingReceivables)}
+            </span>
+          </div>
+          <Eyebrow style={{ display: 'block', marginBottom: 8 }}>
+            Tap the circle when the money arrives
+          </Eyebrow>
+          {collections.pending.length > 0 ? (
+            <>
+              {collections.pending.slice(0, 6).map(p => (
+                <ActivityRow key={p.id} item={p} compact onTogglePaid={togglePaid} />
+              ))}
+              {collections.pending.length > 6 && (
+                <button
+                  onClick={() => { setTab('Activity'); setActFilter('tocollect'); }}
+                  style={{
+                    marginTop: 12, background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontFamily: 'Inter', fontSize: 12, fontWeight: 500, color: C.ink, padding: 0,
+                  }}
+                >View all {collections.pending.length} →</button>
+              )}
+            </>
+          ) : (
+            <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.meta, textAlign: 'center', padding: '24px 0' }}>
+              Nothing pending — everything's collected. 🎉
+            </p>
+          )}
+        </div>
+
+        {/* Recently collected */}
+        <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+            <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
+              Collected
+            </h3>
+            <span style={{ fontFamily: 'Inter', fontSize: 16, fontWeight: 400, color: C.income, fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(collections.collectedThisMonth)} <span style={{ fontSize: 10, color: C.meta }}>this month</span>
+            </span>
+          </div>
+          <Eyebrow style={{ display: 'block', marginBottom: 8 }}>
+            With the day the payment landed
+          </Eyebrow>
+          {collections.collected.length > 0 ? (
+            <>
+              {collections.collected.slice(0, 6).map(p => (
+                <ActivityRow key={p.id} item={p} compact />
+              ))}
+              {collections.collected.length > 6 && (
+                <button
+                  onClick={() => { setTab('Activity'); setActFilter('collected'); }}
+                  style={{
+                    marginTop: 12, background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontFamily: 'Inter', fontSize: 12, fontWeight: 500, color: C.ink, padding: 0,
+                  }}
+                >View all {collections.collected.length} →</button>
+              )}
+            </>
+          ) : (
+            <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.meta, textAlign: 'center', padding: '24px 0' }}>
+              No payments collected yet.
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* ─── Quotes & proposals strip ────────────────────────────
           Answers "¿cuántas propuestas activas tengo y por cuánto?"
           without digging into the More menu. Sent-awaiting is the
           headline (gold); drafts + this-month wins give context. */}
-      {quoteStats.total > 0 && (
+      {quoteStats.total > 0 ? (
         <div style={{
           marginTop: 24, padding: '18px 24px',
           background: isDark ? C.oat : '#FFFFFF',
@@ -1133,6 +1228,26 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
           <div style={{ marginLeft: 'auto' }}>
             <ActionButton
               icon={<TrendUp size={14} />} label="Open proposals" variant="ghost"
+              onClick={() => onJumpToTab('propuestas')}
+            />
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          marginTop: 24, padding: '18px 24px',
+          background: isDark ? C.oat : '#FFFFFF',
+          border: `1px dashed ${C.dashed}`, borderRadius: 18,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div>
+            <Eyebrow gold>● Quotes pipeline</Eyebrow>
+            <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.body, margin: '6px 0 0' }}>
+              No proposals yet — quote a project and track sent / approved here.
+            </p>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <ActionButton
+              icon={<Plus size={14} />} label="New proposal" variant="ghost"
               onClick={() => onJumpToTab('propuestas')}
             />
           </div>
@@ -1311,30 +1426,9 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
             </div>
           </div>
 
-          {/* Activity preview + Top projects */}
+          {/* Top projects + Partner projects ("Upcoming & recent" was
+              replaced by the Collections block above the fold). */}
           <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
-            <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-                <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
-                  Upcoming &amp; recent
-                </h3>
-                <button
-                  onClick={() => setTab('Activity')}
-                  style={{
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontFamily: 'Inter', fontSize: 12, fontWeight: 500, color: C.ink,
-                  }}
-                >View all <TrendUp size={12} /></button>
-              </div>
-              {activity.length > 0 ? activity.slice(0, 4).map(p => (
-                <ActivityRow key={p.id} item={p} compact onTogglePaid={togglePaid} />
-              )) : (
-                <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.meta, textAlign: 'center', padding: '24px 0' }}>
-                  No activity yet. Add income or expenses to see them here.
-                </p>
-              )}
-            </div>
             <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                 <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
