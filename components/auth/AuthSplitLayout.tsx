@@ -43,6 +43,21 @@ export const AuthSplitLayout: React.FC<Props> = ({
   children,
 }) => (
   <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr]" style={{ minHeight: '100vh', background: '#FDFBF7' }}>
+    {/* MOBILE — compact wine brand header. The full panel below is
+        lg-only, which left phones with no logo at all; this keeps the
+        brand present without eating the viewport. */}
+    <div
+      className="lg:hidden"
+      style={{
+        position: 'relative', overflow: 'hidden',
+        background: 'radial-gradient(120% 140% at 20% 0%, #5c1d18 0%, #2C0405 55%, #1A0203 100%)',
+        padding: '28px 24px 22px',
+      }}
+    >
+      <img src="/livv-wordmark-cream.png" alt="livv" style={{ height: 26, width: 'auto', display: 'block' }} />
+      <p className="pa-eyebrow" style={{ color: '#C4A35A', margin: '14px 0 0', fontSize: 10 }}>{eyebrow}</p>
+    </div>
+
     {/* LEFT — wine panel */}
     <div
       className="hidden lg:flex"
@@ -61,12 +76,15 @@ export const AuthSplitLayout: React.FC<Props> = ({
         }}
       />
 
-      {/* Wordmark */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <img src="/livv-mark.svg" alt="Livv" width={40} height={40} style={{ borderRadius: 11 }} />
-        <span style={{ fontFamily: "'Inter', serif", fontStyle: 'italic', fontWeight: 300, fontSize: 26, letterSpacing: '0.01em', color: '#FDFBF7' }}>
-          livv
-        </span>
+      {/* Wordmark — the real Livv brand asset (cream cut of the tenant
+          logo, trimmed from tenant-assets storage). It already reads
+          "livv", so no companion text needed. */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <img
+          src="/livv-wordmark-cream.png"
+          alt="livv"
+          style={{ height: 34, width: 'auto', display: 'block' }}
+        />
       </div>
 
       {/* Headline + features */}

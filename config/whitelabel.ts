@@ -51,7 +51,9 @@ export interface TenantBranding {
 export const defaultBranding: TenantBranding = {
     // Identity
     name: 'LIVV OS',
-    logo: '/livv-logo.svg',
+    // Real brand wordmark (black, transparent bg — for light surfaces).
+    // Cream cut for dark surfaces lives at /livv-wordmark-cream.png.
+    logo: '/livv-wordmark.png',
     logoMark: '/livv-mark.svg',
     favicon: '/favicon.ico',
 
