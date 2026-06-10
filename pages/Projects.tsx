@@ -8,6 +8,7 @@ import { errorLogger } from '../lib/errorLogger';
 import { logActivity } from '../lib/activity';
 import { supabase } from '../lib/supabase';
 import { appUrl } from '../lib/appUrl';
+import { sendInviteEmail } from '../lib/sendInviteEmail';
 import { notifySlackProjectEvent } from '../lib/communications/slack';
 import { useSupabase } from '../hooks/useSupabase';
 import PortalApp from '../components/portal/livv-client view-control/App';
@@ -899,23 +900,38 @@ export const Projects: React.FC<{
   };
 
   const handleInviteClientPortal = async () => {
-    if (!selectedProject?.client_id || !currentTenant?.id) return;
+    if (!selectedProject?.client_id) return;
     setIsInvitingClient(true);
     setClientInviteError(null);
     try {
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients').select('id,email').eq('id', selectedProject.client_id).single();
-      if (clientError || !clientData?.email) throw clientError || new Error('Client email not found');
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles').select('id').eq('name', 'client').single();
-      if (roleError || !roleData) throw roleError || new Error('Client role not found');
-      const { data: invite, error: inviteError } = await supabase
-        .from('invitations').insert({
-          email: clientData.email, role_id: roleData.id, tenant_id: currentTenant.id,
-          client_id: clientData.id, created_by: currentUser?.id, type: 'client'
-        }).select('token').single();
-      if (inviteError) throw inviteError;
-      setClientInviteLink(`${appUrl()}/accept-invite?token=${invite.token}&portal=client`);
+      // SECURITY DEFINER RPC — resolves the client + creates the invitation
+      // under the project's OWNER tenant. Works both for the owner agency
+      // and for partner agencies with an edit share (clients RLS would
+      // block reading the client record directly in that case).
+      const { data, error } = await supabase
+        .rpc('invite_client_for_shared_project', { p_project_id: selectedProject.id });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      if (data?.already_registered) {
+        setClientInviteLink(`${appUrl()}/?portal=client&projectId=${selectedProject.id}`);
+        setClientInviteError(`${data.client_name || 'This client'} already has portal access — link above opens their portal.`);
+        return;
+      }
+
+      const inviteLink = `${appUrl()}/accept-invite?token=${data.token}&portal=client`;
+      setClientInviteLink(inviteLink);
+      // Email the invitation with the OWNER agency's branding (returned by
+      // the RPC so partner-agency callers don't brand it as their own tenant).
+      sendInviteEmail({
+        clientName: data.client_name || 'there',
+        clientEmail: data.client_email,
+        inviteLink,
+        tenantName: data.tenant_name || undefined,
+        inviteType: 'client',
+        logoUrl: data.logo_url || undefined,
+        tenantId: data.tenant_id || undefined,
+      }).catch(err => { if (import.meta.env.DEV) console.warn('[invite-client] email failed:', err); });
     } catch (err: any) {
       setClientInviteError(err.message || 'Error creating client invite');
     } finally {
