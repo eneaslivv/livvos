@@ -78,15 +78,17 @@ CREATE TRIGGER trg_partner_widgets_updated_at BEFORE UPDATE ON public.partner_wi
 ALTER TABLE public.partners        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_widgets ENABLE ROW LEVEL SECURITY;
 
+-- Live tenant_members has no status column — plain membership check,
+-- same as the rest of the live policies. (Applied 2026-06-09.)
 DROP POLICY IF EXISTS "partners_tenant_access" ON public.partners;
 CREATE POLICY "partners_tenant_access" ON public.partners FOR ALL
-  USING (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'))
-  WITH CHECK (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+  USING (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid()));
 
 DROP POLICY IF EXISTS "partner_widgets_tenant_access" ON public.partner_widgets;
 CREATE POLICY "partner_widgets_tenant_access" ON public.partner_widgets FOR ALL
-  USING (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'))
-  WITH CHECK (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+  USING (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid()))
+  WITH CHECK (tenant_id IN (SELECT tm.tenant_id FROM public.tenant_members tm WHERE tm.user_id = auth.uid()));
 
 -- Public-portal read access — looking up a partner by referral_code
 -- from the /portal/[code] route should NOT require auth. Allow
