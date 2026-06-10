@@ -305,6 +305,61 @@ export const Finance: React.FC = () => {
     fetchLeads();
   }, []);
 
+  // ─── Shared-project budgets (partner agencies) ──────────────
+  // Which of MY projects are shared with a partner agency, plus the
+  // agency names. Powers the "Partner projects" block on the dashboard
+  // so budget coordination with e.g. CK Studio is visible at a glance.
+  const [projectShares, setProjectShares] = useState<{ project_id: string; shared_with_tenant_id: string }[]>([]);
+  const [agencyNames, setAgencyNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    (async () => {
+      const [sharesRes, agenciesRes] = await Promise.all([
+        supabase.from('project_agency_shares').select('project_id, shared_with_tenant_id'),
+        supabase.rpc('get_connected_agencies'),
+      ]);
+      if (!sharesRes.error) setProjectShares(sharesRes.data || []);
+      if (!agenciesRes.error && Array.isArray(agenciesRes.data)) {
+        const names: Record<string, string> = {};
+        agenciesRes.data.forEach((a: any) => { names[a.tenant_id] = a.tenant_name; });
+        setAgencyNames(names);
+      }
+    })();
+  }, []);
+
+  const partnerProjects = useMemo(() => {
+    if (projectShares.length === 0) return [];
+    const byProject = new Map<string, string[]>();
+    projectShares.forEach(s => {
+      const list = byProject.get(s.project_id) || [];
+      list.push(agencyNames[s.shared_with_tenant_id] || 'Partner agency');
+      byProject.set(s.project_id, list);
+    });
+    return Array.from(byProject.entries())
+      .map(([projectId, partners]) => {
+        const proj: any = projects.find((p: any) => p.id === projectId);
+        // Skip projects shared INTO this tenant — their finances live in
+        // the owner agency and are invisible here by design, so showing
+        // $0 rows would only confuse.
+        if (proj?.sharedFromTenantId) return null;
+        const rel = incomes.filter((inc: IncomeEntry) => inc.project_id === projectId);
+        let collected = 0, pending = 0;
+        rel.forEach((inc: IncomeEntry) => (inc.installments || []).forEach((i: Installment) => {
+          if (i.status === 'paid') collected += Number(i.amount || 0);
+          else pending += Number(i.amount || 0);
+        }));
+        return {
+          projectId,
+          title: proj?.title || rel[0]?.project_name || 'Shared project',
+          partners,
+          budget: Number(proj?.budget || 0),
+          collected,
+          pending,
+        };
+      })
+      .filter(Boolean as any as <T>(x: T | null) => x is T)
+      .sort((a, b) => (b.collected + b.pending) - (a.collected + a.pending));
+  }, [projectShares, agencyNames, projects, incomes]);
+
   const proposalMetrics = useMemo(() => {
     const sent = proposals.filter(p => p.status === 'sent');
     const approved = proposals.filter(p => p.status === 'approved');
@@ -926,11 +981,14 @@ export const Finance: React.FC = () => {
     }
   }, [deleteBudget]);
 
-  const handleMarkInstallmentPaid = useCallback(async (installment: Installment) => {
+  // Optional paidDate lets the Income tab register the REAL collection
+  // day (user picks it next to "Mark as paid"); the dashboard quick-check
+  // keeps defaulting to today.
+  const handleMarkInstallmentPaid = useCallback(async (installment: Installment, paidDate?: string) => {
     try {
       await updateInstallment(installment.id, {
         status: 'paid',
-        paid_date: new Date().toISOString().split('T')[0],
+        paid_date: paidDate || new Date().toISOString().split('T')[0],
       });
     } catch (err) {
       console.error('Error marking installment as paid:', err);
@@ -1117,6 +1175,8 @@ export const Finance: React.FC = () => {
             onMarkExpensePaid={async (exp) => { await updateExpense(exp.id, { status: 'paid' }); }}
             onJumpToTab={setActiveTab}
             canCreate={hasPermission('finance', 'create')}
+            proposals={proposals}
+            partnerProjects={partnerProjects}
           />
           {/* Partner payouts (70/30 distribución entre socios). Auto-hide
               cuando el tenant no tiene rows en partner_payouts — para LIVV
@@ -1724,12 +1784,27 @@ export const Finance: React.FC = () => {
                                       <div className="ml-auto flex items-center gap-2">
                                         <StatusBadge status={inst.status} />
                                         {inst.status !== 'paid' && (
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(inst); }}
-                                            className="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
-                                          >
-                                            Mark as paid
-                                          </button>
+                                          <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                            {/* Collection-date picker — defaults to today but lets the
+                                                user register the day the money actually arrived. */}
+                                            <input
+                                              type="date"
+                                              id={`paydate-${inst.id}`}
+                                              defaultValue={new Date().toISOString().split('T')[0]}
+                                              title="Collection date"
+                                              className="text-[10px] bg-transparent border border-zinc-100 dark:border-zinc-700 rounded px-1 py-0.5 text-zinc-500 dark:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                                            />
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const el = document.getElementById(`paydate-${inst.id}`) as HTMLInputElement | null;
+                                                handleMarkInstallmentPaid(inst, el?.value || undefined);
+                                              }}
+                                              className="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors whitespace-nowrap"
+                                            >
+                                              Mark as paid
+                                            </button>
+                                          </span>
                                         )}
                                       </div>
                                     </div>

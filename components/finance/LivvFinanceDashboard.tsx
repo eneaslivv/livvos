@@ -41,6 +41,27 @@ interface ProjectPnLEntry {
   health: 'profitable' | 'break-even' | 'loss';
 }
 
+/** Minimal slice of a proposal the dashboard needs for the quotes strip. */
+export interface DashboardProposal {
+  id: string;
+  title: string;
+  status: 'draft' | 'sent' | 'approved' | 'rejected';
+  pricing_total?: number | null;
+  sent_at?: string | null;
+  approved_at?: string | null;
+  created_at?: string;
+}
+
+/** Budget snapshot for a project shared with a partner agency. */
+export interface PartnerProjectBudget {
+  projectId: string;
+  title: string;
+  partners: string[];
+  budget: number;
+  collected: number;
+  pending: number;
+}
+
 export interface LivvFinanceDashboardProps {
   // Data
   incomes: IncomeEntry[];
@@ -48,6 +69,8 @@ export interface LivvFinanceDashboardProps {
   budgets: Budget[];
   liquidityData: LiquidityPoint[];
   projectPnL: ProjectPnLEntry[];
+  proposals?: DashboardProposal[];
+  partnerProjects?: PartnerProjectBudget[];
 
   // Aggregates
   currentBalance: number;
@@ -64,7 +87,7 @@ export interface LivvFinanceDashboardProps {
   onOpenAIChat: () => void;
   onMarkInstallmentPaid: (inst: Installment) => Promise<void> | void;
   onMarkExpensePaid?: (exp: ExpenseEntry) => Promise<void> | void;
-  onJumpToTab: (tab: 'ingresos' | 'gastos' | 'proyectos' | 'budgets') => void;
+  onJumpToTab: (tab: 'ingresos' | 'gastos' | 'proyectos' | 'budgets' | 'propuestas') => void;
 
   // Permissions
   canCreate: boolean;
@@ -646,9 +669,9 @@ const ActivityRow: React.FC<{
         }}>{pos ? '+' : ''}{fmt(item.amount)}</div>
         <div style={{
           fontFamily: 'JetBrains Mono', fontSize: 10,
-          color: isOverdue ? C.expense : C.meta,
+          color: isOverdue ? C.expense : isPaid ? C.income : C.meta,
           letterSpacing: '0.06em', marginTop: 3, textTransform: 'uppercase',
-        }}>{fmtDate(item.date)}</div>
+        }}>{isPaid ? `${pos ? 'Collected' : 'Paid'} · ` : ''}{fmtDate(item.date)}</div>
       </div>
     </div>
   );
@@ -777,6 +800,7 @@ type SubTab = 'Overview' | 'Activity' | 'Projects';
 
 export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
   incomes, expenses, liquidityData, projectPnL,
+  proposals = [], partnerProjects = [],
   currentBalance, projection90d, margin,
   totalPaidIncome, totalExpensesPaid, totalExpensesPending,
   onAddIncome, onAddExpense, onOpenAIAssistant, onOpenAIChat, onMarkInstallmentPaid,
@@ -802,7 +826,12 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
           name: inc.concept || inc.client_name || 'Income',
           sub: [inc.client_name, inc.project_name].filter(Boolean).join(' · ') || 'Income',
           amount: inst.amount,
-          date: inst.due_date || inc.due_date || inc.created_at?.split('T')[0] || '',
+          // Paid rows show the day the money ACTUALLY arrived (paid_date);
+          // open rows keep showing when they're due. This is what answers
+          // "¿cuándo se cobró esto?" at a glance.
+          date: (inst.status === 'paid' && inst.paid_date)
+            ? inst.paid_date
+            : (inst.due_date || inc.due_date || inc.created_at?.split('T')[0] || ''),
           status: inst.status === 'paid' ? 'paid' : inst.status === 'overdue' ? 'overdue' : 'pending',
           source: { kind: 'installment', data: inst },
         });
@@ -934,6 +963,44 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
     return total;
   }, [incomes]);
 
+  // ─── Quotes pipeline rollup ─────────────────────────────────
+  // "¿Cuántas propuestas están activas y por cuánta plata?" — sent
+  // (awaiting reply) is the headline; drafts and this-month approvals
+  // give it context. Clicking through jumps to the Proposals tab.
+  const quoteStats = useMemo(() => {
+    const sent = proposals.filter(p => p.status === 'sent');
+    const draft = proposals.filter(p => p.status === 'draft');
+    const now = new Date();
+    const ymStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const approvedThisMonth = proposals.filter(p =>
+      p.status === 'approved' && p.approved_at && new Date(p.approved_at).getTime() >= ymStart
+    );
+    const val = (list: DashboardProposal[]) => list.reduce((s, p) => s + Number(p.pricing_total || 0), 0);
+    const responded = proposals.filter(p => p.status === 'approved' || p.status === 'rejected').length + sent.length;
+    const winRate = responded > 0
+      ? Math.round((proposals.filter(p => p.status === 'approved').length / responded) * 100)
+      : 0;
+    return {
+      total: proposals.length,
+      sentCount: sent.length, sentValue: val(sent),
+      draftCount: draft.length,
+      approvedMonthCount: approvedThisMonth.length, approvedMonthValue: val(approvedThisMonth),
+      winRate,
+    };
+  }, [proposals]);
+
+  // Activity sub-tab lens — the user's top question is "what's left to
+  // collect / what already came in", so give it one-click cuts.
+  const [actFilter, setActFilter] = useState<'all' | 'tocollect' | 'collected' | 'expenses'>('all');
+  const filteredActivity = useMemo(() => {
+    switch (actFilter) {
+      case 'tocollect': return activity.filter(a => a.kind === 'income' && a.status !== 'paid');
+      case 'collected': return activity.filter(a => a.kind === 'income' && a.status === 'paid');
+      case 'expenses':  return activity.filter(a => a.kind === 'expense');
+      default:          return activity;
+    }
+  }, [activity, actFilter]);
+
   return (
     <div style={{
       background: C.cream, color: C.ink, fontFamily: 'Inter',
@@ -977,7 +1044,7 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
             suggestions={[
               'Paid $180 to AWS',
               'Acme Co. invoice $4500 due May 15',
-              'Split $1,200 with Mariana',
+              "What's pending to collect this month?",
               "What's my margin this month?",
             ]}
           />
@@ -1017,6 +1084,60 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
             hint={`Net ${fmt(currentMonth.net)}`} />
         </div>
       </div>
+
+      {/* ─── Quotes & proposals strip ────────────────────────────
+          Answers "¿cuántas propuestas activas tengo y por cuánto?"
+          without digging into the More menu. Sent-awaiting is the
+          headline (gold); drafts + this-month wins give context. */}
+      {quoteStats.total > 0 && (
+        <div style={{
+          marginTop: 24, padding: '18px 24px',
+          background: isDark ? C.oat : '#FFFFFF',
+          border: `1px solid ${C.bone}`, borderRadius: 18,
+          display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+        }}>
+          <div style={{ minWidth: 170 }}>
+            <Eyebrow gold>● Quotes pipeline</Eyebrow>
+            <div style={{
+              fontFamily: 'Inter', fontWeight: 300, fontSize: 30, letterSpacing: '-0.04em',
+              color: C.ink, fontVariantNumeric: 'tabular-nums', marginTop: 6, lineHeight: 1,
+            }}>
+              {quoteStats.sentCount}
+              <span style={{ fontSize: 13, fontWeight: 400, color: C.meta, marginLeft: 8 }}>
+                awaiting · {fmt(quoteStats.sentValue)}
+              </span>
+            </div>
+          </div>
+          <Dashed vertical style={{ height: 36 }} />
+          <div>
+            <Eyebrow>Drafts</Eyebrow>
+            <div style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: 400, color: C.ink, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {quoteStats.draftCount}
+            </div>
+          </div>
+          <Dashed vertical style={{ height: 36 }} />
+          <div>
+            <Eyebrow>Won this month</Eyebrow>
+            <div style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: 400, color: C.income, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {quoteStats.approvedMonthCount} · {fmt(quoteStats.approvedMonthValue)}
+            </div>
+          </div>
+          <Dashed vertical style={{ height: 36 }} />
+          <div>
+            <Eyebrow>Win rate</Eyebrow>
+            <div style={{ fontFamily: 'Inter', fontSize: 18, fontWeight: 400, color: quoteStats.winRate >= 40 ? C.income : C.gold, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {quoteStats.winRate}%
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <ActionButton
+              icon={<TrendUp size={14} />} label="Open proposals" variant="ghost"
+              onClick={() => onJumpToTab('propuestas')}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ─── Month-by-month tracker ──────────────────────────────
           User asked for: "see how much is being earned month over month
@@ -1274,6 +1395,62 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
                 </p>
               )}
             </div>
+
+            {/* Partner projects — budget coordination with connected
+                agencies (e.g. CK Studio). One row per shared project:
+                collected vs pending against the project budget. */}
+            {partnerProjects.length > 0 && (
+              <div style={{ background: isDark ? C.oat : '#FFFFFF', border: `1px solid ${C.bone}`, borderRadius: 24, padding: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                  <h3 style={{ fontFamily: 'Inter', fontWeight: 500, fontSize: 16, letterSpacing: '-0.02em', margin: 0 }}>
+                    Partner projects
+                  </h3>
+                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: 9, color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    🔗 Shared
+                  </span>
+                </div>
+                <Eyebrow style={{ display: 'block', marginBottom: 12 }}>
+                  Budgets on projects shared with your agencies
+                </Eyebrow>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {partnerProjects.slice(0, 5).map(pp => {
+                    const target = pp.budget > 0 ? pp.budget : (pp.collected + pp.pending);
+                    const pct = target > 0 ? Math.min(100, (pp.collected / target) * 100) : 0;
+                    return (
+                      <div key={pp.projectId} style={{ padding: '8px 0', borderBottom: `1px dashed ${C.dashedSoft}` }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{
+                              fontFamily: 'Inter', fontSize: 13, fontWeight: 500, color: C.ink,
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>{pp.title}</div>
+                            <div style={{ fontFamily: 'Inter', fontSize: 10, color: C.meta, marginTop: 2 }}>
+                              with {pp.partners.join(' · ')}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: 500, color: C.income, fontVariantNumeric: 'tabular-nums' }}>
+                              {fmt(pp.collected)}
+                            </div>
+                            <div style={{ fontFamily: 'JetBrains Mono', fontSize: 9, color: pp.pending > 0 ? C.gold : C.meta, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                              {pp.pending > 0 ? `${fmt(pp.pending)} open` : 'All collected'}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ height: 3, background: 'rgba(90,62,62,0.08)', borderRadius: 999, marginTop: 8, overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: C.income }} />
+                        </div>
+                        {pp.budget > 0 && (
+                          <div style={{ fontFamily: 'JetBrains Mono', fontSize: 9, color: C.meta, letterSpacing: '0.06em', marginTop: 4, textTransform: 'uppercase' }}>
+                            Budget {fmt(pp.budget)} · {Math.round(pct)}% collected
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1290,12 +1467,35 @@ export const LivvFinanceDashboard: React.FC<LivvFinanceDashboardProps> = ({
           <Eyebrow style={{ marginTop: 4, display: 'block' }}>
             Tap the circle to mark received / paid
           </Eyebrow>
-          <div style={{ marginTop: 16 }}>
-            {activity.length > 0 ? activity.map(p => (
+          {/* Lens chips — the question is almost always "what's left to
+              collect?" or "what came in already?", so make those one tap. */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+            {([
+              { id: 'all',       label: 'All' },
+              { id: 'tocollect', label: 'To collect' },
+              { id: 'collected', label: 'Collected' },
+              { id: 'expenses',  label: 'Expenses' },
+            ] as const).map(f => (
+              <button
+                key={f.id}
+                onClick={() => setActFilter(f.id)}
+                style={{
+                  padding: '6px 14px', borderRadius: 9999, cursor: 'pointer',
+                  border: `1px solid ${actFilter === f.id ? C.ink : C.bone}`,
+                  background: actFilter === f.id ? C.ink : 'transparent',
+                  color: actFilter === f.id ? C.cream : C.meta,
+                  fontFamily: 'Inter', fontSize: 11, fontWeight: 500, letterSpacing: '0.01em',
+                  transition: 'all .2s cubic-bezier(.16,1,.3,1)',
+                }}
+              >{f.label}</button>
+            ))}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            {filteredActivity.length > 0 ? filteredActivity.map(p => (
               <ActivityRow key={p.id} item={p} onTogglePaid={togglePaid} />
             )) : (
               <p style={{ fontFamily: 'Inter', fontSize: 13, color: C.meta, textAlign: 'center', padding: '32px 0' }}>
-                Nothing to show yet.
+                Nothing to show here.
               </p>
             )}
           </div>
