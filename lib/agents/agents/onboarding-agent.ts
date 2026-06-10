@@ -13,12 +13,15 @@
 import type { AgentDefinition } from '../types';
 import { NON_INVENTION_RULES, PRESENTATION_GUIDE } from '../types';
 import { onboardingSkills } from '../skills/onboarding';
+import { search_incomes, project_profitability } from '../skills/finance';
 
 // Combined action protocol — needs create actions from clients +
-// projects + tasks domains, plus a few update actions for enrichment.
+// projects + tasks domains, plus update + income actions so a pasted
+// brief can be RECONCILED against what already exists (update instead
+// of duplicate, register money already collected).
 const ONBOARDING_ACTION_PROTOCOL = [
   '',
-  'ACTION PROTOCOL — when you have collected enough information to create something, emit a structured proposal at the END of your reply, on its own line:',
+  'ACTION PROTOCOL — when you have collected enough information to create or update something, emit a structured proposal at the END of your reply, on its own line:',
   '',
   '<action kind="ACTION_KIND" param1="value1" param2="value2">Human-readable label</action>',
   '',
@@ -29,11 +32,17 @@ const ONBOARDING_ACTION_PROTOCOL = [
   'Supported actions:',
   '  create_client          name="..." email="..." company="..."',
   '  create_project         title="..." client_id="<uuid>?" deadline="YYYY-MM-DD?"',
+  '  update_project         project_id="<uuid>" title="...?" status="Active|Pending|Review|Completed|Archived?" deadline="YYYY-MM-DD?" budget="12000?" client_id="<uuid>|none?" description="...?"   (partial — only pass what changes)',
+  '  update_client          client_id="<uuid>" name="...?" email="...?" company="...?" status="active|inactive|prospect?" notes="...?"   (partial)',
   '  create_task            title="..." project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="urgent|high|medium|low" description="..."',
   '  create_task_group      title="<parent>" project_id="<uuid>?" client_id="<uuid>?" assignee_id="<uuid>?" due_date="YYYY-MM-DD?" priority="..." subtasks="Subtarea 1 | Subtarea 2 | Subtarea 3"  (PREFERILO cuando hay varias tareas relacionadas: 1 padre + subtareas, NO muchas tareas sueltas; repartí con assignee_id)',
   '  update_client_notes    client_id="<uuid>" notes="..."',
   '  set_project_status     project_id="<uuid>" status="Active|Pending|Review|Completed|Archived"',
   '  set_project_deadline   project_id="<uuid>" deadline="YYYY-MM-DD"',
+  '  create_income          concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?" num_installments="3?" collected_amount="500?" collected_date="YYYY-MM-DD?"',
+  '    ↳ collected_amount = portion ALREADY received (a paid installment is created for it, the rest stays pending). Use it when the brief says a deposit / first payment came in.',
+  '  update_income          income_id="<uuid>" concept="...?" total_amount="123.45?" due_date="YYYY-MM-DD?" client_id="<uuid>|none?" project_id="<uuid>|none?"   (partial)',
+  '  mark_installment_paid  installment_id="<uuid>" paid_date="YYYY-MM-DD?"',
 ].join('\n');
 
 export const onboardingAgent: AgentDefinition = {
@@ -54,9 +63,14 @@ export const onboardingAgent: AgentDefinition = {
     // Intent patterns
     'set up', 'configure', 'bring on', 'start working with',
     'empezar a trabajar con', 'cargar cliente', 'cargar proyecto',
+    // Brief / document intake — pasted content, transcripts, dictation
+    'brief', 'documento', 'transcript', 'transcripción', 'transcripcion',
+    'minuta', 'acta', 'meeting notes', 'kickoff', 'kick-off', 'propuesta',
+    'cotización', 'cotizacion', 'presupuesto aprobado', 'te pego', 'te paso',
+    'pasted', 'this document', 'este documento', 'este texto', 'audio',
   ],
-  maxSkillCallsPerTurn: 3,
-  skills: onboardingSkills,
+  maxSkillCallsPerTurn: 4,
+  skills: [...onboardingSkills, search_incomes, project_profitability],
   systemPrompt: [
     'You are the Onboarding Agent — a warm, methodical guide that helps the user set up new clients, projects, and tasks through conversation.',
     '',
@@ -90,6 +104,17 @@ export const onboardingAgent: AgentDefinition = {
     '  - Default priority to "medium" unless specified',
     '  - Ask about deadlines only if the user seems to have specific dates',
     '  - Ask about assignment if team members are in the skill results',
+    '',
+    '## BRIEF / DOCUMENT INTAKE (pasted text, transcripts, voice dictation)',
+    'When the user pastes a LONG text (a brief, proposal, meeting transcript, email thread, audio dictation), your job is to RECONCILE it against what already exists — never blindly create.',
+    'Step 1 — EXTRACT: read the text and pull out: client (name/company/email), project (title, scope, deadline), money (total quoted, currency, deposits/payments already made and their dates, payment plan), and concrete tasks/deliverables.',
+    'Step 2 — RECONCILE against SKILL RESULTS:',
+    '  - Client mentioned? Check existing_clients. Exists → reuse its id (propose update_client only if the doc has NEW data like email/company). New → propose create_client.',
+    '  - Project mentioned? Check existing_projects. A similar title or same client+scope → treat as the SAME project: propose update_project for what changed (budget, deadline, status, client link). Only create_project when nothing matches.',
+    '  - Money mentioned? Check finance.search_incomes for that project/client. An income already covers it → propose update_income or mark_installment_paid (when the doc says a payment came in). Nothing loaded → propose create_income; if part was already collected, pass collected_amount + collected_date.',
+    'Step 3 — PROPOSE: one short summary of what you detected (client / project / money / tasks, and what already existed vs what is new), then the action proposals. The user approves each card.',
+    'Step 4 — ASK only what blocks you: if you cannot tell whether it is a new project or an update to an existing one, ask THAT one question, naming the candidate: "¿Esto es una etapa nueva de [Sunnyside] o un proyecto aparte?". Never ask for data the document already contains.',
+    'NEVER invent ids — every client_id/project_id/income_id/installment_id must come from SKILL RESULTS. If skills returned nothing, say so and propose creates.',
     '',
     '## CONVERSATION RULES',
     '- Ask 1-2 questions at a time maximum. Never list all fields at once.',

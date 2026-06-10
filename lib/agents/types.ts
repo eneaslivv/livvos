@@ -271,9 +271,13 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
     '  mark_installment_paid    installment_id="<uuid>" paid_date="YYYY-MM-DD?"',
     '  mark_installment_pending installment_id="<uuid>"',
     '  create_expense           concept="..." amount="123.45" date="YYYY-MM-DD" category="..." status="paid|pending"',
-    '  create_income            concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?"',
+    '  create_income            concept="..." total_amount="123.45" due_date="YYYY-MM-DD" client_id="<uuid>?" project_id="<uuid>?" num_installments="3?" collected_amount="500?" collected_date="YYYY-MM-DD?"',
+    '    ↳ collected_amount = portion ALREADY received (creates a paid installment for it + a pending one for the rest). num_installments splits the total monthly when nothing was collected yet.',
+    '  update_income            income_id="<uuid>" concept="...?" total_amount="123.45?" due_date="YYYY-MM-DD?" client_id="<uuid>|none?" project_id="<uuid>|none?"   (partial — only pass what changes; installments are NOT redistributed)',
+    '  update_expense           expense_id="<uuid>" concept="...?" amount="123.45?" date="YYYY-MM-DD?" category="...?" status="paid|pending?" project_id="<uuid>|none?"',
     '  delete_expense           expense_id="<uuid>"   (DESTRUCTIVE)',
     '  delete_income            income_id="<uuid>"    (DESTRUCTIVE)',
+    'RECONCILE FIRST: before proposing create_income for a project/client, run finance.search_incomes — if a matching income already exists, propose update_income or mark_installment_paid on it instead of creating a duplicate.',
   ].join('\n'),
   calendar: [
     'Supported actions for this agent:',
@@ -292,6 +296,7 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
   clients: [
     'Supported actions for this agent:',
     '  update_client_notes    client_id="<uuid>" notes="..."',
+    '  update_client          client_id="<uuid>" name="...?" email="...?" company="...?" status="active|inactive|prospect?" notes="...?"   (partial — only pass what changes)',
     '  create_client          name="..." email="..." company="..."',
     '  delete_client          client_id="<uuid>"   (DESTRUCTIVE — fails if the client has projects)',
   ].join('\n'),
@@ -300,6 +305,7 @@ const ACTION_MENU_BY_DOMAIN: Record<string, string> = {
     '  set_project_status     project_id="<uuid>" status="Active|Pending|Review|Completed|Archived"',
     '  set_project_deadline   project_id="<uuid>" deadline="YYYY-MM-DD"',
     '  create_project         title="..." client_id="<uuid>?" deadline="YYYY-MM-DD?"',
+    '  update_project         project_id="<uuid>" title="...?" status="...?" deadline="YYYY-MM-DD?" budget="12000?" client_id="<uuid>|none?" description="...?"   (partial — only pass what changes; use it to link a client or fix the budget instead of recreating)',
     '  delete_project         project_id="<uuid>"   (DESTRUCTIVE — fails if the project has open tasks)',
   ].join('\n'),
 };
@@ -333,6 +339,7 @@ export type ActionKind =
   // Finance
   | 'mark_installment_paid' | 'mark_installment_pending'
   | 'create_expense' | 'create_income'
+  | 'update_expense' | 'update_income'
   | 'delete_expense' | 'delete_income'
   // Calendar
   | 'reschedule_event' | 'cancel_event' | 'create_event'
@@ -340,9 +347,10 @@ export type ActionKind =
   // Inbox
   | 'mark_message_done' | 'convert_to_task' | 'draft_reply'
   // Clients
-  | 'update_client_notes' | 'create_client' | 'delete_client'
+  | 'update_client_notes' | 'update_client' | 'create_client' | 'delete_client'
   // Projects
   | 'set_project_status' | 'set_project_deadline' | 'create_project'
+  | 'update_project'
   | 'delete_project';
 
 export interface ProposedAction {

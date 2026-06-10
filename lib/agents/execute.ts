@@ -210,17 +210,88 @@ export async function executeProposedAction(
       }
 
       case 'create_income': {
+        const total = Number(action.params.total_amount);
         const { data, error } = await ctx.db.from('incomes').insert({
           tenant_id: ctx.tenantId,
           concept: action.params.concept,
-          total_amount: Number(action.params.total_amount),
+          total_amount: total,
           due_date: action.params.due_date,
           client_id: action.params.client_id || null,
           project_id: action.params.project_id || null,
           status: 'pending',
         }).select('id').single();
         if (error) throw error;
-        return { ok: true, summary: `Income "${action.params.concept}" logged`, newRowId: (data as any)?.id };
+        const incomeId = (data as any)?.id;
+
+        // Installment rows — without them the income is invisible to the
+        // collected/pending rollups (dashboards sum installments, not
+        // incomes). collected_amount covers the "ya cobré una parte"
+        // intake case: one PAID row for what came in, one pending row
+        // for the rest. Otherwise split into num_installments monthly.
+        const collected = Number(action.params.collected_amount || 0);
+        const today = (ctx.now || new Date()).toISOString().slice(0, 10);
+        const collectedDate = action.params.collected_date || today;
+        const rows: any[] = [];
+        if (collected > 0 && collected < total) {
+          rows.push({ income_id: incomeId, number: 1, amount: collected, due_date: collectedDate, paid_date: collectedDate, status: 'paid' });
+          rows.push({ income_id: incomeId, number: 2, amount: Math.round((total - collected) * 100) / 100, due_date: action.params.due_date, status: 'pending' });
+        } else if (collected >= total && total > 0) {
+          rows.push({ income_id: incomeId, number: 1, amount: total, due_date: collectedDate, paid_date: collectedDate, status: 'paid' });
+        } else {
+          const n = Math.max(1, Math.min(12, Number(action.params.num_installments || 1)));
+          const base = Math.floor((total / n) * 100) / 100;
+          for (let i = 0; i < n; i++) {
+            const due = new Date(`${action.params.due_date}T12:00:00`);
+            due.setMonth(due.getMonth() + i);
+            rows.push({
+              income_id: incomeId,
+              number: i + 1,
+              amount: i === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base,
+              due_date: due.toISOString().slice(0, 10),
+              status: 'pending',
+            });
+          }
+        }
+        const { error: instErr } = await ctx.db.from('installments').insert(rows);
+        if (instErr) throw instErr;
+        return {
+          ok: true,
+          summary: `Income "${action.params.concept}" logged${collected > 0 ? ` (${collected} already collected)` : ''}`,
+          newRowId: incomeId,
+        };
+      }
+
+      case 'update_income': {
+        const p = action.params;
+        const patch: Record<string, any> = {};
+        if (p.concept) patch.concept = p.concept;
+        if (p.total_amount) patch.total_amount = Number(p.total_amount);
+        if (p.due_date) patch.due_date = p.due_date;
+        if (p.client_id) patch.client_id = p.client_id === 'none' ? null : p.client_id;
+        if (p.project_id) patch.project_id = p.project_id === 'none' ? null : p.project_id;
+        if (Object.keys(patch).length === 0) throw new Error('Nothing to update — pass at least one field');
+        const { error } = await ctx.db.from('incomes').update(patch)
+          .eq('id', p.income_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Income updated' };
+      }
+
+      case 'update_expense': {
+        const p = action.params;
+        const patch: Record<string, any> = {};
+        if (p.concept) patch.concept = p.concept;
+        if (p.amount) patch.amount = Number(p.amount);
+        if (p.date) patch.date = p.date;
+        if (p.category) patch.category = p.category;
+        if (p.status) patch.status = p.status;
+        if (p.project_id) patch.project_id = p.project_id === 'none' ? null : p.project_id;
+        if (Object.keys(patch).length === 0) throw new Error('Nothing to update — pass at least one field');
+        const { error } = await ctx.db.from('expenses').update(patch)
+          .eq('id', p.expense_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Expense updated' };
       }
 
       case 'delete_expense': {
@@ -340,6 +411,22 @@ export async function executeProposedAction(
         return { ok: true, summary: 'Client notes updated' };
       }
 
+      case 'update_client': {
+        const p = action.params;
+        const patch: Record<string, any> = {};
+        if (p.name) patch.name = p.name;
+        if (p.email) patch.email = p.email;
+        if (p.company) patch.company = p.company;
+        if (p.status) patch.status = p.status;
+        if (p.notes) patch.email_context_notes = p.notes;
+        if (Object.keys(patch).length === 0) throw new Error('Nothing to update — pass at least one field');
+        const { error } = await ctx.db.from('clients').update(patch)
+          .eq('id', p.client_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Client updated' };
+      }
+
       case 'create_client': {
         const { data, error } = await ctx.db.from('clients').insert({
           tenant_id: ctx.tenantId,
@@ -386,6 +473,26 @@ export async function executeProposedAction(
         }).eq('id', action.params.project_id).eq('tenant_id', ctx.tenantId);
         if (error) throw error;
         return { ok: true, summary: `Deadline set to ${action.params.deadline}` };
+      }
+
+      case 'update_project': {
+        // Partial update for intake/reconciliation: rename, re-budget,
+        // re-link to a client, move status/deadline — one action instead
+        // of duplicating the project when a pasted brief changes terms.
+        const p = action.params;
+        const patch: Record<string, any> = {};
+        if (p.title) patch.title = p.title;
+        if (p.status) patch.status = p.status;
+        if (p.deadline) patch.deadline = p.deadline;
+        if (p.budget) patch.budget = Number(p.budget);
+        if (p.client_id) patch.client_id = p.client_id === 'none' ? null : p.client_id;
+        if (p.description) patch.description = p.description;
+        if (Object.keys(patch).length === 0) throw new Error('Nothing to update — pass at least one field');
+        const { error } = await ctx.db.from('projects').update(patch)
+          .eq('id', p.project_id)
+          .eq('tenant_id', ctx.tenantId);
+        if (error) throw error;
+        return { ok: true, summary: 'Project updated' };
       }
 
       case 'create_project': {

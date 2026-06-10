@@ -92,7 +92,10 @@ export const project_profitability: Skill<{ project_id: string }, any> = {
   run: async (params, ctx) => {
     const t0 = Date.now();
     const [incRes, expRes] = await Promise.all([
-      ctx.db.from('incomes').select('total_amount, installments').eq('tenant_id', ctx.tenantId).eq('project_id', params.project_id),
+      // `installments(...)` is the PostgREST embed — a plain `installments`
+      // selector looked for a column of that name and errored, so this
+      // skill silently failed since day one.
+      ctx.db.from('incomes').select('total_amount, installments(amount, status)').eq('tenant_id', ctx.tenantId).eq('project_id', params.project_id),
       ctx.db.from('expenses').select('amount').eq('tenant_id', ctx.tenantId).eq('project_id', params.project_id),
     ]);
     const ms = Date.now() - t0;
@@ -114,4 +117,38 @@ export const project_profitability: Skill<{ project_id: string }, any> = {
   },
 };
 
-export const financeSkills = [monthly_summary, overdue_installments, project_profitability];
+// ── 4. Search incomes (reconciliation) ───────────────────────────────
+export const search_incomes: Skill<
+  { query?: string; project_id?: string; client_id?: string },
+  Array<any>
+> = {
+  id: 'finance.search_incomes',
+  description: 'Find existing incomes by concept/client/project text (or ids) WITH their installments. Run BEFORE creating an income to avoid duplicates, and to get installment ids when marking money as collected.',
+  kind: 'read',
+  validate: (p: any) => ({
+    // Strip PostgREST .or() metacharacters from free text so a pasted
+    // "Logo, branding (fase 2)" doesn't break the filter syntax.
+    query: String(p?.query || '').replace(/[,()%]/g, ' ').trim(),
+    project_id: p?.project_id || '',
+    client_id: p?.client_id || '',
+  }),
+  run: async (params, ctx) => {
+    const t0 = Date.now();
+    let q = ctx.db
+      .from('incomes')
+      .select('id, concept, total_amount, currency, status, due_date, client_id, client_name, project_id, project_name, installments(id, number, amount, status, due_date, paid_date)')
+      .eq('tenant_id', ctx.tenantId)
+      .order('created_at', { ascending: false })
+      .limit(15);
+    if (params.project_id) q = q.eq('project_id', params.project_id);
+    if (params.client_id) q = q.eq('client_id', params.client_id);
+    if (params.query) q = q.or(`concept.ilike.%${params.query}%,client_name.ilike.%${params.query}%,project_name.ilike.%${params.query}%`);
+    const { data, error } = await q;
+    const ms = Date.now() - t0;
+    if (error) return fail('income[]', error.message, ms);
+    if (!data || data.length === 0) return fail('income[]', 'no_matching_incomes', ms);
+    return ok('income[]', data, ms);
+  },
+};
+
+export const financeSkills = [monthly_summary, overdue_installments, project_profitability, search_incomes];

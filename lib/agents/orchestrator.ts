@@ -60,6 +60,7 @@ const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
   // Finance
   'mark_installment_paid', 'mark_installment_pending',
   'create_expense', 'create_income',
+  'update_expense', 'update_income',
   'delete_expense', 'delete_income',
   // Calendar
   'reschedule_event', 'cancel_event', 'create_event',
@@ -67,9 +68,10 @@ const SUPPORTED_KINDS = new Set<ProposedAction['kind']>([
   // Inbox
   'mark_message_done', 'convert_to_task', 'draft_reply',
   // Clients
-  'update_client_notes', 'create_client', 'delete_client',
+  'update_client_notes', 'update_client', 'create_client', 'delete_client',
   // Projects
   'set_project_status', 'set_project_deadline', 'create_project',
+  'update_project',
   'delete_project',
 ]);
 
@@ -124,6 +126,16 @@ const routeAgent = (
       best = a;
       bestScore = score;
     }
+  }
+  // Long pasted content (a brief, meeting transcript, proposal dump)
+  // rarely contains routing keywords — but it's almost always intake
+  // material: "turn this into / reconcile this against my projects,
+  // clients and incomes". Route those to the onboarding agent, which
+  // owns the reconcile-then-propose flow, unless another agent matched
+  // strongly on its own.
+  if (query.length > 700 && bestScore <= 1) {
+    const intake = AGENTS.find(a => a.id === 'onboarding-agent');
+    if (intake) return intake;
   }
   return best;
 };
