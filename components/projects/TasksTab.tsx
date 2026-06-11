@@ -95,6 +95,33 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   onAiDiscard,
   taskError,
 }) => {
+  // ── Steps structure ──────────────────────────────────────────
+  // Phases read as numbered, collapsible steps. Fully-completed phases
+  // start collapsed so the CURRENT step is what you land on.
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+  const collapseInitRef = useRef(false);
+  useEffect(() => {
+    if (collapseInitRef.current || derivedTasksGroups.length === 0) return;
+    collapseInitRef.current = true;
+    const doneNames = derivedTasksGroups
+      .filter((g: any) => g.tasks.length > 0 && g.tasks.every((t: any) => t.done))
+      .map((g: any) => g.name);
+    if (doneNames.length) setCollapsedPhases(new Set(doneNames));
+  }, [derivedTasksGroups]);
+  const togglePhase = (name: string) =>
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  // First phase with open work = the step the project is ON.
+  const currentStepIdx = derivedTasksGroups.findIndex((g: any) => g.tasks.some((t: any) => !t.done));
+
+  // The AI generator is great on an empty project but eats half the
+  // viewport once real phases exist — collapse it to a slim trigger.
+  const [aiOpen, setAiOpen] = useState(false);
+  const showAiBlock = aiOpen || !!aiPreview || projectTasks.length === 0;
+
   // AI preview edit helpers
   const updatePreviewPhase = (pIdx: number, patch: Partial<AiPreview['phases'][0]>) => {
     if (!aiPreview) return;
@@ -157,7 +184,20 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   return (
     <div className="space-y-6">
 
-      {/* AI Task Generator */}
+      {/* AI Task Generator — full block on empty projects / when opened;
+          slim trigger once real tasks exist so the steps own the page. */}
+      {!showAiBlock && (
+        <button
+          onClick={() => setAiOpen(true)}
+          className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-dashed border-violet-200 dark:border-violet-900/40 text-violet-500 dark:text-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors"
+        >
+          <Icons.Sparkles size={13} />
+          <span className="text-xs font-semibold uppercase tracking-wider">AI Task Generator</span>
+          <span className="text-[11px] text-zinc-400 normal-case font-normal">— describe work, get phases &amp; tasks</span>
+          <Icons.ChevronDown size={13} className="ml-auto" />
+        </button>
+      )}
+      {showAiBlock && (
       <div className="rounded-xl border border-violet-100 dark:border-violet-900/30 bg-gradient-to-br from-violet-50/50 to-white dark:from-violet-950/20 dark:to-zinc-950 overflow-hidden">
         <div className="px-5 py-3.5 flex items-center gap-2 border-b border-violet-100/50 dark:border-violet-900/20">
           <Icons.Sparkles size={14} className="text-violet-500" />
@@ -351,7 +391,18 @@ export const TasksTab: React.FC<TasksTabProps> = ({
             </div>
           </div>
         )}
+        {/* Collapse back to the slim trigger (only when it was opened
+            manually — empty projects keep it pinned). */}
+        {projectTasks.length > 0 && !aiPreview && (
+          <button
+            onClick={() => setAiOpen(false)}
+            className="w-full px-5 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 border-t border-violet-100/50 dark:border-violet-900/20 transition-colors"
+          >
+            Hide generator
+          </button>
+        )}
       </div>
+      )}
 
       {/* Error banner */}
       {taskError && (
@@ -378,6 +429,16 @@ export const TasksTab: React.FC<TasksTabProps> = ({
             </div>
           )}
         </div>
+        {/* Where the project is right now */}
+        {currentStepIdx >= 0 && derivedTasksGroups.length > 0 && (
+          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="font-mono font-semibold text-amber-500 tabular-nums">
+              Step {String(currentStepIdx + 1).padStart(2, '0')}/{String(derivedTasksGroups.length).padStart(2, '0')}
+            </span>
+            {' · '}
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{derivedTasksGroups[currentStepIdx].name}</span>
+          </span>
+        )}
       </div>
 
       {/* Quick task (pinned) */}
@@ -400,56 +461,98 @@ export const TasksTab: React.FC<TasksTabProps> = ({
         )}
       </div>
 
-      {/* Phase groups */}
+      {/* Phase groups — numbered, collapsible steps */}
       {derivedTasksGroups.map((group: any, gIdx: number) => {
         const doneCount = group.tasks.filter((t: any) => t.done).length;
         const totalCount = group.tasks.length;
         const phasePct = totalCount ? Math.round(doneCount / totalCount * 100) : 0;
         const phaseData = project.tasksGroups.find(g => g.name === group.name);
+        const isCollapsed = collapsedPhases.has(group.name);
+        const isCurrent = gIdx === currentStepIdx;
+        const isDone = totalCount > 0 && doneCount === totalCount;
+        // Open work first; finished tasks sink to the bottom of the step.
+        const orderedTasks = [...group.tasks].sort((a: any, b: any) => Number(!!a.done) - Number(!!b.done));
         return (
-          <div key={gIdx} className="group rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden shadow-sm">
-            {/* Phase header */}
-            <div className="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${phasePct === 100 && totalCount > 0 ? 'bg-emerald-500' : phasePct > 0 ? 'bg-amber-400' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.name}</h3>
+          <div
+            key={gIdx}
+            className={`group rounded-xl border bg-white dark:bg-zinc-900/50 overflow-hidden shadow-sm transition-colors ${
+              isCurrent
+                ? 'border-amber-300/70 dark:border-amber-500/30 ring-1 ring-amber-200/50 dark:ring-amber-500/10'
+                : 'border-zinc-100 dark:border-zinc-800'
+            }`}
+          >
+            {/* Phase header — click anywhere to collapse/expand */}
+            <div
+              onClick={() => togglePhase(group.name)}
+              className={`px-5 py-3.5 cursor-pointer select-none ${isCollapsed ? '' : 'border-b border-zinc-100 dark:border-zinc-800'} bg-zinc-50/50 dark:bg-zinc-950/30 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/60 transition-colors`}
+            >
+              <div className="flex items-center gap-3">
+                <Icons.ChevronDown
+                  size={14}
+                  className={`text-zinc-400 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                />
+                {/* Step number — editorial mono */}
+                <span className={`font-mono text-[11px] font-semibold tabular-nums shrink-0 ${isDone ? 'text-emerald-500' : isCurrent ? 'text-amber-500' : 'text-zinc-400'}`}>
+                  {String(gIdx + 1).padStart(2, '0')}
+                </span>
+                <h3 className={`text-sm font-bold truncate ${isDone ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                  {group.name}
+                </h3>
+                {isCurrent && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 shrink-0">
+                    Current
+                  </span>
+                )}
+                {isDone && <Icons.Check size={13} className="text-emerald-500 shrink-0" strokeWidth={3} />}
+
+                <div className="ml-auto flex items-center gap-3 shrink-0">
                   {totalCount > 0 && (
-                    <span className="text-[10px] text-zinc-400 tabular-nums bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{doneCount}/{totalCount}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden hidden sm:block">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${isDone ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                          style={{ width: `${phasePct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-zinc-400 tabular-nums">{doneCount}/{totalCount}</span>
+                    </div>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeletePhase(group.name); }}
+                    className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Delete phase"
+                  >
+                    <Icons.X size={14} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => onDeletePhase(group.name)}
-                  className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                  title="Delete phase"
-                >
-                  <Icons.X size={14} />
-                </button>
               </div>
-              {/* Phase date range */}
-              <div className="flex items-center gap-2 mt-2 ml-5">
-                <Icons.Calendar size={11} className="text-zinc-400 shrink-0" />
-                <input
-                  type="date"
-                  value={phaseData?.startDate || ''}
-                  onChange={e => onUpdatePhaseDate(group.name, 'startDate', e.target.value)}
-                  className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
-                  title="Phase start date"
-                />
-                <span className="text-[10px] text-zinc-300 dark:text-zinc-600">—</span>
-                <input
-                  type="date"
-                  value={phaseData?.endDate || ''}
-                  onChange={e => onUpdatePhaseDate(group.name, 'endDate', e.target.value)}
-                  className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
-                  title="Phase end date"
-                />
-              </div>
+              {/* Phase date range — only when expanded */}
+              {!isCollapsed && (
+                <div className="flex items-center gap-2 mt-2 ml-12" onClick={e => e.stopPropagation()}>
+                  <Icons.Calendar size={11} className="text-zinc-400 shrink-0" />
+                  <input
+                    type="date"
+                    value={phaseData?.startDate || ''}
+                    onChange={e => onUpdatePhaseDate(group.name, 'startDate', e.target.value)}
+                    className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                    title="Phase start date"
+                  />
+                  <span className="text-[10px] text-zinc-300 dark:text-zinc-600">—</span>
+                  <input
+                    type="date"
+                    value={phaseData?.endDate || ''}
+                    onChange={e => onUpdatePhaseDate(group.name, 'endDate', e.target.value)}
+                    className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                    title="Phase end date"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Tasks */}
+            {!isCollapsed && (
             <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
-              {group.tasks.map((task: any) => {
+              {orderedTasks.map((task: any) => {
                 const subs = getSubtasksFor(task.id);
                 const subsCompleted = subs.filter((s: any) => s.completed).length;
                 const isExpanded = expandedTaskId === task.id;
@@ -598,6 +701,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                 )}
               </div>
             </div>
+            )}
           </div>
         );
       })}
