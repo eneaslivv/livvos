@@ -11,6 +11,7 @@ import { GoogleCalendarSettings } from '../components/calendar/GoogleCalendarSet
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useTeam } from '../context/TeamContext';
 import { useClients } from '../context/ClientsContext';
+import { useProjects } from '../context/ProjectsContext';
 import { generateWeeklySummaryFromAI, generatePlanFromAI, PlanAIResult } from '../lib/ai';
 import { CalendarHeader } from '../components/calendar/CalendarHeader';
 import { CalendarKpiStrip, type KpiKey } from '../components/calendar/CalendarKpiStrip';
@@ -63,6 +64,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
   const { members: teamMembers } = useTeam();
   const { clients } = useClients();
+  const { projects: ctxProjects } = useProjects();
   const { agencies: connectedAgencies } = useConnectedAgencies();
 
   // Loading timeout
@@ -134,6 +136,14 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
   const projectMap = projectOptions.reduce<Record<string, { title: string; icon?: string | null; client_id?: string }>>((acc, project) => {
     acc[project.id] = { title: project.title, icon: project.icon, client_id: project.client_id };
+    return acc;
+  }, {});
+
+  // Real per-project accent colors live in ProjectsContext (the lightweight
+  // `projectOptions` query above doesn't select `color`). Build an id→color
+  // map so the mobile Tasks view can render true project colors.
+  const projectColorById = ctxProjects.reduce<Record<string, string>>((acc, p) => {
+    if (p.color) acc[p.id] = p.color;
     return acc;
   }, {});
 
@@ -1354,7 +1364,7 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
       <div className="max-w-[640px] mx-auto pt-3 px-1 pb-6">
         <MobileTasksView
           tasks={tasks as any}
-          projects={(projectOptions || []).map(p => ({ id: p.id, title: p.title }))}
+          projects={(projectOptions || []).map(p => ({ id: p.id, title: p.title, color: projectColorById[p.id] }))}
           onToggle={(id) => {
             const t = tasks.find(x => x.id === id);
             if (!t) return;

@@ -11,7 +11,7 @@ import type { CalendarTask } from '../../hooks/useCalendar';
 
 interface MobileTasksViewProps {
   tasks: CalendarTask[];
-  projects: { id: string; title: string }[];
+  projects: { id: string; title: string; color?: string }[];
   onToggle: (id: string) => void;
 }
 
@@ -42,7 +42,11 @@ export const MobileTasksView: React.FC<MobileTasksViewProps> = ({ tasks, project
   const projAccent = (id?: string | null) => {
     if (!id) return '#A8A29A';
     const idx = projects.findIndex(p => p.id === id);
-    return ACCENTS[(idx < 0 ? 0 : idx) % ACCENTS.length];
+    // Prefer the project's real color; fall back to the palette cycle, then gold.
+    const real = idx >= 0 ? projects[idx].color : undefined;
+    if (real) return real;
+    if (idx >= 0) return ACCENTS[idx % ACCENTS.length];
+    return 'var(--livv-gold)';
   };
   const taskDate = (t: CalendarTask) => ((t as any).start_date || (t as any).due_date || '').slice(0, 10);
 
