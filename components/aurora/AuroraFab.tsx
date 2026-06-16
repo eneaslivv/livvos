@@ -16,15 +16,50 @@ import { useAurora } from '../../context/AuroraContext';
 import { auroraAgents, cssVarsForAgent } from '../../lib/aurora/tokens';
 import { AuroraDock } from './AuroraDock';
 
+/**
+ * Detects when ANY modal/overlay is open so the floating FAB can step
+ * aside instead of covering the modal's footer (e.g. the Cancel button).
+ * Generic on purpose — no per-modal wiring: the shared Modal / SlidePanel
+ * primitives lock body scroll (`body.style.overflow = 'hidden'`), and
+ * every modal renders a full-screen `.fixed.inset-0` backdrop. Either
+ * signal hides the FAB, so it works for every modal automatically.
+ */
+function useOverlayOpen(): boolean {
+  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const bodyLocked = document.body.style.overflow === 'hidden';
+      // Only count interaction-blocking backdrops — a real modal captures
+      // clicks, while decorative full-screen layers (e.g. LiveCursors) are
+      // pointer-events:none and must NOT hide the FAB.
+      const hasBackdrop = Array.from(document.querySelectorAll('.fixed.inset-0'))
+        .some(el => window.getComputedStyle(el as HTMLElement).pointerEvents !== 'none');
+      setOverlayOpen(bodyLocked || hasBackdrop);
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(check); };
+    check();
+    const obs = new MutationObserver(schedule);
+    // Body attrs catch the scroll-lock; body childList catches portaled
+    // modal backdrops (Modal/SlidePanel createPortal into <body>).
+    obs.observe(document.body, { attributes: true, attributeFilter: ['style', 'class'], childList: true });
+    return () => { obs.disconnect(); if (raf) cancelAnimationFrame(raf); };
+  }, []);
+  return overlayOpen;
+}
+
 export const AuroraFab: React.FC = () => {
   const { open, setOpen, agent, mode } = useAurora();
+  const overlayOpen = useOverlayOpen();
   const meta = auroraAgents[agent];
   const label = mode === 'unified' ? 'Livv Assistant' : meta.display_name;
 
   return (
     <>
       <AnimatePresence>
-        {!open && (
+        {!open && !overlayOpen && (
           <motion.button
             key="fab"
             aria-label={`Abrir ${label}`}
