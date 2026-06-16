@@ -289,13 +289,16 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink }} className="truncate">
-                          {inc.client_name && inc.client_name !== 'General' ? inc.client_name : 'Internal · Livv'}
+                          {inc.project_name || inc.concept || 'General income'}
                         </span>
                         <span style={{ ...MONO, padding: '2px 7px', borderRadius: 999, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', background: pill.bg, color: pill.fg }}>
                           {pill.label}
                         </span>
                       </div>
-                      {inc.concept && <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 2 }} className="truncate">{inc.concept}{insts.length > 1 ? ` · ${insts.filter(i => i.status === 'paid').length}/${insts.length} installments` : ''}</div>}
+                      <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 2 }} className="truncate">
+                        {inc.client_name && inc.client_name !== 'General' ? inc.client_name : 'Internal · Livv'}
+                        {insts.length > 1 ? ` · ${insts.filter(i => i.status === 'paid').length}/${insts.length} installments` : ''}
+                      </div>
                     </div>
                     <div className="text-right shrink-0">
                       <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink, fontVariantNumeric: 'tabular-nums' }}>{fmt(inc.total_amount)}</div>
