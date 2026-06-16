@@ -1327,50 +1327,18 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
         <div className="bd-feed flex-1 overflow-y-auto">
           {rightTab === 'tasks' && (
-            <>
-              <TaskSection
-                title="Overdue"
-                icon={<Icons.Clock size={11} className="text-rose-500" />}
-                tasks={focusedOverdue}
-                tone="rose"
-                focused={activeFocus?.tab === 'tasks'}
-                projectsById={projectsById}
-                clientsById={clientsById}
-                onTaskClick={handleTaskClick}
-                onComplete={handleTaskComplete}
-                onSnooze={handleTaskSnooze}
-                onDelete={handleTaskDelete}
-                emptyText="Nothing slipped — good."
-              />
-              <TaskSection
-                title="Due today"
-                icon={<Icons.Activity size={11} className="text-amber-500" />}
-                tasks={focusedDueToday}
-                tone="amber"
-                focused={activeFocus?.tab === 'tasks'}
-                projectsById={projectsById}
-                clientsById={clientsById}
-                onTaskClick={handleTaskClick}
-                onComplete={handleTaskComplete}
-                onSnooze={handleTaskSnooze}
-                onDelete={handleTaskDelete}
-                emptyText="Nothing on today's list."
-              />
-              <TaskSection
-                title="Due soon"
-                icon={<Icons.Sparkles size={11} className="text-indigo-500" />}
-                tasks={focusedDueSoon}
-                tone="indigo"
-                focused={activeFocus?.tab === 'tasks'}
-                projectsById={projectsById}
-                clientsById={clientsById}
-                onTaskClick={handleTaskClick}
-                onComplete={handleTaskComplete}
-                onSnooze={handleTaskSnooze}
-                onDelete={handleTaskDelete}
-                emptyText="Nothing scheduled this week."
-              />
-            </>
+            <ProjectTaskGroups
+              overdue={focusedOverdue}
+              dueToday={focusedDueToday}
+              dueSoon={focusedDueSoon}
+              focused={activeFocus?.tab === 'tasks'}
+              projectsById={projectsById}
+              clientsById={clientsById}
+              onTaskClick={handleTaskClick}
+              onComplete={handleTaskComplete}
+              onSnooze={handleTaskSnooze}
+              onDelete={handleTaskDelete}
+            />
           )}
 
           {rightTab === 'calendar' && (
@@ -1788,11 +1756,41 @@ const PRIORITY_EDGE: Record<string, string> = {
   low:    'bg-zinc-300 dark:bg-zinc-700',
 };
 
-const TaskSection: React.FC<{
-  title: string;
-  icon: React.ReactNode;
-  tasks: CalendarTask[];
-  tone: 'rose' | 'amber' | 'indigo';
+// ── Project health pill ─────────────────────────────────────────────
+// Mirrors the StatusBadge visual language used in pages/Projects.tsx
+// (uppercase mono-ish pill, sage/gold/violet tints) but folds in an
+// "at risk" state: any project with overdue work shows a wine/err
+// tint + "AT RISK" instead of its raw status, so the Brief panel reads
+// as on-track / at-risk at a glance.
+const projectHealthStyle = (status: string, overdue: number): { bg: string; color: string; label: string } => {
+  if (overdue > 0) return { bg: 'rgba(176,58,46,0.12)', color: 'var(--err)', label: 'At risk' };
+  switch (status) {
+    case 'Active':    return { bg: 'rgba(118,146,104,0.12)', color: 'var(--livv-sage)', label: 'On track' };
+    case 'Pending':   return { bg: 'rgba(196,163,90,0.13)', color: 'var(--livv-gold)', label: status };
+    case 'Review':    return { bg: 'rgba(139,92,246,0.1)',  color: '#8b5cf6',          label: status };
+    case 'Completed': return { bg: 'rgba(82,82,91,0.08)',   color: 'var(--os-fg-2)',   label: status };
+    default:          return { bg: 'rgba(82,82,91,0.06)',   color: 'var(--os-fg-3)',   label: status || 'On track' };
+  }
+};
+
+// ── Tasks grouped by project (Brief right panel) ────────────────────
+// Replaces the flat Overdue / Due-today / Due-soon sections with one
+// expandable card per project — same editorial look as the Projects
+// grid rows (dot/icon + title + client + health pill + progress bar +
+// "N open · M overdue" meta). Clicking a card toggles its task list,
+// which reuses SwipeableTaskCard so every task still opens its detail
+// panel and keeps swipe/complete/snooze/delete behaviour.
+//
+// Tasks are the union of overdue+dueToday+dueSoon already filtered by
+// activeFocus upstream; grouping/sorting happens here. Projects sort by
+// urgency (most overdue first, then most open). The most urgent project
+// starts expanded so the panel opens with work in view.
+const NO_PROJECT_KEY = '__none__';
+
+const ProjectTaskGroups: React.FC<{
+  overdue: CalendarTask[];
+  dueToday: CalendarTask[];
+  dueSoon: CalendarTask[];
   focused?: boolean;
   projectsById: Map<string, any>;
   clientsById: Map<string, any>;
@@ -1800,62 +1798,199 @@ const TaskSection: React.FC<{
   onComplete: (t: CalendarTask) => void;
   onSnooze: (t: CalendarTask) => void;
   onDelete: (t: CalendarTask) => void;
-  emptyText: string;
-}> = ({ title, icon, tasks, tone, focused = false, projectsById, clientsById, onTaskClick, onComplete, onSnooze, onDelete, emptyText }) => {
-  const [open, setOpen] = useState(true);
-  if (tasks.length === 0) {
+}> = ({ overdue, dueToday, dueSoon, focused = false, projectsById, clientsById, onTaskClick, onComplete, onSnooze, onDelete }) => {
+  // Build groups: { key, project, tasks[], open, overdue } keyed by
+  // project_id (or NO_PROJECT_KEY). overdueIds lets each task pick the
+  // right tone without re-deriving its date bucket.
+  const { groups, overdueIds, todayIds } = useMemo(() => {
+    const overdueIds = new Set(overdue.map(t => t.id));
+    const todayIds = new Set(dueToday.map(t => t.id));
+    const map = new Map<string, { key: string; project: any; tasks: CalendarTask[]; open: number; overdue: number }>();
+    // Preserve urgency order within a project: overdue first, then
+    // today, then soon (matches how the buckets were derived).
+    for (const t of [...overdue, ...dueToday, ...dueSoon]) {
+      const key = t.project_id && projectsById.has(t.project_id) ? t.project_id : NO_PROJECT_KEY;
+      let g = map.get(key);
+      if (!g) {
+        g = { key, project: key === NO_PROJECT_KEY ? null : projectsById.get(key), tasks: [], open: 0, overdue: 0 };
+        map.set(key, g);
+      }
+      g.tasks.push(t);
+      g.open += 1;
+      if (overdueIds.has(t.id)) g.overdue += 1;
+    }
+    const groups = Array.from(map.values()).sort((a, b) => {
+      // "No project" always sinks to the bottom.
+      if (a.key === NO_PROJECT_KEY) return 1;
+      if (b.key === NO_PROJECT_KEY) return -1;
+      if (b.overdue !== a.overdue) return b.overdue - a.overdue; // most overdue first
+      return b.open - a.open;                                     // then most open
+    });
+    return { groups, overdueIds, todayIds };
+  }, [overdue, dueToday, dueSoon, projectsById]);
+
+  // Per-project expand state. Default: open the most urgent group so
+  // the panel never opens fully collapsed. Re-seed only when the set of
+  // group keys changes (not on every task mutation) so a user's manual
+  // collapse/expand sticks while they work.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(groups[0] ? [groups[0].key] : []));
+  const keysSig = groups.map(g => g.key).join('|');
+  const seededSig = useRef<string>('');
+  useEffect(() => {
+    if (seededSig.current !== keysSig) {
+      seededSig.current = keysSig;
+      setExpanded(new Set(groups[0] ? [groups[0].key] : []));
+    }
+  }, [keysSig]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (groups.length === 0) {
     return (
-      <>
-        <div className="bd-day flex items-center">
-          {icon}
-          <span className="ml-1.5">{title}</span>
-        </div>
-        <div className="px-5 py-3 text-[11px] text-zinc-400 dark:text-zinc-500 italic">{emptyText}</div>
-      </>
+      <div className="px-5 py-10 text-center text-[11px] italic" style={{ color: 'var(--os-fg-3)' }}>
+        Nothing due — you're all clear.
+      </div>
     );
   }
+
   return (
-    <>
-      <div
-        onClick={() => setOpen(o => !o)}
-        className="bd-day flex items-center cursor-pointer hover:!text-zinc-700 dark:hover:!text-zinc-200 transition-colors"
-      >
-        {icon}
-        <span className="ml-1.5">{title}</span>
-        <span className="ml-2 text-[9px] tabular-nums font-mono opacity-70">{tasks.length}</span>
-        <Icons.ChevronDown size={11} className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`} />
-      </div>
-      {open && (
-        <AnimatePresence initial={false}>
-          {tasks.slice(0, 12).map((t, idx) => {
-            const proj = t.project_id ? projectsById.get(t.project_id) : null;
-            const cli  = t.client_id ? clientsById.get(t.client_id) : (proj?.client_id ? clientsById.get(proj.client_id) : null);
-            const due = formatRelative(t.start_date);
-            const edge = PRIORITY_EDGE[t.priority || 'medium'];
-            return (
-              <SwipeableTaskCard
-                key={t.id}
-                task={t}
-                edge={edge}
-                due={due}
-                tone={tone}
-                focused={focused}
-                proj={proj}
-                cli={cli}
-                idx={idx}
-                onClick={onTaskClick}
-                onComplete={onComplete}
-                onSnooze={onSnooze}
-                onDelete={onDelete}
-              />
-            );
-          })}
-        </AnimatePresence>
-      )}
-      {open && tasks.length > 12 && (
-        <div className="px-5 py-2 text-[10px] text-zinc-400 font-mono">+{tasks.length - 12} more</div>
-      )}
-    </>
+    <div className="flex flex-col gap-2 px-3 py-3">
+      {groups.map(g => {
+        const p = g.project;
+        const isNone = g.key === NO_PROJECT_KEY;
+        const isOpen = expanded.has(g.key);
+        const clientLabel = p?.client_id
+          ? (clientsById.get(p.client_id)?.name || clientsById.get(p.client_id)?.company || null)
+          : (p?.clientName || p?.client || null);
+        const health = projectHealthStyle(p?.status, g.overdue);
+        const progress = isNone ? 0 : Math.max(0, Math.min(100, Number(p?.progress) || 0));
+        const dotColor = isNone
+          ? 'var(--os-fg-3)'
+          : (p?.color || (p?.status === 'Active' ? 'var(--livv-sage)' : p?.status === 'Pending' ? 'var(--livv-gold)' : 'var(--os-fg-3)'));
+        const deadline = !isNone && p?.deadline ? formatRelative(p.deadline) : '';
+        const meta = [
+          `${g.open} open`,
+          g.overdue > 0 ? `${g.overdue} overdue` : null,
+          deadline ? `due ${deadline}` : null,
+        ].filter(Boolean).join(' · ');
+
+        return (
+          <div
+            key={g.key}
+            style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}
+          >
+            {/* Summary row — click toggles the project's task list */}
+            <button
+              onClick={() => setExpanded(prev => { const n = new Set(prev); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
+              className="w-full text-left transition-colors hover:bg-[var(--os-surface)]"
+            >
+              <div className="flex items-center gap-3 px-4 pt-3 pb-2.5">
+                {isNone ? (
+                  <span className="w-6 shrink-0 flex items-center justify-center" style={{ color: 'var(--os-fg-3)' }}>
+                    <Icons.Layers size={15} />
+                  </span>
+                ) : p?.icon ? (
+                  <span className="w-6 text-[16px] leading-none shrink-0 text-center">{p.icon}</span>
+                ) : (
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 ml-1.5" style={{ background: dotColor }} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>
+                      {isNone ? 'No project' : (p?.title || 'Untitled project')}
+                    </span>
+                    {!isNone && (
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600,
+                        letterSpacing: '0.1em', textTransform: 'uppercase',
+                        fontFamily: 'var(--font-mono)', background: health.bg, color: health.color,
+                      }}>
+                        {health.label}
+                      </span>
+                    )}
+                    {!isNone && p?.sharedFromName && (
+                      <span className="text-[10px] inline-flex items-center gap-0.5" style={{ color: '#8b5cf6' }}>
+                        <Icons.Briefcase size={9} /> {p.sharedFromName}
+                      </span>
+                    )}
+                  </div>
+                  {clientLabel && (
+                    <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--os-fg-2)' }}>{clientLabel}</div>
+                  )}
+                </div>
+                <Icons.ChevronRight
+                  size={15}
+                  className="shrink-0 transition-transform"
+                  style={{ color: 'var(--os-fg-3)', transform: isOpen ? 'rotate(90deg)' : 'none' }}
+                />
+              </div>
+              {/* Progress bar + meta — hidden for the No-project group
+                  which has no progress/deadline of its own. */}
+              <div className="px-4 pb-3 flex items-center gap-3">
+                {!isNone && (
+                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'var(--os-surface)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${progress}%`, background: g.overdue > 0 ? 'var(--err)' : 'var(--livv-gold)' }} />
+                  </div>
+                )}
+                {!isNone && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)' }} className="tabular-nums shrink-0">
+                    {progress}%
+                  </span>
+                )}
+                <span
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: g.overdue > 0 ? 'var(--err)' : 'var(--os-fg-2)' }}
+                  className={isNone ? 'flex-1' : 'shrink-0'}
+                >
+                  {meta}
+                </span>
+              </div>
+            </button>
+
+            {/* Expanded task list — same SwipeableTaskCard rows + handlers */}
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-1.5 pb-2" style={{ borderTop: '0.5px solid var(--os-divider)' }}>
+                    {g.tasks.slice(0, 12).map((t, idx) => {
+                      const proj = t.project_id ? projectsById.get(t.project_id) : null;
+                      const cli  = t.client_id ? clientsById.get(t.client_id) : (proj?.client_id ? clientsById.get(proj.client_id) : null);
+                      const due = formatRelative(t.start_date);
+                      // Tone follows the task's own urgency, not the
+                      // section: overdue→rose, today→amber, soon→indigo.
+                      const tone: 'rose' | 'amber' | 'indigo' = overdueIds.has(t.id) ? 'rose' : todayIds.has(t.id) ? 'amber' : 'indigo';
+                      return (
+                        <SwipeableTaskCard
+                          key={t.id}
+                          task={t}
+                          edge={PRIORITY_EDGE[t.priority || 'medium']}
+                          due={due}
+                          tone={tone}
+                          focused={focused}
+                          proj={proj}
+                          cli={cli}
+                          idx={idx}
+                          onClick={onTaskClick}
+                          onComplete={onComplete}
+                          onSnooze={onSnooze}
+                          onDelete={onDelete}
+                        />
+                      );
+                    })}
+                    {g.tasks.length > 12 && (
+                      <div className="px-4 py-2 text-[10px] font-mono" style={{ color: 'var(--os-fg-3)' }}>+{g.tasks.length - 12} more</div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
