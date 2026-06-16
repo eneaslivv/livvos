@@ -50,8 +50,16 @@ const Badge = ({ status, label }) => {
 };
 
 // ============================================================ HOME
-const TEMPLATES = ['Website', 'E-commerce', 'Growth system', 'Platform', 'Add-on', 'Maintenance'];
-function HomeView({ onGenerated, goBuild }) {
+const HOME_CARDS = [
+  { glyph: '✦', title: 'New project', desc: 'Quote a fresh build from scratch.', go: 'build' },
+  { glyph: '＋', title: 'New quote / add-on', desc: 'Quote work on an existing project.', go: 'build' },
+  { glyph: '↻', title: 'Maintenance', desc: 'Retainer or one-off support.', go: 'build' },
+  { glyph: '◷', title: 'Review a quote', desc: 'Pipeline, payments & status.', go: 'review' },
+  { glyph: '→', title: 'Approved → onboarding', desc: 'Turn a won quote into a live project.', go: 'onboarding' },
+];
+
+function HomeView({ go, onGenerated }) {
+  const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -64,40 +72,59 @@ function HomeView({ onGenerated, goBuild }) {
     catch (e) { setErr(e.message); } finally { setLoading(false); }
   };
 
+  const cardStyle = { padding: '20px', textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 14, transition: 'all .2s var(--ease-soft)' };
+  const tile = (bg, color) => ({ width: 38, height: 38, borderRadius: 10, background: bg, border: bg === 'var(--livv-cream-100)' ? '1px solid var(--livv-cream-200)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color });
+
   return (
     <section style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 40px 64px' }}>
-      <div style={{ width: '100%', maxWidth: 620, textAlign: 'center' }}>
-        <Eyebrow>Start</Eyebrow>
-        <h1 className="qo-h1" style={{ marginBottom: 30 }}>What are we quoting?</h1>
+      <div style={{ width: '100%', maxWidth: 720 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <Eyebrow>Start</Eyebrow>
+          <h1 className="qo-h1">What are we quoting?</h1>
+          <p className="qo-sub" style={{ marginTop: 12 }}>Pick a path — each one opens a guided flow and the price builds with you.</p>
+        </div>
 
-        <div style={{ background: '#fff', border: '1px solid var(--livv-cream-200)', borderRadius: 20, padding: '8px 8px 12px', boxShadow: 'var(--shadow-md)', textAlign: 'left' }}>
-          <textarea
-            value={brief} onChange={(e) => setBrief(e.target.value)}
-            placeholder="Describe what the client needs in plain words — pages, features, the vibe, the deadline. The AI drafts the quote and you edit everything after."
-            style={{ width: '100%', minHeight: 96, padding: 16, border: 'none', borderRadius: 14, fontFamily: 'var(--font-sans)', fontSize: 14.5, lineHeight: 1.55, color: 'var(--livv-cream-900)', background: 'none', outline: 'none', resize: 'none' }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9, padding: '0 8px 4px' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <span className="qo-cap" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 13px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', color: 'var(--livv-cream-600)' }}>{loading ? 'Reading…' : 'Audio'}</span>
-              <span className="qo-cap" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 13px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', color: 'var(--livv-cream-600)' }}>References</span>
-            </div>
-            <button onClick={submit} disabled={loading || !brief.trim()}
-              style={{ width: 44, height: 44, borderRadius: 999, border: 'none', background: 'var(--livv-cream-900)', color: 'var(--livv-cream-50)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-              {loading ? <Spin /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          {HOME_CARDS.map((c) => (
+            <button key={c.title} className="qo-card" onClick={() => go(c.go)} style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={tile('var(--livv-cream-100)', 'var(--livv-wine-500)')}>{c.glyph}</span>
+                <span style={{ color: 'var(--livv-cream-400)', fontSize: 14 }}>↗</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--livv-cream-900)' }}>{c.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--livv-cream-500)', marginTop: 4, lineHeight: 1.5 }}>{c.desc}</div>
+              </div>
             </button>
-          </div>
-        </div>
-
-        <div className="qo-eyebrow" style={{ margin: '36px 0 14px' }}>Or start from a template</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, justifyContent: 'center' }}>
-          {TEMPLATES.map((t) => (
-            <button key={t} onClick={goBuild} style={{ padding: '9px 16px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', background: '#fff', color: 'var(--livv-cream-700)', fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>{t}</button>
           ))}
+          <button className="qo-card" onClick={() => setBriefOpen((v) => !v)} style={{ ...cardStyle, borderStyle: 'dashed' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={tile('var(--gradient-gold)', '#F4E9D6')}>✦</span>
+              <span style={{ color: 'var(--livv-cream-400)', fontSize: 14 }}>{briefOpen ? '×' : '↗'}</span>
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--livv-cream-900)' }}>Quote from a brief</div>
+              <div style={{ fontSize: 12, color: 'var(--livv-cream-500)', marginTop: 4, lineHeight: 1.5 }}>Describe it in plain words — the AI drafts a starting point.</div>
+            </div>
+          </button>
         </div>
 
-        {err && <p style={{ color: 'var(--livv-brick)', marginTop: 20 }}>⚠ {err}</p>}
+        {briefOpen && (
+          <div className="qo-card qo-pop" style={{ marginTop: 16, padding: '8px 8px 10px' }}>
+            <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
+              placeholder="Describe what the client needs — pages, features, the vibe, the deadline."
+              style={{ width: '100%', minHeight: 84, padding: 14, border: 'none', borderRadius: 12, fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.55, color: 'var(--livv-cream-900)', background: 'none', outline: 'none', resize: 'none' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 6px 2px' }}>
+              <button onClick={submit} disabled={loading || !brief.trim()}
+                style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--livv-cream-900)', color: 'var(--livv-cream-50)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {loading ? <Spin /> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
+              </button>
+            </div>
+          </div>
+        )}
+        {err && <p style={{ color: 'var(--livv-brick)', marginTop: 16, textAlign: 'center' }}>⚠ {err}</p>}
         {result && (
-          <div className="qo-pop" style={{ marginTop: 28, textAlign: 'left' }}>
+          <div className="qo-pop" style={{ marginTop: 18 }}>
             <Eyebrow tone="gold">Generated quote</Eyebrow>
             {(result.priced?.mode === 'two_option'
               ? [['Simple', result.priced.simple], ['Premium', result.priced.premium]]
@@ -619,7 +646,7 @@ export default function QuoteOS({ onExit }) {
 
       <main className="qo-main">
         {onExit && <button className="qo-btn secondary sm qo-exit" onClick={onExit}>Exit ✕</button>}
-        {view === 'home' && <HomeView onGenerated={() => listProposals().then(setProposals)} goBuild={() => setView('build')} />}
+        {view === 'home' && <HomeView go={setView} onGenerated={() => listProposals().then(setProposals)} />}
         {view === 'build' && <BuildView services={services} onExit={() => setView('home')} onApprove={() => setView('onboarding')} />}
         {view === 'review' && <ReviewView proposals={proposals} />}
         {view === 'onboarding' && <OnboardingView onboardings={onboardings} reload={load} />}
