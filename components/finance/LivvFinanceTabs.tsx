@@ -563,14 +563,7 @@ export const LivvIncomeTab: React.FC<LivvIncomeTabProps> = ({
   }, [incomes, viewMode, periodBounds]);
 
   return (
-    <div style={{
-      background: C.cream, color: C.ink, fontFamily: 'Inter',
-      borderRadius: 24, border: `1px solid ${C.bone}`,
-      padding: '36px 32px 40px',
-      boxShadow: isDark
-        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
-        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
-    }}>
+    <div style={{ color: C.ink, fontFamily: 'Inter' }}>
       <Hero
         eyebrow="© Income & Receivables"
         title="What's coming in."
@@ -1008,14 +1001,7 @@ export const LivvExpenseTab: React.FC<LivvExpenseTabProps> = ({
     : 'Filtered';
 
   return (
-    <div style={{
-      background: C.cream, color: C.ink, fontFamily: 'Inter',
-      borderRadius: 24, border: `1px solid ${C.bone}`,
-      padding: '36px 32px 40px',
-      boxShadow: isDark
-        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
-        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
-    }}>
+    <div style={{ color: C.ink, fontFamily: 'Inter' }}>
       <Hero
         eyebrow="© Expenses & Bills"
         title="What's going out."
@@ -1253,14 +1239,7 @@ export const LivvBudgetsTab: React.FC<LivvBudgetsTabProps> = ({
   const isDark = useIsDarkMode();
   const remaining = totalAllocated - totalBudgetSpent;
   return (
-    <div style={{
-      background: C.cream, color: C.ink, fontFamily: 'Inter',
-      borderRadius: 24, border: `1px solid ${C.bone}`,
-      padding: '36px 32px 40px',
-      boxShadow: isDark
-        ? '0 1px 2px rgba(0,0,0,0.4), 0 8px 16px -4px rgba(0,0,0,0.5)'
-        : '0 2px 4px rgba(0,0,0,0.02), 0 8px 16px -4px rgba(0,0,0,0.04)',
-    }}>
+    <div style={{ color: C.ink, fontFamily: 'Inter' }}>
       <Hero
         eyebrow="© Budgets & Caps"
         title="Where you're spending."
