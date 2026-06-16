@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check, X } from 'lucide-react';
 import type { IncomeEntry, Installment, ExpenseEntry } from '../../context/FinanceContext';
 import type { LiquidityPoint } from './LivvFinanceDashboard';
 import { useIsDarkMode } from '../../hooks/useIsDarkMode';
@@ -52,6 +52,9 @@ export interface LivvFinanceHomeProps {
   onAddIncome: (prefill?: { project_id?: string; client_id?: string; concept?: string }) => void;
   onAddExpense: () => void;
   onMarkInstallmentPaid: (inst: Installment) => Promise<void> | void;
+  onUpdateInstallment?: (id: string, patch: Partial<Installment>) => Promise<void> | void;
+  onAddInstallment?: (inc: IncomeEntry) => Promise<void> | void;
+  onDeleteInstallment?: (id: string) => Promise<void> | void;
   onJumpToTab: (tab: 'ingresos' | 'gastos' | 'proyectos' | 'budgets' | 'propuestas') => void;
   onViewAnalytics?: () => void;
   canCreate: boolean;
@@ -61,7 +64,7 @@ const PERIOD_LABEL: Record<Period, string> = { month: 'This month', quarter: 'Qu
 
 export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
   incomes, expenses, liquidityData,
-  onAddIncome, onAddExpense, onMarkInstallmentPaid, onJumpToTab, onViewAnalytics, canCreate,
+  onAddIncome, onAddExpense, onMarkInstallmentPaid, onUpdateInstallment, onAddInstallment, onDeleteInstallment, onJumpToTab, onViewAnalytics, canCreate,
 }) => {
   const c = usePalette();
   const [period, setPeriod] = useState<Period>('month');
@@ -315,18 +318,53 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                     <div style={{ background: c.surface, padding: '6px 20px 10px 36px' }}>
                       {insts.length > 0 ? insts.map(inst => {
                         const ip = inst.status === 'paid' ? c.income : inst.status === 'overdue' ? c.expense : c.gold;
+                        const isPaidInst = inst.status === 'paid';
+                        const editable = canCreate && !isPaidInst && !!onUpdateInstallment;
                         return (
-                          <div key={inst.id} className="flex items-center gap-3 py-1.5">
+                          <div key={inst.id} className="flex items-center gap-2 py-1.5 group/inst">
                             <span style={{ width: 6, height: 6, borderRadius: 999, background: ip, flexShrink: 0 }} />
-                            <span style={{ ...MONO, fontSize: 11, color: c.body }} className="flex-1 min-w-0 truncate">
-                              Installment {inst.number}
-                              <span style={{ color: c.meta }}> · {inst.status === 'paid' && inst.paid_date ? `paid ${fmtDue(inst.paid_date)}` : `due ${fmtDue(inst.due_date)}`}</span>
-                            </span>
-                            <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: inst.status === 'paid' ? c.income : c.ink, fontVariantNumeric: 'tabular-nums' }}>{fmt(inst.amount)}</span>
-                            {inst.status !== 'paid' && canCreate && (
+                            <span style={{ ...MONO, fontSize: 11, color: c.body, flexShrink: 0 }}>Installment {inst.number}</span>
+                            <span style={{ ...MONO, fontSize: 11, color: c.meta }}>·</span>
+                            {editable ? (
+                              <input
+                                type="date"
+                                defaultValue={(inst.due_date || '').slice(0, 10)}
+                                onClick={(e) => e.stopPropagation()}
+                                onBlur={(e) => { const v = e.target.value; if (v && v !== (inst.due_date || '').slice(0, 10)) onUpdateInstallment!(inst.id, { due_date: v }); }}
+                                style={{ ...MONO, fontSize: 11, color: c.body, background: 'transparent', border: 'none', outline: 'none', flex: 1, minWidth: 0, cursor: 'pointer' }}
+                                title="Due date"
+                              />
+                            ) : (
+                              <span style={{ ...MONO, fontSize: 11, color: c.meta, flex: 1, minWidth: 0 }} className="truncate">
+                                {isPaidInst && inst.paid_date ? `paid ${fmtDue(inst.paid_date)}` : `due ${fmtDue(inst.due_date)}`}
+                              </span>
+                            )}
+                            {editable ? (
+                              <span className="inline-flex items-center" style={{ flexShrink: 0 }}>
+                                <span style={{ ...MONO, fontSize: 11, color: c.meta }}>$</span>
+                                <input
+                                  type="number"
+                                  defaultValue={inst.amount}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v !== inst.amount) onUpdateInstallment!(inst.id, { amount: Math.round(v * 100) / 100 }); }}
+                                  style={{ ...MONO, fontSize: 11, fontWeight: 600, color: c.ink, background: 'transparent', border: 'none', outline: 'none', width: 58, textAlign: 'right' }}
+                                />
+                              </span>
+                            ) : (
+                              <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: isPaidInst ? c.income : c.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmt(inst.amount)}</span>
+                            )}
+                            {!isPaidInst && canCreate && (
                               <button onClick={(e) => { e.stopPropagation(); onMarkInstallmentPaid(inst); }}
                                 style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 600, padding: '3px 8px', borderRadius: 999, border: `0.5px solid ${c.dashedSoft}`, background: 'transparent', color: c.body, cursor: 'pointer', flexShrink: 0 }}>
                                 <Check size={9} /> mark
+                              </button>
+                            )}
+                            {editable && onDeleteInstallment && (
+                              <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete installment ${inst.number}?`)) onDeleteInstallment!(inst.id); }}
+                                className="opacity-0 group-hover/inst:opacity-100 transition-opacity"
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: 999, border: 'none', background: 'transparent', color: c.meta, cursor: 'pointer', flexShrink: 0 }}
+                                title="Delete installment">
+                                <X size={11} />
                               </button>
                             )}
                           </div>
@@ -335,6 +373,15 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                         <div style={{ ...MONO, fontSize: 11, color: c.meta, paddingTop: 2 }}>
                           Single payment · {inc.due_date ? `due ${fmtDue(inc.due_date)}` : 'no due date'} · {fmt(inc.total_amount)}
                         </div>
+                      )}
+                      {canCreate && onAddInstallment && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onAddInstallment(inc); }}
+                          className="hover:opacity-70 transition-opacity"
+                          style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 999, border: `1px dashed ${c.dashed}`, background: 'transparent', color: c.gold, cursor: 'pointer' }}
+                        >
+                          <Plus size={10} /> Add installment
+                        </button>
                       )}
                       {/* Project profitability — income vs costs for the project this invoice belongs to */}
                       {(() => {

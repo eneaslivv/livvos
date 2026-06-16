@@ -1009,6 +1009,40 @@ export const Finance: React.FC = () => {
     }
   }, [updateInstallment]);
 
+  // Add a missing installment to an income (e.g. the schedule was short by
+  // one). Defaults the amount to whatever's left to reach total_amount and
+  // the due date to a month after the last installment, then the user can
+  // fine-tune it inline. Installments table has no tenant_id (see createIncome).
+  const handleAddInstallment = useCallback(async (inc: IncomeEntry) => {
+    const insts = inc.installments || [];
+    const nextNumber = insts.length ? Math.max(...insts.map(i => i.number)) + 1 : 1;
+    const existingSum = insts.reduce((s, i) => s + (i.amount || 0), 0);
+    const remaining = Math.max(0, Math.round(((inc.total_amount || 0) - existingSum) * 100) / 100);
+    const lastDue = insts.map(i => i.due_date).filter(Boolean).sort().slice(-1)[0];
+    const base = lastDue ? new Date(lastDue + 'T12:00:00') : new Date();
+    if (lastDue) base.setMonth(base.getMonth() + 1);
+    const due = base.toISOString().split('T')[0];
+    try {
+      const { error } = await supabase.from('installments').insert({
+        income_id: inc.id, number: nextNumber, amount: remaining, due_date: due, status: 'pending',
+      });
+      if (error) throw error;
+      await refreshIncomes();
+    } catch (err) {
+      console.error('Error adding installment:', err);
+    }
+  }, [refreshIncomes]);
+
+  const handleDeleteInstallment = useCallback(async (instId: string) => {
+    try {
+      const { error } = await supabase.from('installments').delete().eq('id', instId);
+      if (error) throw error;
+      await refreshIncomes();
+    } catch (err) {
+      console.error('Error deleting installment:', err);
+    }
+  }, [refreshIncomes]);
+
   const handleDeleteIncome = useCallback(async (id: string) => {
     try {
       await deleteIncome(id);
@@ -1140,6 +1174,9 @@ export const Finance: React.FC = () => {
               onAddIncome={openIncomeForm}
               onAddExpense={openExpenseForm}
               onMarkInstallmentPaid={handleMarkInstallmentPaid}
+              onUpdateInstallment={updateInstallment}
+              onAddInstallment={handleAddInstallment}
+              onDeleteInstallment={handleDeleteInstallment}
               onJumpToTab={setActiveTab}
               onViewAnalytics={() => setFinView('analytics')}
               canCreate={hasPermission('finance', 'create')}
