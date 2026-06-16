@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check } from 'lucide-react';
 import type { IncomeEntry, Installment, ExpenseEntry } from '../../context/FinanceContext';
 import type { LiquidityPoint } from './LivvFinanceDashboard';
 import { useIsDarkMode } from '../../hooks/useIsDarkMode';
@@ -66,6 +66,9 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
   const c = usePalette();
   const [period, setPeriod] = useState<Period>('month');
   const [filter, setFilter] = useState<Filter>('all');
+  // Invoices expanded to reveal their installments (payments + dates).
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const periodStart = useMemo(() => {
@@ -250,34 +253,71 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
             ) : invoices.map(inc => {
               const pill = STATUS_PILL[inc.status] || STATUS_PILL.pending;
               const isPaid = inc.status === 'paid';
+              const isOpen = expanded.has(inc.id);
+              const insts = inc.installments || [];
               return (
-                <div key={inc.id} className="flex items-center gap-3 px-5 py-3" style={{ borderTop: `0.5px solid ${c.dashedSoft}` }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 999, background: isPaid ? c.income : inc.status === 'overdue' ? c.expense : c.gold, flexShrink: 0 }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink }} className="truncate">
-                        {inc.client_name && inc.client_name !== 'General' ? inc.client_name : 'Internal · Livv'}
-                      </span>
-                      <span style={{ ...MONO, padding: '2px 7px', borderRadius: 999, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', background: pill.bg, color: pill.fg }}>
-                        {pill.label}
-                      </span>
+                <div key={inc.id} style={{ borderTop: `0.5px solid ${c.dashedSoft}` }}>
+                  <div
+                    role="button"
+                    onClick={() => toggleExpand(inc.id)}
+                    className="flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: isPaid ? c.income : inc.status === 'overdue' ? c.expense : c.gold, flexShrink: 0 }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink }} className="truncate">
+                          {inc.client_name && inc.client_name !== 'General' ? inc.client_name : 'Internal · Livv'}
+                        </span>
+                        <span style={{ ...MONO, padding: '2px 7px', borderRadius: 999, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', background: pill.bg, color: pill.fg }}>
+                          {pill.label}
+                        </span>
+                      </div>
+                      {inc.concept && <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 2 }} className="truncate">{inc.concept}{insts.length > 1 ? ` · ${insts.filter(i => i.status === 'paid').length}/${insts.length} installments` : ''}</div>}
                     </div>
-                    {inc.concept && <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 2 }} className="truncate">{inc.concept}</div>}
+                    <div className="text-right shrink-0">
+                      <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink, fontVariantNumeric: 'tabular-nums' }}>{fmt(inc.total_amount)}</div>
+                      {inc.due_date && <div style={{ ...MONO, fontSize: 10, color: inc.status === 'overdue' ? c.expense : c.meta }}>due {fmtDue(inc.due_date)}</div>}
+                    </div>
+                    {isPaid ? (
+                      <span style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 11.5, fontWeight: 500, borderRadius: 999, border: `0.5px solid ${c.dashedSoft}`, color: c.meta, flexShrink: 0 }}>
+                        Paid
+                      </span>
+                    ) : canCreate ? (
+                      <button onClick={(e) => { e.stopPropagation(); markIncomePaid(inc); }}
+                        style={{ ...MONO, padding: '7px 14px', fontSize: 11.5, fontWeight: 600, borderRadius: 999, border: 0, background: c.ink, color: c.cream, cursor: 'pointer', flexShrink: 0 }}>
+                        Mark paid
+                      </button>
+                    ) : null}
+                    <ChevronDown size={14} style={{ color: c.meta, flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
                   </div>
-                  <div className="text-right shrink-0">
-                    <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: c.ink, fontVariantNumeric: 'tabular-nums' }}>{fmt(inc.total_amount)}</div>
-                    {inc.due_date && <div style={{ ...MONO, fontSize: 10, color: inc.status === 'overdue' ? c.expense : c.meta }}>due {fmtDue(inc.due_date)}</div>}
-                  </div>
-                  {isPaid ? (
-                    <span style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 11.5, fontWeight: 500, borderRadius: 999, border: `0.5px solid ${c.dashedSoft}`, color: c.meta, flexShrink: 0 }}>
-                      Paid
-                    </span>
-                  ) : canCreate ? (
-                    <button onClick={() => markIncomePaid(inc)}
-                      style={{ ...MONO, padding: '7px 14px', fontSize: 11.5, fontWeight: 600, borderRadius: 999, border: 0, background: c.ink, color: c.cream, cursor: 'pointer', flexShrink: 0 }}>
-                      Mark paid
-                    </button>
-                  ) : null}
+                  {/* Mini dropdown — installments (payments + dates) */}
+                  {isOpen && (
+                    <div style={{ background: c.surface, padding: '6px 20px 10px 36px' }}>
+                      {insts.length > 0 ? insts.map(inst => {
+                        const ip = inst.status === 'paid' ? c.income : inst.status === 'overdue' ? c.expense : c.gold;
+                        return (
+                          <div key={inst.id} className="flex items-center gap-3 py-1.5">
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: ip, flexShrink: 0 }} />
+                            <span style={{ ...MONO, fontSize: 11, color: c.body }} className="flex-1 min-w-0 truncate">
+                              Installment {inst.number}
+                              <span style={{ color: c.meta }}> · {inst.status === 'paid' && inst.paid_date ? `paid ${fmtDue(inst.paid_date)}` : `due ${fmtDue(inst.due_date)}`}</span>
+                            </span>
+                            <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: inst.status === 'paid' ? c.income : c.ink, fontVariantNumeric: 'tabular-nums' }}>{fmt(inst.amount)}</span>
+                            {inst.status !== 'paid' && canCreate && (
+                              <button onClick={(e) => { e.stopPropagation(); onMarkInstallmentPaid(inst); }}
+                                style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 600, padding: '3px 8px', borderRadius: 999, border: `0.5px solid ${c.dashedSoft}`, background: 'transparent', color: c.body, cursor: 'pointer', flexShrink: 0 }}>
+                                <Check size={9} /> mark
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }) : (
+                        <div style={{ ...MONO, fontSize: 11, color: c.meta, paddingTop: 2 }}>
+                          Single payment · {inc.due_date ? `due ${fmtDue(inc.due_date)}` : 'no due date'} · {fmt(inc.total_amount)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
