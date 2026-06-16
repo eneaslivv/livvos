@@ -241,33 +241,43 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     return { overdueCount: overdue, dueTodayCount: dueToday, doneTodayCount: doneToday, eventsTodayCount: eventsToday };
   }, [allTasks, events, user?.id, todayIso]);
 
-  // ── Active projects with health + open-task counts (portfolio glance) ──
-  // Buckets tenant tasks by project for open/overdue counts, derives a
-  // health pill, and surfaces the most urgent six (at-risk → due-soon first).
+  // ── Active projects with health, open-task counts + the tasks themselves
+  //    (so each row can expand inline) — portfolio glance for Home. ──
   const activeProjects = useMemo(() => {
-    const stats = new Map<string, { open: number; overdue: number }>();
+    const stats = new Map<string, { open: number; overdue: number; tasks: any[] }>();
     for (const t of allTasks) {
       if ((t as any).parent_task_id) continue;
       const pid = (t as any).project_id;
       if (!pid || t.completed || t.status === 'cancelled') continue;
       let e = stats.get(pid);
-      if (!e) { e = { open: 0, overdue: 0 }; stats.set(pid, e); }
+      if (!e) { e = { open: 0, overdue: 0, tasks: [] }; stats.set(pid, e); }
       e.open++;
-      const due = t.start_date || (t as any).due_date;
+      const due = (t.start_date || (t as any).due_date) || null;
       if (due && due.slice(0, 10) < todayIso) e.overdue++;
+      e.tasks.push({ id: t.id, title: t.title, due, priority: t.priority });
     }
     const order: Record<ProjectHealth, number> = { 'AT RISK': 0, 'DUE SOON': 1, 'ON TRACK': 2 };
     return projects
       .filter(p => p.status !== ProjectStatus.Completed && p.status !== ProjectStatus.Archived)
       .map(p => {
-        const st = stats.get(p.id) || { open: 0, overdue: 0 };
-        return { p, open: st.open, overdue: st.overdue, health: projectHealthOf(p.deadline, p.progress, todayIso) };
+        const st = stats.get(p.id) || { open: 0, overdue: 0, tasks: [] };
+        const tasks = [...st.tasks].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+        return { p, open: st.open, overdue: st.overdue, tasks, health: projectHealthOf(p.deadline, p.progress, todayIso) };
       })
       .sort((a, b) => (order[a.health] - order[b.health])
         || (a.p.deadline || '9999').localeCompare(b.p.deadline || '9999')
         || b.p.progress - a.p.progress)
       .slice(0, 6);
   }, [projects, allTasks, todayIso]);
+
+  // Resolve a task's project name + color for the Today list ("Needs you now"
+  // clarity: every task says which project it belongs to).
+  const projectMeta = useMemo(
+    () => new Map(projects.map(p => [p.id, { title: p.title, color: p.color as string | undefined }])),
+    [projects]
+  );
+  // Which Home active-project rows are expanded to reveal their tasks inline.
+  const [expandedHomeProjects, setExpandedHomeProjects] = useState<Set<string>>(() => new Set());
 
   // ── Pending inbox count ─────────────────────────────────────────
   useEffect(() => {
@@ -767,32 +777,83 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 </button>
               </div>
               <div>
-                {activeProjects.map(({ p, open, overdue, health }) => {
+                {activeProjects.map(({ p, open, overdue, tasks, health }) => {
                   const hc = HEALTH_STYLE[health];
+                  const expanded = expandedHomeProjects.has(p.id);
                   return (
-                    <button
-                      key={p.id}
-                      onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)}
-                      className="w-full text-left flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--os-surface)]"
-                      style={{ borderTop: '0.5px solid var(--os-divider)' }}
-                    >
-                      {p.icon
-                        ? <span className="w-5 text-[15px] leading-none text-center shrink-0">{p.icon}</span>
-                        : <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.color || 'var(--livv-gold)' }} />}
-                      <div className="min-w-0 sm:w-[42%]">
-                        <div className="text-[13.5px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>{p.title}</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: overdue > 0 ? 'var(--err)' : 'var(--os-fg-3)' }}>
-                          {open} open{p.deadline ? ` · due ${fmtMonthDay(p.deadline)}` : ''}
-                        </div>
+                    <div key={p.id} style={{ borderTop: '0.5px solid var(--os-divider)' }}>
+                      <div className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--os-surface)]">
+                        <button
+                          onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          {p.icon
+                            ? <span className="w-5 text-[15px] leading-none text-center shrink-0">{p.icon}</span>
+                            : <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.color || 'var(--livv-gold)' }} />}
+                          <div className="min-w-0 sm:w-[44%]">
+                            <div className="text-[13.5px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>{p.title}</div>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: overdue > 0 ? 'var(--err)' : 'var(--os-fg-3)' }}>
+                              {open} open{p.deadline ? ` · due ${fmtMonthDay(p.deadline)}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex-1 hidden sm:flex items-center gap-2.5">
+                            <div style={{ flex: 1, height: 5, borderRadius: 999, background: 'var(--os-surface)', overflow: 'hidden' }}>
+                              <div style={{ width: `${p.progress}%`, height: '100%', borderRadius: 999, background: p.progress >= 100 ? 'var(--livv-sage)' : 'var(--livv-gold)' }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)', width: 32, textAlign: 'right' }}>{p.progress}%</span>
+                          </div>
+                        </button>
+                        <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', background: hc.bg, color: hc.fg, whiteSpace: 'nowrap', flexShrink: 0 }}>{health}</span>
+                        {tasks.length > 0 && (
+                          <button
+                            onClick={() => setExpandedHomeProjects(prev => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}
+                            className="p-1 rounded-full shrink-0"
+                            style={{ color: 'var(--os-fg-3)', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}
+                            title={expanded ? 'Collapse' : 'Show tasks'}
+                          >
+                            <Icons.ChevronRight size={14} />
+                          </button>
+                        )}
                       </div>
-                      <div className="flex-1 hidden sm:flex items-center gap-2.5">
-                        <div style={{ flex: 1, height: 5, borderRadius: 999, background: 'var(--os-surface)', overflow: 'hidden' }}>
-                          <div style={{ width: `${p.progress}%`, height: '100%', borderRadius: 999, background: p.progress >= 100 ? 'var(--livv-sage)' : 'var(--livv-gold)' }} />
-                        </div>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)', width: 32, textAlign: 'right' }}>{p.progress}%</span>
-                      </div>
-                      <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', background: hc.bg, color: hc.fg, whiteSpace: 'nowrap', flexShrink: 0 }}>{health}</span>
-                    </button>
+                      <AnimatePresence>
+                        {expanded && tasks.length > 0 && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="px-5 py-1.5" style={{ background: 'var(--os-surface-2)' }}>
+                              {tasks.slice(0, 5).map((t: any) => {
+                                const due = formatDueLabel(t.due, todayIso);
+                                const dueColor = due.tone === 'rose' ? 'var(--err)' : due.tone === 'amber' ? 'var(--livv-gold)' : 'var(--os-fg-3)';
+                                return (
+                                  <button
+                                    key={t.id}
+                                    onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)}
+                                    className="w-full flex items-center gap-2.5 py-1.5 text-left"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dueColor }} />
+                                    <span className="flex-1 min-w-0 truncate text-[12px]" style={{ color: 'var(--os-fg-1)' }}>{t.title}</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: dueColor, whiteSpace: 'nowrap' }}>{due.text}</span>
+                                  </button>
+                                );
+                              })}
+                              {tasks.length > 5 && (
+                                <button
+                                  onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)}
+                                  className="w-full text-left py-1.5 hover:opacity-70 transition-opacity"
+                                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)' }}
+                                >
+                                  +{tasks.length - 5} more →
+                                </button>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   );
                 })}
               </div>
@@ -843,6 +904,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           <QuickTasksCard
             tasks={quickTasks}
             todayIso={todayIso}
+            projectMeta={projectMeta}
             overdueCount={overdueCount}
             dueTodayCount={dueTodayCount}
             onToggle={handleToggleTask}
@@ -1019,12 +1081,13 @@ const formatDueLabel = (start: string | null | undefined, todayIso: string): { t
 const QuickTasksCard: React.FC<{
   tasks: any[];
   todayIso: string;
+  projectMeta: Map<string, { title: string; color?: string }>;
   overdueCount: number;
   dueTodayCount: number;
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
   onSeeAll: () => void;
-}> = ({ tasks, todayIso, overdueCount, dueTodayCount, onToggle, onOpen, onSeeAll }) => {
+}> = ({ tasks, todayIso, projectMeta, overdueCount, dueTodayCount, onToggle, onOpen, onSeeAll }) => {
   const total = overdueCount + dueTodayCount;
   return (
     <motion.div
@@ -1055,6 +1118,7 @@ const QuickTasksCard: React.FC<{
           {tasks.map((t: any) => {
             const due = formatDueLabel(t.start_date, todayIso);
             const dueColor = due.tone === 'rose' ? 'text-rose-500' : due.tone === 'amber' ? 'text-amber-500' : 'text-zinc-400';
+            const proj = t.project_id ? projectMeta.get(t.project_id) : null;
             return (
               <li key={t.id} className="group flex items-center gap-2 px-1.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors">
                 <button
@@ -1067,10 +1131,18 @@ const QuickTasksCard: React.FC<{
                 <span className={`w-1 h-1 rounded-full flex-shrink-0 ${PRIORITY_DOT[t.priority] || PRIORITY_DOT.Medium}`} />
                 <button
                   onClick={() => onOpen(t.id)}
-                  className="flex-1 min-w-0 text-left text-[11.5px] text-zinc-800 dark:text-zinc-200 truncate hover:text-zinc-900 dark:hover:text-white"
+                  className="flex-1 min-w-0 text-left"
                   title={t.title}
                 >
-                  {t.title}
+                  <span className="block truncate text-[11.5px] text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white">
+                    {t.title}
+                  </span>
+                  {proj && (
+                    <span className="flex items-center gap-1 mt-0.5 truncate" style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--os-fg-3)' }}>
+                      <span className="w-1 h-1 rounded-full shrink-0" style={{ background: proj.color || 'var(--livv-gold)' }} />
+                      {proj.title}
+                    </span>
+                  )}
                 </button>
                 {/* "Interno" indicator — pequeño punto de casa para las
                     tareas sin proyecto ni cliente (laburo de estudio).
