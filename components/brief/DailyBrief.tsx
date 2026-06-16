@@ -122,22 +122,33 @@ function buildLocalBrief(cards: CategoryData[], includeRecommendation: boolean):
   const dueToday = Number(todayLoad?.context?.due_today_count || 0);
   const lines: string[] = [];
 
+  // 1. Operating-state read.
   if (attentionCards.length > 0) {
-    lines.push(`You have ${attentionCards.length} operating ${attentionCards.length === 1 ? 'area' : 'areas'} needing attention today. The clearest pressure is ${overdue} overdue ${overdue === 1 ? 'task' : 'tasks'} and ${dueToday} due today, so the day should start with cleanup before new work.`);
+    lines.push(`The operation needs a cleanup pass: ${overdue} overdue and ${dueToday} due today across ${attentionCards.length} ${attentionCards.length === 1 ? 'area' : 'areas'}. Clear the blockers below before starting new work.`);
   } else {
-    lines.push('The operating picture is stable today. There are active signals to monitor, but no category is currently showing a critical blocker.');
+    lines.push('The operation is under control today — no area is showing a critical blocker. Good moment to get ahead on what is coming.');
   }
 
+  // 2. Priorities — the spine: the strongest signal from each area that needs
+  //    attention, as one ordered list across the whole operation.
+  const priorities = attentionCards
+    .slice(0, 4)
+    .map(card => ({ area: card.title, sig: cleanLocalSignal(card.bullets[0]) }))
+    .filter(p => p.sig);
+  if (priorities.length > 0) {
+    lines.push('**Priorities**\n' + priorities.map((p, i) => `${i + 1}. ${p.area} — ${p.sig}`).join('\n'));
+  }
+
+  // 3. Per-area context (numbers + implication; the signals already lead above).
   for (const card of activeCards.slice(0, 5)) {
     const facts = card.highlights
       .filter(h => String(h.value) !== '' && String(h.value) !== '0' && String(h.value) !== '$0')
       .map(h => `${h.label.toLowerCase()}: ${h.value}`)
       .join(', ');
-    const firstSignal = cleanLocalSignal(card.bullets[0]);
     const implication = card.status === 'attention'
-      ? 'This needs a decision or cleanup pass before it compounds.'
-      : 'This looks controlled, but it is still useful context for planning.';
-    lines.push(`**${card.title}**\n${facts || 'No major count spike'}${firstSignal ? `. Top signal: ${firstSignal}` : ''}. ${implication}`);
+      ? 'Needs a decision or cleanup pass before it compounds.'
+      : 'Controlled — useful context for planning.';
+    lines.push(`**${card.title}**\n${facts || 'No major count spike'}. ${implication}`);
   }
 
   const nextStep = includeRecommendation
