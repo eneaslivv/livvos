@@ -6,6 +6,7 @@
  * chrome or modals. Warm editorial style via os tokens (dark-safe).
  */
 import React, { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
 import type { CalendarTask } from '../../hooks/useCalendar';
 
@@ -13,6 +14,8 @@ interface MobileTasksViewProps {
   tasks: CalendarTask[];
   projects: { id: string; title: string; color?: string }[];
   onToggle: (id: string) => void;
+  /** Quick-create a dated task or a dateless note. Optional — hides the "New" button when absent. */
+  onCreate?: (input: { title: string; kind: 'task' | 'note'; projectId?: string; due?: string | null }) => void | Promise<void>;
 }
 
 const ACCENTS = ['#C4A35A', '#6DBEDC', '#769268', '#F1ADD8', '#b4452f', '#5c1d18'];
@@ -22,11 +25,20 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export const MobileTasksView: React.FC<MobileTasksViewProps> = ({ tasks, projects, onToggle }) => {
+export const MobileTasksView: React.FC<MobileTasksViewProps> = ({ tasks, projects, onToggle, onCreate }) => {
   const [taskView, setTaskView] = useState<'week' | 'project'>('week');
+
+  // Quick-create sheet (the design ships no create affordance — this adds one).
+  const [adding, setAdding] = useState(false);
+  const [draftKind, setDraftKind] = useState<'task' | 'note'>('task');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftProj, setDraftProj] = useState('');
+  const [draftDue, setDraftDue] = useState<'today' | 'tomorrow' | 'sel' | 'none'>('today');
+  const [saving, setSaving] = useState(false);
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const todayIso = iso(today);
+  const tomorrowIso = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + 1); return iso(d); }, [today]);
 
   // Monday-anchored current week.
   const weekDays = useMemo(() => {
@@ -83,12 +95,54 @@ export const MobileTasksView: React.FC<MobileTasksViewProps> = ({ tasks, project
     background: active ? 'var(--os-ink)' : 'transparent', color: active ? 'var(--livv-cream-50)' : 'var(--os-fg-2)',
   });
 
+  // ----- Quick-create -----
+  const dueDate =
+    draftKind === 'note' ? null
+    : draftDue === 'today' ? todayIso
+    : draftDue === 'tomorrow' ? tomorrowIso
+    : draftDue === 'sel' ? selKey
+    : null;
+
+  const dueChips: { key: 'today' | 'tomorrow' | 'sel' | 'none'; label: string }[] = [
+    { key: 'today', label: 'Today' },
+    { key: 'tomorrow', label: 'Tomorrow' },
+    ...(selKey !== todayIso && selKey !== tomorrowIso
+      ? [{ key: 'sel' as const, label: new Date(selKey + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }]
+      : []),
+    { key: 'none', label: 'No date' },
+  ];
+
+  const closeSheet = () => setAdding(false);
+  const submitDraft = async () => {
+    const title = draftTitle.trim();
+    if (!title || !onCreate || saving) return;
+    setSaving(true);
+    try {
+      await onCreate({ title, kind: draftKind, projectId: draftProj || undefined, due: dueDate });
+      setDraftTitle(''); setDraftProj(''); setDraftDue('today'); setDraftKind('task');
+      setAdding(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div style={{ padding: '4px 0 24px' }}>
       {/* Header */}
       <div className="mb-4 px-0.5">
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'var(--os-fg-3)', marginBottom: 6 }}>© TASKS タスク</div>
-        <h1 style={{ fontSize: 27, fontWeight: 300, letterSpacing: '-0.03em', margin: 0, color: 'var(--os-fg-0)' }}>Tasks</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 style={{ fontSize: 27, fontWeight: 300, letterSpacing: '-0.03em', margin: 0, color: 'var(--os-fg-0)' }}>Tasks</h1>
+          {onCreate && (
+            <button
+              onClick={() => { setDraftKind('task'); setAdding(true); }}
+              aria-label="New task or note"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', borderRadius: 999, border: 'none', cursor: 'pointer', background: 'var(--os-ink)', color: 'var(--livv-cream-50)', fontSize: 13, fontWeight: 500, flexShrink: 0 }}
+            >
+              <Icons.Plus size={15} /> New
+            </button>
+          )}
+        </div>
         <div style={{ fontSize: 12.5, color: 'var(--os-fg-2)', marginTop: 7 }}>
           {open.length} open · <span style={{ color: '#b4452f' }}>{overdue.length} overdue</span> across {projCount || 0} project{projCount === 1 ? '' : 's'}
         </div>
@@ -195,6 +249,77 @@ export const MobileTasksView: React.FC<MobileTasksViewProps> = ({ tasks, project
           )}
         </div>
       )}
+
+      {/* Quick-create bottom sheet — a dated task or a dateless note */}
+      <AnimatePresence>
+        {adding && (
+          <motion.div
+            className="fixed inset-0"
+            style={{ zIndex: 70, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          >
+            <div onClick={closeSheet} style={{ position: 'absolute', inset: 0, background: 'rgba(9,9,11,0.45)', backdropFilter: 'blur(2px)' }} />
+            <motion.div
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 32, stiffness: 320 }}
+              style={{ position: 'relative', background: 'var(--os-panel)', borderRadius: '24px 24px 0 0', borderTop: '1px solid var(--os-border-2)', padding: '14px 18px calc(env(safe-area-inset-bottom,0px) + 18px)', boxShadow: '0 -12px 40px -12px rgba(0,0,0,0.3)' }}
+            >
+              <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--os-border-2)', margin: '0 auto 16px' }} />
+
+              {/* Task / Note */}
+              <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--os-surface)', borderRadius: 999, marginBottom: 14 }}>
+                <button onClick={() => setDraftKind('task')} style={toggleBtn(draftKind === 'task')}><Icons.Check size={14} />Task</button>
+                <button onClick={() => setDraftKind('note')} style={toggleBtn(draftKind === 'note')}><Icons.FileText size={14} />Note</button>
+              </div>
+
+              <input
+                autoFocus
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') submitDraft(); }}
+                placeholder={draftKind === 'note' ? 'Jot a quick note…' : 'What needs doing?'}
+                style={{ width: '100%', height: 46, padding: '0 14px', borderRadius: 14, border: '1px solid var(--os-border-2)', background: 'var(--os-bg)', color: 'var(--os-fg-0)', fontSize: 15, outline: 'none', marginBottom: 12 }}
+              />
+
+              {draftKind === 'task' && (
+                <div className="flex flex-wrap gap-2" style={{ marginBottom: 12 }}>
+                  {dueChips.map(c => {
+                    const active = draftDue === c.key;
+                    return (
+                      <button key={c.key} onClick={() => setDraftDue(c.key)}
+                        style={{ height: 32, padding: '0 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5,
+                          border: active ? 'none' : '1px solid var(--os-border-2)',
+                          background: active ? 'var(--livv-gold)' : 'transparent',
+                          color: active ? '#1a1407' : 'var(--os-fg-2)', fontWeight: active ? 600 : 400 }}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {projects.length > 0 && (
+                <div style={{ position: 'relative', marginBottom: 16 }}>
+                  <select value={draftProj} onChange={(e) => setDraftProj(e.target.value)}
+                    style={{ width: '100%', height: 44, padding: '0 38px 0 14px', borderRadius: 14, border: '1px solid var(--os-border-2)', background: 'var(--os-bg)', color: draftProj ? 'var(--os-fg-0)' : 'var(--os-fg-3)', fontSize: 14, appearance: 'none', WebkitAppearance: 'none', outline: 'none', cursor: 'pointer' }}>
+                    <option value="">No project</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                  <Icons.ChevronDown size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--os-fg-3)', pointerEvents: 'none' }} />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2.5">
+                <button onClick={closeSheet} style={{ flexShrink: 0, height: 46, padding: '0 18px', borderRadius: 14, border: '1px solid var(--os-border-2)', background: 'transparent', color: 'var(--os-fg-2)', fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={submitDraft} disabled={!draftTitle.trim() || saving}
+                  style={{ flex: 1, height: 46, borderRadius: 14, border: 'none', background: draftTitle.trim() ? 'var(--os-ink)' : 'var(--os-surface)', color: draftTitle.trim() ? 'var(--livv-cream-50)' : 'var(--os-fg-3)', fontSize: 14, fontWeight: 500, cursor: draftTitle.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                  <Icons.Plus size={16} /> {saving ? 'Adding…' : draftKind === 'note' ? 'Add note' : 'Add task'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

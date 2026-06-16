@@ -1371,6 +1371,21 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
             const done = !t.completed;
             updateTask(id, { completed: done, status: done ? 'done' : 'todo' } as any);
           }}
+          onCreate={async ({ title, kind, projectId, due }) => {
+            await createTask({
+              title,
+              description: '',
+              status: 'todo',
+              priority: kind === 'note' ? 'low' : 'medium',
+              completed: false,
+              owner_id: user?.id || '',
+              project_id: projectId || undefined,
+              start_date: due || undefined,
+              duration: 60,
+              order_index: 0,
+              assignee_ids: [],
+            } as any);
+          }}
         />
       </div>
     );
