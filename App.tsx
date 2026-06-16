@@ -1326,18 +1326,21 @@ const App: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <Suspense fallback={<PageFallback />}>
-        <Auth onAuthenticated={() => setIsAuthenticated(true)} isClientPortal={portalFlag === 'client'} />
-      </Suspense>
-    );
-  }
-
+  // Quote OS renders BEFORE the auth gate so quoting.livv.space shows the
+  // Quote OS surface directly (not the eneas-os login). It uses the persisted
+  // Supabase session for tenant data when the user is signed in.
   if (isQuotingApp) {
     return (
       <Suspense fallback={<PageFallback />}>
         <QuoteOS onExit={() => { window.history.replaceState({}, '', window.location.pathname); window.location.reload(); }} />
+      </Suspense>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <Auth onAuthenticated={() => setIsAuthenticated(true)} isClientPortal={portalFlag === 'client'} />
       </Suspense>
     );
   }
