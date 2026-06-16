@@ -14,6 +14,7 @@ import { LivvPartnersConfig } from '../components/finance/LivvPartnersConfig';
 import { FinanceAssistant } from '../components/finance/FinanceAssistant';
 import { FinanceChat } from '../components/finance/FinanceChat';
 import { LivvFinanceDashboard } from '../components/finance/LivvFinanceDashboard';
+import { LivvFinanceHome } from '../components/finance/LivvFinanceHome';
 import { PartnerPayoutsCard } from '../components/finance/PartnerPayoutsCard';
 import { LivvIncomeTab, LivvExpenseTab, LivvBudgetsTab } from '../components/finance/LivvFinanceTabs';
 import { IncomesPipeline } from '../components/finance/IncomesPipeline';
@@ -184,6 +185,8 @@ export const Finance: React.FC = () => {
   }, [expensesLoading]);
 
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
+  // Dashboard landing: invoice-first home (default) vs the deep P&L analytics.
+  const [finView, setFinView] = useState<'home' | 'analytics'>('home');
   // View-mode toggle inside the Ingresos tab (List vs Pipeline kanban).
   // Persisted in localStorage so the user's preference survives reloads.
   const [incomesViewMode, setIncomesViewMode] = useState<'list' | 'pipeline'>(
@@ -1155,29 +1158,53 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ DASHBOARD (Livv editorial) ═══════════════ */}
       {activeTab === 'dashboard' && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <LivvFinanceDashboard
-            incomes={incomes}
-            expenses={expenses}
-            budgets={budgets}
-            liquidityData={liquidityData}
-            projectPnL={projectPnL}
-            currentBalance={currentBalance}
-            projection90d={projection90d}
-            margin={margin}
-            totalPaidIncome={totalPaidIncome}
-            totalExpensesPaid={totalExpensesPaid}
-            totalExpensesPending={totalExpensesPending}
-            onAddIncome={openIncomeForm}
-            onAddExpense={openExpenseForm}
-            onOpenAIAssistant={() => setIsAssistantOpen(true)}
-            onOpenAIChat={() => setIsChatOpen(true)}
-            onMarkInstallmentPaid={handleMarkInstallmentPaid}
-            onMarkExpensePaid={async (exp) => { await updateExpense(exp.id, { status: 'paid' }); }}
-            onJumpToTab={setActiveTab}
-            canCreate={hasPermission('finance', 'create')}
-            proposals={proposals}
-            partnerProjects={partnerProjects}
-          />
+          {finView === 'home' ? (
+            /* Invoice-first home — the practical landing. Deeper P&L
+               analytics stay one click away via onViewAnalytics. */
+            <LivvFinanceHome
+              incomes={incomes}
+              expenses={expenses}
+              liquidityData={liquidityData}
+              onAddIncome={openIncomeForm}
+              onAddExpense={openExpenseForm}
+              onMarkInstallmentPaid={handleMarkInstallmentPaid}
+              onJumpToTab={setActiveTab}
+              onViewAnalytics={() => setFinView('analytics')}
+              canCreate={hasPermission('finance', 'create')}
+            />
+          ) : (
+            <>
+              <button
+                onClick={() => setFinView('home')}
+                className="mb-4 inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+              >
+                ← Overview
+              </button>
+              <LivvFinanceDashboard
+                incomes={incomes}
+                expenses={expenses}
+                budgets={budgets}
+                liquidityData={liquidityData}
+                projectPnL={projectPnL}
+                currentBalance={currentBalance}
+                projection90d={projection90d}
+                margin={margin}
+                totalPaidIncome={totalPaidIncome}
+                totalExpensesPaid={totalExpensesPaid}
+                totalExpensesPending={totalExpensesPending}
+                onAddIncome={openIncomeForm}
+                onAddExpense={openExpenseForm}
+                onOpenAIAssistant={() => setIsAssistantOpen(true)}
+                onOpenAIChat={() => setIsChatOpen(true)}
+                onMarkInstallmentPaid={handleMarkInstallmentPaid}
+                onMarkExpensePaid={async (exp) => { await updateExpense(exp.id, { status: 'paid' }); }}
+                onJumpToTab={setActiveTab}
+                canCreate={hasPermission('finance', 'create')}
+                proposals={proposals}
+                partnerProjects={partnerProjects}
+              />
+            </>
+          )}
           {/* Partner payouts (70/30 distribución entre socios). Auto-hide
               cuando el tenant no tiene rows en partner_payouts — para LIVV
               Studio aparece con los 4 períodos históricos seedeados. */}
