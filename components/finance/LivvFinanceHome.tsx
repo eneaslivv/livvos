@@ -49,7 +49,7 @@ export interface LivvFinanceHomeProps {
   incomes: IncomeEntry[];
   expenses: ExpenseEntry[];
   liquidityData: LiquidityPoint[];
-  onAddIncome: () => void;
+  onAddIncome: (prefill?: { project_id?: string; client_id?: string; concept?: string }) => void;
   onAddExpense: () => void;
   onMarkInstallmentPaid: (inst: Installment) => Promise<void> | void;
   onJumpToTab: (tab: 'ingresos' | 'gastos' | 'proyectos' | 'budgets' | 'propuestas') => void;
@@ -347,7 +347,18 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                           <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${c.dashed}` }}>
                             <div className="flex items-center justify-between mb-1.5">
                               <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.meta }}>Project · {pnl.name}</span>
-                              <span style={{ ...MONO, fontSize: 10, fontWeight: 600, color: profit >= 0 ? c.income : c.expense }}>{margin}% margin</span>
+                              <div className="flex items-center gap-2.5">
+                                <span style={{ ...MONO, fontSize: 10, fontWeight: 600, color: profit >= 0 ? c.income : c.expense }}>{margin}% margin</span>
+                                {canCreate && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onAddIncome({ project_id: inc.project_id || undefined, client_id: inc.client_id || undefined, concept: pnl.name }); }}
+                                    style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 600, padding: '3px 9px', borderRadius: 999, border: `0.5px solid ${c.gold}`, background: 'transparent', color: c.gold, cursor: 'pointer' }}
+                                    title={`New quote for ${pnl.name}`}
+                                  >
+                                    <Plus size={9} /> New quote
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-5 flex-wrap">
                               {[

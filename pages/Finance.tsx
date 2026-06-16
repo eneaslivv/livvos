@@ -720,8 +720,19 @@ export const Finance: React.FC = () => {
     setExpenseForm({ concept: '', category: 'Software', amount: '', vendor: '', project_id: '', date: new Date().toISOString().split('T')[0], recurring: false, status: 'pending', budget_id: '' });
   }, []);
 
-  const openIncomeForm = useCallback(() => {
+  const openIncomeForm = useCallback((prefill?: { project_id?: string; client_id?: string; concept?: string }) => {
     resetIncomeForm();
+    // Pre-scope the form when launched from a project context (e.g. the
+    // "New quote" action inside an expanded invoice) so the user only has
+    // to type the amount — project, client and concept come filled in.
+    if (prefill) {
+      setIncomeForm(p => ({
+        ...p,
+        project_id: prefill.project_id ?? p.project_id,
+        client_id: prefill.client_id ?? p.client_id,
+        concept: prefill.concept ?? p.concept,
+      }));
+    }
     setEditingIncomeId(null);
     setEntryType('income');
     setEntryError(null);
