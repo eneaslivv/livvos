@@ -111,6 +111,8 @@ const BundlePreview = React.lazy(loadBundlePreview);
 const Agent = React.lazy(loadAgent);
 const Products = React.lazy(loadProducts);
 const BuildHub = React.lazy(loadBuildHub);
+// Livv Quote OS — self-contained quoting surface, mounted at ?app=quoting
+const QuoteOS = React.lazy(() => import('./components/quoting/QuoteOS'));
 
 const scheduleIdle = (callback: () => void) => {
   if (typeof window === 'undefined') return;
@@ -1067,6 +1069,7 @@ const App: React.FC = () => {
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
   const viewSharedProjectId = new URLSearchParams(window.location.search).get('view_shared_project');
   const publicPortalToken = new URLSearchParams(window.location.search).get('public_portal');
+  const isQuotingApp = new URLSearchParams(window.location.search).get('app') === 'quoting';
   const sharedDocMatch = window.location.hash.match(/^#shared-doc\/(.+)$/);
   const sharedDocToken = sharedDocMatch ? sharedDocMatch[1] : null;
   // Google OAuth callback detection
@@ -1325,6 +1328,14 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<PageFallback />}>
         <Auth onAuthenticated={() => setIsAuthenticated(true)} isClientPortal={portalFlag === 'client'} />
+      </Suspense>
+    );
+  }
+
+  if (isQuotingApp) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <QuoteOS onExit={() => { window.history.replaceState({}, '', window.location.pathname); window.location.reload(); }} />
       </Suspense>
     );
   }
