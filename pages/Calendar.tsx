@@ -31,6 +31,7 @@ import { TimezoneBar } from '../components/calendar/TimezoneBar';
 import { DayAgendaView } from '../components/calendar/DayAgendaView';
 import { Icons } from '../components/ui/Icons';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { MobileTasksView } from '../components/calendar/MobileTasksView';
 import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 
 interface CalendarProps {
@@ -1345,6 +1346,25 @@ export const Calendar: React.FC<CalendarProps> = ({ navTaskId }) => {
 
   const weekDays = getWeekDays();
   const hours = getHours();
+
+  // Mobile — the Workspace Mobile "Tasks" screen (week strip + by-project)
+  // replaces the full calendar grid; the nav's Tasks tab lands here.
+  if (isMobile) {
+    return (
+      <div className="max-w-[640px] mx-auto pt-3 px-1 pb-6">
+        <MobileTasksView
+          tasks={tasks as any}
+          projects={(projectOptions || []).map(p => ({ id: p.id, title: p.title }))}
+          onToggle={(id) => {
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            const done = !t.completed;
+            updateTask(id, { completed: done, status: done ? 'done' : 'todo' } as any);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto pt-4 pb-6">
