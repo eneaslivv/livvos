@@ -1183,6 +1183,8 @@ export const Finance: React.FC = () => {
               onUpdateInstallment={updateInstallment}
               onAddInstallment={handleAddInstallment}
               onDeleteInstallment={handleDeleteInstallment}
+              onUpdateIncome={updateIncome}
+              onDeleteIncome={deleteIncome}
               onJumpToTab={setActiveTab}
               onViewAnalytics={() => setFinView('analytics')}
               canCreate={hasPermission('finance', 'create')}

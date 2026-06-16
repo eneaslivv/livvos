@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check, X, Trash2 } from 'lucide-react';
 import type { IncomeEntry, Installment, ExpenseEntry } from '../../context/FinanceContext';
 import type { LiquidityPoint } from './LivvFinanceDashboard';
 import { useIsDarkMode } from '../../hooks/useIsDarkMode';
@@ -55,6 +55,8 @@ export interface LivvFinanceHomeProps {
   onUpdateInstallment?: (id: string, patch: Partial<Installment>) => Promise<void> | void;
   onAddInstallment?: (inc: IncomeEntry) => Promise<void> | void;
   onDeleteInstallment?: (id: string) => Promise<void> | void;
+  onUpdateIncome?: (id: string, patch: Partial<IncomeEntry>) => Promise<void> | void;
+  onDeleteIncome?: (id: string) => Promise<void> | void;
   onJumpToTab: (tab: 'ingresos' | 'gastos' | 'proyectos' | 'budgets' | 'propuestas') => void;
   onViewAnalytics?: () => void;
   canCreate: boolean;
@@ -64,7 +66,7 @@ const PERIOD_LABEL: Record<Period, string> = { month: 'This month', quarter: 'Qu
 
 export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
   incomes, expenses, liquidityData,
-  onAddIncome, onAddExpense, onMarkInstallmentPaid, onUpdateInstallment, onAddInstallment, onDeleteInstallment, onJumpToTab, onViewAnalytics, canCreate,
+  onAddIncome, onAddExpense, onMarkInstallmentPaid, onUpdateInstallment, onAddInstallment, onDeleteInstallment, onUpdateIncome, onDeleteIncome, onJumpToTab, onViewAnalytics, canCreate,
 }) => {
   const c = usePalette();
   const [period, setPeriod] = useState<Period>('month');
@@ -425,6 +427,33 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                           </div>
                         );
                       })()}
+                      {/* Invoice actions — rename the concept (to tell apart two
+                          invoices of the same client/project) + delete the invoice */}
+                      {canCreate && (onUpdateIncome || onDeleteIncome) && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${c.dashed}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {onUpdateIncome && (
+                            <div className="flex items-center gap-2" style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.meta, flexShrink: 0 }}>Name</span>
+                              <input
+                                defaultValue={inc.concept || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== (inc.concept || '')) onUpdateIncome!(inc.id, { concept: v }); }}
+                                placeholder="Invoice name…"
+                                style={{ ...MONO, flex: 1, minWidth: 0, fontSize: 11, color: c.ink, background: 'transparent', border: 'none', borderBottom: `1px solid ${c.dashedSoft}`, outline: 'none', padding: '2px 0' }}
+                              />
+                            </div>
+                          )}
+                          {onDeleteIncome && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete invoice "${inc.concept || inc.client_name || 'this'}"? This removes it and its installments.`)) onDeleteIncome!(inc.id); }}
+                              style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 600, padding: '4px 10px', borderRadius: 999, border: `0.5px solid ${c.dashedSoft}`, background: 'transparent', color: c.expense, cursor: 'pointer', flexShrink: 0 }}
+                              title="Delete invoice"
+                            >
+                              <Trash2 size={11} /> Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
