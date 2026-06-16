@@ -187,6 +187,9 @@ export const Finance: React.FC = () => {
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
   // Dashboard landing: invoice-first home (default) vs the deep P&L analytics.
   const [finView, setFinView] = useState<'home' | 'analytics'>('home');
+  // Budgets view was removed — bounce any lingering 'budgets' tab state
+  // (persisted/deep-linked) back to the Dashboard so it never lands blank.
+  useEffect(() => { if (activeTab === 'budgets') setActiveTab('dashboard'); }, [activeTab]);
   // View-mode toggle inside the Ingresos tab (List vs Pipeline kanban).
   // Persisted in localStorage so the user's preference survives reloads.
   const [incomesViewMode, setIncomesViewMode] = useState<'list' | 'pipeline'>(
@@ -1115,7 +1118,6 @@ export const Finance: React.FC = () => {
           { id: 'dashboard', label: 'Dashboard',    icon: BarChart3 },
           { id: 'ingresos',  label: 'Income',       icon: ArrowDownLeft },
           { id: 'gastos',    label: 'Expenses',     icon: Receipt },
-          { id: 'budgets',   label: 'Budgets',      icon: Wallet },
         ] as const;
         const ADVANCED = ([
           { id: 'propuestas', label: 'Proposals',     icon: FileText },
@@ -2118,31 +2120,9 @@ export const Finance: React.FC = () => {
       )}
 
       {/* ═══════════════ BUDGETS (Livv editorial) ═══════════════ */}
-      {activeTab === 'budgets' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <LivvBudgetsTab
-            budgets={budgets}
-            filteredBudgets={filteredBudgets}
-            budgetsLoading={budgetsLoading}
-            totalAllocated={totalAllocated}
-            totalBudgetSpent={totalBudgetSpent}
-            budgetSearch={budgetSearch}
-            setBudgetSearch={setBudgetSearch}
-            budgetCategoryFilter={budgetCategoryFilter}
-            setBudgetCategoryFilter={setBudgetCategoryFilter}
-            budgetCategories={budgetCategories}
-            expandedBudgetId={expandedBudgetId}
-            setExpandedBudgetId={setExpandedBudgetId}
-            budgetSpending={budgetSpending}
-            expenses={expenses}
-            openBudgetForm={openBudgetForm}
-            openEditBudget={openEditBudget}
-            handleDeleteBudget={handleDeleteBudget}
-            canCreate={hasPermission('finance', 'create')}
-            onOpenAIChat={(seed) => { setChatSeedInput(seed || ''); setIsChatOpen(true); }}
-          />
-        </div>
-      )}
+      {/* Budgets view removed per user request (was activeTab === 'budgets'
+          → LivvBudgetsTab). Budget data still loads for the dashboard
+          analytics; only the standalone tab/view is gone. */}
 
       {/* ═══════════════ LEGACY BUDGETS ═══════════════ */}
       {false && (
