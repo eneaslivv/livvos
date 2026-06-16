@@ -51,6 +51,20 @@ export interface AiPreview {
 }
 
 /* ─── Status badge ─── */
+/** Compact relative due label for the landing list rows. */
+const fmtDue = (iso?: string): { text: string; overdue: boolean } => {
+  if (!iso) return { text: 'No date', overdue: false };
+  const d = new Date(iso + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return { text: 'Today', overdue: false };
+  if (diff === 1) return { text: 'Tomorrow', overdue: false };
+  if (diff === -1) return { text: 'Yesterday', overdue: true };
+  if (diff < 0) return { text: `${Math.abs(diff)}d overdue`, overdue: true };
+  if (diff <= 7) return { text: `In ${diff}d`, overdue: false };
+  return { text: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), overdue: false };
+};
+
 const StatusBadge = ({ status }: { status: ProjectStatus }) => {
   const statusStyles: Record<string, { bg: string; color: string }> = {
     [ProjectStatus.Active]: { bg: 'rgba(118,146,104,0.12)', color: 'var(--livv-sage)' },
@@ -729,6 +743,8 @@ export const Projects: React.FC<{
 
   // Subtask UI state
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  // Which project rows are expanded in the full-width landing list.
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
   // When a task is clicked from the kanban / list / wherever inside
   // this project, we open the full TaskDetailPanel INLINE here (via
   // InlineTaskDetailHost) instead of routing to /calendar. Keeps the
@@ -760,6 +776,37 @@ export const Projects: React.FC<{
     }
     return Array.from(groupMap.values());
   }, [projectTasks, selectedProject]);
+
+  /* ─── Per-project task stats for the landing list ───
+     Tenant-wide: merges calendar + synced tasks (deduped, parents only) and
+     buckets them by project_id so each row can show "N open · X% done" and
+     expand to its open tasks — without loading each project individually. */
+  const tasksByProject = useMemo(() => {
+    const map = new Map<string, { open: number; done: number; total: number; overdue: number; tasks: any[] }>();
+    const seen = new Map<string, any>();
+    for (const t of (syncedTasks || [])) { if (!(t as any).parent_task_id) seen.set((t as any).id, t); }
+    for (const t of (calendarTasks || [])) { if (!(t as any).parent_task_id) seen.set((t as any).id, t); }
+    const today = new Date().toISOString().slice(0, 10);
+    for (const t of seen.values()) {
+      const pid = (t as any).project_id || (t as any).projectId;
+      if (!pid) continue;
+      let e = map.get(pid);
+      if (!e) { e = { open: 0, done: 0, total: 0, overdue: 0, tasks: [] }; map.set(pid, e); }
+      const done = !!(t as any).completed || (t as any).status === 'done';
+      const dueDate = (t as any).start_date || (t as any).due_date || undefined;
+      e.total++;
+      if (done) { e.done++; }
+      else {
+        e.open++;
+        if (dueDate && dueDate < today) e.overdue++;
+        e.tasks.push({ id: (t as any).id, title: (t as any).title, dueDate, priority: (t as any).priority || 'medium' });
+      }
+    }
+    for (const e of map.values()) {
+      e.tasks.sort((a, b) => { if (!a.dueDate) return 1; if (!b.dueDate) return -1; return a.dueDate.localeCompare(b.dueDate); });
+    }
+    return map;
+  }, [syncedTasks, calendarTasks]);
 
   /* ─── Build sidebar groups ─── */
   const sidebarGroups = useMemo<SidebarGroup[]>(() => {
@@ -1581,38 +1628,37 @@ export const Projects: React.FC<{
              brings this view back when needed. */}
         {/* ════════════════════════════════════════ */}
         {!selectedId && (
-        <div style={{
-          width: isMobile ? '100%' : 280, flexShrink: 0,
-          background: 'var(--os-panel)',
-          border: '0.5px solid var(--os-border-2)',
-          borderRadius: 14,
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          boxShadow: 'var(--shadow-card)',
-        }}>
-          {/* Sidebar header */}
-          <div style={{
-            padding: '14px 16px 12px',
-            borderBottom: '0.5px solid var(--os-divider)',
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginBottom: 12,
-            }}>
-              <h2 style={{
-                fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
-                color: 'var(--os-fg-0)', margin: 0,
-              }}>Projects</h2>
+        <div className="flex-1 overflow-y-auto">
+          <div style={{ maxWidth: 1080, margin: '0 auto' }} className="px-1 sm:px-3 pb-12">
+            {/* Toolbar — filters + new project */}
+            <div className="flex items-center justify-between gap-3 mb-5 pt-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { id: 'all' as const, label: 'All', count: projects.length },
+                  { id: 'client' as const, label: 'Clients', count: clientCount },
+                  { id: 'personal' as const, label: 'Own', count: personalCount },
+                ]).map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setSidebarFilter(f.id)}
+                    style={{
+                      padding: '5px 13px', fontSize: 12, fontWeight: 500, borderRadius: 999, cursor: 'pointer',
+                      border: sidebarFilter === f.id ? '0.5px solid var(--os-ink)' : '0.5px solid var(--os-border-2)',
+                      background: sidebarFilter === f.id ? 'var(--os-ink)' : 'transparent',
+                      color: sidebarFilter === f.id ? 'var(--livv-cream-50)' : 'var(--os-fg-2)',
+                      transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
+                    }}
+                  >
+                    {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={() => setIsCreating(!isCreating)}
-                style={{
-                  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 999, background: 'var(--os-surface)',
-                  border: '0.5px solid var(--os-border-2)',
-                  color: 'var(--os-fg-2)', cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-semibold rounded-full transition-all shrink-0"
+                style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)' }}
               >
-                <Icons.Plus size={14} />
+                <Icons.Plus size={13} /> New project
               </button>
             </div>
 
@@ -1626,33 +1672,35 @@ export const Projects: React.FC<{
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden"
                 >
-                  <div className="space-y-2 pb-3">
+                  <div className="p-4 mb-5 space-y-2" style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)' }}>
                     <input
                       autoFocus
                       value={newProjectTitle}
                       onChange={e => setNewProjectTitle(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && newProjectTitle.trim()) handleCreateProject(); if (e.key === 'Escape') { setIsCreating(false); resetCreateForm(); } }}
                       placeholder="Project name..."
-                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                      className="w-full px-2.5 py-1.5 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                     />
-                    <select
-                      value={newProjectClient}
-                      onChange={e => setNewProjectClient(e.target.value)}
-                      required
-                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="" disabled>Select a client…</option>
-                      <option value="__internal_livv__">Internal · Livv</option>
-                      {clients.map(c => (
-                        <option key={c.id} value={c.id}>{c.name || c.company || c.email}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="date"
-                      value={newProjectDeadline}
-                      onChange={e => setNewProjectDeadline(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select
+                        value={newProjectClient}
+                        onChange={e => setNewProjectClient(e.target.value)}
+                        required
+                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="" disabled>Select a client…</option>
+                        <option value="__internal_livv__">Internal · Livv</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>{c.name || c.company || c.email}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="date"
+                        value={newProjectDeadline}
+                        onChange={e => setNewProjectDeadline(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 text-zinc-900 dark:text-zinc-100"
+                      />
+                    </div>
                     <textarea
                       value={newProjectDesc}
                       onChange={e => setNewProjectDesc(e.target.value)}
@@ -1667,7 +1715,7 @@ export const Projects: React.FC<{
                       <button
                         onClick={handleCreateProject}
                         disabled={!newProjectTitle.trim() || isSubmittingProject}
-                        className="flex-1 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-1.5"
+                        className="px-4 py-1.5 text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-1.5"
                       >
                         {isSubmittingProject ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Icons.Plus size={12} />}
                         Create
@@ -1684,106 +1732,117 @@ export const Projects: React.FC<{
               )}
             </AnimatePresence>
 
-            {/* Category filter pills */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {([
-                { id: 'all' as const, label: 'All', count: projects.length },
-                { id: 'client' as const, label: 'Clients', count: clientCount },
-                { id: 'personal' as const, label: 'Own', count: personalCount },
-              ]).map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setSidebarFilter(f.id)}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500,
-                    borderRadius: 999, border: 0, cursor: 'pointer',
-                    background: sidebarFilter === f.id ? 'var(--os-ink)' : 'transparent',
-                    color: sidebarFilter === f.id ? 'var(--livv-cream-50, #FDFBF7)' : 'var(--os-fg-2)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }}
-                >
-                  {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sidebar body */}
-          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+            {/* Empty state */}
             {filteredGroups.length === 0 && (
-              <div className="px-3 py-8 text-center">
-                <div className="text-zinc-300 dark:text-zinc-600 mb-2"><Icons.Folder size={28} className="mx-auto" /></div>
-                <p className="text-xs text-zinc-400">No projects in this category</p>
+              <div className="py-20 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center" style={{ background: 'var(--os-surface)' }}>
+                  <Icons.Folder size={20} style={{ color: 'var(--os-fg-3)' }} />
+                </div>
+                <p className="text-sm" style={{ color: 'var(--os-fg-2)' }}>{projects.length ? 'No projects in this category' : 'No projects yet'}</p>
               </div>
             )}
 
+            {/* Grouped project rows */}
             {filteredGroups.map(group => (
-              <div key={group.id}>
+              <div key={group.id} className="mb-7">
                 {/* Group header */}
-                <div className="flex items-center gap-1.5 px-2 pt-2.5 pb-1">
+                <div className="flex items-center gap-1.5 mb-2.5 px-0.5">
                   {group.category === 'client' && group.clientIcon ? (
-                    <span className="text-[12px] leading-none">{group.clientIcon}</span>
+                    <span className="text-[13px] leading-none">{group.clientIcon}</span>
                   ) : group.category === 'client' && group.clientAvatar ? (
-                    <img src={group.clientAvatar} alt={group.label} className="w-3.5 h-3.5 rounded object-cover" />
+                    <img src={group.clientAvatar} alt={group.label} className="w-4 h-4 rounded object-cover" />
                   ) : group.category === 'client' ? (
-                    <div className="w-3.5 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[7px] font-medium text-zinc-600 dark:text-zinc-300">
+                    <div className="w-4 h-4 rounded flex items-center justify-center text-[7px] font-semibold" style={{ background: 'var(--os-surface)', color: 'var(--os-fg-2)' }}>
                       {group.label.substring(0, 2).toUpperCase()}
                     </div>
                   ) : (
-                    <Icons.Star size={9} className="text-zinc-400 dark:text-zinc-600" />
+                    <Icons.Star size={10} style={{ color: 'var(--os-fg-3)' }} />
                   )}
-                  <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.08em] truncate">
-                    {group.label}
-                  </span>
-                  <span className="text-[10px] tabular-nums text-zinc-300 dark:text-zinc-600 ml-auto">{group.projects.length}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--os-fg-2)' }} className="truncate">{group.label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)' }} className="ml-auto">{group.projects.length}</span>
                 </div>
 
-                {/* Project cards */}
-                {group.projects.map(p => {
-                  const isSelected = selectedId === p.id;
-                  return (
-                    <motion.button
-                      key={p.id}
-                      onClick={() => setSelectedId(p.id)}
-                      whileTap={{ scale: 0.99 }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md transition-colors duration-150 group ${
-                        isSelected
-                          ? 'bg-zinc-100 dark:bg-zinc-800/80'
-                          : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {p.icon ? (
-                          <span className="w-5 h-5 flex items-center justify-center text-[14px] leading-none shrink-0">{p.icon}</span>
-                        ) : (
-                          <div
-                            className="w-5 h-5 rounded flex items-center justify-center shrink-0"
-                            style={{ backgroundColor: colorToBg(p.color || '#3b82f6', 0.12) }}
-                          >
-                            <ProgressRing progress={p.progress} size={16} stroke={2} color={p.color || '#3b82f6'} />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className={`text-[12px] truncate transition-colors ${
-                            isSelected ? 'font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-400'
-                          }`}>
-                            {p.title}
-                          </div>
-                          {p.sharedFromName && (
-                            <div className="text-[9px] text-violet-600 dark:text-violet-400 truncate inline-flex items-center gap-0.5 leading-tight">
-                              <Icons.Briefcase size={8} /> Shared from {p.sharedFromName}
+                {/* Project rows */}
+                <div className="flex flex-col gap-2">
+                  {group.projects.map(p => {
+                    const stats = tasksByProject.get(p.id) || { open: 0, done: 0, total: 0, overdue: 0, tasks: [] };
+                    const donePct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : p.progress;
+                    const expanded = expandedProjects.has(p.id);
+                    const dotColor = p.color || (p.status === ProjectStatus.Active ? 'var(--livv-sage)' : p.status === ProjectStatus.Pending ? 'var(--livv-gold)' : 'var(--os-fg-3)');
+                    return (
+                      <div key={p.id} style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                        {/* Summary row */}
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <button onClick={() => setSelectedId(p.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                            {p.icon ? (
+                              <span className="w-6 text-[16px] leading-none shrink-0 text-center">{p.icon}</span>
+                            ) : (
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                            )}
+                            <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                              <span className="text-[14px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>{p.title}</span>
+                              <StatusBadge status={p.status} />
+                              {p.sharedFromName && (
+                                <span className="text-[10px] inline-flex items-center gap-0.5" style={{ color: '#8b5cf6' }}><Icons.Briefcase size={9} /> {p.sharedFromName}</span>
+                              )}
                             </div>
-                          )}
+                          </button>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: stats.overdue > 0 ? 'var(--err)' : 'var(--os-fg-2)' }}>
+                              {stats.open} open · {donePct}% done
+                            </span>
+                            {stats.tasks.length > 0 && (
+                              <button
+                                onClick={() => setExpandedProjects(prev => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}
+                                className="p-1 rounded-full transition-transform"
+                                style={{ color: 'var(--os-fg-3)', transform: expanded ? 'rotate(90deg)' : 'none' }}
+                                title={expanded ? 'Collapse' : 'Expand tasks'}
+                              >
+                                <Icons.ChevronRight size={15} />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <span className={`text-[10px] tabular-nums shrink-0 ${
-                          isSelected ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-300 dark:text-zinc-600'
-                        }`}>
-                          {p.progress}%
-                        </span>
+                        {/* Expanded task list */}
+                        <AnimatePresence>
+                          {expanded && stats.tasks.length > 0 && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div style={{ borderTop: '0.5px solid var(--os-divider)' }}>
+                                {stats.tasks.slice(0, 6).map(t => {
+                                  const due = fmtDue(t.dueDate);
+                                  const pc = t.priority === 'urgent' ? 'var(--err)' : t.priority === 'high' ? 'var(--livv-gold)' : t.priority === 'low' ? 'var(--os-fg-3)' : 'var(--livv-sage)';
+                                  return (
+                                    <button
+                                      key={t.id}
+                                      onClick={() => setSelectedId(p.id)}
+                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--os-surface)]"
+                                      style={{ borderBottom: '0.5px solid var(--os-divider)' }}
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: due.overdue ? 'var(--err)' : pc }} />
+                                      <span className="flex-1 min-w-0 truncate text-[13px]" style={{ color: 'var(--os-fg-1)' }}>{t.title}</span>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: due.overdue ? 'var(--err)' : 'var(--os-fg-3)' }}>{due.text}</span>
+                                    </button>
+                                  );
+                                })}
+                                {stats.tasks.length > 6 && (
+                                  <button onClick={() => setSelectedId(p.id)} className="w-full text-center py-2 transition-colors hover:opacity-70" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-3)' }}>
+                                    +{stats.tasks.length - 6} more →
+                                  </button>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                    </motion.button>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
@@ -1791,9 +1850,10 @@ export const Projects: React.FC<{
         )}
 
         {/* ════════════════════════════════════════ */}
-        {/*  DETAIL PANEL (hidden on mobile when no project, full-width when selected) */}
+        {/*  DETAIL PANEL — only when a project is selected; the full-width
+             list above handles the no-selection landing on every breakpoint. */}
         {/* ════════════════════════════════════════ */}
-        {(!isMobile || selectedId) && (
+        {selectedId && (
         <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden">
           {/* Mobile back button — chunkier on touch */}
           {isMobile && selectedId && (
@@ -1805,33 +1865,23 @@ export const Projects: React.FC<{
               Back to projects
             </button>
           )}
-          {/* Header */}
-          <div className="px-4 sm:px-5 md:px-6 py-3 sm:py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start shrink-0">
-            <div className="min-w-0">
-              {/* Breadcrumb: ← Projects · <Client> · <Project>
-                  The "Projects" chip is now a click target on desktop too —
-                  brings back the project list view by clearing the selection. */}
-              {selectedProject && (
-                <nav className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500 mb-1" aria-label="Breadcrumb">
-                  <button
-                    onClick={() => setSelectedId(null)}
-                    className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 -ml-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
-                    title="Back to all projects"
-                  >
-                    <Icons.ChevronLeft size={10} />
-                    Projects
-                  </button>
-                  <Icons.ChevronRight size={10} />
-                  <span className="text-zinc-500 dark:text-zinc-400 truncate max-w-[140px]">
-                    {selectedClient?.name || 'Internal · Livv'}
-                  </span>
-                  <Icons.ChevronRight size={10} />
-                  <span className="font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[180px]">
-                    {selectedProject.title}
-                  </span>
-                </nav>
-              )}
-              <div className="flex items-center gap-2">
+          {/* Header — editorial */}
+          <div className="px-4 sm:px-6 md:px-8 pt-3.5 pb-4 border-b shrink-0" style={{ borderColor: 'var(--os-divider)' }}>
+            {/* Back link */}
+            {selectedProject && (
+              <button
+                onClick={() => setSelectedId(null)}
+                className="hidden sm:inline-flex items-center gap-1.5 mb-3 transition-colors hover:opacity-70"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', color: 'var(--os-fg-2)' }}
+                title="Back to all projects"
+              >
+                <Icons.ChevronLeft size={13} />
+                All projects
+              </button>
+            )}
+            <div className="flex justify-between items-start gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3">
                 {selectedProject && (
                   selectedProject.logoUrl ? (
                     // Logo present — render it as the avatar with hover
@@ -1933,67 +1983,94 @@ export const Projects: React.FC<{
                     </div>
                   )
                 )}
-                <h1 className="text-[18px] sm:text-[20px] font-semibold text-zinc-900 dark:text-zinc-50 break-words leading-tight">{selectedProject ? selectedProject.title : 'No project selected'}</h1>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
-                {selectedProject && <StatusBadge status={selectedProject.status} />}
-                {selectedProject && (
-                  <>
-                    <span className="flex items-center gap-1 tabular-nums">
-                      <Icons.Calendar size={11} strokeWidth={2} />
-                      {new Date(selectedProject.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </span>
-                    {selectedProject.deadline && (
-                      <span className="flex items-center gap-1 tabular-nums">
-                        <Icons.Clock size={11} strokeWidth={2} />
-                        Due {new Date(selectedProject.deadline).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </span>
-                    )}
-                  </>
-                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 style={{ fontFamily: 'var(--font-sans)', fontWeight: 300, fontSize: 'clamp(20px, 2.4vw, 26px)', letterSpacing: '-0.03em', lineHeight: 1.05, color: 'var(--os-fg-0)', margin: 0, wordBreak: 'break-word' }}>
+                      {selectedProject ? selectedProject.title : 'No project selected'}
+                    </h1>
+                    {selectedProject && <StatusBadge status={selectedProject.status} />}
+                  </div>
+                  {selectedProject && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '0.03em', color: 'var(--os-fg-2)' }}>
+                      <span className="truncate max-w-[180px]">{selectedClient?.name || 'Internal'}</span>
+                      {currentTenant?.name && (<><span style={{ opacity: 0.4 }}>·</span><span className="truncate max-w-[160px]">{currentTenant.name}</span></>)}
+                      <span style={{ opacity: 0.4 }}>·</span>
+                      <span className="tabular-nums">{new Date(selectedProject.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short' })}</span>
+                      <span style={{ opacity: 0.4 }}>→</span>
+                      <span className="tabular-nums">{selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('en-US', { day: '2-digit', month: 'short' }) : 'Open'}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             {selectedProject && (
-              <div className="flex gap-1 shrink-0 items-center">
-                {/* Per-project agency share — only this project gets shared
-                    with the connected partner agency. Replaces the
-                    over-broad "Shared team access" approach. Pill shows
-                    a count when at least one agency is connected so the
-                    user always sees collaboration scope at a glance. */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Connect agency — per-project share; pill shows scope count */}
                 <button
                   onClick={() => setIsAgencyShareModalOpen(true)}
                   title="Connect this project with another agency"
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors inline-flex items-center gap-1.5 ${
-                    agencyShareCount > 0
-                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20'
-                      : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                  }`}
+                  className="px-3 py-1.5 text-[11px] font-medium rounded-full transition-colors inline-flex items-center gap-1.5"
+                  style={agencyShareCount > 0
+                    ? { background: 'rgba(139,92,246,0.10)', color: '#8b5cf6' }
+                    : { background: 'transparent', color: 'var(--os-fg-2)', border: '0.5px solid var(--os-border-2)' }}
                 >
                   <Icons.Briefcase size={11} />
-                  {agencyShareCount > 0 ? `Connected · ${agencyShareCount}` : 'Connect agency'}
-                </button>
-                <button onClick={() => setIsShareModalOpen(true)}
-                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors">
-                  Share
+                  {agencyShareCount > 0 ? `Connected · ${agencyShareCount}` : 'Connect'}
                 </button>
                 <KickoffButton project={selectedProject} tenantId={currentTenant?.id || null} />
-                <button onClick={() => setIsClientPreviewMode(true)}
-                  className="px-2.5 py-1 text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity">
-                  Project View
+                {/* Share — outline pill */}
+                <button
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="px-3.5 py-1.5 text-[12px] font-medium rounded-full transition-all"
+                  style={{ background: 'var(--os-panel)', color: 'var(--os-fg-0)', border: '0.5px solid var(--os-border-2)' }}
+                >
+                  Share
                 </button>
+                {/* Add task — primary dark pill */}
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setNewTaskData({
+                      title: '', description: '',
+                      start_date: today, start_time: '',
+                      priority: 'medium', status: 'todo',
+                      duration: 60,
+                      project_id: selectedProject.id,
+                      client_id: selectedProject.client_id || '',
+                      assignee_id: '', assignee_ids: [],
+                      share_with_tenant_ids: [],
+                    });
+                    setShowNewTaskForm(true);
+                  }}
+                  className="px-3.5 py-1.5 text-[12px] font-semibold rounded-full transition-all inline-flex items-center gap-1.5"
+                  style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)' }}
+                >
+                  <Icons.Plus size={13} />
+                  Add task
+                </button>
+                {/* Project view (client preview) */}
+                <button
+                  onClick={() => setIsClientPreviewMode(true)}
+                  title="Preview the client-facing project view"
+                  className="p-1.5 rounded-full transition-colors"
+                  style={{ color: 'var(--os-fg-2)' }}
+                >
+                  <Icons.Eye size={14} />
+                </button>
+                {/* Settings */}
                 <button
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
                   title="Project settings"
-                  className={`p-1 rounded-md transition-colors ${
-                    activeTab === 'settings'
-                      ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-                      : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                  }`}
+                  className="p-1.5 rounded-full transition-colors"
+                  style={activeTab === 'settings'
+                    ? { background: 'var(--os-surface)', color: 'var(--os-fg-0)' }
+                    : { color: 'var(--os-fg-2)' }}
                 >
-                  <Icons.MoreVert size={13} />
+                  <Icons.MoreVert size={14} />
                 </button>
               </div>
             )}
+            </div>
           </div>
 
           {/* ── Share modal ── */}
