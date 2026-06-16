@@ -542,15 +542,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       </label>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] gap-6 max-w-[1500px] mx-auto px-4">
-        {/* ── LEFT main column ─────────────────────────────────── */}
-        <div className="space-y-5">
+        {/* ── LEFT main column — flex so `order` can put the operational
+             overview (active projects) first and keep the chat below it,
+             coexisting instead of burying the day's status. ─────────── */}
+        <div className="flex flex-col gap-5">
           {/* Greeting row — typographic treatment from the design bundle:
              Inter Light (300) for the headline with -0.035em letter-spacing
              gives it the elegant editorial feel of the mockup, in contrast
              to the previous bold weight which felt heavier than the rest
              of the surface. The eyebrow uses font-mono with wider tracking
              so it reads as a label, not a sentence. */}
-          <header>
+          <header className="order-1">
             <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-400">{dateLabel}</div>
             <div className="flex items-end justify-between gap-4 mt-2 flex-wrap">
               <h1 className="text-[32px] md:text-[40px] font-light text-zinc-900 dark:text-zinc-100 leading-[1.05] tracking-[-0.035em]">
@@ -567,7 +569,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </header>
 
           {/* Top stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="order-2 grid grid-cols-2 md:grid-cols-4 gap-2">
             <StatCard label="Overdue"      value={overdueCount}    tone="rose"    />
             <StatCard label="Due today"    value={dueTodayCount}   tone="amber"   />
             <StatCard label="Events today" value={eventsTodayCount} tone="emerald" />
@@ -581,7 +583,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               siempre visibles arriba del composer. El bloque tiene
               altura fija con scroll interno para que los mensajes
               largos no empujen al resto de la home hacia abajo. */}
-          <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col" style={{ minHeight: '480px', maxHeight: 'calc(100vh - 220px)' }}>
+          <section className="order-4 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col" style={{ minHeight: '400px', maxHeight: 'calc(100vh - 220px)' }}>
             {/* ── Messages area (flex-1, scroll interno) ───────────── */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-2 space-y-3">
               {messages.length === 0 ? (
@@ -765,7 +767,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           {/* Active projects — at-a-glance health across the portfolio so the
               whole system is legible from Home, not just the Projects tab. */}
           {activeProjects.length > 0 && (
-            <section className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--os-border-2)', background: 'var(--os-panel)', boxShadow: 'var(--shadow-card)' }}>
+            <section className="order-3 rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--os-border-2)', background: 'var(--os-panel)', boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3">
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--os-fg-2)' }}>Active projects</span>
                 <button
@@ -863,7 +865,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           {/* DailyBrief — full AI structured summary. Lives below the
               chat block so the chat is the immediate focal point but
               the deeper breakdown is one scroll away. */}
-          <section className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+          <section className="order-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
             <DailyBrief
               onAskFollowUp={(p) => handleSend(p)}
               onNavigate={(page) => onNavigate(page as PageView)}
@@ -871,7 +873,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </section>
 
           {/* Bottom link to Brief for the full tabs */}
-          <div className="text-center pt-2 pb-6">
+          <div className="order-6 text-center pt-2 pb-6">
             <button
               onClick={() => onNavigate('brief')}
               className="text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors inline-flex items-center gap-1.5"
@@ -911,6 +913,44 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             onOpen={(taskId) => onNavigate('calendar', { taskId } as NavParams)}
             onSeeAll={() => onNavigate('calendar')}
           />
+
+          {/* Today's agenda — meetings/events so the day is legible at a glance */}
+          {(() => {
+            const todayEvents = events
+              .filter(e => (e.start_date || '').slice(0, 10) === todayIso)
+              .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+            return (
+              <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 inline-flex items-center gap-1">
+                    <Icons.Calendar size={9} /> Today
+                  </div>
+                  <button onClick={() => onNavigate('calendar')} className="text-[10px] font-mono text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Open →</button>
+                </div>
+                {todayEvents.length === 0 ? (
+                  <p className="px-4 pb-4 text-[11px] text-zinc-400 italic">No events today.</p>
+                ) : (
+                  <ul className="pb-2">
+                    {todayEvents.slice(0, 5).map(e => (
+                      <li key={e.id}>
+                        <button
+                          onClick={() => onNavigate('calendar')}
+                          className="w-full flex items-start gap-2.5 px-4 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
+                        >
+                          <span className="text-[10px] font-mono text-zinc-400 tabular-nums w-10 shrink-0 pt-0.5">{e.start_time ? e.start_time.slice(0, 5) : '—'}</span>
+                          <span className="w-0.5 self-stretch rounded-full bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[12px] text-zinc-800 dark:text-zinc-200 truncate">{e.title}</span>
+                            {e.duration ? <span className="block text-[10px] text-zinc-400">{e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`}</span> : null}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Workspace shortcut — opens the legacy detailed dashboard */}
           <button
