@@ -153,6 +153,26 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
       .map(([name, value], i) => ({ name, value, pct: Math.round((value / total) * 100), color: palette[i % palette.length] }));
   }, [incomes, c]);
 
+  // ── Per-project P&L (income vs costs) — surfaced inside an expanded
+  //    invoice so you can read the project's profitability in context. ──
+  const projectPnL = useMemo(() => {
+    const map = new Map<string, { name: string; income: number; collected: number; costs: number }>();
+    for (const inc of incomes) {
+      if (!inc.project_id) continue;
+      let e = map.get(inc.project_id);
+      if (!e) { e = { name: inc.project_name || inc.concept || 'Project', income: 0, collected: 0, costs: 0 }; map.set(inc.project_id, e); }
+      e.income += inc.total_amount || 0;
+      e.collected += (inc.installments || []).filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0);
+    }
+    for (const exp of expenses) {
+      if (!exp.project_id) continue;
+      let e = map.get(exp.project_id);
+      if (!e) { e = { name: exp.project_name || 'Project', income: 0, collected: 0, costs: 0 }; map.set(exp.project_id, e); }
+      e.costs += exp.amount || 0;
+    }
+    return map;
+  }, [incomes, expenses]);
+
   const markIncomePaid = async (inc: IncomeEntry) => {
     const unpaid = (inc.installments || []).filter(i => i.status !== 'paid');
     for (const inst of unpaid) await onMarkInstallmentPaid(inst);
@@ -316,6 +336,34 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
                           Single payment · {inc.due_date ? `due ${fmtDue(inc.due_date)}` : 'no due date'} · {fmt(inc.total_amount)}
                         </div>
                       )}
+                      {/* Project profitability — income vs costs for the project this invoice belongs to */}
+                      {(() => {
+                        if (!inc.project_id) return null;
+                        const pnl = projectPnL.get(inc.project_id);
+                        if (!pnl || (pnl.income === 0 && pnl.costs === 0)) return null;
+                        const profit = pnl.income - pnl.costs;
+                        const margin = pnl.income > 0 ? Math.round((profit / pnl.income) * 100) : 0;
+                        return (
+                          <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${c.dashed}` }}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.meta }}>Project · {pnl.name}</span>
+                              <span style={{ ...MONO, fontSize: 10, fontWeight: 600, color: profit >= 0 ? c.income : c.expense }}>{margin}% margin</span>
+                            </div>
+                            <div className="flex items-center gap-5 flex-wrap">
+                              {[
+                                { l: 'Income', v: fmt(pnl.income), col: c.ink },
+                                { l: 'Costs', v: fmt(pnl.costs), col: c.expense },
+                                { l: 'Profit', v: fmt(profit), col: profit >= 0 ? c.income : c.expense },
+                              ].map(m => (
+                                <div key={m.l}>
+                                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.meta }}>{m.l} </span>
+                                  <span style={{ ...MONO, fontSize: 12.5, fontWeight: 600, color: m.col, fontVariantNumeric: 'tabular-nums' }}>{m.v}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
