@@ -171,6 +171,15 @@ const GROUP_OF = {
 };
 const GROUP_ORDER = ['Build', 'Sell', 'Grow', 'Operate', 'Enhance'];
 const GROUP_DESC = { Build: 'Websites, landing pages, content.', Sell: 'Commerce, payments, booking.', Grow: 'Leads, CRM, email, SEO.', Operate: 'Apps, dashboards, automation, backend.', Enhance: 'Motion, AI, branding, support.' };
+// Which modules are relevant for each build type — the Scope step adapts to the Context choice.
+const KIND_MODULES = {
+  'Marketing site': ['Marketing Website', 'Simple Content Page', 'Advertise / Landing Page', 'Author Archive Pages', 'Article Comments System', 'Enhanced Article Features (bundle)', 'Newsletter Integration', 'Analytics Reporting Setup', 'Pagination (last 7 days)'],
+  'Landing page': ['Advertise / Landing Page', 'Simple Content Page', 'Newsletter Integration', 'Analytics Reporting Setup'],
+  'E-commerce': ['Shopify Store (50 products)', 'Subscription Platform', 'Event Ticketing System', 'Newsletter Integration', 'Analytics Reporting Setup'],
+  'Web app': ['CRM Dashboard (Simple)', 'Subscription Platform', 'Event Ticketing System', 'Analytics Reporting Setup'],
+  'SaaS / platform': ['Subscription Platform', 'CRM Dashboard (Simple)', 'Analytics Reporting Setup'],
+  'Automation': ['CRM Dashboard (Simple)', 'Newsletter Integration', 'Analytics Reporting Setup', 'MLB Team Stats Pages'],
+};
 const STEPS = ['Context', 'Scope', 'Design', 'Summary'];
 
 function BuildView({ services, onExit, onApprove }) {
@@ -180,10 +189,13 @@ function BuildView({ services, onExit, onApprove }) {
   const [goal, setGoal] = useState(GOALS[0]);
   const [rush, setRush] = useState(false);
   const [sel, setSel] = useState({});
+  const [showAll, setShowAll] = useState(false);
   const [design, setDesign] = useState(1);
   const [optCount, setOptCount] = useState(2);
   const dmult = DESIGN_LEVELS[design].m;
   const umult = rush ? 1.2 : 1.0;
+  // adapt scope to the build type — clear selections that no longer apply when it changes
+  useEffect(() => { setSel({}); }, [ptype]);
 
   const chosen = services.filter((s) => sel[s.id]);
   const base = chosen.reduce((a, s) => a + numOf(s.fixed_price), 0);
@@ -191,9 +203,13 @@ function BuildView({ services, onExit, onApprove }) {
   const client = Math.round((total * 1.38) / 5) * 5;
   const range = chosen.length ? `${money(total * 0.85)}–${money(total * 1.15)}` : '—';
 
-  const groups = useMemo(() => GROUP_ORDER.map((g) => ({
-    g, desc: GROUP_DESC[g], items: services.filter((s) => (GROUP_OF[s.name] || 'Enhance') === g),
-  })).filter((x) => x.items.length), [services]);
+  const groups = useMemo(() => {
+    const relevant = KIND_MODULES[ptype] || null;
+    return GROUP_ORDER.map((g) => ({
+      g, desc: GROUP_DESC[g],
+      items: services.filter((s) => (GROUP_OF[s.name] || 'Enhance') === g && (showAll || !relevant || relevant.includes(s.name))),
+    })).filter((x) => x.items.length);
+  }, [services, ptype, showAll]);
 
   const seg = (active) => `qo-seg${active ? ' on' : ''}`;
 
@@ -243,7 +259,11 @@ function BuildView({ services, onExit, onApprove }) {
           )}
 
           {step === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div className="qo-sub">Modules suggested for <strong style={{ color: 'var(--livv-cream-900)', fontWeight: 600 }}>{ptype}</strong>.</div>
+                <button className="qo-cap" onClick={() => setShowAll((v) => !v)}>{showAll ? 'Suggested only' : 'Show all modules'}</button>
+              </div>
               {groups.map(({ g, desc, items }) => (
                 <div key={g}>
                   <div style={{ marginBottom: 12 }}>
