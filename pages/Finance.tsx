@@ -249,6 +249,8 @@ export const Finance: React.FC = () => {
     client_id: '', project_id: '', concept: '',
     total_amount: '', num_installments: '1', due_date: new Date().toISOString().split('T')[0],
   });
+  // Search box for the income-form project picker (the list was capped at 6, hiding projects)
+  const [incomeProjectSearch, setIncomeProjectSearch] = useState('');
 
   // Expense form state
   const [expenseForm, setExpenseForm] = useState({
@@ -717,6 +719,7 @@ export const Finance: React.FC = () => {
 
   const resetIncomeForm = useCallback(() => {
     setIncomeForm({ client_id: '', project_id: '', concept: '', total_amount: '', num_installments: '1', due_date: new Date().toISOString().split('T')[0] });
+    setIncomeProjectSearch('');
   }, []);
 
   const resetExpenseForm = useCallback(() => {
@@ -759,6 +762,7 @@ export const Finance: React.FC = () => {
       num_installments: String((inc.installments || []).length || 1),
       due_date: inc.due_date || new Date().toISOString().split('T')[0],
     });
+    setIncomeProjectSearch('');
     setEditingIncomeId(inc.id);
     setEntryType('income');
     setEntryError(null);
@@ -2776,61 +2780,85 @@ export const Finance: React.FC = () => {
               {/* Project selector — primary action, auto-fills client + concept */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Project</label>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {projects.length > 0 ? (
-                    <>
-                      {projects.slice(0, 6).map(p => {
-                        const isSelected = incomeForm.project_id === p.id;
-                        return (
-                          <button key={p.id} type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setIncomeForm(prev => ({ ...prev, project_id: '', client_id: '', concept: prev.concept === p.title ? '' : prev.concept }));
-                              } else {
-                                const projectClient = clients.find(c => c.id === p.client_id || c.name === p.client || c.name === p.clientName);
-                                setIncomeForm(prev => ({
-                                  ...prev,
-                                  project_id: p.id,
-                                  client_id: projectClient?.id || prev.client_id,
-                                  concept: prev.concept || p.title,
-                                }));
-                              }
-                            }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg border text-left transition-all ${
-                              isSelected
-                                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-400/30'
-                                : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-                            }`}
-                          >
-                            <div className={`w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                              isSelected ? 'bg-emerald-500 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                            }`}>
-                              {p.client?.substring(0, 2).toUpperCase() || p.title.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className={`text-xs font-medium truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-zinc-900 dark:text-zinc-100'}`}>{p.title}</div>
-                              {p.client && <div className="text-[10px] text-zinc-400 truncate">{p.client}</div>}
-                            </div>
-                            {isSelected && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                      {/* Option for no project */}
-                      <button type="button"
-                        onClick={() => setIncomeForm(prev => ({ ...prev, project_id: '' }))}
-                        className={`flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg border text-left transition-all ${
-                          !incomeForm.project_id
-                            ? 'border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'
-                            : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
-                        }`}
-                      >
-                        <span className="text-[10px] font-medium">No project (general income)</span>
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-xs text-zinc-400 italic py-2">No projects created yet</div>
-                  )}
-                </div>
+                {projects.length === 0 ? (
+                  <div className="text-xs text-zinc-400 italic py-2">No projects created yet</div>
+                ) : (
+                  <>
+                    {projects.length > 6 && (
+                      <div className="relative">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={incomeProjectSearch}
+                          onChange={e => setIncomeProjectSearch(e.target.value)}
+                          placeholder="Search projects by name or client…"
+                          className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-8 pr-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-emerald-400/40"
+                        />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 gap-1.5 max-h-[260px] overflow-y-auto">
+                      {(() => {
+                        const q = incomeProjectSearch.trim().toLowerCase();
+                        const matches = q
+                          ? projects.filter(p =>
+                              p.title?.toLowerCase().includes(q) ||
+                              p.client?.toLowerCase().includes(q) ||
+                              p.clientName?.toLowerCase().includes(q))
+                          : projects;
+                        if (matches.length === 0) {
+                          return <div className="text-xs text-zinc-400 italic py-2 px-1">No projects match “{incomeProjectSearch}”</div>;
+                        }
+                        return matches.map(p => {
+                          const isSelected = incomeForm.project_id === p.id;
+                          return (
+                            <button key={p.id} type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setIncomeForm(prev => ({ ...prev, project_id: '', client_id: '', concept: prev.concept === p.title ? '' : prev.concept }));
+                                } else {
+                                  const projectClient = clients.find(c => c.id === p.client_id || c.name === p.client || c.name === p.clientName);
+                                  setIncomeForm(prev => ({
+                                    ...prev,
+                                    project_id: p.id,
+                                    client_id: projectClient?.id || prev.client_id,
+                                    concept: prev.concept || p.title,
+                                  }));
+                                }
+                              }}
+                              className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg border text-left transition-all ${
+                                isSelected
+                                  ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-400/30'
+                                  : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
+                              }`}
+                            >
+                              <div className={`w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                isSelected ? 'bg-emerald-500 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                              }`}>
+                                {p.client?.substring(0, 2).toUpperCase() || p.title.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className={`text-xs font-medium truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-zinc-900 dark:text-zinc-100'}`}>{p.title}</div>
+                                {p.client && <div className="text-[10px] text-zinc-400 truncate">{p.client}</div>}
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                    {/* Option for no project — always visible below the list */}
+                    <button type="button"
+                      onClick={() => setIncomeForm(prev => ({ ...prev, project_id: '' }))}
+                      className={`flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg border text-left transition-all ${
+                        !incomeForm.project_id
+                          ? 'border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'
+                          : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+                      }`}
+                    >
+                      <span className="text-[10px] font-medium">No project (general income)</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Client — auto-filled from project, but editable */}
