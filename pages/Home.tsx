@@ -32,7 +32,7 @@ import { useTenant } from '../context/TenantContext';
 import { useCalendar } from '../context/CalendarContext';
 import { useFinance } from '../context/FinanceContext';
 import { useClients } from '../context/ClientsContext';
-import { useProjects } from '../context/ProjectsContext';
+import { useProjects, ProjectStatus } from '../context/ProjectsContext';
 import { runOrchestrator, executeProposedAction, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { DailyBrief } from '../components/brief/DailyBrief';
@@ -42,6 +42,29 @@ import { useVoiceInput } from '../hooks/useVoiceInput';
 import { SPRING_ENTER, SPRING_TAP } from '../lib/ui/motion';
 import type { PageView, NavParams } from '../types';
 import { type InboxMessage } from '../components/chat/InboxCards';
+
+/* ── Active-projects health pill: ON TRACK / DUE SOON / AT RISK ──
+   Derived from deadline proximity + progress so Home gives an at-a-glance
+   read on the whole portfolio (same language as the Projects page). */
+type ProjectHealth = 'ON TRACK' | 'DUE SOON' | 'AT RISK';
+const projectHealthOf = (deadline: string | null | undefined, progress: number, todayIso: string): ProjectHealth => {
+  if (progress >= 100 || !deadline) return 'ON TRACK';
+  const daysLeft = Math.round((Date.parse(deadline.slice(0, 10) + 'T00:00:00') - Date.parse(todayIso + 'T00:00:00')) / 86400000);
+  if (Number.isNaN(daysLeft)) return 'ON TRACK';
+  if (daysLeft < 0) return 'AT RISK';
+  if (daysLeft <= 2) return 'DUE SOON';
+  if (daysLeft <= 7 && progress < 50) return 'AT RISK';
+  return 'ON TRACK';
+};
+const HEALTH_STYLE: Record<ProjectHealth, { bg: string; fg: string }> = {
+  'ON TRACK': { bg: 'rgba(118,146,104,0.13)', fg: 'var(--livv-sage)' },
+  'DUE SOON': { bg: 'rgba(196,163,90,0.16)', fg: 'var(--livv-gold)' },
+  'AT RISK':  { bg: 'rgba(239,68,68,0.10)', fg: 'var(--err)' },
+};
+const fmtMonthDay = (iso: string): string => {
+  const d = new Date(iso.slice(0, 10) + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 interface HomeProps {
   onNavigate: (page: PageView, params?: NavParams) => void;
@@ -217,6 +240,34 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     const eventsToday = events.filter(e => e.start_date?.slice(0, 10) === todayIso).length;
     return { overdueCount: overdue, dueTodayCount: dueToday, doneTodayCount: doneToday, eventsTodayCount: eventsToday };
   }, [allTasks, events, user?.id, todayIso]);
+
+  // ── Active projects with health + open-task counts (portfolio glance) ──
+  // Buckets tenant tasks by project for open/overdue counts, derives a
+  // health pill, and surfaces the most urgent six (at-risk → due-soon first).
+  const activeProjects = useMemo(() => {
+    const stats = new Map<string, { open: number; overdue: number }>();
+    for (const t of allTasks) {
+      if ((t as any).parent_task_id) continue;
+      const pid = (t as any).project_id;
+      if (!pid || t.completed || t.status === 'cancelled') continue;
+      let e = stats.get(pid);
+      if (!e) { e = { open: 0, overdue: 0 }; stats.set(pid, e); }
+      e.open++;
+      const due = t.start_date || (t as any).due_date;
+      if (due && due.slice(0, 10) < todayIso) e.overdue++;
+    }
+    const order: Record<ProjectHealth, number> = { 'AT RISK': 0, 'DUE SOON': 1, 'ON TRACK': 2 };
+    return projects
+      .filter(p => p.status !== ProjectStatus.Completed && p.status !== ProjectStatus.Archived)
+      .map(p => {
+        const st = stats.get(p.id) || { open: 0, overdue: 0 };
+        return { p, open: st.open, overdue: st.overdue, health: projectHealthOf(p.deadline, p.progress, todayIso) };
+      })
+      .sort((a, b) => (order[a.health] - order[b.health])
+        || (a.p.deadline || '9999').localeCompare(b.p.deadline || '9999')
+        || b.p.progress - a.p.progress)
+      .slice(0, 6);
+  }, [projects, allTasks, todayIso]);
 
   // ── Pending inbox count ─────────────────────────────────────────
   useEffect(() => {
@@ -700,6 +751,53 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               )}
             </div>
           </section>
+
+          {/* Active projects — at-a-glance health across the portfolio so the
+              whole system is legible from Home, not just the Projects tab. */}
+          {activeProjects.length > 0 && (
+            <section className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--os-border-2)', background: 'var(--os-panel)', boxShadow: 'var(--shadow-card)' }}>
+              <div className="flex items-center justify-between px-5 pt-4 pb-3">
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--os-fg-2)' }}>Active projects</span>
+                <button
+                  onClick={() => onNavigate('projects')}
+                  className="inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--os-fg-3)' }}
+                >
+                  All projects <Icons.ArrowLeft size={10} className="rotate-180" />
+                </button>
+              </div>
+              <div>
+                {activeProjects.map(({ p, open, overdue, health }) => {
+                  const hc = HEALTH_STYLE[health];
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)}
+                      className="w-full text-left flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--os-surface)]"
+                      style={{ borderTop: '0.5px solid var(--os-divider)' }}
+                    >
+                      {p.icon
+                        ? <span className="w-5 text-[15px] leading-none text-center shrink-0">{p.icon}</span>
+                        : <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.color || 'var(--livv-gold)' }} />}
+                      <div className="min-w-0 sm:w-[42%]">
+                        <div className="text-[13.5px] font-medium truncate" style={{ color: 'var(--os-fg-0)' }}>{p.title}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: overdue > 0 ? 'var(--err)' : 'var(--os-fg-3)' }}>
+                          {open} open{p.deadline ? ` · due ${fmtMonthDay(p.deadline)}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex-1 hidden sm:flex items-center gap-2.5">
+                        <div style={{ flex: 1, height: 5, borderRadius: 999, background: 'var(--os-surface)', overflow: 'hidden' }}>
+                          <div style={{ width: `${p.progress}%`, height: '100%', borderRadius: 999, background: p.progress >= 100 ? 'var(--livv-sage)' : 'var(--livv-gold)' }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)', width: 32, textAlign: 'right' }}>{p.progress}%</span>
+                      </div>
+                      <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', background: hc.bg, color: hc.fg, whiteSpace: 'nowrap', flexShrink: 0 }}>{health}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* DailyBrief — full AI structured summary. Lives below the
               chat block so the chat is the immediate focal point but
