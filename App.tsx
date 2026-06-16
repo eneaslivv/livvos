@@ -1069,7 +1069,9 @@ const App: React.FC = () => {
   const sharedProjectToken = new URLSearchParams(window.location.search).get('shared_project');
   const viewSharedProjectId = new URLSearchParams(window.location.search).get('view_shared_project');
   const publicPortalToken = new URLSearchParams(window.location.search).get('public_portal');
-  const isQuotingApp = new URLSearchParams(window.location.search).get('app') === 'quoting';
+  // Quote OS surface: serve it on the quoting.* subdomain (quoting.livv.space) or via ?app=quoting
+  const isQuotingHost = typeof window !== 'undefined' && window.location.hostname.split('.')[0] === 'quoting';
+  const isQuotingApp = isQuotingHost || new URLSearchParams(window.location.search).get('app') === 'quoting';
   const sharedDocMatch = window.location.hash.match(/^#shared-doc\/(.+)$/);
   const sharedDocToken = sharedDocMatch ? sharedDocMatch[1] : null;
   // Google OAuth callback detection
