@@ -1,439 +1,629 @@
 // @ts-nocheck
-// Livv Quote OS — self-contained quoting + onboarding surface.
-// Renders full-screen (its own shell). Wired to the live edge functions
-// (quoting-generate / onboarding-generate / onboarding-sync) and the
-// shared Supabase tables (RLS-scoped). Mounted at ?app=quoting.
-import React, { useEffect, useState, useCallback } from 'react';
+// Livv Quote OS — faithful rebuild of "Livv Quote OS.dc.html".
+// Light cream design system, 6-view state machine, wired to the live
+// edge functions (quoting-generate / onboarding-generate / onboarding-sync)
+// and the shared Supabase tables (RLS-scoped). Mounted at quoting.livv.space / ?app=quoting.
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import './quote-os.css';
 import {
-  getQuotingSession, listProposals, pricingMemory, listServices, listOnboardings,
-  quotingApi,
+  getQuotingSession, listProposals, pricingMemory, listServices, listOnboardings, quotingApi,
 } from '@/lib/quoting/api';
-import { calculatePrice } from '@/lib/quoting/calculator';
 
-const fmt = (n, c = 'USD') =>
-  n == null ? '—' : (c === 'USD' ? '$' : '') + Number(n).toLocaleString('en-US');
-
-const num = (v) => {
+// ---------- helpers ----------
+const money = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '$0';
+  return '$' + Math.round(v).toLocaleString('en-US');
+};
+const numOf = (v) => {
   if (v == null) return 0;
   if (typeof v === 'number') return v;
   return Number(String(v).replace(/[^0-9.]/g, '')) || 0;
 };
+const Spin = () => <span className="qo-spin" />;
 
-const STATUS_BADGE = {
-  draft: { cls: '', label: 'Draft' }, sent: { cls: 'gold', label: 'Sent' },
-  approved: { cls: 'sage', label: 'Approved' }, rejected: { cls: 'missing', label: 'Rejected' },
-  synced: { cls: 'sage', label: 'Synced' }, reviewed: { cls: 'gold', label: 'Reviewed' },
-  complete: { cls: 'sage', label: 'Complete' }, 'in progress': { cls: 'gold', label: 'In progress' },
-};
-const Badge = ({ status }) => {
-  const k = String(status || 'draft').toLowerCase();
-  const b = STATUS_BADGE[k] || { cls: '', label: status || '—' };
-  return <span className={`qo-badge ${b.cls}`}>{b.label}</span>;
-};
-
-const Eyebrow = ({ label, wdx }) => (
-  <div className="qo-eyebrow-row">
-    <span className="qo-eyebrow">{label}</span>
-    {wdx && <span className="qo-wdx">{wdx}</span>}
-  </div>
+const Eyebrow = ({ children, tone }) => (
+  <div className={`qo-eyebrow${tone ? ' ' + tone : ''}`} style={{ marginBottom: 12 }}>© {children}</div>
 );
 
-const Spinner = () => <span className="qo-spinner" />;
+// nav icons (stroke, currentColor) — exact paths from the design
+const Icon = ({ d, size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    {d.map((p, i) => (p.c ? <circle key={i} {...p.c} /> : <path key={i} d={p} />))}
+  </svg>
+);
+const ICONS = {
+  home: ['M3 11l9-7 9 7', 'M5 10v9h14v-9'],
+  draft: ['M4 20h4L19 9l-4-4L4 16v4z', 'M14 6l4 4'],
+  quotes: ['M6 3h8l5 5v13H6z', 'M14 3v5h5', 'M9 13h6M9 17h6'],
+  onboarding: [{ c: { cx: 12, cy: 12, r: 9 } }, 'M9 12h6M13.5 9l3 3-3 3'],
+  history: [{ c: { cx: 12, cy: 12, r: 9 } }, 'M12 7v5l3 2'],
+};
+
+const STATUS = {
+  approved: 'sage', complete: 'sage', paid: 'sage', sent: 'sky', deposit: 'wine',
+  draft: '', rejected: 'brick', 'in progress': 'gold', synced: 'sage', planned: '',
+};
+const Badge = ({ status, label }) => {
+  const k = String(status || '').toLowerCase();
+  return <span className={`qo-badge ${STATUS[k] || ''}`}>{label || status || '—'}</span>;
+};
 
 // ============================================================ HOME
-function HomeScreen({ onQuoted }) {
+const TEMPLATES = ['Website', 'E-commerce', 'Growth system', 'Platform', 'Add-on', 'Maintenance'];
+function HomeView({ onGenerated, goBuild }) {
   const [brief, setBrief] = useState('');
-  const [existing, setExisting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [err, setErr] = useState(null);
 
   const submit = async () => {
     if (!brief.trim() || loading) return;
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const r = await quotingApi.generateQuote({ brief, isExistingClient: existing });
-      setResult(r); onQuoted && onQuoted(r);
-    } catch (e) { setError(e.message); } finally { setLoading(false); }
+    setLoading(true); setErr(null); setResult(null);
+    try { const r = await quotingApi.generateQuote({ brief }); setResult(r); onGenerated && onGenerated(); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
   };
 
-  const renderItems = (items) => (items || []).map((it, i) => (
-    <div className="qo-feat" key={i}>
-      <span className={`qo-feat-dot ${it.complexity === 'advanced' || it.complexity === 'complex' ? 'gold' : ''}`} />
-      <span className="qo-feat-name">{it.name}{it.timeline ? ` · ${it.timeline}` : ''}</span>
-      <span className="qo-feat-price">{fmt(num(it.livv))}</span>
-    </div>
-  ));
-
-  const opt = (title, o) => o && (
-    <div className="qo-card qo-card-pad qo-fade" style={{ marginBottom: 16 }}>
-      <div className="qo-panel-label">{title}</div>
-      {renderItems(o.items)}
-      <div className="qo-feat" style={{ borderBottom: 'none', marginTop: 6 }}>
-        <span className="qo-feat-name" style={{ fontWeight: 500, color: 'var(--qo-ink)' }}>Total (Livv internal)</span>
-        <span className="qo-feat-price" style={{ fontSize: 16 }}>{fmt(o.totals?.livv)}</span>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="qo-fade">
-      <Eyebrow label="© START スタート" />
-      <h1 className="qo-h1">What are we quoting?</h1>
-      <p className="qo-lead">Describe what the client needs in plain words — pages, features, the vibe, the deadline. The AI drafts the quote against Livv's real catalogue, and you edit everything after.</p>
+    <section style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 40px 64px' }}>
+      <div style={{ width: '100%', maxWidth: 620, textAlign: 'center' }}>
+        <Eyebrow>Start</Eyebrow>
+        <h1 className="qo-h1" style={{ marginBottom: 30 }}>What are we quoting?</h1>
 
-      <div className="qo-composer">
-        <div className="qo-composer-eyebrow"><span className="qo-composer-dot">+</span> Quote from a brief</div>
-        <textarea className="qo-textarea" placeholder="e.g. A 5-page marketing site for a coffee brand, premium feel, subtle motion, contact form, launch in 3 weeks…" value={brief} onChange={(e) => setBrief(e.target.value)} />
-        <div className="qo-composer-foot">
-          <button className={`qo-chip ${existing ? '' : ''}`} onClick={() => setExisting((v) => !v)} style={existing ? { borderColor: 'var(--qo-ink)', color: 'var(--qo-ink)' } : {}}>
-            {existing ? '✓ Existing client' : 'New client'}
-          </button>
-          <button className="qo-send" onClick={submit} disabled={loading || !brief.trim()} title="Generate quote">
-            {loading ? <Spinner /> : '↑'}
-          </button>
-        </div>
-      </div>
-
-      {error && <p style={{ color: '#c0392b', marginTop: 18 }}>⚠ {error}</p>}
-
-      {result && (
-        <div style={{ marginTop: 28 }}>
-          <Eyebrow label="© GENERATED QUOTE 見積" />
-          {result.quote?.reasoning && <p className="qo-lead" style={{ marginBottom: 20 }}>{result.quote.reasoning}</p>}
-          {result.priced?.mode === 'two_option' ? (
-            <>{opt('Option 1 — Simple', result.priced.simple)}{opt('Option 2 — Premium', result.priced.premium)}</>
-          ) : (
-            opt('Quote', result.priced?.single)
-          )}
-          {result.quote?.excluded?.length > 0 && (
-            <div className="qo-card qo-card-pad">
-              <div className="qo-panel-label">Excluded</div>
-              {result.quote.excluded.map((x, i) => <div className="qo-panel-row" key={i}>— {x}</div>)}
+        <div style={{ background: '#fff', border: '1px solid var(--livv-cream-200)', borderRadius: 20, padding: '8px 8px 12px', boxShadow: 'var(--shadow-md)', textAlign: 'left' }}>
+          <textarea
+            value={brief} onChange={(e) => setBrief(e.target.value)}
+            placeholder="Describe what the client needs in plain words — pages, features, the vibe, the deadline. The AI drafts the quote and you edit everything after."
+            style={{ width: '100%', minHeight: 96, padding: 16, border: 'none', borderRadius: 14, fontFamily: 'var(--font-sans)', fontSize: 14.5, lineHeight: 1.55, color: 'var(--livv-cream-900)', background: 'none', outline: 'none', resize: 'none' }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9, padding: '0 8px 4px' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span className="qo-cap" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 13px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', color: 'var(--livv-cream-600)' }}>{loading ? 'Reading…' : 'Audio'}</span>
+              <span className="qo-cap" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 13px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', color: 'var(--livv-cream-600)' }}>References</span>
             </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================ QUOTES
-function QuotesScreen({ proposals, onStartOnboarding, busyId }) {
-  return (
-    <div className="qo-fade">
-      <Eyebrow label="© SAVED QUOTES 見積" wdx="(WDX® — 02)" />
-      <h1 className="qo-h1">Review a quote</h1>
-      <p className="qo-lead">Every quote on record. Approved ones can be turned into a live project onboarding in one click.</p>
-      {proposals.length === 0 ? (
-        <div className="qo-card qo-empty">No quotes yet — start one from Home.</div>
-      ) : proposals.map((p) => (
-        <div className="qo-card" style={{ marginBottom: 14 }} key={p.id}>
-          <div className="qo-row">
-            <div className="qo-row-main">
-              <div className="qo-row-title">{p.title} <Badge status={p.status} /></div>
-              <div className="qo-row-sub">{p.project_type || p.summary || '—'}</div>
-            </div>
-            <div>
-              <div className="qo-row-price">{fmt(p.pricing_total, p.currency)}</div>
-              <div className="qo-row-date">{(p.updated_at || p.created_at || '').slice(0, 10)}</div>
-            </div>
-            {String(p.status).toLowerCase() === 'approved' ? (
-              <button className="qo-btn gold" disabled={busyId === p.id} onClick={() => onStartOnboarding(p)}>
-                {busyId === p.id ? <Spinner /> : 'Onboard →'}
-              </button>
-            ) : (
-              <button className="qo-btn ghost">Edit</button>
-            )}
+            <button onClick={submit} disabled={loading || !brief.trim()}
+              style={{ width: 44, height: 44, borderRadius: 999, border: 'none', background: 'var(--livv-cream-900)', color: 'var(--livv-cream-50)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+              {loading ? <Spin /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
+            </button>
           </div>
         </div>
-      ))}
-    </div>
+
+        <div className="qo-eyebrow" style={{ margin: '36px 0 14px' }}>Or start from a template</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, justifyContent: 'center' }}>
+          {TEMPLATES.map((t) => (
+            <button key={t} onClick={goBuild} style={{ padding: '9px 16px', borderRadius: 999, border: '1px solid var(--livv-cream-200)', background: '#fff', color: 'var(--livv-cream-700)', fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>{t}</button>
+          ))}
+        </div>
+
+        {err && <p style={{ color: 'var(--livv-brick)', marginTop: 20 }}>⚠ {err}</p>}
+        {result && (
+          <div className="qo-pop" style={{ marginTop: 28, textAlign: 'left' }}>
+            <Eyebrow tone="gold">Generated quote</Eyebrow>
+            {(result.priced?.mode === 'two_option'
+              ? [['Simple', result.priced.simple], ['Premium', result.priced.premium]]
+              : [['Quote', result.priced?.single]]
+            ).map(([title, o]) => o && (
+              <div className="qo-card" key={title} style={{ padding: '18px 22px', marginBottom: 12 }}>
+                <div className="qo-eyebrow muted" style={{ marginBottom: 10 }}>{title}</div>
+                {(o.items || []).map((it, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px dashed var(--livv-cream-200)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--livv-wine-500)' }}>{it.name}</span>
+                    <span className="qo-money" style={{ fontSize: 12, color: 'var(--livv-cream-600)' }}>{money(numOf(it.livv))}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10 }}>
+                  <span style={{ fontWeight: 500 }}>Total · Livv internal</span>
+                  <span className="qo-money" style={{ fontSize: 16 }}>{money(o.totals?.livv)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
-// ============================================================ HISTORY
-function HistoryScreen({ memory }) {
-  const { projects, proposals } = memory;
-  const pipeline = proposals.reduce((s, p) => s + num(p.pricing_total), 0);
-  const clientValue = Math.round(pipeline * 1.38);
-  const onRecord = proposals.length;
+// ============================================================ BUILD (wizard)
+const PTYPES = ['Marketing site', 'Landing page', 'E-commerce', 'Web app', 'SaaS / platform', 'Automation'];
+const PLATFORMS = ['Custom code', 'Shopify', 'Webflow', 'Framer', 'WordPress'];
+const GOALS = ['Leads', 'Sales', 'Brand', 'Product launch', 'Content'];
+const DESIGN_LEVELS = [
+  { k: 'Simple', m: 0.9, note: 'Clean, template-led. Fastest to ship.' },
+  { k: 'Custom', m: 1.0, note: 'Bespoke layouts, standard polish.' },
+  { k: 'Premium', m: 1.2, note: 'Brand-grade system, refined detail.' },
+  { k: 'Animated', m: 1.35, note: 'Motion system across the build.' },
+  { k: 'Advanced art direction', m: 1.5, note: 'Experimental, high creative direction.' },
+];
+const GROUP_OF = {
+  'Marketing Website': 'Build', 'Simple Content Page': 'Build', 'Advertise / Landing Page': 'Build', 'Author Archive Pages': 'Build',
+  'Shopify Store (50 products)': 'Sell', 'Subscription Platform': 'Sell', 'Event Ticketing System': 'Sell',
+  'Newsletter Integration': 'Grow', 'Analytics Reporting Setup': 'Grow', 'MLB Team Stats Pages': 'Grow',
+  'CRM Dashboard (Simple)': 'Operate',
+  'Enhanced Article Features (bundle)': 'Enhance', 'Article Comments System': 'Enhance', 'Pagination (last 7 days)': 'Enhance',
+};
+const GROUP_ORDER = ['Build', 'Sell', 'Grow', 'Operate', 'Enhance'];
+const GROUP_DESC = { Build: 'Websites, landing pages, content.', Sell: 'Commerce, payments, booking.', Grow: 'Leads, CRM, email, SEO.', Operate: 'Apps, dashboards, automation, backend.', Enhance: 'Motion, AI, branding, support.' };
+const STEPS = ['Context', 'Scope', 'Design', 'Summary'];
 
-  // consistency: avg livv price per item name across snapshots
-  const byName = {};
-  proposals.forEach((p) => (p.pricing_snapshot?.items || []).forEach((it) => {
-    const k = it.name; if (!k) return; (byName[k] = byName[k] || []).push(num(it.livv));
-  }));
-  const consistency = Object.entries(byName).slice(0, 5).map(([name, arr]) => ({
-    name, avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length), n: arr.length,
-  }));
+function BuildView({ services, onExit, onApprove }) {
+  const [step, setStep] = useState(0);
+  const [ptype, setPtype] = useState(PTYPES[0]);
+  const [platform, setPlatform] = useState(PLATFORMS[0]);
+  const [goal, setGoal] = useState(GOALS[0]);
+  const [rush, setRush] = useState(false);
+  const [sel, setSel] = useState({});
+  const [design, setDesign] = useState(1);
+  const [optCount, setOptCount] = useState(2);
+  const dmult = DESIGN_LEVELS[design].m;
+  const umult = rush ? 1.2 : 1.0;
+
+  const chosen = services.filter((s) => sel[s.id]);
+  const base = chosen.reduce((a, s) => a + numOf(s.fixed_price), 0);
+  const total = Math.round((base * dmult * umult) / 5) * 5;
+  const client = Math.round((total * 1.38) / 5) * 5;
+  const range = chosen.length ? `${money(total * 0.85)}–${money(total * 1.15)}` : '—';
+
+  const groups = useMemo(() => GROUP_ORDER.map((g) => ({
+    g, desc: GROUP_DESC[g], items: services.filter((s) => (GROUP_OF[s.name] || 'Enhance') === g),
+  })).filter((x) => x.items.length), [services]);
+
+  const seg = (active) => `qo-seg${active ? ' on' : ''}`;
 
   return (
-    <div className="qo-fade">
-      <Eyebrow label="© PROJECT HISTORY · CONSISTENCY 履歴" wdx="(WDX® — 05)" />
-      <h1 className="qo-h1">Pricing memory</h1>
-      <div className="qo-grid qo-grid-4" style={{ marginBottom: 26 }}>
-        <div className="qo-card qo-stat"><div className="qo-stat-value">{onRecord}</div><div className="qo-stat-label">Quotes on record</div><div className="qo-stat-sub">across clients</div></div>
-        <div className="qo-card qo-stat"><div className="qo-stat-value">{fmt(pipeline)}</div><div className="qo-stat-label">Pipeline (Livv internal)</div><div className="qo-stat-sub">sum of quoted cost</div></div>
-        <div className="qo-card qo-stat"><div className="qo-stat-value">{fmt(clientValue)}</div><div className="qo-stat-label">Client-facing value</div><div className="qo-stat-sub">after markup</div></div>
-        <div className="qo-card qo-stat"><div className="qo-stat-value">{projects.length}</div><div className="qo-stat-label">Active projects</div><div className="qo-stat-sub">in delivery</div></div>
+    <section style={{ display: 'grid', gridTemplateColumns: '1fr 340px', minHeight: '100vh' }}>
+      {/* left */}
+      <div style={{ padding: '30px 38px 48px', maxWidth: 760 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 26 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button className="qo-cap" onClick={onExit} style={{ color: 'var(--livv-cream-400)' }}>← Exit</button>
+            <span style={{ color: 'var(--livv-cream-300)' }}>/</span>
+            <span style={{ color: 'var(--livv-wine-500)', fontSize: 13 }}>New quote</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {STEPS.map((s, i) => (
+              <button key={s} onClick={() => setStep(i)}
+                style={{ padding: '5px 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 500,
+                  background: i === step ? 'var(--livv-cream-900)' : i < step ? 'var(--livv-cream-100)' : 'none',
+                  color: i === step ? 'var(--livv-cream-50)' : i < step ? 'var(--livv-wine-500)' : 'var(--livv-cream-400)' }}>{s}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="qo-step" key={step}>
+          <Eyebrow>{`Step 0${step + 1} · ${STEPS[step]}`}</Eyebrow>
+          <h2 className="qo-h2" style={{ marginBottom: 8 }}>{['Tell me about the project', 'What does it need?', 'Design & complexity', 'Review & price'][step]}</h2>
+          <p className="qo-sub" style={{ maxWidth: 520, marginBottom: 26 }}>{['A few quick choices so the engine knows where to start.', 'Tap the modules. The price builds with you.', 'Set the visual ambition — you see the price impact, transparently.', 'Everything in one place — edit the price and approve.'][step]}</p>
+
+          {step === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              {[['What are you building?', PTYPES, ptype, setPtype], ['Platform', PLATFORMS, platform, setPlatform], ['Primary goal', GOALS, goal, setGoal]].map(([label, opts, val, set]) => (
+                <div key={label}>
+                  <div className="qo-eyebrow" style={{ marginBottom: 10 }}>{label}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {opts.map((o) => <button key={o} className={seg(val === o)} onClick={() => set(o)}>{o}</button>)}
+                  </div>
+                </div>
+              ))}
+              <div>
+                <div className="qo-eyebrow" style={{ marginBottom: 10 }}>Urgency</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className={seg(!rush)} onClick={() => setRush(false)}>Standard</button>
+                  <button className={seg(rush)} onClick={() => setRush(true)}>Rush (+20%)</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+              {groups.map(({ g, desc, items }) => (
+                <div key={g}>
+                  <div style={{ marginBottom: 12 }}>
+                    <div className="qo-mono" style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--livv-cream-900)' }}>{g}</div>
+                    <div style={{ fontSize: 11, color: 'var(--livv-cream-400)', marginTop: 2 }}>{desc}</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
+                    {items.map((s) => (
+                      <button key={s.id} className={`qo-modtile${sel[s.id] ? ' on' : ''}`} onClick={() => setSel((p) => ({ ...p, [s.id]: !p[s.id] }))}>
+                        <span className={`qo-dot${sel[s.id] ? ' on' : ''}`} style={{ marginTop: 5 }} />
+                        <span style={{ flex: 1 }}>
+                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500, color: 'var(--livv-cream-900)' }}>{s.name}</span>
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--livv-cream-500)', marginTop: 2 }}>{(s.deliverables || []).slice(0, 2).join(' · ')}</span>
+                        </span>
+                        <span className="qo-money" style={{ fontSize: 11.5, color: 'var(--livv-cream-700)' }}>{money(s.fixed_price)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {DESIGN_LEVELS.map((d, i) => (
+                <button key={d.k} className={`qo-rowsel${design === i ? ' on' : ''}`} onClick={() => setDesign(i)}>
+                  <span className={`qo-dot${design === i ? ' on' : ''}`} />
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{d.k}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--livv-cream-500)' }}>{d.note}</span>
+                  </span>
+                  <span className="qo-money" style={{ fontSize: 12, color: 'var(--livv-gold)' }}>×{d.m.toFixed(2)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <div className="qo-card" style={{ padding: '18px 20px' }}>
+                <div className="qo-eyebrow muted" style={{ marginBottom: 10 }}>Selected scope</div>
+                {chosen.length === 0 ? <div className="qo-sub">Nothing selected — go back to Scope.</div> : chosen.map((s) => (
+                  <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px dashed var(--livv-cream-200)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--livv-wine-500)' }}>{s.name}</span>
+                    <span className="qo-money" style={{ fontSize: 12, color: 'var(--livv-cream-600)' }}>{money(s.fixed_price)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <div className="qo-eyebrow" style={{ marginBottom: 10 }}>Client price options</div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  {[1, 2, 3].map((n) => <button key={n} className={seg(optCount === n)} onClick={() => setOptCount(n)}>{n} option{n > 1 ? 's' : ''}</button>)}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${optCount},1fr)`, gap: 12 }}>
+                  {[
+                    optCount === 3 && { name: 'Essential', mult: 0.72, rec: false },
+                    { name: optCount === 1 ? 'Proposal' : 'Standard', mult: 1.0, rec: optCount !== 3 ? false : true },
+                    optCount >= 2 && { name: optCount === 3 ? 'Recommended' : 'Premium', mult: optCount === 3 ? 1.0 : 1.35, rec: optCount === 2 },
+                    optCount === 3 && { name: 'Premium', mult: 1.35, rec: false },
+                  ].filter(Boolean).slice(0, optCount).map((o, i) => (
+                    <div key={i} style={{ borderRadius: 16, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 8, position: 'relative',
+                      background: o.rec ? 'var(--livv-cream-900)' : 'none', border: o.rec ? 'none' : '1px dashed var(--livv-cream-300)', color: o.rec ? 'var(--livv-cream-50)' : 'inherit' }}>
+                      {o.rec && <span className="qo-mono" style={{ position: 'absolute', top: 14, right: 16, fontSize: 8, color: 'var(--livv-gold)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Recommended</span>}
+                      <span style={{ fontSize: 14, fontWeight: 500 }}>{o.name}</span>
+                      <span className="qo-money" style={{ fontWeight: 300, fontSize: 30, letterSpacing: '-0.03em' }}>{money(client * o.mult)}</span>
+                      <span className="qo-mono" style={{ fontSize: 10, color: o.rec ? 'var(--livv-cream-400)' : 'var(--livv-cream-500)' }}>Client investment</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="qo-card" style={{ padding: '18px 20px' }}>
+                  <div className="qo-eyebrow muted" style={{ marginBottom: 8 }}>Estimated timeline</div>
+                  <div style={{ fontSize: 18, fontWeight: 300 }}>{chosen.reduce((a, s) => a + (s.estimated_weeks || 0), 0) || 3}–{(chosen.reduce((a, s) => a + (s.estimated_weeks || 0), 0) || 3) + 2} weeks</div>
+                </div>
+                <div className="qo-card sel" style={{ padding: '18px 20px', boxShadow: 'var(--shadow-md)' }}>
+                  <div className="qo-eyebrow muted" style={{ marginBottom: 8 }}>Editable price · Livv</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <span style={{ fontSize: 22, color: 'var(--livv-cream-500)' }}>$</span>
+                    <span className="qo-stat-val" style={{ fontSize: 28 }}>{total.toLocaleString('en-US')}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="qo-btn secondary">Share landing ↗</button>
+                <button className="qo-btn secondary">Client-ready PDF ↗</button>
+                <button className="qo-btn primary" onClick={() => onApprove && onApprove({ ptype, total, client })}>Approve → Onboarding ↗</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="qo-divider" style={{ marginTop: 30, paddingTop: 18, display: 'flex', justifyContent: 'space-between' }}>
+          <button className="qo-btn secondary" style={{ color: 'var(--livv-cream-500)' }} disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>← Back</button>
+          <button className="qo-btn primary" onClick={() => setStep((s) => Math.min(3, s + 1))}>{step === 3 ? 'Done' : 'Continue'} ↗</button>
+        </div>
       </div>
-      <div className="qo-grid qo-grid-2">
-        <div className="qo-card">
-          <div className="qo-card-pad" style={{ paddingBottom: 6 }}><div className="qo-panel-label">Projects</div></div>
-          {projects.slice(0, 8).map((pr) => (
-            <div className="qo-row" key={pr.id}>
-              <div className="qo-row-main"><div className="qo-row-title" style={{ fontSize: 15 }}>{pr.title}</div><div className="qo-row-sub">{pr.status}</div></div>
-              <div className="qo-row-price" style={{ fontSize: 17 }}>{fmt(pr.budget_total, pr.currency)}</div>
+
+      {/* right rail */}
+      <div style={{ borderLeft: '1px solid var(--livv-cream-200)', background: '#fff', padding: '30px 22px', position: 'sticky', top: 0, alignSelf: 'start', height: '100vh', overflowY: 'auto' }}>
+        <Eyebrow>AI Quote Assistant</Eyebrow>
+        <div style={{ fontSize: 13, color: 'var(--livv-cream-500)', marginBottom: 18 }}>{chosen.length ? `${chosen.length} module${chosen.length > 1 ? 's' : ''} selected.` : 'Pick modules to build the quote.'}</div>
+        <div className="text-gradient-gold" style={{ fontFamily: 'var(--font-sans)', fontWeight: 300, fontSize: 42, lineHeight: 1, letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div>
+        <div className="qo-mono" style={{ fontSize: 10, color: 'var(--livv-cream-400)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Livv · suggested {range}</div>
+        <div className="qo-mono" style={{ fontSize: 11, color: 'var(--livv-wine-500)', marginTop: 4 }}>Client · {money(client)}</div>
+
+        <div className="qo-eyebrow" style={{ margin: '22px 0 8px' }}>Selected</div>
+        {chosen.length === 0 ? <div style={{ fontSize: 13, color: 'var(--livv-cream-400)' }}>Nothing selected yet.</div> : chosen.map((s) => (
+          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--livv-cream-100)', fontSize: 12.5 }}>
+            <span style={{ color: 'var(--livv-wine-500)' }}>{s.name}</span>
+            <span className="qo-money" style={{ color: 'var(--livv-cream-500)' }}>{money(s.fixed_price)}</span>
+          </div>
+        ))}
+        <div className="qo-card-dark" style={{ marginTop: 22, borderRadius: 12, padding: '13px 15px' }}>
+          <div className="qo-mono" style={{ fontSize: 9, color: 'var(--livv-gold)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Next step</div>
+          <div style={{ fontSize: 12.5, color: 'var(--livv-cream-50)' }}>{step < 3 ? 'Continue through the steps — the price updates live.' : 'Review the options and approve to start onboarding.'}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================ REVIEW (pipeline)
+function ReviewView({ proposals }) {
+  const [tab, setTab] = useState('pipeline');
+  const [filter, setFilter] = useState('All');
+  const [open, setOpen] = useState(null);
+
+  const total = proposals.reduce((a, p) => a + numOf(p.pricing_total), 0);
+  const approved = proposals.filter((p) => String(p.status).toLowerCase() === 'approved');
+  const stats = [
+    ['Total pipeline', money(total), `${proposals.length} quotes`],
+    ['Approved', money(approved.reduce((a, p) => a + numOf(p.pricing_total), 0)), `${approved.length} won`],
+    ['Client value', money(total * 1.38), 'after markup'],
+    ['Avg quote', money(proposals.length ? total / proposals.length : 0), 'per project'],
+  ];
+  const filters = ['All', 'Draft', 'Sent', 'Approved'];
+  const list = proposals.filter((p) => filter === 'All' || String(p.status).toLowerCase() === filter.toLowerCase());
+
+  return (
+    <section style={{ padding: '34px 40px 64px', maxWidth: 1080 }}>
+      <Eyebrow>Pipeline · quotes & payments</Eyebrow>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 26 }}>
+        <h2 className="qo-h2">Manage quotes</h2>
+        <div style={{ background: 'var(--livv-cream-100)', borderRadius: 999, padding: 4, display: 'flex' }}>
+          {['pipeline', 'insights'].map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 16px', borderRadius: 999, border: 'none', fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize', background: tab === t ? 'var(--livv-cream-900)' : 'none', color: tab === t ? 'var(--livv-cream-50)' : 'var(--livv-cream-500)' }}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '18px 0', borderTop: '1px dashed var(--livv-cream-300)', borderBottom: '1px dashed var(--livv-cream-300)', marginBottom: 22 }}>
+        {stats.map(([v, val, sub]) => (
+          <div key={v}><div className="qo-stat-val" style={{ fontSize: 26 }}>{val}</div><div style={{ fontSize: 12, fontWeight: 500, color: 'var(--livv-cream-700)', marginTop: 6 }}>{v}</div><div className="qo-mono" style={{ fontSize: 9.5, color: 'var(--livv-cream-400)', marginTop: 3 }}>{sub}</div></div>
+        ))}
+      </div>
+
+      {tab === 'pipeline' ? (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+            {filters.map((f) => <button key={f} className={`qo-seg${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>{f}</button>)}
+          </div>
+          {list.length === 0 ? <div className="qo-sub" style={{ padding: 30 }}>No quotes here yet.</div> : list.map((p) => (
+            <div key={p.id} style={{ borderBottom: '1px dashed var(--livv-cream-300)' }}>
+              <div onClick={() => setOpen(open === p.id ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 4px', cursor: 'pointer' }}>
+                <span style={{ color: 'var(--livv-cream-400)', fontSize: 17, transform: open === p.id ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}>›</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10 }}>{p.title} <Badge status={p.status} /></div>
+                  <div style={{ fontSize: 12, color: 'var(--livv-cream-500)', marginTop: 3 }}>{p.project_type || p.summary || '—'}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="qo-money" style={{ fontSize: 15 }}>{money(p.pricing_total)}</div>
+                  <div className="qo-mono" style={{ fontSize: 10, color: 'var(--livv-cream-400)' }}>{(p.updated_at || p.created_at || '').slice(0, 10)}</div>
+                </div>
+              </div>
+              {open === p.id && (
+                <div className="qo-pop" style={{ padding: '2px 4px 22px 34px', display: 'flex', gap: 10 }}>
+                  <button className="qo-btn secondary sm">Re-quote / edit</button>
+                  <button className="qo-btn secondary sm" style={{ color: 'var(--livv-cream-500)' }}>Duplicate</button>
+                </div>
+              )}
             </div>
           ))}
-          {projects.length === 0 && <div className="qo-empty">No projects yet.</div>}
-        </div>
-        <div className="qo-card qo-card-pad">
-          <div className="qo-panel-label">Consistency checks</div>
-          {consistency.length === 0 ? <div className="qo-row-sub">Not enough history yet.</div> : consistency.map((c) => (
-            <div className="qo-panel-row" key={c.name}>
-              <span className="qo-feat-dot gold" />
-              <span>{c.name}</span>
-              <span className="qo-feat-price" style={{ marginLeft: 'auto' }}>{fmt(c.avg)} avg</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+        </>
+      ) : (
+        <div className="qo-sub" style={{ padding: 20 }}>Insights — consistency checks live in the Dashboard view.</div>
+      )}
+    </section>
   );
 }
 
 // ============================================================ ONBOARDING
-function OnboardingScreen({ onboardings, reload }) {
+function OnboardingView({ onboardings, reload }) {
   const [active, setActive] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [syncing, setSyncing] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
 
-  const open = (o) => { setActive(o); setPreview(null); setDone(null); };
-
-  const doPreview = async () => {
-    setPreview('loading');
-    try { const r = await quotingApi.previewSync({ onboardingId: active.id }); setPreview(r); }
-    catch (e) { setPreview({ error: e.message }); }
+  const sync = async () => {
+    setBusy(true);
+    try { const pv = await quotingApi.previewSync({ onboardingId: active.id }); setPreview(pv); } catch (e) { setPreview({ error: e.message }); } finally { setBusy(false); }
   };
-  const doSync = async () => {
-    setSyncing(true);
-    try { const r = await quotingApi.syncToLean({ onboardingId: active.id }); setDone(r); reload && reload(); }
-    catch (e) { setDone({ error: e.message }); } finally { setSyncing(false); }
+  const confirm = async () => {
+    setBusy(true);
+    try { const r = await quotingApi.syncToLean({ onboardingId: active.id }); setDone(r); reload && reload(); } catch (e) { setDone({ error: e.message }); } finally { setBusy(false); }
   };
 
   if (!active) {
     return (
-      <div className="qo-fade">
-        <Eyebrow label="© APPROVED QUOTE → PROJECT 開始" wdx="(WDX® — 03)" />
-        <h1 className="qo-h1">Onboarding</h1>
-        <p className="qo-lead">Approved quotes converted into project structures — checklists, owners, assets and access, ready to sync with Lean.</p>
-        {onboardings.length === 0 ? (
-          <div className="qo-card qo-empty">No onboardings yet. Approve a quote, then "Onboard →".</div>
-        ) : onboardings.map((o) => (
-          <div className="qo-card" style={{ marginBottom: 14 }} key={o.id}>
-            <div className="qo-row">
-              <div className="qo-row-main">
-                <div className="qo-row-title">{o.plan?.project?.title || 'Onboarding'} <Badge status={o.status} /></div>
-                <div className="qo-row-sub">{(o.plan?.stages || []).length} stages · {fmt(o.approved_value, o.currency)}</div>
-              </div>
-              <button className="qo-btn dark" onClick={() => open(o)}>Open</button>
-            </div>
+      <section style={{ padding: '34px 40px 64px', maxWidth: 1080 }}>
+        <Eyebrow>Approved quotes → onboarding</Eyebrow>
+        <h2 className="qo-h2" style={{ marginBottom: 10 }}>Start an onboarding</h2>
+        <p className="qo-sub" style={{ maxWidth: 560, marginBottom: 26 }}>Pick an approved quote. The engine turns it into a live project — checklist, owners, assets and access — generated from exactly what was sold.</p>
+        {onboardings.length === 0 ? <div className="qo-card" style={{ padding: 30, textAlign: 'center', color: 'var(--livv-cream-400)' }}>No onboardings yet. Approve a quote, then "Onboard".</div> : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {onboardings.map((o) => (
+              <button key={o.id} className="qo-card" onClick={() => { setActive(o); setPreview(null); setDone(null); }} style={{ padding: 20, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 13 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 16, fontWeight: 500 }}>{o.plan?.project?.title || 'Onboarding'}</span>
+                  <Badge status={o.status} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--livv-cream-300)', paddingTop: 10 }}>
+                  <span className="qo-money" style={{ fontSize: 15 }}>{money(o.approved_value)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--livv-wine-500)' }}>Start onboarding →</span>
+                </div>
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
     );
   }
 
   const plan = active.plan || {};
   return (
-    <div className="qo-fade">
-      <button className="qo-btn ghost" style={{ marginBottom: 18 }} onClick={() => setActive(null)}>← All onboardings</button>
+    <section style={{ padding: '34px 40px 64px', maxWidth: 1080 }}>
+      <button className="qo-cap" style={{ marginBottom: 16 }} onClick={() => setActive(null)}>← All approved quotes</button>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
-        <div>
-          <Eyebrow label="© APPROVED QUOTE → PROJECT 開始" />
-          <h1 className="qo-h1" style={{ marginBottom: 8 }}>{plan.project?.title || 'New Project'}</h1>
-        </div>
-        {active.status !== 'synced' && (
-          <button className="qo-btn gold" onClick={doPreview} style={{ marginTop: 40 }}>Sync with Lean ↗</button>
-        )}
+        <div><Eyebrow>Approved quote → project</Eyebrow><h2 className="qo-h2" style={{ marginBottom: 8 }}>{plan.project?.title || 'New Project'}</h2></div>
+        {active.status !== 'synced' && <button className="qo-btn gold" onClick={sync} disabled={busy}>{busy && !preview ? <Spin /> : 'Sync with Lean ↗'}</button>}
       </div>
-      <p className="qo-lead">Approved quote converted into a project structure — checklist, owners, assets and access, ready to sync with Lean.</p>
+      <p className="qo-sub" style={{ maxWidth: 600, marginBottom: 22 }}>Approved quote converted into a project structure — checklist, owners, assets and access, ready to sync with Lean.</p>
 
-      {preview === 'loading' && <div className="qo-card qo-card-pad"><Spinner /> Preparing sync…</div>}
-      {preview && preview !== 'loading' && !preview.error && !done && (
-        <div className="qo-card qo-card-pad qo-fade" style={{ marginBottom: 22, borderColor: 'var(--qo-gold)' }}>
-          <div className="qo-panel-label">Ready to sync with Lean</div>
-          <div className="qo-row-sub" style={{ marginBottom: 14 }}>
-            {preview.summary?.stages} stages · {preview.summary?.tasks} tasks · {preview.summary?.accesses} accesses · {preview.summary?.assetsPending} assets pending
-          </div>
-          <button className="qo-btn gold" onClick={doSync} disabled={syncing}>{syncing ? <Spinner /> : 'Confirm — create the project'}</button>
+      {preview && !preview.error && !done && (
+        <div className="qo-pop qo-card" style={{ padding: '18px 22px', marginBottom: 22, borderColor: 'var(--livv-gold)' }}>
+          <div className="qo-eyebrow gold" style={{ marginBottom: 10 }}>Ready to sync with Lean</div>
+          <div className="qo-sub" style={{ marginBottom: 14 }}>{preview.summary?.stages} stages · {preview.summary?.tasks} tasks · {preview.summary?.accesses} accesses · {preview.summary?.assetsPending} assets pending</div>
+          <button className="qo-btn gold" onClick={confirm} disabled={busy}>{busy ? <Spin /> : 'Confirm — create the project'}</button>
         </div>
       )}
-      {preview?.error && <p style={{ color: '#c0392b' }}>⚠ {preview.error}</p>}
-      {done && !done.error && <div className="qo-card qo-card-pad qo-fade" style={{ marginBottom: 22, borderColor: 'var(--qo-sage)' }}><div className="qo-panel-label">Synced ✓</div><div className="qo-row-sub">Created {done.tasks} tasks across {done.milestones} stages. Project is live in Lean.</div></div>}
-      {done?.error && <p style={{ color: '#c0392b' }}>⚠ {done.error}</p>}
+      {preview?.error && <p style={{ color: 'var(--livv-brick)' }}>⚠ {preview.error}</p>}
+      {done && !done.error && <div className="qo-pop qo-card" style={{ padding: '18px 22px', marginBottom: 22, borderColor: 'var(--livv-sage)' }}><div className="qo-eyebrow sage" style={{ marginBottom: 8 }}>Synced ✓</div><div className="qo-sub">Created {done.tasks} tasks across {done.milestones} stages. Project is live in Lean.</div></div>}
+      {done?.error && <p style={{ color: 'var(--livv-brick)' }}>⚠ {done.error}</p>}
 
-      <div className="qo-grid qo-grid-2">
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 22 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {(plan.stages || []).map((st, i) => (
-            <div className="qo-card qo-stage" key={i}>
-              <div className="qo-stage-head"><span className="qo-stage-title">{st.title}</span><span className="qo-stage-week">{st.due_date || `Stage ${i + 1}`}</span></div>
+            <div key={i} className="qo-card" style={{ padding: '18px 20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 500 }}>{st.title}</span>
+                <span className="qo-mono" style={{ fontSize: 11, color: 'var(--livv-cream-400)' }}>{st.due_date || `Stage ${i + 1}`}</span>
+              </div>
               {(st.tasks || []).map((t, j) => (
-                <div className="qo-task" key={j}>
+                <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
                   <span className="qo-check" />
-                  <span className="qo-task-title">{t.title}{t.optional ? ' · optional' : ''}</span>
-                  <span className="qo-task-owner">{t.owner_role || '—'}</span>
+                  <span style={{ flex: 1, fontSize: 14, color: 'var(--livv-wine-500)' }}>{t.title}</span>
+                  <span className="qo-mono" style={{ fontSize: 10, color: 'var(--livv-cream-400)' }}>{t.owner_role || '—'}</span>
                 </div>
               ))}
             </div>
           ))}
         </div>
-        <div>
-          <div className="qo-card qo-card-pad" style={{ marginBottom: 18 }}>
-            <div className="qo-panel-label">Pending assets</div>
-            {(plan.assets_pending || []).map((a, i) => (
-              <div className="qo-panel-row" key={i}>{a.name}<span className="qo-badge waiting">{a.status || 'waiting'}</span></div>
-            ))}
-            {(plan.assets_pending || []).length === 0 && <div className="qo-row-sub">None flagged.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="qo-card" style={{ padding: '18px 20px' }}>
+            <div className="qo-eyebrow muted" style={{ marginBottom: 14 }}>Pending assets</div>
+            {(plan.assets_pending || []).map((a, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', fontSize: 14, color: 'var(--livv-wine-500)' }}>{a.name}<span className="qo-badge gold" style={{ marginLeft: 'auto' }}>{a.status || 'waiting'}</span></div>)}
+            {!(plan.assets_pending || []).length && <div className="qo-sub">None flagged.</div>}
           </div>
-          <div className="qo-card qo-card-pad">
-            <div className="qo-panel-label">Access needed</div>
-            {(plan.accesses_needed || []).map((a, i) => (
-              <div className="qo-panel-row" key={i}><span className="qo-check" />{a.service}</div>
-            ))}
-            {(plan.accesses_needed || []).length === 0 && <div className="qo-row-sub">None flagged.</div>}
+          <div className="qo-card" style={{ padding: '18px 20px' }}>
+            <div className="qo-eyebrow muted" style={{ marginBottom: 14 }}>Access needed</div>
+            {(plan.accesses_needed || []).map((a, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', fontSize: 14, color: 'var(--livv-wine-500)' }}><span className="qo-check" />{a.service}</div>)}
+            {!(plan.accesses_needed || []).length && <div className="qo-sub">None flagged.</div>}
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-// ============================================================ NEW PROJECT (quote engine)
-const PROJECT_TYPES = ['Marketing Website', 'Landing Page', 'E-commerce (Shopify)', 'Web Application', 'Mobile App'];
-function NewProjectScreen({ services }) {
-  const [ptype, setPtype] = useState(PROJECT_TYPES[0]);
-  const [selected, setSelected] = useState({});
-  const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
-
-  const chosen = services.filter((s) => selected[s.id]);
-  const simple = chosen.reduce((sum, s) => sum + calculatePrice(s, { complexity: 'simple' }).livvPrice, 0);
-  const premium = chosen.reduce((sum, s) => sum + calculatePrice(s, { complexity: 'advanced' }).livvPrice, 0);
-  const total = chosen.reduce((sum, s) => sum + calculatePrice(s, {}).livvPrice, 0);
-  const client = Math.round(total * 1.38);
+// ============================================================ DASHBOARD
+function DashboardView({ memory }) {
+  const { projects, proposals } = memory;
+  const pipeline = proposals.reduce((a, p) => a + numOf(p.pricing_total), 0);
+  const byName = {};
+  proposals.forEach((p) => (p.pricing_snapshot?.items || []).forEach((it) => { if (it.name) (byName[it.name] = byName[it.name] || []).push(numOf(it.livv)); }));
+  const checks = Object.entries(byName).slice(0, 6).map(([n, a]) => ({ n, avg: Math.round(a.reduce((x, y) => x + y, 0) / a.length) }));
+  const stats = [['Quotes on record', proposals.length, 'across clients'], ['Pipeline · Livv', money(pipeline), 'quoted cost'], ['Client-facing', money(pipeline * 1.38), 'after markup'], ['Active projects', projects.length, 'in delivery']];
 
   return (
-    <div className="qo-fade">
-      <Eyebrow label="© NEW PROJECT 新規" wdx="(WDX® — 01)" />
-      <h1 className="qo-h1">Configure the build</h1>
-      <p className="qo-lead">Select scope and the engine prices it against Livv's real catalogue. A leaner Simple and a fuller Premium build below.</p>
-
-      <div className="qo-card qo-card-pad" style={{ maxWidth: 380, marginBottom: 26 }}>
-        <div className="qo-panel-label" style={{ marginBottom: 8 }}>Configured · Livv internal</div>
-        <div className="qo-stat-value" style={{ fontSize: 44 }}>{fmt(total)}</div>
-        <div className="qo-stat-sub">Client price · {fmt(client)} (38% markup) · Simple {fmt(simple)} / Premium {fmt(premium)}</div>
+    <section style={{ padding: '34px 40px 64px', maxWidth: 1180 }}>
+      <Eyebrow>Project history · consistency</Eyebrow>
+      <h2 className="qo-h2" style={{ marginBottom: 26 }}>Pricing memory</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 26 }}>
+        {stats.map(([l, v, s]) => <div key={l} className="qo-card" style={{ padding: '22px 20px' }}><div className="qo-stat-val" style={{ fontSize: 32 }}>{typeof v === 'number' ? v : v}</div><div style={{ fontSize: 13, color: 'var(--livv-wine-500)', marginTop: 10 }}>{l}</div><div className="qo-mono" style={{ fontSize: 10, color: 'var(--livv-cream-400)', marginTop: 8, textTransform: 'uppercase' }}>{s}</div></div>)}
       </div>
-
-      <div className="qo-panel-label">Project type</div>
-      <div className="qo-pills">
-        {PROJECT_TYPES.map((t) => <button key={t} className={`qo-pill ${t === ptype ? 'is-active' : ''}`} onClick={() => setPtype(t)}>{t}</button>)}
-      </div>
-
-      <div className="qo-card" style={{ marginTop: 22 }}>
-        <div className="qo-card-pad" style={{ paddingBottom: 4 }}>
-          <div className="qo-panel-label" style={{ margin: 0 }}>© Feature catalogue 機能</div>
-          <div className="qo-row-sub" style={{ marginTop: 4 }}>Real per-feature pricing. Toggle to build the quote.</div>
-        </div>
-        <div style={{ padding: '4px 28px 18px' }}>
-          {services.map((s) => (
-            <div className="qo-feat" key={s.id} onClick={() => toggle(s.id)} style={{ cursor: 'pointer' }}>
-              <span className={`qo-check ${selected[s.id] ? 'on' : ''}`}>{selected[s.id] ? '✓' : ''}</span>
-              <span className="qo-feat-name">{s.name}</span>
-              <span className="qo-feat-price">{fmt(s.fixed_price)}</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 24 }}>
+        <div className="qo-card" style={{ borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.8fr auto', gap: 8, padding: '13px 22px', background: 'var(--livv-cream-100)', borderBottom: '1px solid var(--livv-cream-300)' }}>
+            {['Project', 'Budget', 'Status'].map((h) => <span key={h} className="qo-mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--livv-cream-500)' }}>{h}</span>)}
+          </div>
+          {projects.slice(0, 10).map((pr) => (
+            <div key={pr.id} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.8fr auto', gap: 8, padding: '13px 22px', borderBottom: '1px solid var(--livv-cream-200)', alignItems: 'center' }}>
+              <span style={{ fontSize: 13.5, fontWeight: 500 }}>{pr.title}</span>
+              <span className="qo-money" style={{ fontSize: 13, color: 'var(--livv-cream-600)' }}>{money(pr.budget_total)}</span>
+              <Badge status={pr.status} />
             </div>
           ))}
-          {services.length === 0 && <div className="qo-empty">Catalogue is empty.</div>}
+          {projects.length === 0 && <div style={{ padding: 30, color: 'var(--livv-cream-400)' }}>No projects yet.</div>}
+        </div>
+        <div className="qo-card" style={{ padding: '20px 22px' }}>
+          <div className="qo-eyebrow" style={{ marginBottom: 16 }}>Consistency checks</div>
+          {checks.length === 0 ? <div className="qo-sub">Not enough history yet.</div> : checks.map((c) => (
+            <div key={c.n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', fontSize: 14, color: 'var(--livv-wine-500)' }}>
+              <span className="qo-dot on" /><span>{c.n}</span><span className="qo-money" style={{ marginLeft: 'auto', color: 'var(--livv-cream-600)' }}>{money(c.avg)} avg</span>
+            </div>
+          ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
 // ============================================================ SHELL
-const NAV = [
-  { id: 'home', num: '01', label: 'Home', jp: '入口' },
-  { id: 'new', num: '02', label: 'New Project', jp: '新規' },
-  { id: 'quotes', num: '03', label: 'Quotes', jp: '見積' },
-  { id: 'onboarding', num: '04', label: 'Onboarding', jp: '開始' },
-  { id: 'history', num: '05', label: 'History', jp: '履歴' },
-];
-
 export default function QuoteOS({ onExit }) {
-  const [screen, setScreen] = useState('home');
+  const [view, setView] = useState('home');
   const [session, setSession] = useState(null);
   const [proposals, setProposals] = useState([]);
   const [memory, setMemory] = useState({ projects: [], proposals: [] });
   const [services, setServices] = useState([]);
   const [onboardings, setOnboardings] = useState([]);
-  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     const [s, p, m, sv, ob] = await Promise.all([
-      getQuotingSession().catch(() => null),
-      listProposals().catch(() => []),
-      pricingMemory().catch(() => ({ projects: [], proposals: [] })),
-      listServices().catch(() => []),
+      getQuotingSession().catch(() => null), listProposals().catch(() => []),
+      pricingMemory().catch(() => ({ projects: [], proposals: [] })), listServices().catch(() => []),
       listOnboardings().catch(() => []),
     ]);
     setSession(s); setProposals(p); setMemory(m); setServices(sv); setOnboardings(ob);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const startOnboarding = async (proposal) => {
-    setBusyId(proposal.id);
-    try {
-      await quotingApi.generateOnboarding({ proposalId: proposal.id });
-      const ob = await listOnboardings(); setOnboardings(ob); setScreen('onboarding');
-    } catch (e) { alert('Onboarding generation failed: ' + e.message); }
-    finally { setBusyId(null); }
-  };
+  const approvedReady = onboardings.filter((o) => o.status !== 'synced').length;
+  const hasDraft = false;
+
+  const nav = [
+    { kind: 'head', label: 'Workspace' },
+    { id: 'home', label: 'Home', icon: 'home' },
+    { kind: 'head', label: 'Pipeline' },
+    ...(hasDraft ? [{ id: 'build', label: 'Current draft', icon: 'draft', badge: 'live' }] : []),
+    { id: 'review', label: 'Quotes', icon: 'quotes', badge: String(proposals.length || '') },
+    { kind: 'head', label: 'Delivery' },
+    { id: 'onboarding', label: 'Onboarding', icon: 'onboarding', badge: approvedReady ? `${approvedReady} ready` : '' },
+    { kind: 'head', label: 'Memory' },
+    { id: 'dashboard', label: 'History', icon: 'history' },
+  ];
 
   return (
     <div className="quote-os">
       <aside className="qo-side">
-        <div className="qo-brand">
-          <div className="qo-logo">LV</div>
-          <div><div className="qo-brand-name">Livv Studio</div><div className="qo-brand-sub">Quote OS</div></div>
+        <div className="qo-logo-wrap" onClick={() => setView('home')}>
+          <div className="qo-logo"><span>LV</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className="qo-brand-name">Livv Studio</span>
+            <span className="qo-brand-sub">Quote OS</span>
+          </div>
         </div>
-        <div className="qo-side-label">© Workspace ワークスペース</div>
-        <nav className="qo-nav">
-          {NAV.map((n) => (
-            <button key={n.id} className={`qo-nav-item ${screen === n.id ? 'is-active' : ''}`} onClick={() => setScreen(n.id)}>
-              <span className="qo-nav-num">{n.num}</span>
-              <span className="qo-nav-label">{n.label}</span>
-              <span className="qo-nav-jp">{n.jp}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="qo-side-label">© Quick actions クイック</div>
-        <div className="qo-quick">
-          <button className="qo-quick-item" onClick={() => setScreen('home')}><span className="qo-quick-dot blue">+</span> New quote</button>
-          <button className="qo-quick-item" onClick={() => setScreen('onboarding')}><span className="qo-quick-dot purple">↻</span> Sync to Lean</button>
+        {nav.map((n, i) => n.kind === 'head' ? (
+          <div key={i} className="qo-side-head">{n.label}</div>
+        ) : (
+          <button key={n.id} className={`qo-nav-item${view === n.id ? ' on' : ''}`} onClick={() => setView(n.id)}>
+            <span className="qo-nav-tile"><Icon d={ICONS[n.icon]} /></span>
+            <span className="qo-nav-label">{n.label}</span>
+            {n.badge ? <span className="qo-nav-badge">{n.badge}</span> : null}
+          </button>
+        ))}
+        <div className="qo-quick-wrap">
+          <div className="qo-side-head" style={{ padding: '0 4px 9px' }}>Quick actions</div>
+          <div className="qo-quick-row">
+            {[['▶', 'New', 'home'], ['⟳', 'Sync', 'onboarding'], ['↓', 'Export', 'review']].map(([g, l, v]) => (
+              <button key={l} className="qo-quick" onClick={() => setView(v)}><span className="qo-quick-sphere">{g}</span><span className="qo-quick-label">{l}</span></button>
+            ))}
+          </div>
+          <div className="qo-foot">Where art meets business.<br />Buenos Aires · LATAM + US</div>
         </div>
-        <div className="qo-side-foot">Where art meets business.<br />Buenos Aires · LATAM + US<br />livvvv.com{session?.name ? ` · ${session.name}` : ''}</div>
       </aside>
 
       <main className="qo-main">
-        {onExit && <button className="qo-exit" onClick={onExit}>Exit ✕</button>}
-        {screen === 'home' && <HomeScreen onQuoted={() => listProposals().then(setProposals)} />}
-        {screen === 'new' && <NewProjectScreen services={services} />}
-        {screen === 'quotes' && <QuotesScreen proposals={proposals} onStartOnboarding={startOnboarding} busyId={busyId} />}
-        {screen === 'onboarding' && <OnboardingScreen onboardings={onboardings} reload={load} />}
-        {screen === 'history' && <HistoryScreen memory={memory} />}
+        {onExit && <button className="qo-btn secondary sm qo-exit" onClick={onExit}>Exit ✕</button>}
+        {view === 'home' && <HomeView onGenerated={() => listProposals().then(setProposals)} goBuild={() => setView('build')} />}
+        {view === 'build' && <BuildView services={services} onExit={() => setView('home')} onApprove={() => setView('onboarding')} />}
+        {view === 'review' && <ReviewView proposals={proposals} />}
+        {view === 'onboarding' && <OnboardingView onboardings={onboardings} reload={load} />}
+        {view === 'dashboard' && <DashboardView memory={memory} />}
       </main>
     </div>
   );
