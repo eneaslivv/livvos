@@ -1018,7 +1018,7 @@ export const Finance: React.FC = () => {
 
   if (!hasPermission('finance', 'view')) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
         <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg mb-4">
           <CreditCard className="w-8 h-8 text-zinc-400" />
         </div>
@@ -1227,7 +1227,7 @@ export const Finance: React.FC = () => {
               { title: 'Operating Margin', value: `${margin.toFixed(1)}%`, change: incomes.length > 0 ? fmtPercent(3.1) : null, trend: 'up' as const, status: margin >= 0 ? 'positive' as const : 'negative' as const, icon: PieChart, accent: 'amber' },
               { title: 'Potential Revenue', value: fmtCurrency(proposalMetrics.potentialRevenue), change: proposalMetrics.sent.length > 0 ? `${proposalMetrics.sent.length} pending` : null, trend: 'up' as const, status: proposalMetrics.potentialRevenue > 0 ? 'positive' as const : 'neutral' as const, icon: FileText, accent: 'indigo' },
             ].map((m, i) => (
-              <div key={i} className="group relative p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all duration-300">
+              <div key={i} className="group relative p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all duration-300">
                 <div className="flex items-center gap-2 mb-3">
                   <div className={`p-1.5 rounded-lg bg-${m.accent}-50 dark:bg-${m.accent}-500/10`}>
                     <m.icon className={`text-${m.accent}-500`} size={14} />
@@ -1253,7 +1253,7 @@ export const Finance: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
             {/* Liquidity Timeline */}
-            <div className="lg:col-span-2 p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="lg:col-span-2 p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Liquidity Timeline</h3>
@@ -1293,7 +1293,7 @@ export const Finance: React.FC = () => {
             </div>
 
             {/* Expense Breakdown */}
-            <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Expenses by Category</h3>
                 <span className="text-[10px] text-zinc-400">{fmtCurrency(totalExpensesPaid + totalExpensesPending)}</span>
@@ -1352,7 +1352,7 @@ export const Finance: React.FC = () => {
           {/* Quick Overview Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Upcoming Payments */}
-            <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Upcoming Payments</h3>
                 <button onClick={() => setActiveTab('ingresos')} className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-0.5">
@@ -1387,7 +1387,7 @@ export const Finance: React.FC = () => {
             </div>
 
             {/* Recent Expenses */}
-            <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Recent Expenses</h3>
                 <button onClick={() => setActiveTab('gastos')} className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-0.5">
@@ -1508,21 +1508,21 @@ export const Finance: React.FC = () => {
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Invoiced</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 {fmtCurrency(incomes.reduce((s: number, i: IncomeEntry) => s + i.total_amount, 0))}
               </div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Collected</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(totalPaidIncome)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pending</div>
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(totalPendingIncome)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Overdue</div>
               <div className={`text-sm font-semibold ${totalOverdueIncome > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
                 {fmtCurrency(totalOverdueIncome)}
@@ -1532,7 +1532,7 @@ export const Finance: React.FC = () => {
           </div>
 
           {/* Status filter tabs */}
-          <div className="flex gap-1 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-1">
+          <div className="flex gap-1 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] p-1">
             {([
               { key: 'all' as const, label: 'All', count: incomes.length },
               { key: 'pending' as const, label: 'To collect', count: incomes.filter(i => i.status === 'pending' || i.status === 'partial').length },
@@ -1557,7 +1557,7 @@ export const Finance: React.FC = () => {
           {/* Income breakdown chart + search */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             {/* Income by Source Chart */}
-            <div className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Income by Service</h3>
@@ -1658,7 +1658,7 @@ export const Finance: React.FC = () => {
 
               {/* Collection progress */}
               {incomes.length > 0 && (
-                <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+                <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Collection progress</span>
                     <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1682,7 +1682,7 @@ export const Finance: React.FC = () => {
 
               {/* Top clients mini-list */}
               {incomes.length > 0 && (
-                <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+                <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">Top Clients</h4>
                   <div className="space-y-2">
                     {(() => {
@@ -1711,7 +1711,7 @@ export const Finance: React.FC = () => {
           </div>
 
           {/* Income list */}
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+          <div className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] overflow-hidden">
             {incomesLoading && !incomesTimedOut ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
@@ -1799,7 +1799,7 @@ export const Finance: React.FC = () => {
                                               const taskId = e.target.value || null;
                                               await updateInstallment(inst.id, { linked_task_id: taskId } as any);
                                             }}
-                                            className="text-[10px] bg-transparent border border-zinc-100 dark:border-zinc-700 rounded px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                            className="text-[10px] bg-transparent border border-zinc-100 dark:border-zinc-700 rounded px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-[var(--livv-gold)]"
                                           >
                                             <option value="">No delivery link</option>
                                             {(projectTasksCache[inc.project_id] || []).map(t => (
@@ -1935,19 +1935,19 @@ export const Finance: React.FC = () => {
               : 'Filtered';
             return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses · {monthLabel}</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(filtPaid + filtPending)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Paid</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{fmtCurrency(filtPaid)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Pending</div>
               <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">{fmtCurrency(filtPending)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Recurring / month</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(filtRecurring)}</div>
             </div>
@@ -2031,7 +2031,7 @@ export const Finance: React.FC = () => {
           </div>
 
           {/* Expenses list */}
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+          <div className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] overflow-hidden">
             {expensesLoading && !expensesTimedOut ? (
               <div className="flex flex-col items-center justify-center p-10 gap-2">
                 <div className="w-6 h-6 border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 dark:border-t-zinc-100 rounded-full animate-spin" />
@@ -2140,15 +2140,15 @@ export const Finance: React.FC = () => {
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           {/* Summary strip */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Allocated</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{fmtCurrency(totalAllocated)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Spent</div>
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">{fmtCurrency(totalBudgetSpent)}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Remaining</div>
               <div className={`text-sm font-semibold ${totalAllocated - totalBudgetSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {fmtCurrency(totalAllocated - totalBudgetSpent)}
@@ -2221,7 +2221,7 @@ export const Finance: React.FC = () => {
                 const linkedExpenses = isExpanded ? expenses.filter(e => e.budget_id === budget.id) : [];
 
                 return (
-                  <div key={budget.id} className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden group">
+                  <div key={budget.id} className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] overflow-hidden group">
                     {/* Color top bar */}
                     <div className="h-1" style={{ backgroundColor: budget.color }} />
 
@@ -2319,7 +2319,7 @@ export const Finance: React.FC = () => {
               this month and what's their dollar value" in one glance,
               plus the confirmed cut so the user can see win-rate at the
               monthly cadence they actually plan against. */}
-          <div className="rounded-xl border border-zinc-100 dark:border-zinc-800/60 bg-gradient-to-br from-indigo-50/40 to-transparent dark:from-indigo-500/5 dark:to-transparent px-5 py-4">
+          <div className="rounded-xl border border-zinc-100 dark:border-zinc-800/60 bg-gradient-to-br from-[rgba(196,163,90,0.10)] to-transparent dark:from-[rgba(196,163,90,0.06)] dark:to-transparent px-5 py-4">
             <div className="flex items-baseline justify-between mb-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
@@ -2337,7 +2337,7 @@ export const Finance: React.FC = () => {
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Sent</div>
                 <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{proposalMetrics.sentThisMonth.length}</div>
-                <div className="text-[10px] text-indigo-500 font-medium mt-0.5 tabular-nums">{fmtCurrency(proposalMetrics.sentValueThisMonth)}</div>
+                <div className="text-[10px] text-[var(--livv-gold)] font-medium mt-0.5 tabular-nums">{fmtCurrency(proposalMetrics.sentValueThisMonth)}</div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Confirmed</div>
@@ -2356,17 +2356,17 @@ export const Finance: React.FC = () => {
 
           {/* Summary cards (lifetime) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
-                  <Send size={12} className="text-indigo-500" />
+                <div className="p-1.5 rounded-lg bg-[rgba(196,163,90,0.12)]">
+                  <Send size={12} className="text-[var(--livv-gold)]" />
                 </div>
                 <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Pending</span>
               </div>
               <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.sent.length}</div>
-              <div className="text-[10px] text-indigo-500 font-medium mt-0.5">{fmtCurrency(proposalMetrics.potentialRevenue)}</div>
+              <div className="text-[10px] text-[var(--livv-gold)] font-medium mt-0.5">{fmtCurrency(proposalMetrics.potentialRevenue)}</div>
             </div>
-            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center gap-2 mb-2">
                 <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
                   <ThumbsUp size={12} className="text-emerald-500" />
@@ -2376,7 +2376,7 @@ export const Finance: React.FC = () => {
               <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.approved.length}</div>
               <div className="text-[10px] text-emerald-500 font-medium mt-0.5">{fmtCurrency(proposalMetrics.confirmedRevenue)}</div>
             </div>
-            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center gap-2 mb-2">
                 <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10">
                   <ThumbsDown size={12} className="text-rose-500" />
@@ -2386,7 +2386,7 @@ export const Finance: React.FC = () => {
               <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proposalMetrics.rejected.length}</div>
               <div className="text-[10px] text-rose-400 font-medium mt-0.5">{fmtCurrency(proposalMetrics.lostRevenue)}</div>
             </div>
-            <div className="p-4 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-4 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="flex items-center gap-2 mb-2">
                 <div className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800">
                   <Target size={12} className="text-zinc-500" />
@@ -2423,10 +2423,10 @@ export const Finance: React.FC = () => {
           </div>
 
           {/* Proposals table */}
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 overflow-hidden">
+          <div className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] overflow-hidden">
             {proposalsLoading ? (
               <div className="flex items-center justify-center py-16">
-                <div className="w-5 h-5 border-2 border-zinc-200 dark:border-zinc-700 border-t-indigo-500 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-zinc-200 dark:border-zinc-700 border-t-[var(--livv-gold)] rounded-full animate-spin" />
               </div>
             ) : filteredProposals.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
@@ -2441,7 +2441,7 @@ export const Finance: React.FC = () => {
                   const isEditing = editingProposalId === p.id;
                   const statusStyles: Record<string, string> = {
                     draft: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400',
-                    sent: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+                    sent: 'bg-[rgba(196,163,90,0.12)] text-[var(--livv-gold)]',
                     approved: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
                     rejected: 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400',
                   };
@@ -2470,14 +2470,14 @@ export const Finance: React.FC = () => {
                                 if (val !== p.pricing_total) updateProposalField(p.id, 'pricing_total', val);
                               }}
                               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                              className="w-24 text-sm font-semibold text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 tabular-nums"
+                              className="w-24 text-sm font-semibold text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[var(--livv-gold)] tabular-nums"
                               placeholder="0"
                             />
                           </div>
                         ) : (
                           <button
                             onClick={() => setEditingProposalId(p.id)}
-                            className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-text"
+                            className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 hover:text-[var(--livv-gold)] transition-colors cursor-text"
                             title="Click to edit amount"
                           >
                             {p.pricing_total ? fmtCurrency(p.pricing_total) : '—'}
@@ -2494,7 +2494,7 @@ export const Finance: React.FC = () => {
                           {/* Edit toggle */}
                           <button
                             onClick={() => setEditingProposalId(isEditing ? null : p.id)}
-                            className={`p-1.5 rounded-md transition-colors ${isEditing ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600' : 'text-zinc-300 hover:text-zinc-500 opacity-0 group-hover/proposal:opacity-100'}`}
+                            className={`p-1.5 rounded-md transition-colors ${isEditing ? 'bg-[rgba(196,163,90,0.12)] text-[var(--livv-gold)]' : 'text-zinc-300 hover:text-zinc-500 opacity-0 group-hover/proposal:opacity-100'}`}
                             title={isEditing ? 'Done editing' : 'Edit'}
                           >
                             <Pencil size={13} />
@@ -2504,7 +2504,7 @@ export const Finance: React.FC = () => {
                           {p.status === 'draft' && (
                             <button
                               onClick={() => updateProposalStatus(p.id, 'sent')}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-[10px] font-semibold transition-colors"
+                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-[rgba(196,163,90,0.12)] text-[var(--livv-gold)] hover:bg-[rgba(196,163,90,0.2)] text-[10px] font-semibold transition-colors"
                               title="Mark as sent"
                             >
                               <Send size={10} />
@@ -2566,7 +2566,7 @@ export const Finance: React.FC = () => {
                             <select
                               value={p.client_id || ''}
                               onChange={e => updateProposalField(p.id, 'client_id', e.target.value || null)}
-                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
+                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--livv-gold)] text-zinc-700 dark:text-zinc-300"
                             >
                               <option value="">No client</option>
                               {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</option>)}
@@ -2577,7 +2577,7 @@ export const Finance: React.FC = () => {
                             <select
                               value={p.lead_id || ''}
                               onChange={e => updateProposalField(p.id, 'lead_id', e.target.value || null)}
-                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
+                              className="flex-1 max-w-[200px] text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--livv-gold)] text-zinc-700 dark:text-zinc-300"
                             >
                               <option value="">No lead</option>
                               {leads.map(l => <option key={l.id} value={l.id}>{l.name}{l.company ? ` — ${l.company}` : ''}</option>)}
@@ -2588,7 +2588,7 @@ export const Finance: React.FC = () => {
                             <select
                               value={p.currency || 'USD'}
                               onChange={e => updateProposalField(p.id, 'currency', e.target.value)}
-                              className="text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-zinc-700 dark:text-zinc-300"
+                              className="text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--livv-gold)] text-zinc-700 dark:text-zinc-300"
                             >
                               <option value="USD">USD</option>
                               <option value="EUR">EUR</option>
@@ -2611,23 +2611,23 @@ export const Finance: React.FC = () => {
       {activeTab === 'proyectos' && (
         <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Projects</div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectPnL.length}</div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Income</div>
               <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 {fmtCurrency(projectPnL.reduce((s: number, p: { income: number }) => s + p.income, 0))}
               </div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Total Expenses</div>
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">
                 {fmtCurrency(projectPnL.reduce((s: number, p: { expenses: number }) => s + p.expenses, 0))}
               </div>
             </div>
-            <div className="p-3 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60">
+            <div className="p-3 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)]">
               <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">Net Profit</div>
               <div className={`text-sm font-semibold ${projectPnL.reduce((s: number, p: { profit: number }) => s + p.profit, 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {fmtCurrency(projectPnL.reduce((s: number, p: { profit: number }) => s + p.profit, 0))}
@@ -2636,7 +2636,7 @@ export const Finance: React.FC = () => {
           </div>
 
           {projectPnL.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-10 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 gap-2">
+            <div className="flex flex-col items-center justify-center p-10 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] gap-2">
               <Target size={24} className="text-zinc-300" />
               <p className="text-zinc-400 text-xs">Add income and expenses linked to projects to see the P&L analysis.</p>
             </div>
@@ -2645,7 +2645,7 @@ export const Finance: React.FC = () => {
               {projectPnL.map(p => {
                 const progressPct = p.income > 0 ? Math.min(100, (p.expenses / p.income) * 100) : (p.expenses > 0 ? 100 : 0);
                 return (
-                  <div key={p.name} className="p-5 bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all">
+                  <div key={p.name} className="p-5 bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition-all">
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{p.name}</h4>
@@ -2700,10 +2700,10 @@ export const Finance: React.FC = () => {
       {/* ═══════════════ CONFIGURACIÓN ═══════════════ */}
       {activeTab === 'config' && (
         <div className="animate-in fade-in duration-500 space-y-5">
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
+          <div className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] p-5">
             <LivvPartnersConfig />
           </div>
-          <div className="bg-white dark:bg-zinc-900/80 rounded-xl border border-zinc-100 dark:border-zinc-800/60 p-5">
+          <div className="bg-[var(--os-panel)] rounded-xl border border-[var(--os-border-2)] p-5">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">Financial Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg">
