@@ -933,6 +933,26 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         }
       }
 
+      // Auto-link a project when none was passed but the concept is literally
+      // an existing project's title (case-insensitive, tenant-scoped). This
+      // stops "No project" incomes whose concept names a real project — the
+      // exact bug we kept fixing by hand. Prefer a project under the same
+      // client when titles clash; exact-title only (no fuzzy) to avoid
+      // mis-linking concepts like "Sunnyside redesign".
+      if (!incomePayload.project_id && data.concept && String(data.concept).trim()) {
+        const { data: matches } = await supabase
+          .from('projects')
+          .select('id, title, client_id')
+          .eq('tenant_id', currentTenant.id)
+          .ilike('title', String(data.concept).trim())
+        if (matches && matches.length) {
+          const pref = (incomePayload.client_id && matches.find(m => m.client_id === incomePayload.client_id)) || matches[0]
+          incomePayload.project_id = pref.id
+          incomePayload.project_name = pref.title
+          if (pref.client_id && !incomePayload.client_id) incomePayload.client_id = pref.client_id
+        }
+      }
+
       if (import.meta.env.DEV) console.log('[FinanceContext] Inserting income:', incomePayload)
 
       const { data: income, error: incErr } = await supabase
