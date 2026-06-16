@@ -33,6 +33,8 @@ import { useCalendar } from '../context/CalendarContext';
 import { useFinance } from '../context/FinanceContext';
 import { useClients } from '../context/ClientsContext';
 import { useProjects, ProjectStatus } from '../context/ProjectsContext';
+import { useIsMobile } from '../hooks/useMediaQuery';
+import { useAurora } from '../context/AuroraContext';
 import { runOrchestrator, executeProposedAction, type ProposedAction } from '../lib/agents';
 import { errorLogger } from '../lib/errorLogger';
 import { DailyBrief } from '../components/brief/DailyBrief';
@@ -447,6 +449,124 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   }, [user]);
   const partOfDay = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
   const dateLabel = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  // ── Mobile — editorial Workspace Mobile layout ──────────────────
+  const isMobile = useIsMobile();
+  const { setOpen: setAuroraOpen } = useAurora();
+  if (isMobile) {
+    const noScroll = 'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+    const mStats = [
+      { label: 'Overdue', value: overdueCount, tone: '#b4452f' },
+      { label: 'Due today', value: dueTodayCount, tone: 'var(--os-fg-0)' },
+      { label: 'Events', value: eventsTodayCount, tone: 'var(--os-fg-0)' },
+      { label: 'Messages', value: pendingMsgs, tone: 'var(--livv-gold)' },
+    ];
+    return (
+      <div style={{ padding: '4px 0 24px' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3.5 px-0.5">
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.16em', color: 'var(--os-fg-3)' }}>{dateLabel}</div>
+          <div style={{ width: 34, height: 34, borderRadius: 999, background: 'linear-gradient(135deg,#5c1d18,#2C0405)', color: '#EDE5D8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500 }}>
+            {(userFirstName || 'E')[0]?.toUpperCase()}
+          </div>
+        </div>
+
+        {/* Greeting */}
+        <h1 style={{ fontSize: 30, fontWeight: 300, letterSpacing: '-0.035em', lineHeight: 1.05, margin: 0, color: 'var(--os-fg-0)' }} className="px-0.5">
+          {partOfDay},<br />
+          <span className="capitalize" style={{ background: 'linear-gradient(110deg,#5c1d18,#C4A35A,#5c1d18)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{userFirstName}.</span>
+        </h1>
+
+        {/* Stat cards — horizontal scroll */}
+        <div className={`flex gap-2.5 ${noScroll}`} style={{ margin: '18px -16px 0', padding: '2px 16px' }}>
+          {mStats.map(st => (
+            <div key={st.label} style={{ flexShrink: 0, width: 108, background: 'var(--os-panel)', border: '1px solid var(--os-border-2)', borderRadius: 16, padding: '14px 16px', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ fontSize: 28, fontWeight: 300, letterSpacing: '-0.03em', lineHeight: 1, color: st.tone, fontVariantNumeric: 'tabular-nums' }}>{st.value}</div>
+              <div style={{ fontSize: 11, color: 'var(--os-fg-2)', marginTop: 7 }}>{st.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Aurora launcher card */}
+        <div style={{ marginTop: 18, background: 'var(--os-panel)', border: '1px solid var(--os-border-2)', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+          <div style={{ height: 3, background: 'linear-gradient(110deg,#5c1d18,#C4A35A,#E8BC59,#5c1d18)' }} />
+          <div style={{ padding: '18px 16px 14px' }}>
+            <div className="flex items-center gap-2.5">
+              <span style={{ width: 36, height: 36, borderRadius: 999, background: 'var(--os-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ width: 18, height: 18, borderRadius: 999, background: 'conic-gradient(from 0deg,#E8BC59,#769268,#6DBEDC,#E8BC59)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.Sparkles size={10} style={{ color: '#09090B' }} /></span>
+              </span>
+              <div><div style={{ fontSize: 14, fontWeight: 500, color: 'var(--os-fg-0)' }}>Let's focus.</div><div style={{ fontSize: 12, color: 'var(--os-fg-2)' }}>What's the first thing?</div></div>
+            </div>
+            <div className={`flex gap-2 ${noScroll}`} style={{ margin: '14px -16px 0', padding: '0 16px' }}>
+              {HOME_CHIPS.map((c, i) => (
+                <button key={i} onClick={() => setAuroraOpen(true)} style={{ flexShrink: 0, height: 32, padding: '0 13px', border: '1px solid var(--os-border-2)', borderRadius: 999, background: 'var(--os-surface)', cursor: 'pointer', fontSize: 12, color: 'var(--os-fg-1)', whiteSpace: 'nowrap' }}>{c.label}</button>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => setAuroraOpen(true)} className="w-full flex items-center gap-2.5" style={{ padding: '12px 14px', borderTop: '1px solid var(--os-divider)', background: 'transparent', border: 0, borderTop: '1px solid var(--os-divider)', cursor: 'pointer' }}>
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--os-fg-3)', textAlign: 'left' }}>Ask Aurora anything…</span>
+            <span style={{ width: 34, height: 34, borderRadius: 999, background: 'var(--os-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--livv-cream-50)', flexShrink: 0 }}><Icons.Send size={15} /></span>
+          </button>
+        </div>
+
+        {/* Today's tasks */}
+        <div style={{ marginTop: 22 }}>
+          <div className="flex items-center gap-2 mb-3 px-0.5">
+            <span style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--os-fg-3)', fontWeight: 500 }}>Today's tasks</span>
+            {overdueCount > 0 && <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: '#b4452f' }}>{overdueCount} overdue</span>}
+          </div>
+          <div className="flex flex-col gap-2">
+            {quickTasks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', background: 'var(--os-panel)', border: '1px dashed var(--os-border-2)', borderRadius: 14, fontSize: 12.5, color: 'var(--os-fg-3)' }}>Nothing on your plate today.</div>
+            ) : quickTasks.slice(0, 4).map((t: any) => {
+              const proj = t.project_id ? projectMeta.get(t.project_id) : null;
+              const due = formatDueLabel(t.start_date, todayIso);
+              const dueColor = due.tone === 'rose' ? '#b4452f' : due.tone === 'amber' ? 'var(--livv-gold)' : 'var(--os-fg-3)';
+              return (
+                <div key={t.id} className="flex items-center gap-3" style={{ background: 'var(--os-panel)', border: '1px solid var(--os-border-2)', borderRadius: 14, padding: '13px 14px' }}>
+                  <button onClick={() => handleToggleTask(t.id)} style={{ width: 20, height: 20, borderRadius: 999, border: '1.75px solid var(--os-border-2)', background: 'transparent', flexShrink: 0, cursor: 'pointer' }} aria-label="Complete" />
+                  <button onClick={() => onNavigate('calendar', { taskId: t.id } as NavParams)} className="flex-1 min-w-0 text-left bg-transparent border-0 cursor-pointer">
+                    <div style={{ fontSize: 13.5, color: 'var(--os-fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</div>
+                    {proj && <div className="flex items-center gap-1.5" style={{ marginTop: 3 }}><span style={{ width: 7, height: 7, borderRadius: 2, background: proj.color || 'var(--livv-gold)', flexShrink: 0 }} /><span style={{ fontSize: 10.5, color: 'var(--os-fg-3)' }}>{proj.title}</span></div>}
+                  </button>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, whiteSpace: 'nowrap', color: dueColor }}>{due.text}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Active projects */}
+        {activeProjects.length > 0 && (
+          <div style={{ marginTop: 22 }}>
+            <div className="flex items-center gap-2 mb-3 px-0.5">
+              <span style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--os-fg-3)', fontWeight: 500 }}>Active projects</span>
+              <button onClick={() => onNavigate('projects')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--os-fg-2)' }}>All →</button>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {activeProjects.map(({ p, open, health }) => {
+                const hc = HEALTH_STYLE[health];
+                return (
+                  <button key={p.id} onClick={() => onNavigate('projects', { projectId: p.id } as NavParams)} className="text-left bg-transparent" style={{ background: 'var(--os-panel)', border: '1px solid var(--os-border-2)', borderRadius: 16, padding: '14px 16px', boxShadow: 'var(--shadow-card)', cursor: 'pointer' }}>
+                    <div className="flex items-center gap-2.5">
+                      <span style={{ width: 9, height: 9, borderRadius: 3, background: p.color || 'var(--livv-gold)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, flex: 1, color: 'var(--os-fg-0)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, color: hc.fg, background: hc.bg }}>{health}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5" style={{ marginTop: 12 }}>
+                      <div style={{ position: 'relative', flex: 1, height: 5, borderRadius: 999, background: 'var(--os-surface)', overflow: 'hidden' }}><div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${p.progress}%`, borderRadius: 999, background: p.color || 'var(--livv-gold)' }} /></div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-2)' }}>{p.progress}%</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--os-fg-3)', marginTop: 7 }}>{open} open{p.deadline ? ` · due ${fmtMonthDay(p.deadline)}` : ''}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-3rem)]">
