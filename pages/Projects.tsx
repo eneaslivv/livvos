@@ -86,6 +86,53 @@ const StatusBadge = ({ status }: { status: ProjectStatus }) => {
   );
 };
 
+/* ─── Project status control ───────────────────────────────────
+   The status pill becomes a dropdown so you can change a project's
+   status right from the detail header — including marking it
+   Completed/Archived (the "is this project finished?" control). */
+const PROJECT_STATUS_ORDER: ProjectStatus[] = [
+  ProjectStatus.Active, ProjectStatus.Pending, ProjectStatus.Review, ProjectStatus.Completed, ProjectStatus.Archived,
+];
+const ProjectStatusControl = ({ status, onChange }: { status: ProjectStatus; onChange: (s: ProjectStatus) => void }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
+        title="Change project status"
+      >
+        <StatusBadge status={status} />
+        <Icons.ChevronDown size={11} style={{ color: 'var(--os-fg-3)' }} />
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 top-full mt-1.5 z-40 py-1"
+          style={{ minWidth: 152, background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 12, boxShadow: 'var(--shadow-md)' }}
+        >
+          {PROJECT_STATUS_ORDER.map(s => (
+            <button
+              key={s}
+              onClick={() => { if (s !== status) onChange(s); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-[var(--os-surface)]"
+            >
+              <StatusBadge status={s} />
+              {s === status && <Icons.Check size={12} strokeWidth={3} style={{ marginLeft: 'auto', color: 'var(--livv-sage)' }} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ─── Client Picker Dropdown ─── */
 const ClientPickerDropdown = ({ clients, onSelect }: {
   clients: { id: string; name: string; company?: string; email?: string; avatar_url?: string }[];
@@ -1988,7 +2035,7 @@ export const Projects: React.FC<{
                     <h1 style={{ fontFamily: 'var(--font-sans)', fontWeight: 300, fontSize: 'clamp(20px, 2.4vw, 26px)', letterSpacing: '-0.03em', lineHeight: 1.05, color: 'var(--os-fg-0)', margin: 0, wordBreak: 'break-word' }}>
                       {selectedProject ? selectedProject.title : 'No project selected'}
                     </h1>
-                    {selectedProject && <StatusBadge status={selectedProject.status} />}
+                    {selectedProject && <ProjectStatusControl status={selectedProject.status} onChange={(s) => handleUpdateProject({ status: s })} />}
                   </div>
                   {selectedProject && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '0.03em', color: 'var(--os-fg-2)' }}>
