@@ -20,7 +20,7 @@ interface TopNavbarProps {
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, currentMode, navParams, onOpenSearch, onNavigate, onOpenNewTask }) => {
-    const { user } = useRBAC();
+    const { user, hasPermission } = useRBAC();
     const { currentTenant } = useTenant();
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const isDarkMode = document.documentElement.classList.contains('dark');
@@ -28,17 +28,34 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ pageTitle, currentPage, cu
 
     return (
         <header className="w-full px-3 md:px-4 bg-zinc-50/60 dark:bg-black/60 backdrop-blur-2xl rounded-full">
-            <div className="flex items-center justify-between h-9 w-full">
+            <div className="relative flex items-center justify-between h-9 w-full">
 
-                {/* Left: Logo + Search Bar */}
+                {/* Center: Studio mark → Activity. Absolutely centered so it
+                    reads as a central logo. Shows the tenant/agency logo (or
+                    an initial) and is the studio's "home base" / activity
+                    button — replaces the old Activity item in the side nav. */}
+                {hasPermission('activity', 'view') && (
+                    <button
+                        onClick={() => onNavigate('activity')}
+                        title="Studio activity"
+                        aria-label="Studio activity"
+                        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-full overflow-hidden transition-all hover:scale-105 ${
+                            currentPage === 'activity' ? '' : 'ring-1 ring-zinc-200 dark:ring-zinc-700 hover:ring-zinc-300 dark:hover:ring-zinc-600'
+                        }`}
+                        style={currentPage === 'activity' ? { boxShadow: '0 0 0 2px var(--livv-gold, #C4A35A)' } : undefined}
+                    >
+                        {tenantLogo ? (
+                            <img src={tenantLogo} alt={currentTenant?.name || 'Studio'} className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="w-full h-full flex items-center justify-center text-[11px] font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                                {(currentTenant?.name?.[0] || user?.name?.[0] || 'S').toUpperCase()}
+                            </span>
+                        )}
+                    </button>
+                )}
+
+                {/* Left: Search Bar */}
                 <div className="flex items-center gap-2.5 min-w-0">
-                    {tenantLogo && (
-                        <img
-                            src={tenantLogo}
-                            alt={currentTenant?.name || ''}
-                            className="h-5 max-w-[72px] object-contain shrink-0 md:hidden"
-                        />
-                    )}
                     {/* Mobile: compact icon button (the fixed w-48 box was
                         overflowing the bar next to the logo + actions).
                         Desktop keeps the full search field with ⌘K hint. */}

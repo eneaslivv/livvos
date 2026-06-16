@@ -603,7 +603,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
       { id: 'home', label: 'Home', icon: <Icons.Home /> },
       // Brief — chat-with-AI + structured tasks/calendar panel on the side
       { id: 'brief', label: 'Brief', icon: <Icons.Sparkles /> },
-      { id: 'activity', label: 'Studio Activity', icon: <Icons.Activity />, permission: { module: 'activity', action: 'view' } },
+      // Studio Activity moved to the central studio-mark in the TopNavbar
+      // (the logo circle) — it's the studio's "home base" button now.
     ],
     [
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
