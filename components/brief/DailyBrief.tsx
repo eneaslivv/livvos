@@ -15,6 +15,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Icons } from '../ui/Icons';
+// Self-import the brief styles so the bd-brief-* classes are present
+// wherever DailyBrief renders (e.g. Home), not only on the lazy Brief page.
+import './BriefDesign.css';
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../../context/TenantContext';
 import { useAuth } from '../../hooks/useAuth';
