@@ -320,12 +320,12 @@ function BuildView({ services, onExit, onApprove }) {
                   {[1, 2, 3].map((n) => <button key={n} className={seg(optCount === n)} onClick={() => setOptCount(n)}>{n} option{n > 1 ? 's' : ''}</button>)}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${optCount},1fr)`, gap: 12 }}>
-                  {[
-                    optCount === 3 && { name: 'Essential', mult: 0.72, rec: false },
-                    { name: optCount === 1 ? 'Proposal' : 'Standard', mult: 1.0, rec: optCount !== 3 ? false : true },
-                    optCount >= 2 && { name: optCount === 3 ? 'Recommended' : 'Premium', mult: optCount === 3 ? 1.0 : 1.35, rec: optCount === 2 },
-                    optCount === 3 && { name: 'Premium', mult: 1.35, rec: false },
-                  ].filter(Boolean).slice(0, optCount).map((o, i) => (
+                  {(optCount === 1
+                    ? [{ name: 'Proposal', mult: 1.0, rec: false }]
+                    : optCount === 2
+                    ? [{ name: 'Standard', mult: 1.0, rec: true }, { name: 'Premium', mult: 1.35, rec: false }]
+                    : [{ name: 'Essential', mult: 0.72, rec: false }, { name: 'Standard', mult: 1.0, rec: true }, { name: 'Premium', mult: 1.35, rec: false }]
+                  ).map((o, i) => (
                     <div key={i} style={{ borderRadius: 16, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 8, position: 'relative',
                       background: o.rec ? 'var(--livv-cream-900)' : 'none', border: o.rec ? 'none' : '1px dashed var(--livv-cream-300)', color: o.rec ? 'var(--livv-cream-50)' : 'inherit' }}>
                       {o.rec && <span className="qo-mono" style={{ position: 'absolute', top: 14, right: 16, fontSize: 8, color: 'var(--livv-gold)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Recommended</span>}
