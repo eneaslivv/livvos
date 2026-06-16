@@ -1051,28 +1051,12 @@ export const Finance: React.FC = () => {
           different page than the Dashboard, breaking the rhythm when
           the user clicked between Income / Expenses / Budgets. */}
 
-      {/* ─── Forecast banner ───────────────────────────────────
-           Cross-tab "where am I headed" strip. Shows current balance,
-           90-day projection, and operating margin — with a trend arrow
-           that points up/down based on the projection vs current balance.
-           Visible on every tab except Dashboard (which has its own hero
-           with these same numbers in editorial form). The point: even
-           when a user is deep in a single Income or Expense tab, they
-           can glance up and know "am I trending healthy this quarter?"
-           without jumping back to the dashboard.
-
-           Hidden when there's literally no data yet — showing $0 / $0
-           on a fresh empty workspace would only add noise. Once they
-           log even one income or expense, the banner kicks in. */}
-      {activeTab !== 'dashboard' && (incomes.length > 0 || expenses.length > 0) && (
-        <FinanceForecastBanner
-          currentBalance={currentBalance}
-          projection90d={projection90d}
-          margin={margin}
-          totalPendingIncome={totalPendingIncome}
-          totalExpensesPending={totalExpensesPending}
-        />
-      )}
+      {/* Forecast banner + AI quick-bar were removed: they only rendered on
+          non-Dashboard tabs, so switching tabs changed the whole page
+          structure (a green strip + an AI bar would appear/disappear).
+          Every tab now shares the SAME shell — tab strip → content — so the
+          experience is consistent. AI stays available via the Aurora dock;
+          the forward-looking numbers live in the Dashboard's own cards. */}
 
       {/* ─── Tabs (simplified) ──────────────────────────────────
            Surfacing only the 4 daily-driver tabs by default. The rest
@@ -1131,29 +1115,6 @@ export const Finance: React.FC = () => {
         );
       })()}
 
-      {/* ─── AI Quick-Ask bar ───────────────────────────────────
-           Slim "Ask anything, or log a transaction…" input pinned
-           below the tab row on every non-Dashboard tab. The Dashboard
-           already has its own (bigger) AI hero, so we don't duplicate
-           it there. Pressing Enter opens FinanceChat seeded with the
-           typed text — paperclip → file/Excel upload via FinanceAssistant.
-           Hidden when the user lacks `finance:create` (read-only viewers
-           can't trigger AI mutations). */}
-      {activeTab !== 'dashboard' && hasPermission('finance', 'create') && (
-        <FinanceAIQuickBar
-          value={aiBarInput}
-          onChange={setAiBarInput}
-          onSubmit={(text) => {
-            const trimmed = text.trim();
-            if (!trimmed) return;
-            setChatSeedInput(trimmed);
-            setIsChatOpen(true);
-            setAiBarInput('');
-          }}
-          onOpenAssistant={() => setIsAssistantOpen(true)}
-          activeTab={activeTab}
-        />
-      )}
 
       {/* ═══════════════ DASHBOARD (Livv editorial) ═══════════════ */}
       {activeTab === 'dashboard' && (
