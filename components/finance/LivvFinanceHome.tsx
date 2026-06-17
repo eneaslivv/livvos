@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Clock, AlertCircle, Plus, BarChart3, Receipt, ChevronDown, Check, X, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Clock, Plus, BarChart3, Receipt, ChevronDown, Check, X, Trash2, Percent } from 'lucide-react';
 import type { IncomeEntry, Installment, ExpenseEntry } from '../../context/FinanceContext';
 import type { LiquidityPoint } from './LivvFinanceDashboard';
 import { useIsDarkMode } from '../../hooks/useIsDarkMode';
@@ -110,7 +110,8 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
     const expensesPeriod = expenses
       .filter(e => (e.date || '').slice(0, 10) >= periodStart)
       .reduce((s, e) => s + (e.amount || 0), 0);
-    return { collected, outstanding, overdue, openCount, overdueCount, expensesPeriod, net: collected - expensesPeriod };
+    const net = collected - expensesPeriod;
+    return { collected, outstanding, overdue, current: outstanding - overdue, openCount, overdueCount, expensesPeriod, net, marginPct: collected > 0 ? Math.round((net / collected) * 100) : null };
   }, [incomes, expenses, periodStart, todayIso]);
 
   // ── Invoice list (incomes) + filter counts ──────────────────────────
@@ -195,6 +196,7 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
     boxShadow: '0 1px 2px rgba(90,62,62,0.04)',
   };
   const eyebrow: React.CSSProperties = { ...MONO, fontSize: 10, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase', color: c.meta };
+  const bigNum: React.CSSProperties = { fontFamily: SANS, fontWeight: 300, fontSize: 30, letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' };
 
   return (
     <div style={{ fontFamily: SANS, color: c.ink }}>
@@ -206,7 +208,9 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
             Finances
           </h1>
           <p style={{ ...MONO, fontSize: 11.5, color: c.meta }}>
-            Net <span style={{ color: stats.net >= 0 ? c.income : c.expense, fontWeight: 600 }}>{fmt(stats.net)}</span> {PERIOD_LABEL[period].toLowerCase()} · keep your invoices up to date below
+            <span style={{ color: c.gold, fontWeight: 600 }}>{fmt(stats.outstanding)}</span> to collect
+            {stats.overdue > 0 && <> (incl. <span style={{ color: c.expense, fontWeight: 600 }}>{fmt(stats.overdue)}</span> overdue)</>}
+            {' · '}net <span style={{ color: stats.net >= 0 ? c.income : c.expense, fontWeight: 600 }}>{fmt(stats.net)}</span> {PERIOD_LABEL[period].toLowerCase()}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -229,25 +233,71 @@ export const LivvFinanceHome: React.FC<LivvFinanceHomeProps> = ({
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
+      {/* ── Stat cards ──
+          Collected (in) · To collect (owed, with the overdue slice shown
+          *inside* it so it reads as a subset, not a separate bucket) ·
+          Expenses (out) · Margin (net ÷ collected). */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: 'Collected', value: stats.collected, caption: 'paid this period', Icon: ArrowDownLeft, color: c.income },
-          { label: 'Outstanding', value: stats.outstanding, caption: `${stats.openCount} open invoice${stats.openCount === 1 ? '' : 's'}`, Icon: Clock, color: c.gold },
-          { label: 'Overdue', value: stats.overdue, caption: stats.overdueCount > 0 ? `${stats.overdueCount} need${stats.overdueCount === 1 ? 's' : ''} a nudge` : 'all current', Icon: AlertCircle, color: c.expense },
-          { label: 'Expenses', value: stats.expensesPeriod, caption: PERIOD_LABEL[period].toLowerCase(), Icon: ArrowUpRight, color: c.ink },
-        ].map(s => (
-          <div key={s.label} style={{ ...cardStyle, padding: '16px 18px' }}>
-            <div className="flex items-center justify-between mb-2.5">
-              <span style={eyebrow}>{s.label}</span>
-              <s.Icon size={13} style={{ color: c.meta }} />
-            </div>
-            <div style={{ fontFamily: SANS, fontWeight: 300, fontSize: 30, letterSpacing: '-0.03em', lineHeight: 1, color: s.color, fontVariantNumeric: 'tabular-nums' }}>
-              {fmt(s.value)}
-            </div>
-            <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 8 }}>{s.caption}</div>
+        {/* Collected */}
+        <div style={{ ...cardStyle, padding: '16px 18px' }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <span style={eyebrow}>Collected</span>
+            <ArrowDownLeft size={13} style={{ color: c.meta }} />
           </div>
-        ))}
+          <div style={{ ...bigNum, color: c.income }}>{fmt(stats.collected)}</div>
+          <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 8 }}>paid this period</div>
+        </div>
+
+        {/* To collect — total owed; overdue is the red slice of this same bar */}
+        <div style={{ ...cardStyle, padding: '16px 18px' }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <span style={eyebrow}>To collect</span>
+            <Clock size={13} style={{ color: c.meta }} />
+          </div>
+          <div style={{ ...bigNum, color: c.gold }}>{fmt(stats.outstanding)}</div>
+          {stats.outstanding > 0 ? (
+            <>
+              <div style={{ display: 'flex', height: 5, borderRadius: 999, overflow: 'hidden', background: c.surface, marginTop: 10 }}
+                   title={`${fmt(stats.overdue)} overdue + ${fmt(stats.current)} not yet due = ${fmt(stats.outstanding)} total`}>
+                {stats.overdue > 0 && <div style={{ width: `${Math.round((stats.overdue / stats.outstanding) * 100)}%`, background: c.expense }} />}
+                <div style={{ flex: 1, background: c.gold }} />
+              </div>
+              <div style={{ ...MONO, fontSize: 10.5, marginTop: 8 }}>
+                {stats.overdue > 0
+                  ? <><span style={{ color: c.expense, fontWeight: 600 }}>{fmt(stats.overdue)} overdue</span><span style={{ color: c.meta }}> · {fmt(stats.current)} upcoming</span></>
+                  : <span style={{ color: c.meta }}>{stats.openCount} open · all current</span>}
+              </div>
+            </>
+          ) : (
+            <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 8 }}>nothing outstanding</div>
+          )}
+        </div>
+
+        {/* Expenses */}
+        <div style={{ ...cardStyle, padding: '16px 18px' }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <span style={eyebrow}>Expenses</span>
+            <ArrowUpRight size={13} style={{ color: c.meta }} />
+          </div>
+          <div style={{ ...bigNum, color: c.ink }}>{fmt(stats.expensesPeriod)}</div>
+          <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 8 }}>spent this period</div>
+        </div>
+
+        {/* Margin — net ÷ collected for the period (profit after costs) */}
+        <div style={{ ...cardStyle, padding: '16px 18px' }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <span style={eyebrow}>Margin</span>
+            <Percent size={13} style={{ color: c.meta }} />
+          </div>
+          <div style={{ ...bigNum, color: stats.marginPct === null ? c.meta : stats.marginPct >= 0 ? c.income : c.expense }}>
+            {stats.marginPct === null ? '—' : `${stats.marginPct}%`}
+          </div>
+          <div style={{ ...MONO, fontSize: 10.5, color: c.meta, marginTop: 8 }}>
+            {stats.marginPct === null
+              ? 'no collections yet'
+              : <>net <span style={{ color: stats.net >= 0 ? c.income : c.expense, fontWeight: 600 }}>{fmt(stats.net)}</span> ÷ collected</>}
+          </div>
+        </div>
       </div>
 
       {/* ── Body: invoices (left) + side widgets (right) ── */}
