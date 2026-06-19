@@ -479,6 +479,22 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
       .sort((a, b) => (a.start_time || '00:00').localeCompare(b.start_time || '00:00'));
   }, [events, today]);
 
+  // The calendar tab shows the week ahead (today + next 7 days), grouped by
+  // day, so it stays useful even when today happens to be empty.
+  const upcomingEvents = useMemo(() => {
+    const todayStr = today.toISOString().slice(0, 10);
+    const horizon = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+    return events
+      .filter(e => {
+        const d = e.start_date?.slice(0, 10);
+        return !!d && d >= todayStr && d <= horizon;
+      })
+      .sort((a, b) =>
+        (a.start_date || '').localeCompare(b.start_date || '') ||
+        (a.start_time || '00:00').localeCompare(b.start_time || '00:00'),
+      );
+  }, [events, today]);
+
   const nextMeeting = useMemo(() => {
     const now = new Date();
     for (const e of todayEvents) {
@@ -1343,40 +1359,61 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
           {rightTab === 'calendar' && (
             <>
-              <div className="bd-day">
-                {today.toLocaleDateString('en-US', { weekday: 'long' })} · {today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </div>
-              {todayEvents.length === 0 ? (
-                <div className="px-5 py-8 text-center text-[12px] text-zinc-400 dark:text-zinc-500 italic">
-                  No events on the calendar today.
-                </div>
+              {upcomingEvents.length === 0 ? (
+                <>
+                  <div className="bd-day">
+                    {today.toLocaleDateString('en-US', { weekday: 'long' })} · {today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                  <div className="px-5 py-8 text-center text-[12px] text-zinc-400 dark:text-zinc-500 italic">
+                    Nothing scheduled in the next 7 days.
+                  </div>
+                </>
               ) : (
-                todayEvents.map(e => {
-                  const eventColor = (e as any).color || '#c4a35a';
+                Object.entries(
+                  upcomingEvents.reduce((acc, e) => {
+                    const key = e.start_date?.slice(0, 10) || 'undated';
+                    (acc[key] = acc[key] || []).push(e);
+                    return acc;
+                  }, {} as Record<string, typeof upcomingEvents>),
+                ).map(([dateKey, dayEvents]) => {
+                  const todayStr = today.toISOString().slice(0, 10);
+                  const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(0, 10);
+                  const d = new Date(`${dateKey}T00:00:00`);
+                  const label = dateKey === todayStr ? 'Today' : dateKey === tomorrowStr ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long' });
                   return (
-                    <div
-                      key={e.id}
-                      className="bd-msg"
-                      style={{ gridTemplateColumns: '60px 1fr 80px' }}
-                      onClick={() => setOpenEvent(e)}
-                    >
-                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#18181b', fontWeight: 600, letterSpacing: '0.04em' }}>
-                        {e.start_time || '—'}
-                      </span>
-                      <div className="bd-msg-body">
-                        <div style={{ fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: 9999, background: eventColor }} />
-                          <span style={{ color: '#18181b' }} className="dark:!text-zinc-50">{e.title}</span>
-                        </div>
-                        {(e.location || e.duration) && (
-                          <div style={{ fontSize: 11, color: '#71717a', fontFamily: 'JetBrains Mono, monospace', marginTop: 3, display: 'inline-flex', gap: 10 }}>
-                            {e.duration && <span>{e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`} duration</span>}
-                            {e.location && <span className="truncate" style={{ maxWidth: 180 }}>📍 {e.location}</span>}
-                          </div>
-                        )}
+                    <React.Fragment key={dateKey}>
+                      <div className="bd-day">
+                        {label} · {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </div>
-                      <span className="bd-msg-time">{e.duration ? (e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`) : ''}</span>
-                    </div>
+                      {dayEvents.map(e => {
+                        const eventColor = (e as any).color || '#c4a35a';
+                        return (
+                          <div
+                            key={e.id}
+                            className="bd-msg"
+                            style={{ gridTemplateColumns: '60px 1fr 80px' }}
+                            onClick={() => setOpenEvent(e)}
+                          >
+                            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#18181b', fontWeight: 600, letterSpacing: '0.04em' }}>
+                              {e.start_time || '—'}
+                            </span>
+                            <div className="bd-msg-body">
+                              <div style={{ fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: 9999, background: eventColor }} />
+                                <span style={{ color: '#18181b' }} className="dark:!text-zinc-50">{e.title}</span>
+                              </div>
+                              {(e.location || e.duration) && (
+                                <div style={{ fontSize: 11, color: '#71717a', fontFamily: 'JetBrains Mono, monospace', marginTop: 3, display: 'inline-flex', gap: 10 }}>
+                                  {e.duration && <span>{e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`} duration</span>}
+                                  {e.location && <span className="truncate" style={{ maxWidth: 180 }}>📍 {e.location}</span>}
+                                </div>
+                              )}
+                            </div>
+                            <span className="bd-msg-time">{e.duration ? (e.duration < 60 ? `${e.duration}m` : `${Math.round(e.duration / 60 * 10) / 10}h`) : ''}</span>
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })
               )}

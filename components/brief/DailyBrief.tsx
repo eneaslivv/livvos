@@ -31,7 +31,7 @@ import { BriefSettings } from './BriefSettings';
 const DEFAULT_ENABLED: CategoryId[] = ['today_load','cashflow','pipeline','content','inbox','team_kpis','strategy','upcoming'];
 
 // ── Day-keyed cache ───────────────────────────────────────────────
-const CACHE_VERSION = 'v4-en';
+const CACHE_VERSION = 'v5-en';
 const cacheKey = (userId: string) =>
   `brief_cache:${CACHE_VERSION}:${userId}:${new Date().toISOString().slice(0, 10)}`;
 
@@ -122,35 +122,39 @@ function buildLocalBrief(cards: CategoryData[], includeRecommendation: boolean):
   const dueToday = Number(todayLoad?.context?.due_today_count || 0);
   const lines: string[] = [];
 
-  // 1. Operating-state read.
+  // Conversational read of the day — no headers, no numbered lists. The Brief
+  // should sound like a colleague talking you through the morning, not a report.
   if (attentionCards.length > 0) {
-    lines.push(`The operation needs a cleanup pass: ${overdue} overdue and ${dueToday} due today across ${attentionCards.length} ${attentionCards.length === 1 ? 'area' : 'areas'}. Clear the blockers below before starting new work.`);
+    const bits: string[] = [];
+    if (overdue > 0) bits.push(`${overdue} overdue`);
+    if (dueToday > 0) bits.push(`${dueToday} due today`);
+    const load = bits.length ? `You're carrying ${bits.join(' and ')}, so` : 'A few things need a look, so';
+    lines.push(`Here's where things stand. ${load} the move today is to clear what's blocking before you open anything new.`);
   } else {
-    lines.push('The operation is under control today — no area is showing a critical blocker. Good moment to get ahead on what is coming.');
+    lines.push("Here's where things stand. Nothing is on fire today, so it's a good window to get ahead on what's coming instead of reacting.");
   }
 
-  // 2. Priorities — the spine: the strongest signal from each area that needs
-  //    attention, as one ordered list across the whole operation.
+  // Guide through the top things to tackle, in flowing prose.
   const priorities = attentionCards
-    .slice(0, 4)
-    .map(card => ({ area: card.title, sig: cleanLocalSignal(card.bullets[0]) }))
+    .slice(0, 3)
+    .map(card => ({ area: card.title.toLowerCase(), sig: cleanLocalSignal(card.bullets[0]) }))
     .filter(p => p.sig);
   if (priorities.length > 0) {
-    lines.push('**Priorities**\n' + priorities.map((p, i) => `${i + 1}. ${p.area} — ${p.sig}`).join('\n'));
+    const sentences = priorities.map((p, i) => {
+      const lead = i === 0 ? 'Start with' : i === 1 ? 'Then' : 'After that';
+      return `${lead} ${p.area}: ${p.sig.replace(/\.$/, '')}.`;
+    });
+    lines.push(sentences.join(' '));
   }
 
-  // 3. Per-area context (numbers + implication; the signals already lead above).
-  for (const card of activeCards.slice(0, 5)) {
-    const facts = card.highlights
-      .filter(h => String(h.value) !== '' && String(h.value) !== '0' && String(h.value) !== '$0')
-      .map(h => `${h.label.toLowerCase()}: ${h.value}`)
-      .join(', ');
-    const implication = card.status === 'attention'
-      ? 'Needs a decision or cleanup pass before it compounds.'
-      : 'Controlled — useful context for planning.';
-    lines.push(`**${card.title}**\n${facts || 'No major count spike'}. ${implication}`);
+  // One light line on what's steady, so the brief feels balanced, not alarmist.
+  const okCards = activeCards.filter(c => c.status === 'ok').slice(0, 3);
+  if (okCards.length > 0) {
+    lines.push(`The rest is steady for now: ${okCards.map(c => c.title.toLowerCase()).join(', ')}.`);
   }
 
+  // next_step is shown on its own "Do this first" card, so it is not repeated
+  // inside the message — keeping the brief itself uncluttered.
   const nextStep = includeRecommendation
     ? attentionCards[0]?.bullets[0]
       ? `Clear the first ${attentionCards[0].title.toLowerCase()} blocker: ${cleanLocalSignal(attentionCards[0].bullets[0])}`
@@ -158,8 +162,6 @@ function buildLocalBrief(cards: CategoryData[], includeRecommendation: boolean):
         ? 'Start by closing or rescheduling the oldest overdue task.'
         : 'Pick one priority task and protect a focused work block for it.'
     : null;
-
-  if (nextStep) lines.push(`Main focus: ${nextStep}`);
 
   return {
     headline: attentionCards.length > 0 ? `${attentionCards.length} areas need attention` : 'No critical blockers',

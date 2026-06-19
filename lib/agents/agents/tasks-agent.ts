@@ -10,6 +10,8 @@ export const tasksAgent: AgentDefinition = {
     'task', 'tasks', 'tarea', 'tareas', 'pending', 'overdue', 'due',
     'todo', 'in progress', 'kanban', 'priority', 'completed', 'done',
     'subtask', 'asignado', 'pendiente', 'vencida', 'cerrar', 'mover',
+    'moveme', 'movela', 'movelo', 'reprogram', 'pospon', 'reschedule',
+    'move to', 'move the', 'cambiar fecha', 'cambiar la fecha', 'due date',
     'create task', 'new task', 'remind me to', 'add a task',
     'quÃ© tengo', 'que tengo', 'quÃ© hago', 'que hago', 'priorizar',
     'pipeline',
