@@ -609,7 +609,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
     [
       { id: 'calendar', label: 'Calendar', icon: <Icons.Calendar />, permission: { module: 'calendar', action: 'view' }, feature: 'calendar_integration' },
       { id: 'docs', label: 'Docs', icon: <Icons.Docs />, permission: { module: 'documents', action: 'view' }, feature: 'documents_module' },
-      { id: 'project_architect', label: 'Architect', icon: <Icons.Briefcase />, permission: { module: 'projects', action: 'view' }, feature: 'projects_module' },
     ],
   ];
   // NOTE: Strategy / Content / Scaling / Growth / Toolkit / Agent USED to live

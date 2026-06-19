@@ -137,6 +137,12 @@ const formatRelative = (dateStr: string | undefined): string => {
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 };
 
+// Project Architect lives inside Brief (one place to plan a project), so it
+// is loaded here rather than registered as a separate page.
+const ProjectArchitectEmbed = React.lazy(() =>
+  import('./ProjectArchitect').then(m => ({ default: m.ProjectArchitect })),
+);
+
 export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const reduceMotion = useReducedMotion();
   const { user } = useAuth();
@@ -161,6 +167,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   // The task/event the user tapped in the panel, so the chat can resolve
   // deictic references ("move it", "movela") without them naming the item.
   const [selectedBriefItem, setSelectedBriefItem] = useState<{ type: 'task' | 'event'; id: string; title: string } | null>(null);
+  const [showArchitect, setShowArchitect] = useState(false);
   const [openMessage, setOpenMessage] = useState<any | null>(null);
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const [activeFocus, setActiveFocus] = useState<BriefPanelFocus | null>(null);
@@ -1063,6 +1070,24 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
         ? todayEvents.length
         : 0;
 
+  // Architect mode — the same component and flow, embedded in the Brief
+  // content slot (the sidebar stays). Triggered by the "Project plan" chip.
+  if (showArchitect) {
+    return (
+      <div className="h-[calc(100vh-3rem)] max-w-[1100px] mx-auto py-4 overflow-y-auto">
+        <button
+          onClick={() => setShowArchitect(false)}
+          className="mb-1 inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+        >
+          <span aria-hidden>←</span> Back to brief
+        </button>
+        <React.Suspense fallback={<div className="py-16 text-center text-[13px] text-zinc-400">Loading…</div>}>
+          <ProjectArchitectEmbed onNavigate={onNavigate} />
+        </React.Suspense>
+      </div>
+    );
+  }
+
   return (
     <>
     <div className="h-[calc(100vh-3rem)] grid grid-cols-1 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] gap-4 max-w-[1600px] mx-auto py-4">
@@ -1253,6 +1278,16 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
             send button that scales 1.04 on hover and tints to wine. */}
         <div className="px-4 pt-3 pb-3 border-t border-zinc-100 dark:border-zinc-800/60">
           <div className="bd-chips mb-2.5">
+            <motion.button
+              onClick={() => setShowArchitect(true)}
+              disabled={sending}
+              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={SPRING_ENTER}
+              className="bd-chip cat-onboard disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Project plan
+            </motion.button>
             {[
               { label: 'New client',      cat: 'cat-onboard', prompt: 'I want to set up a new client.' },
               { label: 'New project',     cat: 'cat-onboard', prompt: 'I want to create a new project.' },
