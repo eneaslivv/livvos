@@ -158,6 +158,9 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
   const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openEvent, setOpenEvent] = useState<any | null>(null);
+  // The task/event the user tapped in the panel, so the chat can resolve
+  // deictic references ("move it", "movela") without them naming the item.
+  const [selectedBriefItem, setSelectedBriefItem] = useState<{ type: 'task' | 'event'; id: string; title: string } | null>(null);
   const [openMessage, setOpenMessage] = useState<any | null>(null);
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const [activeFocus, setActiveFocus] = useState<BriefPanelFocus | null>(null);
@@ -559,9 +562,13 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
     setSending(true);
     try {
       const history = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
-      const routedQuery = panelFocus
-        ? `${q}\n\nUI focus: The right panel is filtering/highlighting ${panelFocus.tab} for ${panelFocus.label}. Answer with a concrete, detailed breakdown of the matching items, dates, owners/projects/clients when available, and the next action. Do not stay generic.`
-        : q;
+      const focusHint = panelFocus
+        ? `\n\nUI focus: The right panel is filtering/highlighting ${panelFocus.tab} for ${panelFocus.label}. Answer with a concrete, detailed breakdown of the matching items, dates, owners/projects/clients when available, and the next action. Do not stay generic.`
+        : '';
+      const selHint = selectedBriefItem
+        ? `\n\nThe user is looking at this ${selectedBriefItem.type} and may be referring to it: "${selectedBriefItem.title}" (id=${selectedBriefItem.id}). If their message is about moving, rescheduling, completing, or updating it, use that id.`
+        : '';
+      const routedQuery = `${q}${focusHint}${selHint}`;
       const out = await runOrchestrator(
         {
           query: routedQuery,
@@ -597,6 +604,30 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
 
   const handleTaskClick = (t: CalendarTask) => {
     setOpenTaskId(t.id);
+    setSelectedBriefItem({ type: 'task', id: t.id, title: t.title });
+  };
+
+  // Before/after for a reschedule-style proposed action, shown on the card
+  // so the user is not approving a date change blind.
+  const fmtBriefDate = (d?: string | null): string =>
+    d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+  const actionDetail = (a: ChatAction): string | null => {
+    const p: Record<string, string> = (a.params || {}) as any;
+    if (a.kind === 'update_task_due_date') {
+      const t = allTasks.find((x: any) => x.id === p.task_id);
+      return `${fmtBriefDate((t as any)?.start_date)} → ${fmtBriefDate(p.due_date)}`;
+    }
+    if (a.kind === 'reschedule_event') {
+      const e = events.find((x: any) => x.id === p.event_id);
+      const before = e ? `${fmtBriefDate((e as any).start_date)}${(e as any).start_time ? ' ' + (e as any).start_time : ''}` : '—';
+      const after = `${fmtBriefDate(p.new_date)}${p.new_time ? ' ' + p.new_time : ''}`;
+      return `${before} → ${after}`;
+    }
+    if (a.kind === 'set_project_deadline') {
+      const pr = projects.find((x: any) => x.id === p.project_id);
+      return `${fmtBriefDate((pr as any)?.deadline)} → ${fmtBriefDate(p.deadline)}`;
+    }
+    return null;
   };
 
   // ── Inline task actions on the cards ─────────────────────────────
@@ -1118,6 +1149,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                       <AnimatePresence key={k} mode="wait" initial={false}>
                         <ActionCard
                           action={a}
+                          subtitle={actionDetail(a)}
                           onConfirm={() => executeAction(i, k)}
                           onSkip={() => skipAction(i, k)}
                         />
@@ -1243,6 +1275,19 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
               </motion.button>
             ))}
           </div>
+          {selectedBriefItem && (
+            <div className="flex items-center gap-1.5 mb-1.5 ml-1 px-2 py-1 rounded-full w-fit max-w-full bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 text-[11px] text-violet-700 dark:text-violet-300">
+              <Icons.Sparkles size={10} className="shrink-0" />
+              <span className="truncate">About: {selectedBriefItem.title}</span>
+              <button
+                onClick={() => setSelectedBriefItem(null)}
+                className="shrink-0 opacity-70 hover:opacity-100"
+                title="Clear"
+              >
+                <Icons.Close size={11} />
+              </button>
+            </div>
+          )}
           <div className={`bd-input-shell flex items-end gap-1.5 pl-3.5 pr-1.5 py-1.5 ${voice.isListening ? '!bg-rose-50/40 dark:!bg-rose-500/5 !border-rose-200/60 dark:!border-rose-500/30' : ''}`}>
             <textarea
               value={input}
@@ -1392,7 +1437,7 @@ export const Brief: React.FC<BriefProps> = ({ onNavigate }) => {
                             key={e.id}
                             className="bd-msg"
                             style={{ gridTemplateColumns: '60px 1fr 80px' }}
-                            onClick={() => setOpenEvent(e)}
+                            onClick={() => { setOpenEvent(e); setSelectedBriefItem({ type: 'event', id: e.id, title: e.title }); }}
                           >
                             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#18181b', fontWeight: 600, letterSpacing: '0.04em' }}>
                               {e.start_time || '—'}
@@ -2342,9 +2387,10 @@ const MicButton: React.FC<{
 // (⚠ with error tooltip). Skipped renders as a grayed-out chip too.
 const ActionCard: React.FC<{
   action: ChatAction;
+  subtitle?: string | null;
   onConfirm: () => void;
   onSkip: () => void;
-}> = ({ action, onConfirm, onSkip }) => {
+}> = ({ action, subtitle, onConfirm, onSkip }) => {
   // Each state is its own motion.div under an AnimatePresence
   // mode="wait" so the card morphs between forms: pending → executing
   // (small scale-out, spin in) → done (chip swooshes in with a Check
@@ -2414,9 +2460,16 @@ const ActionCard: React.FC<{
       className="flex items-center gap-2 p-2 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50/60 dark:bg-violet-500/5"
     >
       <Icons.Sparkles size={12} className="text-violet-600 dark:text-violet-400 shrink-0" />
-      <span className="flex-1 text-[11.5px] text-zinc-800 dark:text-zinc-100 leading-snug">
-        {action.label}
-      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-[11.5px] text-zinc-800 dark:text-zinc-100 leading-snug">
+          {action.label}
+        </div>
+        {subtitle && (
+          <div className="mt-0.5 text-[10.5px] font-medium text-violet-600 dark:text-violet-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
       {action.state === 'executing' ? (
         <motion.span
           initial={{ opacity: 0 }}
