@@ -13,6 +13,7 @@ import { clientsAgent }    from './agents/clients-agent';
 import { projectsAgent }   from './agents/projects-agent';
 import { inboxAgent }      from './agents/inbox-agent';
 import { onboardingAgent } from './agents/onboarding-agent';
+import { projectArchitectAgent } from './agents/project-architect-agent';
 
 export const AGENTS: AgentDefinition[] = [
   tasksAgent,
@@ -22,6 +23,7 @@ export const AGENTS: AgentDefinition[] = [
   projectsAgent,
   inboxAgent,
   onboardingAgent,
+  projectArchitectAgent,
 ];
 
 export const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));

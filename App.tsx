@@ -70,6 +70,7 @@ const loadBundlePreview = () => retryDynamicImport(() => import('./pages/BundleP
 const loadAgent = () => retryDynamicImport(() => import('./pages/Agent').then(m => ({ default: m.Agent })), 'Agent');
 const loadProducts = () => retryDynamicImport(() => import('./pages/Products').then(m => ({ default: m.Products })), 'Products');
 const loadBuildHub = () => retryDynamicImport(() => import('./pages/BuildHub').then(m => ({ default: m.BuildHub })), 'BuildHub');
+const loadProjectArchitect = () => retryDynamicImport(() => import('./pages/ProjectArchitect').then(m => ({ default: m.ProjectArchitect })), 'ProjectArchitect');
 
 const Home = React.lazy(loadHome);
 const Brief = React.lazy(loadBrief);
@@ -111,6 +112,7 @@ const BundlePreview = React.lazy(loadBundlePreview);
 const Agent = React.lazy(loadAgent);
 const Products = React.lazy(loadProducts);
 const BuildHub = React.lazy(loadBuildHub);
+const ProjectArchitect = React.lazy(loadProjectArchitect);
 // Livv Quote OS — self-contained quoting surface, mounted at ?app=quoting
 const QuoteOS = React.lazy(() => import('./components/quoting/QuoteOS'));
 
@@ -767,6 +769,15 @@ const AppContent: React.FC<{
             </KeepAlivePage>
           )}
 
+          {/* Project Architect — brief → blueprint → stages + tasks + dates */}
+          {visitedPages.has('project_architect') && (
+            <KeepAlivePage page="project_architect" active={currentPage === 'project_architect'}>
+              <ProtectedRoute permission={{ module: 'projects', action: 'view' }} feature="projects_module">
+                <ProjectArchitect onNavigate={handleNavigate} />
+              </ProtectedRoute>
+            </KeepAlivePage>
+          )}
+
           {/* Team / Clients (shared TeamClients component) */}
           {hasVisitedTeamClients && (
             <KeepAlivePage page="clients" active={isTeamClientsActive}>
@@ -1022,6 +1033,7 @@ const AUDIT_PAGE_LABELS: Partial<Record<PageView, string>> = {
   agent: 'Agents',
   products: 'Products',
   build_hub: 'Growth OS',
+  project_architect: 'Architect',
 };
 const AUDITED_PAGES = new Set<PageView>(Object.keys(AUDIT_PAGE_LABELS) as PageView[]);
 const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
@@ -1030,7 +1042,7 @@ const VALID_PAGES: ReadonlySet<PageView> = new Set<PageView>([
   'tenant_settings', 'client_portal', 'shared_project', 'content_cms', 'platform_admin',
   'platform_customers', 'platform_roles', 'platform_features', 'platform_audit', 'platform_slack_agent', 'platform_sales_agent',
   'strategy_hub', 'content_engine', 'sales_pipeline', 'team_scaling', 'growth_dashboard', 'strategy_toolkit',
-  'bundle_preview', 'agent', 'products', 'build_hub',
+  'bundle_preview', 'agent', 'products', 'build_hub', 'project_architect',
 ]);
 
 const readLastPage = (): PageView => {

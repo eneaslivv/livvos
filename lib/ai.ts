@@ -404,6 +404,40 @@ export const generateTaskFromAI = (input: string, profile?: LiveAIProfile): Prom
 export const generateProposalFromAI = (input: string, profile?: LiveAIProfile): Promise<ProposalAIResult> =>
   callGemini('proposal', input, (r) => !!r?.content, profile)
 
+// ─── Project Architect ───────────────────────────────────────────
+// Classifies a brief, picks the matching blueprint, and adapts it into a
+// strict project structure (stages + tasks + estimates). The model decides
+// structure only — never dates. Deep validation lives in
+// lib/projectArchitect/schema.ts; this gate just checks the coarse shape.
+
+export type ProjectArchitectAIResult = {
+  project: {
+    name: string
+    client: string | null
+    type: string
+    hard_deadline: string | null
+    target_deadline?: string | null
+  }
+  stages: Array<{
+    name: string
+    order: number
+    effort_weight: number
+    tasks: Array<{ title: string; estimate_hours: number; depends_on: string | null }>
+  }>
+  missing_info: string[]
+}
+
+export const generateProjectStructureFromAI = (
+  input: string,
+  profile?: LiveAIProfile,
+): Promise<ProjectArchitectAIResult> =>
+  callGemini(
+    'project_architect',
+    input,
+    (r) => !!r && typeof r === 'object' && !!(r as any).project && Array.isArray((r as any).stages) && (r as any).stages.length > 0,
+    profile,
+  )
+
 export const generateWeeklySummaryFromAI = (input: string, profile?: LiveAIProfile): Promise<WeeklySummaryAIResult> =>
   callGemini('weekly_summary', input, (r) => Array.isArray(r?.objectives) && Array.isArray(r?.focus_tasks) && Array.isArray(r?.recommendations), profile)
 
