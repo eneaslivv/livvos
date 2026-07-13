@@ -31,6 +31,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../context/TenantContext';
 import { useCalendar } from '../context/CalendarContext';
 import { useFinance } from '../context/FinanceContext';
+import { useRBAC } from '../context/RBACContext';
 import { useClients } from '../context/ClientsContext';
 import { useProjects, ProjectStatus } from '../context/ProjectsContext';
 import { useIsMobile } from '../hooks/useMediaQuery';
@@ -169,6 +170,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   }, [currentTenant, updateTenant]);
   const { tasks: allTasks, events, updateTask, createTask, updateEvent, createEvent, deleteEvent, deleteTask } = useCalendar();
   const { incomes, expenses } = useFinance();
+  const { hasPermission } = useRBAC();
   const { clients } = useClients();
   const { projects } = useProjects();
   // ModeTabs (Thoughts / Vision / Deep work) sistema removido — el toggle
@@ -1013,13 +1015,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             <SideCounter label="Done" value={doneTodayCount} sub={doneTodayCount > 0 ? `${doneTodayCount} today` : '0% complete'} tone="emerald" onClick={() => onNavigate('brief')} />
           </div>
 
-          {/* Monthly profit — dark card with sparkline */}
-          <MonthlyProfitCard
-            series={profitSeries}
-            currentMonthProfit={currentMonthProfit}
-            profitDelta={profitDelta}
-            onClick={() => onNavigate('finance')}
-          />
+          {/* Monthly profit — dark card with sparkline (hidden for roles without finance access) */}
+          {hasPermission('finance', 'view') && (
+            <MonthlyProfitCard
+              series={profitSeries}
+              currentMonthProfit={currentMonthProfit}
+              profitDelta={profitDelta}
+              onClick={() => onNavigate('finance')}
+            />
+          )}
 
           {/* Quick tasks — overdue + today con checkbox.
               Reemplaza el bloque de Insights genérico (no servía). */}

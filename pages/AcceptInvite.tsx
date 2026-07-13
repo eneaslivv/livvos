@@ -41,12 +41,35 @@ export const AcceptInvite: React.FC = () => {
         if (error || !row) {
           setError('Invitation not found or expired.');
         } else if (row.status === 'accepted') {
+          // Google/OAuth signups land back here AFTER the handle_new_user
+          // trigger already accepted the invitation — that's success.
+          const { data: sess } = await supabase.auth.getSession();
+          const sessEmail = sess?.session?.user?.email?.toLowerCase();
+          if (sessEmail && sessEmail === (row.email || '').toLowerCase()) {
+            window.location.href = (row.type === 'client') ? '/?portal=client' : '/';
+            return;
+          }
           setError('This invitation has already been used.');
         } else {
           setEmail(row.email);
           setInviteType(row.type || 'team');
           setTenantName(row.tenant_name || row.tenant || null);
           setIsValidToken(true);
+
+          // Already signed in (e.g. back from the Google redirect, or an open
+          // session for the invited email) — accept directly, no password step.
+          const { data: sess } = await supabase.auth.getSession();
+          const sessEmail = sess?.session?.user?.email?.toLowerCase();
+          if (sessEmail && sessEmail === (row.email || '').toLowerCase()) {
+            const { data: result } = await supabase.rpc('accept_invitation', { p_token: token });
+            if (result?.success || result?.error === 'Invitation not found or already used') {
+              window.location.href = (row.type === 'client') ? '/?portal=client' : '/';
+              return;
+            }
+            setError(result?.error || 'Could not accept the invitation.');
+          } else if (sessEmail) {
+            setError(`You are signed in as ${sessEmail}, but this invitation is for ${row.email}. Sign out and use the invited account.`);
+          }
 
           // Detect existing-user case up front so the form opens in the right mode
           // and we never surprise the user with a "switch to sign-in" mid-flow.
@@ -178,6 +201,25 @@ export const AcceptInvite: React.FC = () => {
     }
   };
 
+  // Google OAuth — redirects back to this page with a session; the mount
+  // effect (or the handle_new_user trigger for brand-new users) finishes
+  // the acceptance.
+  const handleGoogle = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/accept-invite?token=${token}` },
+      });
+      if (oauthError) throw oauthError;
+      // The browser navigates away to Google from here.
+    } catch (err: any) {
+      setError(err.message || 'Could not start Google sign-in.');
+      setIsSubmitting(false);
+    }
+  };
+
   // Sign-in flow for existing users
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -297,6 +339,35 @@ export const AcceptInvite: React.FC = () => {
     </span>
   );
 
+  const googleButton = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 14px' }}>
+        <span style={{ flex: 1, height: 1, background: '#E6E2D8' }} />
+        <span style={{ fontSize: 11, color: '#78736A', letterSpacing: '0.08em' }}>OR</span>
+        <span style={{ flex: 1, height: 1, background: '#E6E2D8' }} />
+      </div>
+      <button
+        type="button" onClick={handleGoogle} disabled={isSubmitting}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+          padding: '12px 16px', borderRadius: 12, border: '1px solid #E6E2D8', background: '#fff',
+          color: '#09090B', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
+          <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
+          <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z" />
+          <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 12.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
+        </svg>
+        Continue with Google
+      </button>
+      <p style={{ fontSize: 11.5, color: '#78736A', marginTop: 8, textAlign: 'center' }}>
+        Use the Google account for {email}
+      </p>
+    </>
+  );
+
   return (
     <AuthSplitLayout
       eyebrow={isClientInvite ? '© CLIENT PORTAL ポータル' : '© JOIN THE TEAM ポータル'}
@@ -343,6 +414,7 @@ export const AcceptInvite: React.FC = () => {
           <button type="submit" className="pa-btn pa-btn-wine" disabled={isSubmitting || !password}>
             {isSubmitting ? spinner : <>Sign in & accept <ArrowRight size={16} /></>}
           </button>
+          {googleButton}
           <button type="button" className="pa-link" style={{ display: 'block', margin: '16px auto 0', fontSize: 12.5 }}
             onClick={() => { setExistingUserFlow(false); setPassword(''); setError(null); }}>
             Back to sign-up
@@ -381,6 +453,7 @@ export const AcceptInvite: React.FC = () => {
           <button type="submit" className="pa-btn pa-btn-wine" disabled={isSubmitting || !password || !confirmPassword || !agree}>
             {isSubmitting ? spinner : <>Enter your portal <ArrowRight size={16} /></>}
           </button>
+          {googleButton}
           <p style={{ textAlign: 'center', fontSize: 12.5, color: '#78736A', marginTop: 18 }}>
             Already set up? <button type="button" className="pa-link" onClick={() => { setExistingUserFlow(true); setPassword(''); setConfirmPassword(''); setError(null); }}>Sign in</button>
           </p>

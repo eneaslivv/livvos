@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { AiAdvisor } from './AiAdvisor';
 import { BottomTabBar } from './ui/BottomTabBar';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { usePresenceHeartbeat } from '../hooks/usePresenceHeartbeat';
 import { ClientsSidebarTree } from './layout/ClientsSidebarTree';
 import { TenantSwitcher } from './layout/TenantSwitcher';
 
@@ -448,6 +449,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, currentMo
   // If either condition fires, Master is hidden. Coming back to the
   // super-agency tenant restores it.
   const isMobile = useIsMobile();
+  usePresenceHeartbeat();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);

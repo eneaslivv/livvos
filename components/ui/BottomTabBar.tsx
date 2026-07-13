@@ -2,6 +2,7 @@ import React from 'react'
 import { Icons } from './Icons'
 import { PageView, NavParams } from '../../types'
 import { useAurora } from '../../context/AuroraContext'
+import { useRBAC } from '../../context/RBACContext'
 
 interface BottomTabBarProps {
   currentPage: PageView
@@ -31,6 +32,14 @@ const RIGHT: Tab[] = [
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({ currentPage, onNavigate }) => {
   const { setOpen: setAuroraOpen } = useAurora()
+  const { hasPermission } = useRBAC()
+
+  // Permission-gate tabs so restricted roles (collaborator) never see Finances.
+  const rightTabs = RIGHT.filter(t =>
+    t.id === 'finance' ? hasPermission('finance', 'view')
+    : t.id === 'projects' ? hasPermission('projects', 'view')
+    : true
+  )
 
   const TabButton: React.FC<{ tab: Tab }> = ({ tab }) => {
     const active = tab.match.includes(currentPage)
@@ -88,7 +97,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ currentPage, onNavig
           </span>
         </button>
 
-        {RIGHT.map(t => <TabButton key={t.id} tab={t} />)}
+        {rightTabs.map(t => <TabButton key={t.id} tab={t} />)}
       </div>
     </div>
   )

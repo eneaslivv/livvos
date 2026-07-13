@@ -118,7 +118,7 @@ export const UserManagement: React.FC = () => {
   // Invite form
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [accessLevel, setAccessLevel] = useState<'full' | 'custom'>('full');
+  const [accessLevel, setAccessLevel] = useState<'full' | 'collaborator' | 'custom'>('full');
   const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set(ALL_SCREEN_IDS));
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -231,6 +231,11 @@ export const UserManagement: React.FC = () => {
         const adminRole = roles.find(r => r.name === 'admin');
         if (!adminRole) throw new Error('Admin role not found');
         roleIdToUse = adminRole.id;
+      } else if (accessLevel === 'collaborator') {
+        // System role: only sees assigned tasks + member projects, no finance.
+        const collabRole = roles.find(r => r.name === 'collaborator');
+        if (!collabRole) throw new Error('Collaborator role not found — run the 2026-07-13 migration');
+        roleIdToUse = collabRole.id;
       } else {
         // Create custom role with selected permissions (admin client bypasses RLS)
         const { data: newRole, error: roleError } = await supabase
@@ -554,6 +559,23 @@ export const UserManagement: React.FC = () => {
                     </div>
                     <div className={`text-[10px] mt-0.5 ${accessLevel === 'full' ? 'text-indigo-200' : 'text-zinc-400'}`}>
                       All screens & features
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAccessLevel('collaborator'); setSelectedScreens(new Set()); }}
+                    className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                      accessLevel === 'collaborator'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <Icons.Users size={14} />
+                      Collaborator
+                    </div>
+                    <div className={`text-[10px] mt-0.5 ${accessLevel === 'collaborator' ? 'text-indigo-200' : 'text-zinc-400'}`}>
+                      Only assigned tasks & projects
                     </div>
                   </button>
                   <button

@@ -14,6 +14,7 @@ export interface TeamMember {
     name: string | null;
     avatar_url: string | null;
     status: 'active' | 'invited' | 'suspended';
+    last_seen_at: string | null;
     role: string;
     role_id: string | null;
     // Agent fields
@@ -89,7 +90,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     supabase.from('profiles').select('*').order('name'),
                     supabase.from('user_roles').select('user_id, roles(id, name)'),
                     supabase.from('tasks').select('assignee_id, assignee_ids, completed'),
-                    supabase.from('project_members').select('member_id'),
+                    supabase.from('project_members').select('user_id'),
                 ]),
                 timeout,
             ]) as [PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>];
@@ -137,7 +138,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ? projectMembersResult.value.data : null;
             if (projectMembers) {
                 projectMembers.forEach((pm: any) => {
-                    projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
+                    projectCounts[pm.user_id] = (projectCounts[pm.user_id] || 0) + 1;
                 });
             }
 
@@ -156,6 +157,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     name: profile.name,
                     avatar_url: profile.avatar_url,
                     status: profile.status || 'active',
+                    last_seen_at: profile.last_seen_at ?? null,
                     role: roleName || 'No Role',
                     role_id: roleId || null,
                     is_agent: profile.is_agent ?? false,

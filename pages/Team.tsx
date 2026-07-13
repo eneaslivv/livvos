@@ -61,6 +61,20 @@ const getStatusIndicator = (status: TeamMember['status']) => {
     }
 };
 
+// Presence from profiles.last_seen_at (heartbeat updates it every ~4 min while the app is open)
+const formatLastSeen = (iso: string | null): string | null => {
+    if (!iso) return null;
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (diffMs < 5 * 60 * 1000) return 'Online now';
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `Active ${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Active ${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `Active ${days}d ago`;
+    return `Active ${new Date(iso).toLocaleDateString()}`;
+};
+
 const getAgentTypeInfo = (type: string | null) => {
     const found = AGENT_TYPES.find(t => t.value === type);
     return found || { value: 'custom', label: type || 'Agent', icon: 'Bot' };
@@ -379,6 +393,10 @@ export const Team: React.FC = () => {
                         const roleBadge = getRoleBadge(member.role);
                         const isSelected = selectedMember?.id === member.id;
                         const agentInfo = member.is_agent ? getAgentTypeInfo(member.agent_type) : null;
+                        const lastSeen = member.is_agent ? null : formatLastSeen(member.last_seen_at);
+                        const presenceColor = member.status !== 'active'
+                            ? statusInfo.color
+                            : lastSeen === 'Online now' ? 'bg-emerald-400' : 'bg-zinc-300';
 
                         return (
                             <div
@@ -423,7 +441,7 @@ export const Team: React.FC = () => {
                                                 (member.name || member.email).substring(0, 2).toUpperCase()
                                             )}
                                         </div>
-                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-zinc-900 ${statusInfo.color}`} />
+                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-zinc-900 ${presenceColor}`} />
                                     </div>
 
                                     <div className="flex-1 min-w-0 pt-0.5">
@@ -431,6 +449,9 @@ export const Team: React.FC = () => {
                                             {member.name || 'Unnamed'}
                                         </h3>
                                         <p className="text-xs text-zinc-400 truncate mt-0.5">{member.email}</p>
+                                        {lastSeen && (
+                                            <p className={`text-[10px] truncate mt-0.5 ${lastSeen === 'Online now' ? 'text-emerald-500' : 'text-zinc-400'}`}>{lastSeen}</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -522,6 +543,10 @@ export const Team: React.FC = () => {
                             {filteredMembers.map((member) => {
                                 const statusInfo = getStatusIndicator(member.status);
                                 const roleBadge = getRoleBadge(member.role);
+                                const lastSeen = member.is_agent ? null : formatLastSeen(member.last_seen_at);
+                                const presenceColor = member.status !== 'active'
+                                    ? statusInfo.color
+                                    : lastSeen === 'Online now' ? 'bg-emerald-400' : 'bg-zinc-300';
 
                                 return (
                                     <tr
@@ -570,8 +595,13 @@ export const Team: React.FC = () => {
                                         </td>
                                         <td className="px-5 py-3.5">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${statusInfo.color}`} />
-                                                <span className="text-xs text-zinc-500 capitalize">{member.status}</span>
+                                                <div className={`w-2 h-2 rounded-full ${presenceColor}`} />
+                                                <div>
+                                                    <span className="text-xs text-zinc-500 capitalize">{member.status}</span>
+                                                    {lastSeen && (
+                                                        <div className={`text-[10px] ${lastSeen === 'Online now' ? 'text-emerald-500' : 'text-zinc-400'}`}>{lastSeen}</div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5 text-center">
