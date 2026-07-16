@@ -819,6 +819,48 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
         refreshMemberships();
     }, [fetchTenantData, refreshMemberships]);
 
+    // ── Stale-workspace guard ────────────────────────────────────────────
+    // ALL tenant-scoped RLS hangs off profiles.tenant_id — a single mutable
+    // row shared by every session of this user. If another tab/device runs
+    // switch_active_tenant, every query in THIS tab silently starts returning
+    // the other workspace's data while the UI still shows the old one
+    // (cross-tenant bleed: e.g. Livv Studio's roster rendered inside CK
+    // Studio's calendar). Watch our own profile row; on a tenant_id change
+    // that doesn't match what's on screen, hard-reload so every context
+    // resyncs. Delayed + re-checked so the deliberate switch flow (which
+    // already reloads/navigates itself) isn't raced.
+    const currentTenantIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        currentTenantIdRef.current = currentTenant?.id ?? null;
+    }, [currentTenant?.id]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+        const channel = supabase
+            .channel(`tenant-guard-${user.id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}`,
+            }, (payload: any) => {
+                const newTenantId = payload.new?.tenant_id ?? null;
+                if (!newTenantId || !currentTenantIdRef.current) return;
+                if (newTenantId === currentTenantIdRef.current) return;
+                if (reloadTimer) clearTimeout(reloadTimer);
+                reloadTimer = setTimeout(() => {
+                    // Re-check: an in-app switch may have refetched/navigated already.
+                    if (currentTenantIdRef.current && newTenantId !== currentTenantIdRef.current) {
+                        errorLogger.warn?.('Active workspace changed in another session — reloading to resync');
+                        window.location.reload();
+                    }
+                }, 1500);
+            })
+            .subscribe();
+        return () => {
+            if (reloadTimer) clearTimeout(reloadTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
+
     // Apply branding when it changes
     useEffect(() => {
         applyBranding();

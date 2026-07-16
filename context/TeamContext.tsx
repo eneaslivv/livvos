@@ -63,11 +63,27 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [error, setError] = useState<string | null>(null);
     const hasLoadedRef = useRef(false);
 
-    // Fetch team members — queries run in parallel to avoid one slow query blocking the rest
+    // Fetch team members — queries run in parallel to avoid one slow query blocking the rest.
+    //
+    // IMPORTANT (tenant isolation): members come from the get_tenant_members
+    // RPC (tenant_members-backed, membership-validated server-side), NOT from
+    // a raw `profiles` select. The profiles RLS policy filters by
+    // profiles.tenant_id — each user's *currently active workspace*, which
+    // switch_active_tenant rewrites — so a raw select returned "everyone whose
+    // active workspace matches mine" instead of "members of the workspace I'm
+    // viewing". That leaked the full Livv Studio roster into the CK Studio
+    // calendar/team UI. Same source of truth as UserManagement + refreshUsage.
     const fetchTeamMembers = useCallback(async () => {
+        const tenantId = currentTenant?.id;
         if (!user) {
             setMembers([]);
             setIsLoading(false);
+            return;
+        }
+        if (!tenantId) {
+            // Tenant still resolving — keep the loading state; the effect
+            // re-runs when currentTenant lands.
+            setMembers([]);
             return;
         }
 
@@ -83,26 +99,29 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setTimeout(() => reject(new Error('Team data request timed out')), 10000)
             );
 
-            // Run all queries in parallel so one slow/hanging query doesn't block the rest
-            const [profilesResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.race([
+            // Run all queries in parallel so one slow/hanging query doesn't block the rest.
+            // tasks are tenant-scoped explicitly: their RLS intentionally spans
+            // tenants (shared projects / cross-tenant assignees), so an
+            // unfiltered select would count another workspace's tasks here.
+            const [membersResult, userRolesResult, tasksResult, projectMembersResult] = await Promise.race([
                 Promise.allSettled([
-                    supabase.from('profiles').select('*').order('name'),
+                    supabase.rpc('get_tenant_members', { p_tenant_id: tenantId }),
                     supabase.from('user_roles').select('user_id, roles(id, name)'),
-                    supabase.from('tasks').select('assignee_id, assignee_ids, completed'),
-                    supabase.from('project_members').select('member_id'),
+                    supabase.from('tasks').select('assignee_id, assignee_ids, completed').eq('tenant_id', tenantId),
+                    supabase.from('project_members').select('user_id'),
                 ]),
                 timeout,
             ]) as [PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>, PromiseSettledResult<any>];
 
-            // 1. Profiles (required)
-            const profiles = profilesResult.status === 'fulfilled' && !profilesResult.value.error
-                ? profilesResult.value.data : null;
+            // 1. Tenant members (required)
+            const tenantMembers = membersResult.status === 'fulfilled' && !membersResult.value.error
+                ? membersResult.value.data : null;
 
-            if (!profiles) {
-                const msg = profilesResult.status === 'rejected'
-                    ? (profilesResult.reason as Error).message
-                    : (profilesResult as PromiseFulfilledResult<any>).value?.error?.message || 'Unknown error';
-                if (import.meta.env.DEV) console.warn('Could not fetch profiles:', msg);
+            if (!tenantMembers) {
+                const msg = membersResult.status === 'rejected'
+                    ? (membersResult.reason as Error).message
+                    : (membersResult as PromiseFulfilledResult<any>).value?.error?.message || 'Unknown error';
+                if (import.meta.env.DEV) console.warn('Could not fetch tenant members:', msg);
                 setMembers([]);
                 setIsLoading(false);
                 return;
@@ -137,32 +156,33 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ? projectMembersResult.value.data : null;
             if (projectMembers) {
                 projectMembers.forEach((pm: any) => {
-                    projectCounts[pm.member_id] = (projectCounts[pm.member_id] || 0) + 1;
+                    projectCounts[pm.user_id] = (projectCounts[pm.user_id] || 0) + 1;
                 });
             }
 
             // 5. Merge data
-            const enrichedMembers: TeamMember[] = profiles.map((profile: any) => {
-                const roleEntry = userRoles?.find((ur: any) => ur.user_id === profile.id);
-                const tc = taskCounts[profile.id] || { open: 0, completed: 0 };
+            const enrichedMembers: TeamMember[] = tenantMembers.map((member: any) => {
+                const roleEntry = userRoles?.find((ur: any) => ur.user_id === member.id);
+                const tc = taskCounts[member.id] || { open: 0, completed: 0 };
 
                 const roleData: any = roleEntry?.roles;
-                const roleName: string = roleData ? (Array.isArray(roleData) ? roleData[0]?.name : roleData.name) : 'No Role';
+                // RBAC role (user_roles) first; tenant membership role as fallback.
+                const roleName: string = roleData ? (Array.isArray(roleData) ? roleData[0]?.name : roleData.name) : (member.member_role || 'No Role');
                 const roleId: string | null = roleData ? (Array.isArray(roleData) ? roleData[0]?.id : roleData.id) : null;
 
                 return {
-                    id: profile.id,
-                    email: profile.email,
-                    name: profile.name,
-                    avatar_url: profile.avatar_url,
-                    status: profile.status || 'active',
+                    id: member.id,
+                    email: member.email,
+                    name: member.name,
+                    avatar_url: member.avatar_url,
+                    status: member.status || 'active',
                     role: roleName || 'No Role',
                     role_id: roleId || null,
-                    is_agent: profile.is_agent ?? false,
-                    agent_type: profile.agent_type ?? null,
-                    agent_description: profile.agent_description ?? null,
-                    agent_connected: profile.agent_connected ?? false,
-                    assignedProjects: projectCounts[profile.id] || 0,
+                    is_agent: member.is_agent ?? false,
+                    agent_type: member.agent_type ?? null,
+                    agent_description: member.agent_description ?? null,
+                    agent_connected: member.agent_connected ?? false,
+                    assignedProjects: projectCounts[member.id] || 0,
                     openTasks: tc.open,
                     completedTasks: tc.completed,
                 };
@@ -176,7 +196,9 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } finally {
             setIsLoading(false);
         }
-    }, [user?.id]);
+    // currentTenant?.id in deps: switching workspaces MUST refetch the member
+    // list, otherwise the previous tenant's roster stays on screen.
+    }, [user?.id, currentTenant?.id]);
 
     // Initial fetch + realtime
     const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +212,8 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .channel('team-rt')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, debouncedFetch)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, debouncedFetch)
+            // Membership add/remove — the member list is tenant_members-backed now.
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tenant_members' }, debouncedFetch)
             .subscribe();
         return () => {
             if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
@@ -197,13 +221,17 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [fetchTeamMembers]);
 
-    // Get tasks for a specific member
+    // Get tasks for a specific member — tenant-scoped (tasks RLS spans tenants
+    // for shared projects, so without the filter this listed tasks from OTHER
+    // workspaces the member belongs to).
     const getMemberTasks = useCallback(async (memberId: string): Promise<TeamTask[]> => {
         try {
+            if (!currentTenant?.id) return [];
             const { data, error } = await supabase
                 .from('tasks')
                 .select('id, title, project_id, assignee_id, completed, due_date, priority')
                 .eq('assignee_id', memberId)
+                .eq('tenant_id', currentTenant.id)
                 .order('completed', { ascending: true })
                 .order('due_date', { ascending: true });
 
@@ -217,7 +245,7 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error fetching member tasks:', err);
             return [];
         }
-    }, []);
+    }, [currentTenant?.id]);
 
     // Assign task to member
     const assignTaskToMember = async (taskId: string, memberId: string): Promise<void> => {
@@ -344,17 +372,27 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    // Remove member from tenant
+    // Remove member from tenant — server-side via RPC. tenant_members has no
+    // client DELETE policy, and the old client-side writes either failed RLS
+    // (other users' profile rows) or leaked across tenants (global task
+    // unassign / account-wide suspend). remove_tenant_member scopes everything
+    // to the current tenant and validates the caller is owner/admin.
     const removeMember = async (memberId: string) => {
         try {
+            const tenantId = currentTenant?.id;
+            if (!tenantId) throw new Error('No active workspace');
             const tenantName = currentTenant?.name || 'LIVV OS';
 
-            // Send email BEFORE removing (so we can still look up their profile)
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('email, name')
-                .eq('id', memberId)
-                .single();
+            // Look up their contact info BEFORE removing (from the member list
+            // we already hold — a profiles select may be RLS-blocked).
+            const member = members.find(m => m.id === memberId);
+            const profile = member ? { email: member.email, name: member.name } : null;
+
+            const { error: rpcError } = await supabase.rpc('remove_tenant_member', {
+                p_tenant_id: tenantId,
+                p_user_id: memberId,
+            });
+            if (rpcError) throw rpcError;
 
             if (profile?.email) {
                 sendEmail({
@@ -369,19 +407,6 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     },
                 }).catch(() => {})
             }
-
-            // Remove role assignments
-            await supabase.from('user_roles').delete().eq('user_id', memberId);
-            // Remove project memberships
-            await supabase.from('project_members').delete().eq('member_id', memberId);
-            // Unassign tasks
-            await supabase.from('tasks').update({ assignee_id: null }).eq('assignee_id', memberId);
-            // Remove profile from tenant (set tenant_id to null)
-            const { error } = await supabase
-                .from('profiles')
-                .update({ tenant_id: null, status: 'suspended' })
-                .eq('id', memberId);
-            if (error) throw error;
 
             setMembers(prev => prev.filter(m => m.id !== memberId));
         } catch (err) {
