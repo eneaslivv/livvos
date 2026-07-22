@@ -51,10 +51,84 @@ export interface TasksTabProps {
   onAiDiscard: () => void;
   // Error
   taskError: string | null;
+  /** Role gates — structural edits (add/edit phases & tasks). Completing a
+   *  task stays always-on: assignment-scoped RLS enforces it server-side. */
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const formatCurrency = (amount: number) =>
   amount >= 1000 ? `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : `$${amount}`;
+
+/* Signature motion curve for every micro-interaction in this tab. */
+const EASE_SOFT = [0.16, 1, 0.3, 1] as const;
+
+/* ── Animated check circle — the Asana moment ─────────────────────
+   Spring pop on tap, SVG path draw on complete, and a one-shot pulse
+   ring so finishing a task feels like an event, not a state change. */
+const CheckCircle: React.FC<{
+  done: boolean;
+  size?: number;
+  onToggle: () => void;
+}> = ({ done, size = 20, onToggle }) => {
+  const [burst, setBurst] = useState(0);
+  return (
+    <motion.button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!done) setBurst(b => b + 1);
+        onToggle();
+      }}
+      whileTap={{ scale: 0.8 }}
+      whileHover={{ scale: 1.08 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+      className="relative flex items-center justify-center shrink-0 rounded-full group/check"
+      style={{
+        width: size, height: size,
+        border: done ? '1.5px solid var(--ok)' : '1.5px solid var(--os-border-2)',
+        background: done ? 'var(--ok)' : 'transparent',
+        transition: 'background 0.25s cubic-bezier(0.16,1,0.3,1), border-color 0.25s',
+        cursor: 'pointer',
+      }}
+      title={done ? 'Reopen task' : 'Mark complete'}
+    >
+      {/* Pulse ring on completion */}
+      <AnimatePresence>
+        {burst > 0 && done && (
+          <motion.span
+            key={burst}
+            initial={{ scale: 0.6, opacity: 0.7 }}
+            animate={{ scale: 2.1, opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.55, ease: 'easeOut' }}
+            className="absolute inset-0 rounded-full pointer-events-none"
+            style={{ border: '1.5px solid var(--ok)' }}
+          />
+        )}
+      </AnimatePresence>
+      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
+        <motion.path
+          d="M5 13l4 4L19 7"
+          stroke={done ? '#fff' : 'var(--ok)'}
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={false}
+          animate={{ pathLength: done ? 1 : 0, opacity: done ? 1 : 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className={done ? '' : 'group-hover/check:!opacity-40'}
+        />
+      </svg>
+    </motion.button>
+  );
+};
+
+/* ── Priority dot — warm editorial palette ── */
+const priorityColor = (p?: string) =>
+  p === 'urgent' ? 'var(--err)'
+  : p === 'high' ? 'var(--warn)'
+  : p === 'low' ? 'var(--os-fg-3)'
+  : 'var(--sky)';
 
 export const TasksTab: React.FC<TasksTabProps> = ({
   project,
@@ -94,6 +168,8 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   onAiAccept,
   onAiDiscard,
   taskError,
+  canEdit = true,
+  canDelete = true,
 }) => {
   // ── Steps structure ──────────────────────────────────────────
   // Phases read as numbered, collapsible steps. Fully-completed phases
@@ -114,13 +190,67 @@ export const TasksTab: React.FC<TasksTabProps> = ({
       if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
+
+  // ── Optimistic completion ────────────────────────────────────
+  // The server round-trip (update + realtime/refresh) takes ~1s; the check
+  // must react NOW. We keep a local override per task id and drop it once
+  // props catch up with the intended value.
+  const [pendingDone, setPendingDone] = useState<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    if (pendingDone.size === 0) return;
+    const settled: string[] = [];
+    for (const g of derivedTasksGroups) {
+      for (const t of g.tasks) {
+        const want = pendingDone.get(t.id);
+        if (want !== undefined && !!t.done === want) settled.push(t.id);
+        for (const s of getSubtasksFor(t.id)) {
+          const sWant = pendingDone.get(s.id);
+          if (sWant !== undefined && !!s.completed === sWant) settled.push(s.id);
+        }
+      }
+    }
+    if (settled.length) {
+      setPendingDone(prev => {
+        const next = new Map(prev);
+        settled.forEach(id => next.delete(id));
+        return next;
+      });
+    }
+  }, [derivedTasksGroups, pendingDone, getSubtasksFor]);
+  const effectiveDone = (t: any) => pendingDone.get(t.id) ?? !!t.done;
+  const handleToggle = (gIdx: number, task: any) => {
+    const next = !effectiveDone(task);
+    setPendingDone(prev => new Map(prev).set(task.id, next));
+    onToggleTask(gIdx, task.id);
+    // Safety net: if the server rejects the write (RLS) the props never
+    // settle — drop the override so the row snaps back to server truth.
+    scheduleOptimisticExpiry(task.id);
+  };
+  const scheduleOptimisticExpiry = (id: string) => {
+    setTimeout(() => {
+      setPendingDone(prev => {
+        if (!prev.has(id)) return prev;
+        const cleaned = new Map(prev);
+        cleaned.delete(id);
+        return cleaned;
+      });
+    }, 5000);
+  };
+  const handleToggleSub = (sub: any) => {
+    const next = !(pendingDone.get(sub.id) ?? !!sub.completed);
+    setPendingDone(prev => new Map(prev).set(sub.id, next));
+    onToggleSubtask(sub.id, sub.completed);
+    scheduleOptimisticExpiry(sub.id);
+  };
+
   // First phase with open work = the step the project is ON.
-  const currentStepIdx = derivedTasksGroups.findIndex((g: any) => g.tasks.some((t: any) => !t.done));
+  const currentStepIdx = derivedTasksGroups.findIndex((g: any) => g.tasks.some((t: any) => !effectiveDone(t)));
+  const doneTotal = projectTasks.filter((t: any) => pendingDone.get(t.id) ?? t.completed).length;
 
   // The AI generator is great on an empty project but eats half the
   // viewport once real phases exist — collapse it to a slim trigger.
   const [aiOpen, setAiOpen] = useState(false);
-  const showAiBlock = aiOpen || !!aiPreview || projectTasks.length === 0;
+  const showAiBlock = canEdit && (aiOpen || !!aiPreview || projectTasks.length === 0);
 
   // AI preview edit helpers
   const updatePreviewPhase = (pIdx: number, patch: Partial<AiPreview['phases'][0]>) => {
@@ -181,27 +311,30 @@ export const TasksTab: React.FC<TasksTabProps> = ({
     });
     onAiPreviewChange({ ...aiPreview, phases });
   };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
       {/* AI Task Generator — full block on empty projects / when opened;
           slim trigger once real tasks exist so the steps own the page. */}
-      {!showAiBlock && (
-        <button
+      {canEdit && !showAiBlock && (
+        <motion.button
           onClick={() => setAiOpen(true)}
-          className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-dashed border-violet-200 dark:border-violet-900/40 text-violet-500 dark:text-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors"
+          whileTap={{ scale: 0.99 }}
+          className="w-full flex items-center gap-2.5 px-4 py-2.5 transition-colors hover:bg-[var(--accent-soft)]"
+          style={{ borderRadius: 12, border: '1px dashed var(--accent-strong)', color: 'var(--fg-gold)' }}
         >
           <Icons.Sparkles size={13} />
           <span className="text-xs font-semibold uppercase tracking-wider">AI Task Generator</span>
-          <span className="text-[11px] text-zinc-400 normal-case font-normal">— describe work, get phases &amp; tasks</span>
+          <span className="text-[11px] normal-case font-normal" style={{ color: 'var(--os-fg-3)' }}>— describe work, get phases &amp; tasks</span>
           <Icons.ChevronDown size={13} className="ml-auto" />
-        </button>
+        </motion.button>
       )}
       {showAiBlock && (
-      <div className="rounded-xl border border-violet-100 dark:border-violet-900/30 bg-gradient-to-br from-violet-50/50 to-white dark:from-violet-950/20 dark:to-zinc-950 overflow-hidden">
-        <div className="px-5 py-3.5 flex items-center gap-2 border-b border-violet-100/50 dark:border-violet-900/20">
-          <Icons.Sparkles size={14} className="text-violet-500" />
-          <span className="text-xs font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wider">AI Task Generator</span>
+      <div className="overflow-hidden" style={{ borderRadius: 14, border: '0.5px solid var(--accent-strong)', background: 'var(--os-panel)', boxShadow: 'var(--shadow-card)' }}>
+        <div className="px-5 py-3.5 flex items-center gap-2" style={{ borderBottom: '0.5px solid var(--os-divider)', background: 'var(--accent-soft)' }}>
+          <Icons.Sparkles size={14} style={{ color: 'var(--fg-gold)' }} />
+          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--fg-gold)' }}>AI Task Generator</span>
         </div>
         <div className="p-5 space-y-3">
           <textarea
@@ -210,70 +343,77 @@ export const TasksTab: React.FC<TasksTabProps> = ({
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onAiGenerate(); } }}
             placeholder="Describe the work to be done and AI will break it into phases and tasks..."
             rows={2}
-            className="w-full px-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-800 resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
+            className="w-full px-4 py-3 text-sm focus:outline-none resize-none"
+            style={{ background: 'var(--os-surface)', border: '0.5px solid var(--os-border-2)', borderRadius: 12, color: 'var(--os-fg-0)' }}
           />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-zinc-400">Ctrl+Enter to generate</span>
-            <button
+            <span className="text-[10px]" style={{ color: 'var(--os-fg-3)' }}>Ctrl+Enter to generate</span>
+            <motion.button
               onClick={onAiGenerate}
               disabled={aiGenerating || !aiPrompt.trim()}
-              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              whileTap={{ scale: 0.96 }}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)', borderRadius: 999 }}
             >
               {aiGenerating ? (
                 <><Icons.Loader size={13} className="animate-spin" /> Generating...</>
               ) : (
                 <><Icons.Sparkles size={13} /> Generate tasks</>
               )}
-            </button>
+            </motion.button>
           </div>
           {aiError && (
-            <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-2 rounded-lg">
+            <div className="flex items-center gap-2 text-xs px-3 py-2" style={{ color: 'var(--err)', background: 'rgba(239,68,68,0.07)', borderRadius: 10 }}>
               <Icons.AlertCircle size={13} /> {aiError}
             </div>
           )}
         </div>
         {/* AI Preview — fully editable */}
         {aiPreview && (
-          <div className="border-t border-violet-100/50 dark:border-violet-900/20">
-            <div className="px-5 py-3 flex items-center justify-between bg-violet-50/50 dark:bg-violet-950/10">
-              <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">
+          <div style={{ borderTop: '0.5px solid var(--os-divider)' }}>
+            <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--accent-soft)' }}>
+              <span className="text-xs font-semibold" style={{ color: 'var(--fg-gold)' }}>
                 {aiPreview.phases.reduce((s, p) => s + p.tasks.length, 0)} tasks
                 {(() => { const st = aiPreview.phases.reduce((s, p) => s + p.tasks.reduce((ss, t) => ss + (t.subtasks?.length || 0), 0), 0); return st > 0 ? ` + ${st} subtasks` : ''; })()}
                 {' '}in {aiPreview.phases.length} phases
                 {aiPreview.phases.some(p => p.budget) && (
-                  <span className="ml-2 text-emerald-600 dark:text-emerald-400">
+                  <span className="ml-2" style={{ color: 'var(--ok)' }}>
                     · ${aiPreview.phases.reduce((s, p) => s + (p.budget || 0), 0).toLocaleString()}
                   </span>
                 )}
               </span>
               <div className="flex items-center gap-2">
-                <button onClick={onAiDiscard} className="px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+                <button onClick={onAiDiscard} className="px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-70" style={{ color: 'var(--os-fg-2)' }}>
                   Discard
                 </button>
-                <button
+                <motion.button
                   onClick={onAiAccept}
                   disabled={aiGenerating || aiPreview.phases.length === 0}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-50 active:scale-95"
+                  whileTap={{ scale: 0.96 }}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold transition-opacity disabled:opacity-50"
+                  style={{ background: 'var(--ok)', color: '#fff', borderRadius: 999 }}
                 >
                   {aiGenerating ? <Icons.Loader size={12} className="animate-spin" /> : <Icons.Check size={12} />}
                   Accept and create
-                </button>
+                </motion.button>
               </div>
             </div>
             <div className="p-5 space-y-5">
               {aiPreview.phases.map((phase, pIdx) => (
-                <div key={pIdx} className="rounded-lg border border-zinc-100 dark:border-zinc-800 overflow-hidden">
+                <div key={pIdx} className="overflow-hidden" style={{ borderRadius: 12, border: '0.5px solid var(--os-border-2)' }}>
                   {/* Phase header — editable */}
-                  <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 space-y-2">
+                  <div className="px-4 py-3 space-y-2" style={{ background: 'var(--os-surface)' }}>
                     <div className="flex items-center gap-2">
                       <input
                         value={phase.name}
                         onChange={e => updatePreviewPhase(pIdx, { name: e.target.value })}
-                        className="flex-1 text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider bg-transparent border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                        className="flex-1 text-[11px] font-bold uppercase tracking-wider bg-transparent border-b border-transparent focus:outline-none px-0 py-0.5"
+                        style={{ color: 'var(--os-fg-1)' }}
                       />
                       <button
                         onClick={() => deletePreviewPhase(pIdx)}
-                        className="p-1 text-zinc-300 hover:text-red-400 transition-colors"
+                        className="p-1 transition-colors hover:!text-[var(--err)]"
+                        style={{ color: 'var(--os-fg-3)' }}
                         title="Remove phase"
                       >
                         <Icons.X size={12} />
@@ -281,66 +421,68 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center gap-1.5">
-                        <Icons.Calendar size={10} className="text-zinc-400" />
+                        <Icons.Calendar size={10} style={{ color: 'var(--os-fg-3)' }} />
                         <input
                           type="date"
                           value={phase.startDate || ''}
                           onChange={e => updatePreviewPhase(pIdx, { startDate: e.target.value || undefined })}
-                          className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
+                          className="text-[11px] bg-transparent border-b border-dashed focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
+                          style={{ color: 'var(--os-fg-2)', borderColor: 'var(--os-border-2)' }}
                         />
-                        <span className="text-[10px] text-zinc-300">—</span>
+                        <span className="text-[10px]" style={{ color: 'var(--os-fg-3)' }}>—</span>
                         <input
                           type="date"
                           value={phase.endDate || ''}
                           onChange={e => updatePreviewPhase(pIdx, { endDate: e.target.value || undefined })}
-                          className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
+                          className="text-[11px] bg-transparent border-b border-dashed focus:outline-none px-1 py-0.5 w-[130px] cursor-pointer"
+                          style={{ color: 'var(--os-fg-2)', borderColor: 'var(--os-border-2)' }}
                         />
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-zinc-400">$</span>
+                        <span className="text-[10px]" style={{ color: 'var(--os-fg-3)' }}>$</span>
                         <input
                           type="number"
                           value={phase.budget || ''}
                           onChange={e => updatePreviewPhase(pIdx, { budget: Number(e.target.value) || 0 })}
-                          className="w-20 text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-emerald-400 focus:outline-none px-0.5 py-0 tabular-nums"
+                          className="w-20 text-[10px] bg-transparent border-b border-dashed focus:outline-none px-0.5 py-0 tabular-nums"
+                          style={{ color: 'var(--os-fg-2)', borderColor: 'var(--os-border-2)' }}
                           placeholder="Budget"
                         />
                       </div>
                     </div>
                   </div>
                   {/* Tasks + Subtasks — editable */}
-                  <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
+                  <div>
                     {phase.tasks.map((task, tIdx) => (
-                      <div key={tIdx}>
+                      <div key={tIdx} style={{ borderTop: tIdx > 0 ? '0.5px solid var(--os-divider)' : undefined }}>
                         {/* Parent task row */}
-                        <div className="group/aitask flex items-center gap-2 px-4 py-2 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10">
-                          <div className="w-4 h-4 rounded-full border-2 border-zinc-200 dark:border-zinc-700 shrink-0" />
+                        <div className="group/aitask flex items-center gap-2 px-4 py-2 transition-colors hover:bg-[var(--os-surface)]">
+                          <div className="w-4 h-4 rounded-full shrink-0" style={{ border: '1.5px solid var(--os-border-2)' }} />
                           <input
                             value={task.title}
                             onChange={e => updatePreviewTask(pIdx, tIdx, { title: e.target.value })}
-                            className="flex-1 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                            className="flex-1 text-sm bg-transparent border-b border-transparent focus:outline-none px-0 py-0.5"
+                            style={{ color: 'var(--os-fg-0)' }}
                           />
                           {(task as any).dueDate && (
                             <input
                               type="date"
                               value={(task as any).dueDate}
                               onChange={e => updatePreviewTask(pIdx, tIdx, { dueDate: e.target.value } as any)}
-                              className="text-[10px] text-zinc-400 dark:text-zinc-500 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-violet-400 focus:outline-none px-0.5 py-0 w-24"
+                              className="text-[10px] bg-transparent border-b border-dashed focus:outline-none px-0.5 py-0 w-24"
+                              style={{ color: 'var(--os-fg-3)', borderColor: 'var(--os-border-2)' }}
                             />
                           )}
                           {(task as any).assignee && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-500 dark:bg-violet-500/10 dark:text-violet-400 truncate max-w-[80px]" title={(task as any).assignee}>
+                            <span className="text-[9px] px-1.5 py-0.5 truncate max-w-[80px]" style={{ borderRadius: 999, background: 'var(--accent-soft)', color: 'var(--fg-gold)' }} title={(task as any).assignee}>
                               {(task as any).assignee}
                             </span>
                           )}
                           <select
                             value={task.priority}
                             onChange={e => updatePreviewTask(pIdx, tIdx, { priority: e.target.value })}
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none ${
-                              task.priority === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
-                                : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-400'
-                                : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
-                            }`}
+                            className="text-[10px] px-1.5 py-0.5 font-medium border-0 cursor-pointer focus:outline-none"
+                            style={{ borderRadius: 999, background: 'var(--os-surface)', color: priorityColor(task.priority) }}
                           >
                             <option value="high">high</option>
                             <option value="medium">medium</option>
@@ -348,34 +490,38 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                           </select>
                           <button
                             onClick={() => addPreviewSubtask(pIdx, tIdx)}
-                            className="p-0.5 text-zinc-300 hover:text-violet-500 opacity-0 group-hover/aitask:opacity-100 transition-all"
+                            className="p-0.5 opacity-0 group-hover/aitask:opacity-100 transition-all hover:!text-[var(--fg-gold)]"
+                            style={{ color: 'var(--os-fg-3)' }}
                             title="Add subtask"
                           >
                             <Icons.Plus size={11} />
                           </button>
                           <button
                             onClick={() => deletePreviewTask(pIdx, tIdx)}
-                            className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aitask:opacity-100 transition-all"
+                            className="p-0.5 opacity-0 group-hover/aitask:opacity-100 transition-all hover:!text-[var(--err)]"
+                            style={{ color: 'var(--os-fg-3)' }}
                           >
                             <Icons.X size={11} />
                           </button>
                         </div>
                         {/* Subtask rows */}
                         {task.subtasks && task.subtasks.length > 0 && (
-                          <div className="ml-6 border-l-2 border-zinc-100 dark:border-zinc-800">
+                          <div className="ml-6" style={{ borderLeft: '2px solid var(--os-divider)' }}>
                             {task.subtasks.map((sub, sIdx) => (
-                              <div key={sIdx} className="group/aisub flex items-center gap-2 pl-4 pr-4 py-1.5 hover:bg-zinc-50/30 dark:hover:bg-zinc-800/5">
-                                <div className="w-3 h-3 rounded border border-zinc-200 dark:border-zinc-700 shrink-0" />
+                              <div key={sIdx} className="group/aisub flex items-center gap-2 pl-4 pr-4 py-1.5 transition-colors hover:bg-[var(--os-surface)]">
+                                <div className="w-3 h-3 rounded shrink-0" style={{ border: '1px solid var(--os-border-2)' }} />
                                 <input
                                   value={sub.title}
                                   onChange={e => updatePreviewSubtask(pIdx, tIdx, sIdx, { title: e.target.value })}
                                   placeholder="Subtask title..."
                                   autoFocus={!sub.title}
-                                  className="flex-1 text-xs text-zinc-600 dark:text-zinc-400 bg-transparent border-b border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-violet-400 focus:outline-none px-0 py-0.5"
+                                  className="flex-1 text-xs bg-transparent border-b border-transparent focus:outline-none px-0 py-0.5"
+                                  style={{ color: 'var(--os-fg-1)' }}
                                 />
                                 <button
                                   onClick={() => deletePreviewSubtask(pIdx, tIdx, sIdx)}
-                                  className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/aisub:opacity-100 transition-all"
+                                  className="p-0.5 opacity-0 group-hover/aisub:opacity-100 transition-all hover:!text-[var(--err)]"
+                                  style={{ color: 'var(--os-fg-3)' }}
                                 >
                                   <Icons.X size={10} />
                                 </button>
@@ -396,7 +542,8 @@ export const TasksTab: React.FC<TasksTabProps> = ({
         {projectTasks.length > 0 && !aiPreview && (
           <button
             onClick={() => setAiOpen(false)}
-            className="w-full px-5 py-2 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 border-t border-violet-100/50 dark:border-violet-900/20 transition-colors"
+            className="w-full px-5 py-2 text-[10px] font-medium transition-colors hover:opacity-70"
+            style={{ color: 'var(--os-fg-3)', borderTop: '0.5px solid var(--os-divider)' }}
           >
             Hide generator
           </button>
@@ -405,65 +552,88 @@ export const TasksTab: React.FC<TasksTabProps> = ({
       )}
 
       {/* Error banner */}
-      {taskError && (
-        <div className="px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs text-rose-600 dark:text-rose-400">
-          {taskError}
-        </div>
-      )}
+      <AnimatePresence>
+        {taskError && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="px-4 py-2 text-xs"
+            style={{ background: 'rgba(239,68,68,0.07)', border: '0.5px solid rgba(239,68,68,0.25)', borderRadius: 12, color: 'var(--err)' }}
+          >
+            {taskError}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Summary bar */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{projectTasks.length} tasks</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--os-fg-0)' }}>{projectTasks.length} tasks</span>
           {projectTasks.length > 0 && (
             <div className="flex items-center gap-2">
-              <div className="w-24 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${projectTasks.length ? Math.round(projectTasks.filter((t: any) => t.completed).length / projectTasks.length * 100) : 0}%` }}
+              <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--os-surface)' }}>
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: 'var(--ok)' }}
+                  animate={{ width: `${projectTasks.length ? Math.round(doneTotal / projectTasks.length * 100) : 0}%` }}
+                  transition={{ duration: 0.5, ease: EASE_SOFT }}
                 />
               </div>
-              <span className="text-[10px] text-zinc-400 tabular-nums">
-                {projectTasks.filter((t: any) => t.completed).length}/{projectTasks.length}
+              <span className="text-[10px] tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--os-fg-3)' }}>
+                {doneTotal}/{projectTasks.length}
               </span>
             </div>
           )}
         </div>
         {/* Where the project is right now */}
         {currentStepIdx >= 0 && derivedTasksGroups.length > 0 && (
-          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span className="font-mono font-semibold text-amber-500 tabular-nums">
+          <span className="text-[11px]" style={{ color: 'var(--os-fg-2)' }}>
+            <span className="font-semibold tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-gold)' }}>
               Step {String(currentStepIdx + 1).padStart(2, '0')}/{String(derivedTasksGroups.length).padStart(2, '0')}
             </span>
             {' · '}
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">{derivedTasksGroups[currentStepIdx].name}</span>
+            <span className="font-medium" style={{ color: 'var(--os-fg-1)' }}>{derivedTasksGroups[currentStepIdx].name}</span>
           </span>
         )}
       </div>
 
       {/* Quick task (pinned) */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-        <Icons.Plus size={16} className="text-zinc-400 shrink-0" />
+      {canEdit && (
+      <div
+        className="flex items-center gap-3 px-4 py-3 transition-shadow focus-within:shadow-[var(--shadow-sm)]"
+        style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)' }}
+      >
+        <Icons.Plus size={16} style={{ color: 'var(--os-fg-3)' }} className="shrink-0" />
         <input
           value={quickTaskTitle}
           onChange={e => onQuickTaskTitleChange(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && onQuickTask()}
           placeholder="Quick task... (Enter to create)"
-          className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none"
+          className="flex-1 bg-transparent text-sm focus:outline-none"
+          style={{ color: 'var(--os-fg-0)' }}
         />
-        {quickTaskTitle.trim() && (
-          <button
-            onClick={onQuickTask}
-            className="px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity active:scale-95"
-          >
-            Create
-          </button>
-        )}
+        <AnimatePresence>
+          {quickTaskTitle.trim() && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={onQuickTask}
+              className="px-3 py-1.5 text-[11px] font-semibold"
+              style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)', borderRadius: 999 }}
+            >
+              Create
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
+      )}
 
       {/* Phase groups — numbered, collapsible steps */}
       {derivedTasksGroups.map((group: any, gIdx: number) => {
-        const doneCount = group.tasks.filter((t: any) => t.done).length;
+        const doneCount = group.tasks.filter((t: any) => effectiveDone(t)).length;
         const totalCount = group.tasks.length;
         const phasePct = totalCount ? Math.round(doneCount / totalCount * 100) : 0;
         const phaseData = project.tasksGroups.find(g => g.name === group.name);
@@ -471,156 +641,214 @@ export const TasksTab: React.FC<TasksTabProps> = ({
         const isCurrent = gIdx === currentStepIdx;
         const isDone = totalCount > 0 && doneCount === totalCount;
         // Open work first; finished tasks sink to the bottom of the step.
-        const orderedTasks = [...group.tasks].sort((a: any, b: any) => Number(!!a.done) - Number(!!b.done));
+        const orderedTasks = [...group.tasks].sort((a: any, b: any) => Number(effectiveDone(a)) - Number(effectiveDone(b)));
         return (
           <div
-            key={gIdx}
-            className={`group rounded-xl border bg-white dark:bg-zinc-900/50 overflow-hidden shadow-sm transition-colors ${
-              isCurrent
-                ? 'border-amber-300/70 dark:border-amber-500/30 ring-1 ring-amber-200/50 dark:ring-amber-500/10'
-                : 'border-zinc-100 dark:border-zinc-800'
-            }`}
+            key={group.name}
+            className="group overflow-hidden"
+            style={{
+              background: 'var(--os-panel)',
+              border: isCurrent ? '0.5px solid var(--accent-strong)' : '0.5px solid var(--os-border-2)',
+              borderRadius: 14,
+              boxShadow: isCurrent ? '0 0 0 3px var(--accent-soft), var(--shadow-card)' : 'var(--shadow-card)',
+              transition: 'border-color 0.3s, box-shadow 0.3s',
+            }}
           >
             {/* Phase header — click anywhere to collapse/expand */}
             <div
               onClick={() => togglePhase(group.name)}
-              className={`px-5 py-3.5 cursor-pointer select-none ${isCollapsed ? '' : 'border-b border-zinc-100 dark:border-zinc-800'} bg-zinc-50/50 dark:bg-zinc-950/30 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/60 transition-colors`}
+              className="px-5 py-3.5 cursor-pointer select-none transition-colors hover:bg-[var(--os-surface)]"
+              style={{
+                borderBottom: isCollapsed ? undefined : '0.5px solid var(--os-divider)',
+                background: isCurrent ? 'var(--accent-soft)' : 'var(--os-surface-2)',
+              }}
             >
               <div className="flex items-center gap-3">
-                <Icons.ChevronDown
-                  size={14}
-                  className={`text-zinc-400 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-                />
+                <motion.span
+                  animate={{ rotate: isCollapsed ? -90 : 0 }}
+                  transition={{ duration: 0.25, ease: EASE_SOFT }}
+                  className="shrink-0 flex"
+                  style={{ color: 'var(--os-fg-3)' }}
+                >
+                  <Icons.ChevronDown size={14} />
+                </motion.span>
                 {/* Step number — editorial mono */}
-                <span className={`font-mono text-[11px] font-semibold tabular-nums shrink-0 ${isDone ? 'text-emerald-500' : isCurrent ? 'text-amber-500' : 'text-zinc-400'}`}>
+                <span
+                  className="text-[11px] font-semibold tabular-nums shrink-0"
+                  style={{ fontFamily: 'var(--font-mono)', color: isDone ? 'var(--ok)' : isCurrent ? 'var(--fg-gold)' : 'var(--os-fg-3)' }}
+                >
                   {String(gIdx + 1).padStart(2, '0')}
                 </span>
-                <h3 className={`text-sm font-bold truncate ${isDone ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                <h3 className="text-sm font-bold truncate" style={{ color: isDone ? 'var(--os-fg-3)' : 'var(--os-fg-0)' }}>
                   {group.name}
                 </h3>
                 {isCurrent && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 shrink-0">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 shrink-0"
+                    style={{ borderRadius: 999, background: 'var(--accent-strong)', color: 'var(--livv-wine-500)' }}
+                  >
                     Current
                   </span>
                 )}
-                {isDone && <Icons.Check size={13} className="text-emerald-500 shrink-0" strokeWidth={3} />}
+                {isDone && <Icons.Check size={13} strokeWidth={3} className="shrink-0" style={{ color: 'var(--ok)' }} />}
 
                 <div className="ml-auto flex items-center gap-3 shrink-0">
                   {totalCount > 0 && (
                     <div className="flex items-center gap-2">
-                      <div className="w-16 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden hidden sm:block">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${isDone ? 'bg-emerald-500' : 'bg-amber-400'}`}
-                          style={{ width: `${phasePct}%` }}
+                      <div className="w-16 h-1 rounded-full overflow-hidden hidden sm:block" style={{ background: 'var(--os-surface)' }}>
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ background: isDone ? 'var(--ok)' : 'var(--accent)' }}
+                          animate={{ width: `${phasePct}%` }}
+                          transition={{ duration: 0.5, ease: EASE_SOFT }}
                         />
                       </div>
-                      <span className="text-[10px] text-zinc-400 tabular-nums">{doneCount}/{totalCount}</span>
+                      <span className="text-[10px] tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--os-fg-3)' }}>{doneCount}/{totalCount}</span>
                     </div>
                   )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDeletePhase(group.name); }}
-                    className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Delete phase"
-                  >
-                    <Icons.X size={14} />
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeletePhase(group.name); }}
+                      className="p-1 transition-all opacity-0 group-hover:opacity-100 hover:!text-[var(--err)]"
+                      style={{ color: 'var(--os-fg-3)' }}
+                      title="Delete phase"
+                    >
+                      <Icons.X size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
               {/* Phase date range — only when expanded */}
               {!isCollapsed && (
                 <div className="flex items-center gap-2 mt-2 ml-12" onClick={e => e.stopPropagation()}>
-                  <Icons.Calendar size={11} className="text-zinc-400 shrink-0" />
+                  <Icons.Calendar size={11} style={{ color: 'var(--os-fg-3)' }} className="shrink-0" />
                   <input
                     type="date"
                     value={phaseData?.startDate || ''}
                     onChange={e => onUpdatePhaseDate(group.name, 'startDate', e.target.value)}
-                    className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                    disabled={!canEdit}
+                    className="text-[10px] bg-transparent border-b border-dashed focus:outline-none px-1 py-0.5 w-[110px] disabled:cursor-default"
+                    style={{ color: 'var(--os-fg-2)', borderColor: 'var(--os-border-2)' }}
                     title="Phase start date"
                   />
-                  <span className="text-[10px] text-zinc-300 dark:text-zinc-600">—</span>
+                  <span className="text-[10px]" style={{ color: 'var(--os-fg-3)' }}>—</span>
                   <input
                     type="date"
                     value={phaseData?.endDate || ''}
                     onChange={e => onUpdatePhaseDate(group.name, 'endDate', e.target.value)}
-                    className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-transparent border-b border-dashed border-zinc-200 dark:border-zinc-700 focus:border-blue-400 focus:outline-none px-1 py-0.5 w-[110px]"
+                    disabled={!canEdit}
+                    className="text-[10px] bg-transparent border-b border-dashed focus:outline-none px-1 py-0.5 w-[110px] disabled:cursor-default"
+                    style={{ color: 'var(--os-fg-2)', borderColor: 'var(--os-border-2)' }}
                     title="Phase end date"
                   />
                 </div>
               )}
             </div>
 
-            {/* Tasks */}
-            {!isCollapsed && (
-            <div className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
+            {/* Tasks — animated collapse + layout-animated rows */}
+            <AnimatePresence initial={false}>
+              {!isCollapsed && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: EASE_SOFT }}
+                  className="overflow-hidden"
+                >
               {orderedTasks.map((task: any) => {
+                const done = effectiveDone(task);
                 const subs = getSubtasksFor(task.id);
-                const subsCompleted = subs.filter((s: any) => s.completed).length;
+                const subsCompleted = subs.filter((s: any) => pendingDone.get(s.id) ?? s.completed).length;
                 const isExpanded = expandedTaskId === task.id;
-                const priorityColor = task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-amber-500' : task.priority === 'medium' ? 'bg-blue-500' : 'bg-emerald-500';
                 const payment = taskPayments.get(task.id);
                 return (
-                  <div key={task.id}>
-                    <div className="group/task flex items-center gap-3 px-5 py-3 hover:bg-zinc-50/80 dark:hover:bg-zinc-800/20 transition-colors">
-                      <button
-                        onClick={() => onToggleTask(gIdx, task.id)}
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                          task.done
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
-                            : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400 text-transparent'
-                        }`}
-                      >
-                        <Icons.Check size={11} strokeWidth={3} />
-                      </button>
-                      <div
-                        className={`flex-1 min-w-0 ${onOpenTask ? 'cursor-pointer' : ''}`}
-                        onClick={() => onOpenTask?.(task.id)}
-                        title={onOpenTask ? 'Open task' : undefined}
-                      >
+                  <motion.div
+                    key={task.id}
+                    layout="position"
+                    transition={{ layout: { duration: 0.35, ease: EASE_SOFT } }}
+                    style={{ borderTop: '0.5px solid var(--os-divider)' }}
+                  >
+                    <div
+                      className={`group/task flex items-center gap-3 px-5 py-2.5 transition-colors ${onOpenTask ? 'cursor-pointer' : ''} hover:bg-[var(--os-surface)]`}
+                      onClick={() => onOpenTask?.(task.id)}
+                      title={onOpenTask ? 'Open task' : undefined}
+                    >
+                      <CheckCircle done={done} onToggle={() => handleToggle(gIdx, task)} />
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm transition-colors truncate ${onOpenTask ? 'hover:underline' : ''} ${task.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                          <span className="relative text-sm truncate transition-colors" style={{ color: done ? 'var(--os-fg-3)' : 'var(--os-fg-0)' }}>
                             {task.title}
+                            {/* Animated strike-through */}
+                            <motion.span
+                              className="absolute left-0 top-1/2 h-px w-full pointer-events-none"
+                              style={{ background: 'var(--os-fg-3)', originX: 0 }}
+                              initial={false}
+                              animate={{ scaleX: done ? 1 : 0 }}
+                              transition={{ duration: 0.3, ease: EASE_SOFT }}
+                            />
                           </span>
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityColor}`} />
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: priorityColor(task.priority) }} />
                           {payment && (
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${
-                              payment.status === 'paid'
-                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
-                                : payment.status === 'overdue'
-                                ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400'
-                                : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
-                            }`}>
+                            <span
+                              className="text-[9px] px-1.5 py-0.5 font-semibold shrink-0"
+                              style={{
+                                borderRadius: 999,
+                                background: payment.status === 'paid' ? 'rgba(118,146,104,0.12)' : payment.status === 'overdue' ? 'rgba(239,68,68,0.08)' : 'var(--accent-soft)',
+                                color: payment.status === 'paid' ? 'var(--ok)' : payment.status === 'overdue' ? 'var(--err)' : 'var(--warn)',
+                              }}
+                            >
                               {formatCurrency(payment.amount)} · {payment.status}
                             </span>
                           )}
                         </div>
                         {subs.length > 0 && (
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <div className="w-12 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${subs.length ? Math.round(subsCompleted / subs.length * 100) : 0}%` }} />
+                            <div className="w-12 h-1 rounded-full overflow-hidden" style={{ background: 'var(--os-surface)' }}>
+                              <div className="h-full rounded-full transition-all" style={{ background: 'var(--ok)', width: `${subs.length ? Math.round(subsCompleted / subs.length * 100) : 0}%` }} />
                             </div>
-                            <span className="text-[9px] text-zinc-400 tabular-nums">{subsCompleted}/{subs.length}</span>
+                            <span className="text-[9px] tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--os-fg-3)' }}>{subsCompleted}/{subs.length}</span>
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                         <DatePickerButton
                           value={task.dueDate || null}
                           onChange={(date) => onUpdateTaskDate(task.id, date)}
-                          done={task.done}
+                          done={done}
+                          disabled={!canEdit}
                         />
                         <button
                           onClick={() => onSetExpandedTaskId(isExpanded ? null : task.id)}
-                          className={`p-1 rounded-md transition-all ${isExpanded ? 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500'}`}
+                          className="p-1 rounded-md transition-all"
+                          style={isExpanded
+                            ? { color: 'var(--fg-gold)', background: 'var(--accent-soft)' }
+                            : { color: 'var(--os-fg-3)' }}
                           title="Subtasks"
                         >
-                          <Icons.ChevronDown size={13} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          <motion.span animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex">
+                            <Icons.ChevronDown size={13} />
+                          </motion.span>
                         </button>
-                        <button
-                          onClick={() => onDeleteTask(task.id, task.title)}
-                          className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-400 dark:hover:text-red-400 transition-colors opacity-0 group-hover/task:opacity-100"
-                        >
-                          <Icons.Trash size={13} />
-                        </button>
+                        {canDelete && (
+                          <button
+                            onClick={() => onDeleteTask(task.id, task.title)}
+                            className="p-1 transition-all opacity-0 group-hover/task:opacity-100 hover:!text-[var(--err)]"
+                            style={{ color: 'var(--os-fg-3)' }}
+                          >
+                            <Icons.Trash size={13} />
+                          </button>
+                        )}
+                        {/* Open-detail affordance — appears on hover, Asana-style */}
+                        {onOpenTask && (
+                          <button
+                            onClick={() => onOpenTask(task.id)}
+                            className="p-1 transition-all opacity-0 group-hover/task:opacity-100 hover:!text-[var(--os-fg-0)]"
+                            style={{ color: 'var(--os-fg-3)' }}
+                            title="Open details"
+                          >
+                            <Icons.ChevronRight size={13} />
+                          </button>
+                        )}
                       </div>
                     </div>
                     {/* Subtasks panel */}
@@ -630,107 +858,140 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
+                          transition={{ duration: 0.2, ease: EASE_SOFT }}
                           className="overflow-hidden"
                         >
                           <div className="pl-12 pr-5 pb-3 space-y-1">
-                            {subs.map((sub: any) => (
+                            {subs.map((sub: any) => {
+                              const subDone = pendingDone.get(sub.id) ?? !!sub.completed;
+                              return (
                               <div key={sub.id} className="flex items-center gap-2 group/sub py-1">
-                                <button
-                                  onClick={() => onToggleSubtask(sub.id, sub.completed)}
-                                  className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                                    sub.completed
-                                      ? 'bg-emerald-500 border-emerald-500'
-                                      : 'border-zinc-300 dark:border-zinc-600 hover:border-emerald-400'
-                                  }`}
-                                >
-                                  {sub.completed && <Icons.Check size={9} className="text-white" strokeWidth={3} />}
-                                </button>
-                                <span className={`flex-1 text-xs ${sub.completed ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                <CheckCircle done={subDone} size={16} onToggle={() => handleToggleSub(sub)} />
+                                <span className="flex-1 text-xs" style={{ color: subDone ? 'var(--os-fg-3)' : 'var(--os-fg-1)', textDecoration: subDone ? 'line-through' : 'none' }}>
                                   {sub.title}
                                 </span>
-                                <button
-                                  onClick={() => onDeleteSubtask(sub.id)}
-                                  className="p-0.5 text-zinc-300 hover:text-red-400 opacity-0 group-hover/sub:opacity-100 transition-all"
-                                >
-                                  <Icons.X size={10} />
-                                </button>
+                                {canDelete && (
+                                  <button
+                                    onClick={() => onDeleteSubtask(sub.id)}
+                                    className="p-0.5 opacity-0 group-hover/sub:opacity-100 transition-all hover:!text-[var(--err)]"
+                                    style={{ color: 'var(--os-fg-3)' }}
+                                  >
+                                    <Icons.X size={10} />
+                                  </button>
+                                )}
                               </div>
-                            ))}
+                              );
+                            })}
                             {/* Add subtask input */}
-                            <div className="flex items-center gap-2 pt-1">
-                              <div className="w-4 h-4 rounded border-2 border-dashed border-zinc-200 dark:border-zinc-700 shrink-0" />
-                              <input
-                                value={expandedTaskId === task.id ? newSubtaskTitle : ''}
-                                onChange={e => onNewSubtaskTitleChange(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') onAddSubtask(task.id); }}
-                                placeholder="Add subtask..."
-                                className="flex-1 bg-transparent text-xs text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 focus:outline-none"
-                              />
-                              {newSubtaskTitle.trim() && (
-                                <button
-                                  onClick={() => onAddSubtask(task.id)}
-                                  className="px-2 py-0.5 text-[10px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md hover:opacity-90 transition-opacity"
-                                >
-                                  +
-                                </button>
-                              )}
-                            </div>
+                            {canEdit && (
+                              <div className="flex items-center gap-2 pt-1">
+                                <div className="w-4 h-4 rounded shrink-0" style={{ border: '1.5px dashed var(--os-border-2)' }} />
+                                <input
+                                  value={expandedTaskId === task.id ? newSubtaskTitle : ''}
+                                  onChange={e => onNewSubtaskTitleChange(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') onAddSubtask(task.id); }}
+                                  placeholder="Add subtask..."
+                                  className="flex-1 bg-transparent text-xs focus:outline-none"
+                                  style={{ color: 'var(--os-fg-1)' }}
+                                />
+                                {newSubtaskTitle.trim() && (
+                                  <button
+                                    onClick={() => onAddSubtask(task.id)}
+                                    className="px-2 py-0.5 text-[10px] font-semibold transition-opacity hover:opacity-90"
+                                    style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)', borderRadius: 8 }}
+                                  >
+                                    +
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </div>
+                  </motion.div>
                 );
               })}
 
-              {/* Add task input */}
-              <div className="flex items-center gap-2 px-5 py-2.5">
-                <div className="w-5 h-5 rounded-full border-2 border-dashed border-zinc-200 dark:border-zinc-700 shrink-0" />
-                <input
-                  value={newTaskTitle[gIdx] ?? ''}
-                  onChange={e => onNewTaskTitleChange({ ...newTaskTitle, [gIdx]: e.target.value })}
-                  onKeyDown={e => e.key === 'Enter' && onAddTask(gIdx)}
-                  placeholder="Add task..."
-                  className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none py-1"
-                />
-                {(newTaskTitle[gIdx] ?? '').trim() && (
-                  <button onClick={() => onAddTask(gIdx)} className="px-3 py-1 text-[11px] font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg hover:opacity-90 transition-opacity active:scale-95">
-                    Add
-                  </button>
-                )}
-              </div>
-            </div>
-            )}
+              {/* Add task input — ghost row, Asana-style */}
+              {canEdit && (
+                <div
+                  className="flex items-center gap-2 px-5 py-2.5 transition-colors focus-within:bg-[var(--os-surface)]"
+                  style={{ borderTop: '0.5px solid var(--os-divider)' }}
+                >
+                  <div className="w-5 h-5 rounded-full shrink-0" style={{ border: '1.5px dashed var(--os-border-2)' }} />
+                  <input
+                    value={newTaskTitle[gIdx] ?? ''}
+                    onChange={e => onNewTaskTitleChange({ ...newTaskTitle, [gIdx]: e.target.value })}
+                    onKeyDown={e => e.key === 'Enter' && onAddTask(gIdx)}
+                    placeholder="Add task..."
+                    className="flex-1 bg-transparent text-sm focus:outline-none py-1"
+                    style={{ color: 'var(--os-fg-0)' }}
+                  />
+                  <AnimatePresence>
+                    {(newTaskTitle[gIdx] ?? '').trim() && (
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        whileTap={{ scale: 0.94 }}
+                        onClick={() => onAddTask(gIdx)}
+                        className="px-3 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)', borderRadius: 999 }}
+                      >
+                        Add
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         );
       })}
 
       {/* Add phase */}
-      <div className="flex items-center gap-2">
-        <input
-          value={newGroupName}
-          onChange={e => onNewGroupNameChange(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && onAddGroup()}
-          placeholder="New phase..."
-          className="px-4 py-2.5 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm bg-transparent focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 transition-colors"
-        />
-        {newGroupName.trim() && (
-          <button onClick={onAddGroup} className="px-4 py-2.5 text-xs font-semibold bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl hover:opacity-90 transition-opacity active:scale-95">
-            + Add Phase
-          </button>
-        )}
-      </div>
+      {canEdit && (
+        <div className="flex items-center gap-2">
+          <input
+            value={newGroupName}
+            onChange={e => onNewGroupNameChange(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onAddGroup()}
+            placeholder="New phase..."
+            className="px-4 py-2.5 text-sm bg-transparent focus:outline-none transition-colors"
+            style={{ border: '1px dashed var(--os-border-2)', borderRadius: 12, color: 'var(--os-fg-0)' }}
+          />
+          <AnimatePresence>
+            {newGroupName.trim() && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={onAddGroup}
+                className="px-4 py-2.5 text-xs font-semibold"
+                style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)', borderRadius: 12 }}
+              >
+                + Add Phase
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Empty state */}
       {derivedTasksGroups.length === 0 && projectTasks.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
-            <Icons.CheckCircle size={24} className="text-zinc-300 dark:text-zinc-600" />
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--os-surface)' }}>
+            <Icons.CheckCircle size={24} style={{ color: 'var(--os-fg-3)' }} />
           </div>
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">No tasks yet</p>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs">
-            Use the AI generator to create tasks automatically or add phases manually.
+          <p className="text-sm font-medium mb-1" style={{ color: 'var(--os-fg-2)' }}>No tasks yet</p>
+          <p className="text-xs max-w-xs" style={{ color: 'var(--os-fg-3)' }}>
+            {canEdit
+              ? 'Use the AI generator to create tasks automatically or add phases manually.'
+              : 'Tasks will appear here once the team adds them.'}
           </p>
         </div>
       )}
@@ -743,7 +1004,8 @@ const DatePickerButton: React.FC<{
   value: string | null;
   onChange: (date: string | null) => void;
   done: boolean;
-}> = ({ value, onChange, done }) => {
+  disabled?: boolean;
+}> = ({ value, onChange, done, disabled }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localValue, setLocalValue] = useState(value);
 
@@ -762,27 +1024,31 @@ const DatePickerButton: React.FC<{
   return (
     <div className="relative">
       <button
-        onClick={() => inputRef.current?.showPicker()}
-        className={`text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
-          !parsedDate
-            ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-            : isOverdue
-            ? 'text-red-500 bg-red-50 dark:bg-red-500/10 font-semibold'
-            : 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800'
-        }`}
+        onClick={() => !disabled && inputRef.current?.showPicker()}
+        className="text-[10px] px-2 py-0.5 transition-colors"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          borderRadius: 999,
+          cursor: disabled ? 'default' : 'pointer',
+          background: isOverdue ? 'rgba(239,68,68,0.08)' : 'var(--os-surface)',
+          color: isOverdue ? 'var(--err)' : 'var(--os-fg-3)',
+          fontWeight: isOverdue ? 600 : 400,
+        }}
       >
         {parsedDate
           ? parsedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-          : 'Set date'}
+          : disabled ? '—' : 'Set date'}
       </button>
-      <input
-        ref={inputRef}
-        type="date"
-        value={localValue || ''}
-        onChange={handleChange}
-        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        tabIndex={-1}
-      />
+      {!disabled && (
+        <input
+          ref={inputRef}
+          type="date"
+          value={localValue || ''}
+          onChange={handleChange}
+          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+          tabIndex={-1}
+        />
+      )}
     </div>
   );
 };

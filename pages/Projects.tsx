@@ -24,7 +24,8 @@ import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 import { InlineTaskDetailHost } from '../components/calendar/InlineTaskDetailHost';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
-import { ProjectSidebar, ShareModal, PortalLinkSection, OverviewTab, TasksTab, TimelineTab, FilesTab, SettingsTab } from '../components/projects';
+import { ProjectRail, PortalLinkSection, OverviewTab, TasksTab, FilesTab, SettingsTab } from '../components/projects';
+import { useRBAC } from '../context/RBACContext';
 import { ShareProjectWithAgencyModal } from '../components/projects/ShareProjectWithAgencyModal';
 import { IconPicker } from '../components/ui/IconPicker';
 
@@ -633,6 +634,19 @@ export const Projects: React.FC<{
   const { currentTenant } = useTenant();
   const { updateTask, createTask, tasks: calendarTasks } = useCalendar();
   const { agencies: connectedAgencies } = useConnectedAgencies();
+
+  // ── Role gates ────────────────────────────────────────────────
+  // UI-level mirror of the RLS rules so collaborators/viewers get a clean
+  // read-only surface instead of buttons that would fail server-side.
+  // Same fallback as Layout: while RBAC is still initializing we don't
+  // hide anything (permissions resolve within the first second).
+  const { hasPermission, isInitialized: rbacReady } = useRBAC();
+  const allowProjects = (action: 'create' | 'edit' | 'delete' | 'manage') =>
+    !rbacReady || hasPermission('projects', action);
+  const canCreateProject = allowProjects('create');
+  const canEditProject = allowProjects('edit');
+  const canDeleteProject = allowProjects('delete');
+  const canManageProject = allowProjects('manage');
 
   // ── State for the unified task creation panel ──
   // Same shape Calendar uses for newTaskData — so the panel renders
@@ -1700,13 +1714,18 @@ export const Projects: React.FC<{
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => setIsCreating(!isCreating)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-semibold rounded-full transition-all shrink-0"
-                style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)' }}
-              >
-                <Icons.Plus size={13} /> New project
-              </button>
+              {canCreateProject && (
+                <motion.button
+                  onClick={() => setIsCreating(!isCreating)}
+                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.03 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-semibold rounded-full shrink-0"
+                  style={{ background: 'var(--os-ink)', color: 'var(--livv-cream-50)' }}
+                >
+                  <Icons.Plus size={13} /> New project
+                </motion.button>
+              )}
             </div>
 
             {/* New project form */}
@@ -1789,9 +1808,15 @@ export const Projects: React.FC<{
               </div>
             )}
 
-            {/* Grouped project rows */}
-            {filteredGroups.map(group => (
-              <div key={group.id} className="mb-7">
+            {/* Grouped project rows — staggered entrance per group */}
+            {filteredGroups.map((group, groupIdx) => (
+              <motion.div
+                key={group.id}
+                className="mb-7"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: Math.min(groupIdx * 0.05, 0.3), ease: [0.16, 1, 0.3, 1] }}
+              >
                 {/* Group header */}
                 <div className="flex items-center gap-1.5 mb-2.5 px-0.5">
                   {group.category === 'client' && group.clientIcon ? (
@@ -1817,7 +1842,12 @@ export const Projects: React.FC<{
                     const expanded = expandedProjects.has(p.id);
                     const dotColor = p.color || (p.status === ProjectStatus.Active ? 'var(--livv-sage)' : p.status === ProjectStatus.Pending ? 'var(--livv-gold)' : 'var(--os-fg-3)');
                     return (
-                      <div key={p.id} style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}>
+                      <motion.div
+                        key={p.id}
+                        whileHover={{ y: -2, boxShadow: 'var(--shadow-lifted)' }}
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        style={{ background: 'var(--os-panel)', border: '0.5px solid var(--os-border-2)', borderRadius: 14, boxShadow: 'var(--shadow-card)', overflow: 'hidden' }}
+                      >
                         {/* Summary row */}
                         <div className="flex items-center gap-3 px-4 py-3">
                           <button onClick={() => setSelectedId(p.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -1886,14 +1916,31 @@ export const Projects: React.FC<{
                             </motion.div>
                           )}
                         </AnimatePresence>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
+        )}
+
+        {/* ════════════════════════════════════════ */}
+        {/*  PROJECT RAIL — Asana-style sub-sidebar while a project is open.
+             Keeps the client → projects tree one click away so switching
+             projects never requires bouncing back to the landing list.
+             Desktop only; collapsible with persisted state. */}
+        {/* ════════════════════════════════════════ */}
+        {selectedId && (
+          <ProjectRail
+            groups={sidebarGroups}
+            selectedId={selectedId}
+            statsByProject={tasksByProject}
+            onSelect={setSelectedId}
+            onBackToAll={() => setSelectedId(null)}
+            onNewProject={canCreateProject ? () => { setSelectedId(null); setIsCreating(true); } : undefined}
+          />
         )}
 
         {/* ════════════════════════════════════════ */}
@@ -2053,6 +2100,7 @@ export const Projects: React.FC<{
             {selectedProject && (
               <div className="flex items-center gap-1.5 shrink-0">
                 {/* Connect agency — per-project share; pill shows scope count */}
+                {canManageProject && (
                 <button
                   onClick={() => setIsAgencyShareModalOpen(true)}
                   title="Connect this project with another agency"
@@ -2064,8 +2112,10 @@ export const Projects: React.FC<{
                   <Icons.Briefcase size={11} />
                   {agencyShareCount > 0 ? `Connected · ${agencyShareCount}` : 'Connect'}
                 </button>
-                <KickoffButton project={selectedProject} tenantId={currentTenant?.id || null} />
+                )}
+                {canManageProject && <KickoffButton project={selectedProject} tenantId={currentTenant?.id || null} />}
                 {/* Share — outline pill */}
+                {canManageProject && (
                 <button
                   onClick={() => setIsShareModalOpen(true)}
                   className="px-3.5 py-1.5 text-[12px] font-medium rounded-full transition-all"
@@ -2073,7 +2123,9 @@ export const Projects: React.FC<{
                 >
                   Share
                 </button>
+                )}
                 {/* Add task — primary dark pill */}
+                {canEditProject && (
                 <button
                   onClick={() => {
                     const today = new Date().toISOString().slice(0, 10);
@@ -2095,6 +2147,7 @@ export const Projects: React.FC<{
                   <Icons.Plus size={13} />
                   Add task
                 </button>
+                )}
                 {/* Project view (client preview) */}
                 <button
                   onClick={() => setIsClientPreviewMode(true)}
@@ -2105,6 +2158,7 @@ export const Projects: React.FC<{
                   <Icons.Eye size={14} />
                 </button>
                 {/* Settings */}
+                {canEditProject && (
                 <button
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'overview' : 'settings')}
                   title="Project settings"
@@ -2115,6 +2169,7 @@ export const Projects: React.FC<{
                 >
                   <Icons.MoreVert size={14} />
                 </button>
+                )}
               </div>
             )}
             </div>
@@ -2388,7 +2443,7 @@ export const Projects: React.FC<{
                           onStatusChange={async (id, status) => {
                             await updateTask(id, { status, completed: status === 'done' } as any);
                           }}
-                          onAddTask={(status) => {
+                          onAddTask={!canEditProject ? undefined : (status) => {
                             // Open the same EventTaskFormPanel that Calendar
                             // uses — so the task gets full metadata
                             // (start_date, start_time, duration, assignees,
@@ -2450,6 +2505,8 @@ export const Projects: React.FC<{
                     onAiAccept={handleAiAccept}
                     onAiDiscard={() => { setAiPreview(null); setAiPrompt(''); }}
                     taskError={taskError}
+                    canEdit={canEditProject}
+                    canDelete={canDeleteProject}
                   />
                     )}
                   </>

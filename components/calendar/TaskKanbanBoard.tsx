@@ -140,8 +140,8 @@ export const TaskKanbanBoard: React.FC<Props> = ({ tasks, onTaskClick, onStatusC
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
                       onClick={() => { if (draggedId !== task.id) onTaskClick?.(task); }}
-                      className={`group bg-white dark:bg-zinc-900 px-3 py-2.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:border-zinc-300 dark:hover:border-zinc-700 hover:-translate-y-px cursor-grab active:cursor-grabbing transition-all duration-150 ease-out ${
-                        isDragging ? 'opacity-40 scale-[0.97]' : ''
+                      className={`group bg-white dark:bg-zinc-900 px-3 py-2.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.07)] hover:border-zinc-300 dark:hover:border-zinc-700 hover:-translate-y-0.5 active:scale-[0.98] cursor-grab active:cursor-grabbing transition-all duration-150 ease-out ${
+                        isDragging ? 'opacity-40 scale-[0.97] rotate-1' : ''
                       }`}
                     >
                       {task.cover_url && (
