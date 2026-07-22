@@ -14,6 +14,14 @@ export interface SlidePanelProps {
   width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full';
   /** Alias for width */
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full';
+  /**
+   * 'overlay' (default) — modal: backdrop, body scroll lock, click-outside
+   * closes. 'docked' — Asana-style: no backdrop, the page underneath stays
+   * visible AND interactive (so clicking another list row can swap the
+   * panel's content); closes via X / Escape only. Docked applies on
+   * desktop only — mobile always uses the modal bottom sheet.
+   */
+  variant?: 'overlay' | 'docked';
   /** Optional footer (action buttons, etc.) */
   footer?: React.ReactNode;
   /** Optional header-right element (extra buttons, badges) */
@@ -38,12 +46,15 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
   title,
   subtitle,
   width = 'md',
+  variant = 'overlay',
   footer,
   headerRight,
   children,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+  // Docked only makes sense on desktop — mobile keeps the bottom sheet.
+  const docked = variant === 'docked' && !isMobile;
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -55,13 +66,14 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
   useEffect(() => {
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
+      // Docked panels leave the page scrollable — that's the point.
+      if (!docked) document.body.style.overflow = 'hidden';
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
+      if (!docked) document.body.style.overflow = '';
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen, handleEscape, docked]);
 
   const handleDragEnd = (_: any, info: PanInfo) => {
     if (info.offset.y > 100 || info.velocity.y > 500) {
@@ -72,16 +84,18 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-sm"
-            onClick={onClose}
-          />
+        <div className={`fixed inset-0 overflow-hidden ${docked ? 'z-40 pointer-events-none' : 'z-50'}`}>
+          {/* Backdrop — omitted when docked so the page stays interactive */}
+          {!docked && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-sm"
+              onClick={onClose}
+            />
+          )}
 
           {/* Panel */}
           <motion.div
@@ -90,7 +104,7 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
             animate={isMobile ? { y: 0 } : { x: 0 }}
             exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{
-              duration: 0.4,
+              duration: docked ? 0.32 : 0.4,
               ease: [0.16, 1, 0.3, 1],
             }}
             drag={isMobile ? 'y' : false}
@@ -100,7 +114,7 @@ export const SlidePanel: React.FC<SlidePanelProps> = ({
             className={
               isMobile
                 ? 'absolute bottom-0 left-0 right-0 max-h-[92vh] bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl flex flex-col'
-                : `absolute top-0 right-0 bottom-0 w-screen ${widthClasses[width]} bg-white dark:bg-zinc-900 shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.05)] dark:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.3)] border-l border-zinc-100 dark:border-zinc-800 flex flex-col`
+                : `absolute top-0 right-0 bottom-0 w-screen ${widthClasses[width]} bg-white dark:bg-zinc-900 ${docked ? 'pointer-events-auto shadow-[-24px_0_48px_-12px_rgba(44,4,5,0.14)]' : 'shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.05)]'} dark:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.3)] border-l border-zinc-100 dark:border-zinc-800 flex flex-col`
             }
             style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}
           >

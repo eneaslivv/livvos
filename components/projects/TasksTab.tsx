@@ -55,6 +55,10 @@ export interface TasksTabProps {
    *  task stays always-on: assignment-scoped RLS enforces it server-side. */
   canEdit?: boolean;
   canDelete?: boolean;
+  /** Drag-to-reorder — receives the dragged id, the stage it was dropped
+   *  into, and the full displayed id sequence of that stage. Absent =
+   *  dragging disabled (viewers, mobile callers). */
+  onReorderTask?: (taskId: string, targetGroupName: string, orderedIds: string[]) => void;
 }
 
 const formatCurrency = (amount: number) =>
@@ -170,6 +174,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
   taskError,
   canEdit = true,
   canDelete = true,
+  onReorderTask,
 }) => {
   // ── Steps structure ──────────────────────────────────────────
   // Phases read as numbered, collapsible steps. Fully-completed phases
@@ -241,6 +246,87 @@ export const TasksTab: React.FC<TasksTabProps> = ({
     setPendingDone(prev => new Map(prev).set(sub.id, next));
     onToggleSubtask(sub.id, sub.completed);
     scheduleOptimisticExpiry(sub.id);
+  };
+
+  // ── Drag-to-reorder ──────────────────────────────────────────
+  // HTML5 DnD armed from the grip handle only (so row clicks/inputs never
+  // start an accidental drag). Optimistic: `orderOverride` renders the new
+  // sequence instantly while the parent renumbers order_index server-side;
+  // `pendingGroupMove` relocates a cross-stage task until group_name lands.
+  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ group: string; index: number } | null>(null);
+  const [orderOverride, setOrderOverride] = useState<Map<string, string[]>>(new Map());
+  const [pendingGroupMove, setPendingGroupMove] = useState<Map<string, string>>(new Map());
+
+  // Settle: drop the overrides once server truth matches what we rendered.
+  useEffect(() => {
+    if (orderOverride.size === 0 && pendingGroupMove.size === 0) return;
+    const byId = new Map<string, any>();
+    const groupOf = new Map<string, string>();
+    for (const g of derivedTasksGroups) {
+      for (const t of g.tasks) { byId.set(t.id, t); groupOf.set(t.id, g.name); }
+    }
+    setPendingGroupMove(prev => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, target] of prev) {
+        if (groupOf.get(id) === target) { next.delete(id); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    setOrderOverride(prev => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [groupName, ids] of prev) {
+        const settled = ids.every((id, idx) => {
+          const t = byId.get(id);
+          return t && (t.order ?? 0) === (idx + 1) * 1000;
+        });
+        if (settled) { next.delete(groupName); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [derivedTasksGroups, orderOverride, pendingGroupMove]);
+
+  // Groups as rendered: cross-stage pending moves relocate the task NOW,
+  // not after the server round-trip.
+  const renderGroups = React.useMemo(() => {
+    if (pendingGroupMove.size === 0) return derivedTasksGroups;
+    const all: Array<{ from: string; task: any }> = [];
+    for (const g of derivedTasksGroups) for (const t of g.tasks) all.push({ from: g.name, task: t });
+    return derivedTasksGroups.map(g => ({
+      ...g,
+      tasks: [
+        ...g.tasks.filter((t: any) => (pendingGroupMove.get(t.id) ?? g.name) === g.name),
+        ...all.filter(e => e.from !== g.name && pendingGroupMove.get(e.task.id) === g.name).map(e => e.task),
+      ],
+    }));
+  }, [derivedTasksGroups, pendingGroupMove]);
+
+  const completeDrop = (targetGroup: string, opens: any[], dones: any[]) => {
+    if (!draggingId || !dropTarget || !onReorderTask) return;
+    const openIds = opens.map(t => t.id);
+    const fromIdx = openIds.indexOf(draggingId);
+    let insertAt = Math.max(0, Math.min(dropTarget.index, openIds.length));
+    const without = openIds.filter(id => id !== draggingId);
+    if (fromIdx !== -1 && fromIdx < insertAt) insertAt -= 1;
+    const newOpenIds = [...without.slice(0, insertAt), draggingId, ...without.slice(insertAt)];
+    if (fromIdx !== -1 && newOpenIds.join() === openIds.join()) {
+      // Same-group no-op drop.
+      setDraggingId(null); setDragArmedId(null); setDropTarget(null);
+      return;
+    }
+    setOrderOverride(prev => new Map(prev).set(targetGroup, newOpenIds));
+    if (fromIdx === -1) setPendingGroupMove(prev => new Map(prev).set(draggingId, targetGroup));
+    onReorderTask(draggingId, targetGroup, [...newOpenIds, ...dones.map(t => t.id)]);
+    // Fallback: never leave stale overrides if the writes are rejected.
+    const droppedId = draggingId;
+    setTimeout(() => {
+      setOrderOverride(prev => { if (!prev.has(targetGroup)) return prev; const n = new Map(prev); n.delete(targetGroup); return n; });
+      setPendingGroupMove(prev => { if (!prev.has(droppedId)) return prev; const n = new Map(prev); n.delete(droppedId); return n; });
+    }, 6000);
+    setDraggingId(null); setDragArmedId(null); setDropTarget(null);
   };
 
   // First phase with open work = the step the project is ON.
@@ -632,7 +718,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({
       )}
 
       {/* Phase groups — numbered, collapsible steps */}
-      {derivedTasksGroups.map((group: any, gIdx: number) => {
+      {renderGroups.map((group: any, gIdx: number) => {
         const doneCount = group.tasks.filter((t: any) => effectiveDone(t)).length;
         const totalCount = group.tasks.length;
         const phasePct = totalCount ? Math.round(doneCount / totalCount * 100) : 0;
@@ -640,8 +726,17 @@ export const TasksTab: React.FC<TasksTabProps> = ({
         const isCollapsed = collapsedPhases.has(group.name);
         const isCurrent = gIdx === currentStepIdx;
         const isDone = totalCount > 0 && doneCount === totalCount;
-        // Open work first; finished tasks sink to the bottom of the step.
-        const orderedTasks = [...group.tasks].sort((a: any, b: any) => Number(effectiveDone(a)) - Number(effectiveDone(b)));
+        // Open work first (manual order, or the optimistic drag override);
+        // finished tasks sink to the bottom of the step.
+        const override = orderOverride.get(group.name);
+        let opens = group.tasks.filter((t: any) => !effectiveDone(t));
+        const dones = group.tasks.filter((t: any) => effectiveDone(t));
+        if (override) {
+          const pos = new Map(override.map((id: string, i: number) => [id, i]));
+          opens = [...opens].sort((a: any, b: any) => (pos.get(a.id) ?? 999) - (pos.get(b.id) ?? 999));
+        }
+        const orderedTasks = [...opens, ...dones];
+        const isDropGroup = dropTarget?.group === group.name && !!draggingId;
         return (
           <div
             key={group.name}
@@ -654,13 +749,22 @@ export const TasksTab: React.FC<TasksTabProps> = ({
               transition: 'border-color 0.3s, box-shadow 0.3s',
             }}
           >
-            {/* Phase header — click anywhere to collapse/expand */}
+            {/* Phase header — click anywhere to collapse/expand; also a drop
+                target so a task can be dragged onto a collapsed stage. */}
             <div
               onClick={() => togglePhase(group.name)}
+              onDragOver={(e) => {
+                if (!draggingId || !onReorderTask) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDropTarget({ group: group.name, index: Number.MAX_SAFE_INTEGER });
+              }}
+              onDrop={(e) => { e.preventDefault(); completeDrop(group.name, opens, dones); }}
               className="px-5 py-3.5 cursor-pointer select-none transition-colors hover:bg-[var(--os-surface)]"
               style={{
                 borderBottom: isCollapsed ? undefined : '0.5px solid var(--os-divider)',
-                background: isCurrent ? 'var(--accent-soft)' : 'var(--os-surface-2)',
+                background: isDropGroup && isCollapsed ? 'var(--accent-soft)' : isCurrent ? 'var(--accent-soft)' : 'var(--os-surface-2)',
+                boxShadow: isDropGroup && isCollapsed ? 'inset 0 0 0 1.5px var(--accent-strong)' : undefined,
               }}
             >
               <div className="flex items-center gap-3">
@@ -754,25 +858,79 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.3, ease: EASE_SOFT }}
                   className="overflow-hidden"
+                  onDragOver={(e) => {
+                    if (!draggingId || !onReorderTask) return;
+                    e.preventDefault();
+                    // Empty space fallback — rows overwrite this with a
+                    // precise index via their own onDragOver.
+                    if (!dropTarget || dropTarget.group !== group.name) {
+                      setDropTarget({ group: group.name, index: opens.length });
+                    }
+                  }}
+                  onDrop={(e) => { e.preventDefault(); completeDrop(group.name, opens, dones); }}
                 >
-              {orderedTasks.map((task: any) => {
+              {orderedTasks.map((task: any, rowIdx: number) => {
                 const done = effectiveDone(task);
                 const subs = getSubtasksFor(task.id);
                 const subsCompleted = subs.filter((s: any) => pendingDone.get(s.id) ?? s.completed).length;
                 const isExpanded = expandedTaskId === task.id;
                 const payment = taskPayments.get(task.id);
+                const showDropLineAbove = isDropGroup && (
+                  (rowIdx < opens.length && dropTarget!.index === rowIdx) ||
+                  (rowIdx === opens.length && dropTarget!.index >= opens.length)
+                );
                 return (
                   <motion.div
                     key={task.id}
                     layout="position"
                     transition={{ layout: { duration: 0.35, ease: EASE_SOFT } }}
-                    style={{ borderTop: '0.5px solid var(--os-divider)' }}
+                    style={{ borderTop: '0.5px solid var(--os-divider)', opacity: draggingId === task.id ? 0.35 : 1 }}
                   >
+                    {showDropLineAbove && (
+                      <div className="relative h-0 pointer-events-none">
+                        <div className="absolute left-4 right-4 -top-px h-[2.5px] rounded-full z-10" style={{ background: 'var(--accent)', boxShadow: '0 0 8px var(--accent-strong)' }} />
+                      </div>
+                    )}
                     <div
-                      className={`group/task flex items-center gap-3 px-5 py-2.5 transition-colors ${onOpenTask ? 'cursor-pointer' : ''} hover:bg-[var(--os-surface)]`}
+                      className={`group/task relative flex items-center gap-3 px-5 py-2.5 transition-colors ${onOpenTask ? 'cursor-pointer' : ''} hover:bg-[var(--os-surface)]`}
                       onClick={() => onOpenTask?.(task.id)}
                       title={onOpenTask ? 'Open task' : undefined}
+                      draggable={dragArmedId === task.id && !!onReorderTask && !done}
+                      onDragStart={(e) => {
+                        if (dragArmedId !== task.id) { e.preventDefault(); return; }
+                        setDraggingId(task.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                        try { e.dataTransfer.setData('text/plain', task.id); } catch { /* older browsers */ }
+                      }}
+                      onDragEnd={() => { setDraggingId(null); setDragArmedId(null); setDropTarget(null); }}
+                      onDragOver={(e) => {
+                        if (!draggingId || !onReorderTask) return;
+                        e.preventDefault();
+                        // Rows own their dragover — without this the container's
+                        // empty-space fallback (running in the same bubble with
+                        // stale state) clobbers the precise index.
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const before = e.clientY < rect.top + rect.height / 2;
+                        const idx = done ? opens.length : rowIdx + (before ? 0 : 1);
+                        setDropTarget(prev => (prev && prev.group === group.name && prev.index === idx) ? prev : { group: group.name, index: idx });
+                      }}
+                      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); completeDrop(group.name, opens, dones); }}
                     >
+                      {/* Drag grip — hover-reveal, arms the row for dragging */}
+                      {onReorderTask && !done && (
+                        <span
+                          className="absolute left-1 opacity-0 group-hover/task:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+                          style={{ color: 'var(--os-fg-3)' }}
+                          onMouseDown={(e) => { e.stopPropagation(); setDragArmedId(task.id); }}
+                          onMouseUp={() => { if (!draggingId) setDragArmedId(null); }}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Drag to reorder"
+                        >
+                          <Icons.Drag size={12} />
+                        </span>
+                      )}
                       <CheckCircle done={done} onToggle={() => handleToggle(gIdx, task)} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -912,6 +1070,14 @@ export const TasksTab: React.FC<TasksTabProps> = ({
                   </motion.div>
                 );
               })}
+
+              {/* End-of-list drop line — only needed when no done rows exist
+                  to carry the "above first done row" indicator. */}
+              {isDropGroup && dones.length === 0 && dropTarget!.index >= opens.length && (
+                <div className="relative h-0 pointer-events-none">
+                  <div className="absolute left-4 right-4 -top-px h-[2.5px] rounded-full z-10" style={{ background: 'var(--accent)', boxShadow: '0 0 8px var(--accent-strong)' }} />
+                </div>
+              )}
 
               {/* Add task input — ghost row, Asana-style */}
               {canEdit && (

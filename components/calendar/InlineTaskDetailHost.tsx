@@ -225,6 +225,7 @@ export const InlineTaskDetailHost: React.FC<Props> = ({ taskId, onClose }) => {
       getMemberAvatar={getMemberAvatar}
       getClientLabel={getClientLabel}
       onOpenTaskDetail={handleOpenTaskDetail as any}
+      variant="docked"
     />
   );
 };

@@ -69,6 +69,10 @@ export interface TaskDetailPanelProps {
   getMemberAvatar: (id?: string) => string | null;
   getClientLabel: (task: CalendarTask) => string | null;
   onOpenTaskDetail: (task: CalendarTask) => void;
+  /** 'docked' = Asana-style non-modal panel (page stays interactive,
+   *  narrower). Default 'overlay' keeps the existing modal behavior for
+   *  Calendar and every other current consumer. */
+  variant?: 'overlay' | 'docked';
 }
 
 // ── Local UI primitives ───────────────────────────────────────────────
@@ -132,6 +136,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
   getMemberAvatar,
   getClientLabel,
   onOpenTaskDetail,
+  variant = 'overlay',
 }) => {
   const completedCount = subtasksForSelected.filter(s => s.completed).length;
   const totalSubtasks = subtasksForSelected.length;
@@ -344,7 +349,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({
     <SlidePanel
       isOpen={!!selectedTask}
       onClose={onClose}
-      width="2xl"
+      width={variant === 'docked' ? 'xl' : '2xl'}
+      variant={variant}
       footer={
         <div className="space-y-2">
           {saveError && (

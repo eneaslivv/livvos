@@ -679,7 +679,7 @@ export const Projects: React.FC<{
   const { data: syncedTasks, add: addSyncedTask, update: updateSyncedTask, remove: removeSyncedTask, refresh: refreshTasks } = useSupabase<any>('tasks', {
     enabled: true,
     subscribe: true,
-    select: 'id,title,completed,completed_at,project_id,start_date,end_date,due_date,assignee_id,priority,group_name,parent_task_id,status'
+    select: 'id,title,completed,completed_at,project_id,start_date,end_date,due_date,assignee_id,priority,group_name,parent_task_id,status,order_index'
   });
 
   // Loading timeout — prevents infinite spinner
@@ -828,12 +828,18 @@ export const Projects: React.FC<{
         assignee: task.assignee_id || '', dueDate: taskDate,
         priority: task.priority || 'medium', status: task.status || 'todo',
         completedAt: task.completed_at || undefined,
+        order: task.order_index ?? 0,
       });
     }
     if (selectedProject) {
       for (const g of selectedProject.tasksGroups) {
         if (!groupMap.has(g.name)) groupMap.set(g.name, { name: g.name, tasks: [] });
       }
+    }
+    // Stable manual order within each group (drag-to-reorder writes
+    // order_index; legacy rows all sit at 0 and keep insertion order).
+    for (const g of groupMap.values()) {
+      g.tasks.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
     }
     return Array.from(groupMap.values());
   }, [projectTasks, selectedProject]);
@@ -1140,7 +1146,11 @@ export const Projects: React.FC<{
 
   const handleToggleTask = async (groupIdx: number, taskId: string) => {
     if (!selectedProject) return;
-    const task = derivedTasksGroups[groupIdx]?.tasks.find((t: any) => t.id === taskId);
+    // Prefer the given group, but fall back to a global search — during the
+    // brief settle window after a cross-stage drag the task may render in a
+    // group it hasn't been persisted into yet.
+    const task = derivedTasksGroups[groupIdx]?.tasks.find((t: any) => t.id === taskId)
+      || derivedTasksGroups.flatMap(g => g.tasks).find((t: any) => t.id === taskId);
     if (!task) return;
     const newDone = !task.done;
     try {
@@ -1218,6 +1228,31 @@ export const Projects: React.FC<{
       setTimeout(() => refreshTasks(), 500);
     } catch (err: any) {
       errorLogger.error('Error deleting subtask', err);
+    }
+  };
+
+  /** Drag-to-reorder: persist the displayed sequence of a stage.
+   *  Renumbers with 1000-spacing (order_index is integer, legacy rows all 0)
+   *  and rewrites group_name when the drop crossed stages. Writes fire in
+   *  parallel; TasksTab keeps an optimistic override until they settle. */
+  const handleReorderTask = async (taskId: string, targetGroupName: string, orderedIds: string[]) => {
+    if (!selectedProject) return;
+    try {
+      const byId = new Map(projectTasks.map((t: any) => [t.id, t]));
+      const writes: Promise<unknown>[] = [];
+      orderedIds.forEach((id, idx) => {
+        const t: any = byId.get(id);
+        if (!t) return;
+        const newOrder = (idx + 1) * 1000;
+        const patch: any = {};
+        if ((t.order_index ?? 0) !== newOrder) patch.order_index = newOrder;
+        if (id === taskId && (t.group_name || 'General') !== targetGroupName) patch.group_name = targetGroupName;
+        if (Object.keys(patch).length > 0) writes.push(updateSyncedTask(id, patch));
+      });
+      await Promise.all(writes);
+      setTimeout(() => refreshTasks(), 1000);
+    } catch (err: any) {
+      errorLogger.error('Error reordering tasks', err);
     }
   };
 
@@ -2507,6 +2542,7 @@ export const Projects: React.FC<{
                     taskError={taskError}
                     canEdit={canEditProject}
                     canDelete={canDeleteProject}
+                    onReorderTask={canEditProject ? handleReorderTask : undefined}
                   />
                     )}
                   </>
