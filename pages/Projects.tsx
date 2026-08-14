@@ -766,6 +766,21 @@ export const Projects: React.FC<{
 
   const selectedProject = projects.find(p => p.id === selectedId) || null;
 
+  // Open/close a project AND mirror it into App-level navParams. The main
+  // sidebar's Clients tree highlights `navParams.projectId`, so without the
+  // mirror only tree-initiated opens got highlighted — opening from the
+  // landing cards (or leaving via "All projects") left the tree pointing at
+  // a project you weren't in. Single-sidebar model needs the one sidebar to
+  // be a truthful "you are here" indicator.
+  const openProject = (id: string) => {
+    setSelectedId(id);
+    onNavigate?.('projects', { projectId: id });
+  };
+  const closeProject = () => {
+    setSelectedId(null);
+    onNavigate?.('projects');
+  };
+
   // Load the per-project agency-share count whenever a project is opened.
   // Used to show "🔗 N agencies" pill in the header. Cheap query (RPC,
   // server-side filtered).
@@ -1003,7 +1018,7 @@ export const Projects: React.FC<{
       });
       resetCreateForm();
       setIsCreating(false);
-      setSelectedId(newProject.id);
+      openProject(newProject.id);
     } catch (err: any) {
       errorLogger.error('Error creating project', err);
       setCreateError(err?.message || 'Error creating the project.');
@@ -1876,7 +1891,7 @@ export const Projects: React.FC<{
                       >
                         {/* Summary row */}
                         <div className="flex items-center gap-3 px-4 py-3">
-                          <button onClick={() => setSelectedId(p.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                          <button onClick={() => openProject(p.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                             {p.icon ? (
                               <span className="w-6 text-[16px] leading-none shrink-0 text-center">{p.icon}</span>
                             ) : (
@@ -1923,7 +1938,7 @@ export const Projects: React.FC<{
                                   return (
                                     <button
                                       key={t.id}
-                                      onClick={() => setSelectedId(p.id)}
+                                      onClick={() => openProject(p.id)}
                                       className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--os-surface)]"
                                       style={{ borderBottom: '0.5px solid var(--os-divider)' }}
                                     >
@@ -1934,7 +1949,7 @@ export const Projects: React.FC<{
                                   );
                                 })}
                                 {stats.tasks.length > 6 && (
-                                  <button onClick={() => setSelectedId(p.id)} className="w-full text-center py-2 transition-colors hover:opacity-70" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-3)' }}>
+                                  <button onClick={() => openProject(p.id)} className="w-full text-center py-2 transition-colors hover:opacity-70" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--os-fg-3)' }}>
                                     +{stats.tasks.length - 6} more →
                                   </button>
                                 )}
@@ -1965,7 +1980,7 @@ export const Projects: React.FC<{
           {/* Mobile back button — chunkier on touch */}
           {isMobile && selectedId && (
             <button
-              onClick={() => setSelectedId(null)}
+              onClick={closeProject}
               className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors w-full border-b border-zinc-100 dark:border-zinc-800/60 shrink-0"
             >
               <Icons.ChevronLeft size={18} />
@@ -1977,7 +1992,7 @@ export const Projects: React.FC<{
             {/* Back link */}
             {selectedProject && (
               <button
-                onClick={() => setSelectedId(null)}
+                onClick={closeProject}
                 className="hidden sm:inline-flex items-center gap-1.5 mb-3 transition-colors hover:opacity-70"
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', color: 'var(--os-fg-2)' }}
                 title="Back to all projects"
@@ -2545,7 +2560,7 @@ export const Projects: React.FC<{
                       if (!confirm('Are you sure you want to delete this project? This cannot be undone.')) return;
                       try {
                         await deleteProject(selectedProject.id);
-                        setSelectedId(null);
+                        closeProject();
                       } catch (err: any) { alert('Error deleting project: ' + (err?.message || 'Unknown error')); }
                     }}
                   />
