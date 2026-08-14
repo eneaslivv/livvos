@@ -24,7 +24,7 @@ import { useConnectedAgencies } from '../hooks/useConnectedAgencies';
 import { InlineTaskDetailHost } from '../components/calendar/InlineTaskDetailHost';
 import { useFinance } from '../context/FinanceContext';
 import { colorToBg, ColorPalette } from '../components/ui/ColorPalette';
-import { ProjectRail, PortalLinkSection, OverviewTab, TasksTab, FilesTab, SettingsTab } from '../components/projects';
+import { PortalLinkSection, OverviewTab, TasksTab, FilesTab, SettingsTab } from '../components/projects';
 import { useRBAC } from '../context/RBACContext';
 import { ShareProjectWithAgencyModal } from '../components/projects/ShareProjectWithAgencyModal';
 import { IconPicker } from '../components/ui/IconPicker';
@@ -625,7 +625,6 @@ export const Projects: React.FC<{
    *  own TaskDetailPanel. */
   onNavigate?: (page: import('../types').PageView, params?: import('../types').NavParams) => void;
 }> = ({ navParams, onNavigate }) => {
-  const navProjectId = navParams?.projectId;
   const isMobile = useIsMobile();
   const { projects, loading, error, createProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
@@ -1069,21 +1068,13 @@ export const Projects: React.FC<{
     }
   };
 
-  // Persist last-opened project so returning to the page keeps your context.
-  // CRITICAL: skip the restore when an explicit `navProjectId` is in flight —
-  // otherwise this effect races with the navProjectId effect above and the
-  // user clicks "Mobilita" but sees the previously-opened project. The
-  // navProjectId path always wins.
-  useEffect(() => {
-    if (selectedId || !projects.length || navProjectId) return;
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('projects:lastSelectedId') : null;
-    if (stored && projects.some(p => p.id === stored)) setSelectedId(stored);
-  }, [projects, selectedId, navProjectId]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (selectedId) window.localStorage.setItem('projects:lastSelectedId', selectedId);
-  }, [selectedId]);
+  // NOTE: we used to persist + auto-restore the last-opened project here
+  // (localStorage `projects:lastSelectedId`). Removed on purpose: navParams
+  // is sticky, so entering Projects without an explicit projectId restored
+  // a project the user never clicked — and "← All projects" bounced you
+  // straight back into it (selectedId=null re-armed the restore). Landing
+  // on the list unless the user explicitly picks a project is the
+  // predictable behavior.
 
   // Listen for global "+ New" popover and Clients page requesting a new project.
   useEffect(() => {
@@ -1962,25 +1953,12 @@ export const Projects: React.FC<{
         )}
 
         {/* ════════════════════════════════════════ */}
-        {/*  PROJECT RAIL — Asana-style sub-sidebar while a project is open.
-             Keeps the client → projects tree one click away so switching
-             projects never requires bouncing back to the landing list.
-             Desktop only; collapsible with persisted state. */}
-        {/* ════════════════════════════════════════ */}
-        {selectedId && (
-          <ProjectRail
-            groups={sidebarGroups}
-            selectedId={selectedId}
-            statsByProject={tasksByProject}
-            onSelect={setSelectedId}
-            onBackToAll={() => setSelectedId(null)}
-            onNewProject={canCreateProject ? () => { setSelectedId(null); setIsCreating(true); } : undefined}
-          />
-        )}
-
-        {/* ════════════════════════════════════════ */}
-        {/*  DETAIL PANEL — only when a project is selected; the full-width
-             list above handles the no-selection landing on every breakpoint. */}
+        {/*  DETAIL PANEL — full width when a project is selected (Asana
+             model: one global sidebar, full-width content). The main app
+             sidebar's Clients tree already lists every client → project,
+             so no per-page project rail: it duplicated that tree and
+             squeezed the detail. The full-width list above handles the
+             no-selection landing on every breakpoint. */}
         {/* ════════════════════════════════════════ */}
         {selectedId && (
         <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden">

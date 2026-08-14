@@ -1,6 +1,3 @@
-export { ProjectSidebar } from './ProjectSidebar';
-export { ProjectRail } from './ProjectRail';
-export type { RailGroup } from './ProjectRail';
 export { ShareModal, PortalLinkSection } from './ShareModal';
 export { OverviewTab } from './OverviewTab';
 export { TasksTab } from './TasksTab';
