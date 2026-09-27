@@ -309,6 +309,7 @@ serve(async (req) => {
       gclid ? `GCLID: ${gclid}` : null,
       fbclid ? `FBCLID: ${fbclid}` : null,
       msclkid ? `MSCLKID: ${msclkid}` : null,
+      attribution?.ttclid ? `TTCLID: ${attribution.ttclid}` : null,
       page_url ? `Page: ${page_url}` : null,
     ].filter(Boolean).join('\n')
 
@@ -316,6 +317,13 @@ serve(async (req) => {
       gclid: gclid || attribution?.first_gclid || null,
       fbclid: fbclid || attribution?.first_fbclid || null,
       msclkid: msclkid || null,
+      // The site captures these click ids too (livvvv.com sends them inside
+      // `attribution`); without them a lead from a TikTok, Google app or
+      // LinkedIn ad can only be traced by its UTMs.
+      ttclid: attribution?.ttclid || null,
+      gbraid: attribution?.gbraid || null,
+      wbraid: attribution?.wbraid || null,
+      li_fat_id: attribution?.li_fat_id || null,
       utm_source: utm_source || attribution?.utm_source || null,
       utm_medium: utm_medium || attribution?.utm_medium || null,
       utm_campaign: utm_campaign || attribution?.utm_campaign || null,
